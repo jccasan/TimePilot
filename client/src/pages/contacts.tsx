@@ -286,7 +286,7 @@ export default function Contacts() {
                       name="yardSize"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Yard Size</FormLabel>
+                          <FormLabel>Lot Size</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-yard-size">
@@ -294,10 +294,11 @@ export default function Contacts() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="small">Small</SelectItem>
-                              <SelectItem value="medium">Medium</SelectItem>
-                              <SelectItem value="large">Large</SelectItem>
-                              <SelectItem value="extra_large">Extra Large</SelectItem>
+                              <SelectItem value="0.25_or_less">0.25 Acre or Less</SelectItem>
+                              <SelectItem value="0.26_0.5">.26-.5 Acre</SelectItem>
+                              <SelectItem value="0.51_0.75">.51-.75 Acre</SelectItem>
+                              <SelectItem value="0.75_1">.75-1 Acre</SelectItem>
+                              <SelectItem value="over_1">Over 1 Acre</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
