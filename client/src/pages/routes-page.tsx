@@ -53,14 +53,19 @@ export default function RoutesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data: routes, isLoading } = useQuery<Route[]>({
-    queryKey: [`/api/routes?dayOfWeek=${selectedDay}`],
+    queryKey: ["/api/routes", selectedDay],
+    queryFn: async () => {
+      const res = await fetch(`/api/routes?dayOfWeek=${selectedDay}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
   });
 
   const form = useForm<RouteFormValues>({
     resolver: zodResolver(routeFormSchema),
     defaultValues: {
       name: "",
-      dayOfWeek: "monday",
+      dayOfWeek: selectedDay as any,
       technicianId: "",
       color: "#3b82f6",
     },
@@ -72,9 +77,9 @@ export default function RoutesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
-      toast({ title: "Route created", description: "New route added successfully." });
+      toast({ title: "Route created" });
       setDialogOpen(false);
-      form.reset();
+      form.reset({ name: "", dayOfWeek: selectedDay, technicianId: "", color: "#3b82f6" });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -85,7 +90,10 @@ export default function RoutesPage() {
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold" data-testid="text-routes-heading">Routes</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (open) form.setValue("dayOfWeek", selectedDay as any);
+        }}>
           <DialogTrigger asChild>
             <Button data-testid="button-create-route">
               <Plus className="mr-1 h-4 w-4" /> Create Route
