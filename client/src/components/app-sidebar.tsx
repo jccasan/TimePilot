@@ -7,6 +7,7 @@ import {
   Smartphone,
   FileText,
   CreditCard,
+  DollarSign,
   Zap,
   Key,
   Webhook,
@@ -44,6 +45,7 @@ const menuSections = [
   {
     label: "Billing",
     items: [
+      { title: "Pricing", url: "/pricing", icon: DollarSign },
       { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Subscription", url: "/billing", icon: CreditCard },
     ],

@@ -285,6 +285,44 @@ export const attachments = pgTable("attachments", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const pricingCategoryEnum = pgEnum("pricing_category", [
+  "recurring_service", "one_time_service", "add_on", "package"
+]);
+
+export const servicePricing = pgTable("service_pricing", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  category: pricingCategoryEnum("category").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
+  unit: varchar("unit", { length: 50 }).notNull().default("per_visit"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_svcpricing_company").on(table.companyId),
+  index("idx_svcpricing_category").on(table.category),
+]);
+
+export const servicePackages = pgTable("service_packages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  frequency: varchar("frequency", { length: 50 }).notNull(),
+  basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
+  includedItems: jsonb("included_items").$type<string[]>().notNull().default([]),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_spkg_company").on(table.companyId),
+]);
+
 export const companyRelations = relations(companies, ({ many }) => ({
   companyUsers: many(companyUsers),
   contacts: many(contacts),
@@ -407,5 +445,12 @@ export type ApiKey = typeof apiKeys.$inferSelect;
 export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
 export type Webhook = typeof webhooks.$inferSelect;
 export type InsertWebhook = z.infer<typeof insertWebhookSchema>;
+
+export const insertServicePricingSchema = createInsertSchema(servicePricing).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true, updatedAt: true });
+export type ServicePricingItem = typeof servicePricing.$inferSelect;
+export type InsertServicePricing = z.infer<typeof insertServicePricingSchema>;
+export type ServicePackage = typeof servicePackages.$inferSelect;
+export type InsertServicePackage = z.infer<typeof insertServicePackageSchema>;
 export type Attachment = typeof attachments.$inferSelect;
 export type InsertAttachment = z.infer<typeof insertAttachmentSchema>;

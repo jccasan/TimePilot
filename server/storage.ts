@@ -5,6 +5,7 @@ import {
   properties, routes, servicePlans, vacationHolds,
   visits, invoices, invoiceLineItems, automationRules,
   automationEventLogs, apiKeys, webhooks, attachments,
+  servicePricing, servicePackages,
   type Company, type InsertCompany,
   type CompanyUser, type InsertCompanyUser,
   type Contact, type InsertContact,
@@ -20,6 +21,8 @@ import {
   type ApiKey, type InsertApiKey,
   type Webhook, type InsertWebhook,
   type Attachment, type InsertAttachment,
+  type ServicePricingItem, type InsertServicePricing,
+  type ServicePackage, type InsertServicePackage,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -125,6 +128,21 @@ export interface IStorage {
   // Attachments
   createAttachment(data: InsertAttachment): Promise<Attachment>;
   getAttachments(companyId: string, filters?: { contactId?: string; propertyId?: string; visitId?: string }): Promise<Attachment[]>;
+
+  // Service Pricing
+  getServicePricing(companyId: string, category?: string): Promise<ServicePricingItem[]>;
+  createServicePricingItem(data: InsertServicePricing): Promise<ServicePricingItem>;
+  updateServicePricingItem(id: string, data: Partial<InsertServicePricing>): Promise<ServicePricingItem>;
+  deleteServicePricingItem(id: string): Promise<void>;
+
+  // Service Packages
+  getServicePackages(companyId: string): Promise<ServicePackage[]>;
+  createServicePackage(data: InsertServicePackage): Promise<ServicePackage>;
+  updateServicePackage(id: string, data: Partial<InsertServicePackage>): Promise<ServicePackage>;
+  deleteServicePackage(id: string): Promise<void>;
+
+  // Seed default pricing
+  seedDefaultPricing(companyId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -519,6 +537,124 @@ export class DatabaseStorage implements IStorage {
     if (filters?.propertyId) conditions.push(eq(attachments.propertyId, filters.propertyId));
     if (filters?.visitId) conditions.push(eq(attachments.visitId, filters.visitId));
     return db.select().from(attachments).where(and(...conditions)).orderBy(desc(attachments.createdAt));
+  }
+  // ================ Service Pricing ================
+  async getServicePricing(companyId: string, category?: string): Promise<ServicePricingItem[]> {
+    const conditions = [eq(servicePricing.companyId, companyId)];
+    if (category) conditions.push(eq(servicePricing.category, category as any));
+    return db.select().from(servicePricing).where(and(...conditions)).orderBy(asc(servicePricing.sortOrder), asc(servicePricing.name));
+  }
+
+  async createServicePricingItem(data: InsertServicePricing): Promise<ServicePricingItem> {
+    const [item] = await db.insert(servicePricing).values(data).returning();
+    return item;
+  }
+
+  async updateServicePricingItem(id: string, data: Partial<InsertServicePricing>): Promise<ServicePricingItem> {
+    const [item] = await db.update(servicePricing).set({ ...data, updatedAt: new Date() }).where(eq(servicePricing.id, id)).returning();
+    return item;
+  }
+
+  async deleteServicePricingItem(id: string): Promise<void> {
+    await db.delete(servicePricing).where(eq(servicePricing.id, id));
+  }
+
+  // ================ Service Packages ================
+  async getServicePackages(companyId: string): Promise<ServicePackage[]> {
+    return db.select().from(servicePackages).where(eq(servicePackages.companyId, companyId)).orderBy(asc(servicePackages.sortOrder), asc(servicePackages.name));
+  }
+
+  async createServicePackage(data: InsertServicePackage): Promise<ServicePackage> {
+    const [pkg] = await db.insert(servicePackages).values(data).returning();
+    return pkg;
+  }
+
+  async updateServicePackage(id: string, data: Partial<InsertServicePackage>): Promise<ServicePackage> {
+    const [pkg] = await db.update(servicePackages).set({ ...data, updatedAt: new Date() }).where(eq(servicePackages.id, id)).returning();
+    return pkg;
+  }
+
+  async deleteServicePackage(id: string): Promise<void> {
+    await db.delete(servicePackages).where(eq(servicePackages.id, id));
+  }
+
+  // ================ Seed Default Pricing ================
+  async seedDefaultPricing(companyId: string): Promise<void> {
+    const existing = await this.getServicePricing(companyId);
+    if (existing.length > 0) return;
+
+    const defaultPricing: Omit<InsertServicePricing, "companyId">[] = [
+      { category: "recurring_service", name: "Weekly Scooping - 1 Dog", description: "Once per week yard cleanup for 1 dog", basePrice: "14.99", unit: "per_week", sortOrder: 1 },
+      { category: "recurring_service", name: "Weekly Scooping - 2 Dogs", description: "Once per week yard cleanup for 2 dogs", basePrice: "18.99", unit: "per_week", sortOrder: 2 },
+      { category: "recurring_service", name: "Weekly Scooping - 3 Dogs", description: "Once per week yard cleanup for 3 dogs", basePrice: "22.99", unit: "per_week", sortOrder: 3 },
+      { category: "recurring_service", name: "Weekly Scooping - 4+ Dogs", description: "Once per week yard cleanup for 4 or more dogs", basePrice: "26.99", unit: "per_week", sortOrder: 4 },
+      { category: "recurring_service", name: "Twice Weekly Scooping - 1 Dog", description: "Two visits per week for 1 dog", basePrice: "24.99", unit: "per_week", sortOrder: 5 },
+      { category: "recurring_service", name: "Twice Weekly Scooping - 2 Dogs", description: "Two visits per week for 2 dogs", basePrice: "29.99", unit: "per_week", sortOrder: 6 },
+      { category: "recurring_service", name: "Twice Weekly Scooping - 3 Dogs", description: "Two visits per week for 3 dogs", basePrice: "34.99", unit: "per_week", sortOrder: 7 },
+      { category: "recurring_service", name: "Twice Weekly Scooping - 4+ Dogs", description: "Two visits per week for 4 or more dogs", basePrice: "39.99", unit: "per_week", sortOrder: 8 },
+      { category: "recurring_service", name: "Bi-Weekly Scooping - 1 Dog", description: "Every other week yard cleanup for 1 dog", basePrice: "24.99", unit: "per_visit", sortOrder: 9 },
+      { category: "recurring_service", name: "Bi-Weekly Scooping - 2 Dogs", description: "Every other week yard cleanup for 2 dogs", basePrice: "29.99", unit: "per_visit", sortOrder: 10 },
+      { category: "recurring_service", name: "Bi-Weekly Scooping - 3 Dogs", description: "Every other week yard cleanup for 3 dogs", basePrice: "34.99", unit: "per_visit", sortOrder: 11 },
+      { category: "recurring_service", name: "Bi-Weekly Scooping - 4+ Dogs", description: "Every other week yard cleanup for 4 or more dogs", basePrice: "39.99", unit: "per_visit", sortOrder: 12 },
+      { category: "one_time_service", name: "One-Time Yard Cleanup (Small)", description: "Single visit cleanup for small yards (0.25 acre or less)", basePrice: "49.99", unit: "flat_rate", sortOrder: 1 },
+      { category: "one_time_service", name: "One-Time Yard Cleanup (Medium)", description: "Single visit cleanup for medium yards (0.26-0.5 acre)", basePrice: "69.99", unit: "flat_rate", sortOrder: 2 },
+      { category: "one_time_service", name: "One-Time Yard Cleanup (Large)", description: "Single visit cleanup for large yards (0.51-1 acre)", basePrice: "89.99", unit: "flat_rate", sortOrder: 3 },
+      { category: "one_time_service", name: "One-Time Yard Cleanup (XL)", description: "Single visit cleanup for yards over 1 acre", basePrice: "119.99", unit: "flat_rate", sortOrder: 4 },
+      { category: "one_time_service", name: "Initial Cleanup / Backlog", description: "First-time deep clean for yards not regularly serviced", basePrice: "99.99", unit: "flat_rate", sortOrder: 5 },
+      { category: "one_time_service", name: "Post-Winter Cleanup", description: "Seasonal deep clean after snow melt", basePrice: "129.99", unit: "flat_rate", sortOrder: 6 },
+      { category: "add_on", name: "Deodorizing Treatment", description: "Enzyme-based yard deodorizer application", basePrice: "15.99", unit: "per_visit", sortOrder: 1 },
+      { category: "add_on", name: "Sanitizing Spray", description: "Disinfectant spray treatment for high-traffic areas", basePrice: "12.99", unit: "per_visit", sortOrder: 2 },
+      { category: "add_on", name: "Brown Spot Treatment", description: "Apply brown spot repair solution to affected areas", basePrice: "9.99", unit: "per_visit", sortOrder: 3 },
+      { category: "add_on", name: "Dog Waste Station Install", description: "Install pet waste bag dispenser station", basePrice: "49.99", unit: "one_time", sortOrder: 4 },
+      { category: "add_on", name: "Dog Waste Station Refill", description: "Refill waste bags in station dispenser", basePrice: "14.99", unit: "per_visit", sortOrder: 5 },
+      { category: "add_on", name: "Additional Dog (per dog)", description: "Extra charge per additional dog beyond plan", basePrice: "4.99", unit: "per_week", sortOrder: 6 },
+      { category: "add_on", name: "Large Lot Surcharge", description: "Extra charge for lots over 0.5 acre", basePrice: "5.99", unit: "per_visit", sortOrder: 7 },
+      { category: "add_on", name: "Gate / Access Difficulty", description: "Surcharge for hard-to-access properties", basePrice: "3.99", unit: "per_visit", sortOrder: 8 },
+      { category: "add_on", name: "Commercial Property", description: "Commercial property service premium", basePrice: "19.99", unit: "per_visit", sortOrder: 9 },
+    ];
+
+    for (const item of defaultPricing) {
+      await this.createServicePricingItem({ ...item, companyId });
+    }
+
+    const defaultPackages: Omit<InsertServicePackage, "companyId">[] = [
+      {
+        name: "Basic Weekly",
+        description: "Weekly scooping service for 1-2 dogs on a standard lot",
+        frequency: "weekly",
+        basePrice: "59.99",
+        includedItems: ["Weekly Scooping - 1 Dog", "Standard lot (0.25 acre or less)"],
+        sortOrder: 1,
+      },
+      {
+        name: "Standard Weekly",
+        description: "Weekly scooping with deodorizing for 1-2 dogs",
+        frequency: "weekly",
+        basePrice: "74.99",
+        includedItems: ["Weekly Scooping - 2 Dogs", "Deodorizing Treatment", "Standard lot (0.25 acre or less)"],
+        sortOrder: 2,
+      },
+      {
+        name: "Premium Weekly",
+        description: "Twice weekly scooping with deodorizing and sanitizing for up to 3 dogs",
+        frequency: "weekly",
+        basePrice: "129.99",
+        includedItems: ["Twice Weekly Scooping - 3 Dogs", "Deodorizing Treatment", "Sanitizing Spray"],
+        sortOrder: 3,
+      },
+      {
+        name: "Multi-Dog Household",
+        description: "Weekly service for 4+ dogs with full treatment package",
+        frequency: "weekly",
+        basePrice: "149.99",
+        includedItems: ["Weekly Scooping - 4+ Dogs", "Deodorizing Treatment", "Sanitizing Spray", "Brown Spot Treatment"],
+        sortOrder: 4,
+      },
+    ];
+
+    for (const pkg of defaultPackages) {
+      await this.createServicePackage({ ...pkg, companyId });
+    }
   }
 }
 

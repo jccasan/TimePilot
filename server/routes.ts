@@ -18,6 +18,8 @@ import {
   insertInvoiceLineItemSchema,
   insertAutomationRuleSchema,
   insertWebhookSchema,
+  insertServicePricingSchema,
+  insertServicePackageSchema,
 } from "@shared/schema";
 
 async function getCompanyContext(req: Request) {
@@ -721,6 +723,90 @@ export async function registerRoutes(
       const { role } = await getCompanyContext(req);
       requireRole(role);
       await storage.deleteWebhook(req.params.id);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Service Pricing ================
+  app.get("/api/pricing", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const category = req.query.category as string | undefined;
+      const items = await storage.getServicePricing(companyId, category);
+      res.json(items);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/pricing", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const parsed = insertServicePricingSchema.parse({ ...req.body, companyId });
+      const item = await storage.createServicePricingItem(parsed);
+      res.status(201).json(item);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { role } = await getCompanyContext(req);
+      requireRole(role);
+      const item = await storage.updateServicePricingItem(req.params.id, req.body);
+      res.json(item);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { role } = await getCompanyContext(req);
+      requireRole(role);
+      await storage.deleteServicePricingItem(req.params.id);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/pricing/seed", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      await storage.seedDefaultPricing(companyId);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Service Packages ================
+  app.get("/api/packages", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const packages = await storage.getServicePackages(companyId);
+      res.json(packages);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/packages", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const parsed = insertServicePackageSchema.parse({ ...req.body, companyId });
+      const pkg = await storage.createServicePackage(parsed);
+      res.status(201).json(pkg);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/packages/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { role } = await getCompanyContext(req);
+      requireRole(role);
+      const pkg = await storage.updateServicePackage(req.params.id, req.body);
+      res.json(pkg);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/packages/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { role } = await getCompanyContext(req);
+      requireRole(role);
+      await storage.deleteServicePackage(req.params.id);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
