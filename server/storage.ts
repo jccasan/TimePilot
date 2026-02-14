@@ -132,14 +132,14 @@ export interface IStorage {
   // Service Pricing
   getServicePricing(companyId: string, category?: string): Promise<ServicePricingItem[]>;
   createServicePricingItem(data: InsertServicePricing): Promise<ServicePricingItem>;
-  updateServicePricingItem(id: string, data: Partial<InsertServicePricing>): Promise<ServicePricingItem>;
-  deleteServicePricingItem(id: string): Promise<void>;
+  updateServicePricingItem(id: string, companyId: string, data: Partial<InsertServicePricing>): Promise<ServicePricingItem>;
+  deleteServicePricingItem(id: string, companyId: string): Promise<void>;
 
   // Service Packages
   getServicePackages(companyId: string): Promise<ServicePackage[]>;
   createServicePackage(data: InsertServicePackage): Promise<ServicePackage>;
-  updateServicePackage(id: string, data: Partial<InsertServicePackage>): Promise<ServicePackage>;
-  deleteServicePackage(id: string): Promise<void>;
+  updateServicePackage(id: string, companyId: string, data: Partial<InsertServicePackage>): Promise<ServicePackage>;
+  deleteServicePackage(id: string, companyId: string): Promise<void>;
 
   // Seed default pricing
   seedDefaultPricing(companyId: string): Promise<void>;
@@ -550,13 +550,13 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  async updateServicePricingItem(id: string, data: Partial<InsertServicePricing>): Promise<ServicePricingItem> {
-    const [item] = await db.update(servicePricing).set({ ...data, updatedAt: new Date() }).where(eq(servicePricing.id, id)).returning();
+  async updateServicePricingItem(id: string, companyId: string, data: Partial<InsertServicePricing>): Promise<ServicePricingItem> {
+    const [item] = await db.update(servicePricing).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePricing.id, id), eq(servicePricing.companyId, companyId))).returning();
     return item;
   }
 
-  async deleteServicePricingItem(id: string): Promise<void> {
-    await db.delete(servicePricing).where(eq(servicePricing.id, id));
+  async deleteServicePricingItem(id: string, companyId: string): Promise<void> {
+    await db.delete(servicePricing).where(and(eq(servicePricing.id, id), eq(servicePricing.companyId, companyId)));
   }
 
   // ================ Service Packages ================
@@ -569,19 +569,19 @@ export class DatabaseStorage implements IStorage {
     return pkg;
   }
 
-  async updateServicePackage(id: string, data: Partial<InsertServicePackage>): Promise<ServicePackage> {
-    const [pkg] = await db.update(servicePackages).set({ ...data, updatedAt: new Date() }).where(eq(servicePackages.id, id)).returning();
+  async updateServicePackage(id: string, companyId: string, data: Partial<InsertServicePackage>): Promise<ServicePackage> {
+    const [pkg] = await db.update(servicePackages).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePackages.id, id), eq(servicePackages.companyId, companyId))).returning();
     return pkg;
   }
 
-  async deleteServicePackage(id: string): Promise<void> {
-    await db.delete(servicePackages).where(eq(servicePackages.id, id));
+  async deleteServicePackage(id: string, companyId: string): Promise<void> {
+    await db.delete(servicePackages).where(and(eq(servicePackages.id, id), eq(servicePackages.companyId, companyId)));
   }
 
   // ================ Seed Default Pricing ================
   async seedDefaultPricing(companyId: string): Promise<void> {
-    const existing = await this.getServicePricing(companyId);
-    if (existing.length > 0) return;
+    const existingPricing = await this.getServicePricing(companyId);
+    const existingPackages = await this.getServicePackages(companyId);
 
     const defaultPricing: Omit<InsertServicePricing, "companyId">[] = [
       { category: "recurring_service", name: "Weekly Scooping - 1 Dog", description: "Once per week yard cleanup for 1 dog", basePrice: "14.99", unit: "per_week", sortOrder: 1 },
@@ -613,8 +613,10 @@ export class DatabaseStorage implements IStorage {
       { category: "add_on", name: "Commercial Property", description: "Commercial property service premium", basePrice: "19.99", unit: "per_visit", sortOrder: 9 },
     ];
 
-    for (const item of defaultPricing) {
-      await this.createServicePricingItem({ ...item, companyId });
+    if (existingPricing.length === 0) {
+      for (const item of defaultPricing) {
+        await this.createServicePricingItem({ ...item, companyId });
+      }
     }
 
     const defaultPackages: Omit<InsertServicePackage, "companyId">[] = [
@@ -652,8 +654,10 @@ export class DatabaseStorage implements IStorage {
       },
     ];
 
-    for (const pkg of defaultPackages) {
-      await this.createServicePackage({ ...pkg, companyId });
+    if (existingPackages.length === 0) {
+      for (const pkg of defaultPackages) {
+        await this.createServicePackage({ ...pkg, companyId });
+      }
     }
   }
 }

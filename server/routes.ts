@@ -749,18 +749,19 @@ export async function registerRoutes(
 
   app.patch("/api/pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { role } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const item = await storage.updateServicePricingItem(req.params.id, req.body);
+      const parsed = insertServicePricingSchema.partial().parse(req.body);
+      const item = await storage.updateServicePricingItem(req.params.id, companyId, parsed);
       res.json(item);
     } catch (err) { handleError(res, err); }
   });
 
   app.delete("/api/pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { role } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      await storage.deleteServicePricingItem(req.params.id);
+      await storage.deleteServicePricingItem(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -795,18 +796,19 @@ export async function registerRoutes(
 
   app.patch("/api/packages/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { role } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const pkg = await storage.updateServicePackage(req.params.id, req.body);
+      const parsed = insertServicePackageSchema.partial().parse(req.body);
+      const pkg = await storage.updateServicePackage(req.params.id, companyId, parsed);
       res.json(pkg);
     } catch (err) { handleError(res, err); }
   });
 
   app.delete("/api/packages/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { role } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      await storage.deleteServicePackage(req.params.id);
+      await storage.deleteServicePackage(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
