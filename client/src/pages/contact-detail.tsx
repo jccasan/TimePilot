@@ -95,6 +95,7 @@ export default function ContactDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       toast({ title: "Updated", description: "Contact updated successfully." });
       setEditing(false);
     },

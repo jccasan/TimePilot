@@ -243,6 +243,20 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const parsed = insertContactSchema.parse({ ...req.body, companyId });
       const contact = await storage.createContact(parsed);
+
+      if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
+        await storage.createProperty({
+          companyId,
+          contactId: contact.id,
+          streetAddress: contact.streetAddress,
+          city: contact.city,
+          state: contact.state,
+          zipCode: contact.zipCode,
+          numberOfDogs: contact.numberOfDogs ?? 1,
+          yardSize: contact.yardSize ?? null,
+        });
+      }
+
       res.status(201).json(contact);
     } catch (err) { handleError(res, err); }
   });
@@ -253,6 +267,23 @@ export async function registerRoutes(
       const existing = await storage.getContact(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Contact not found" });
       const contact = await storage.updateContact(req.params.id, req.body);
+
+      if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
+        const existingProperties = await storage.getProperties(companyId, contact.id);
+        if (existingProperties.length === 0) {
+          await storage.createProperty({
+            companyId,
+            contactId: contact.id,
+            streetAddress: contact.streetAddress,
+            city: contact.city,
+            state: contact.state,
+            zipCode: contact.zipCode,
+            numberOfDogs: contact.numberOfDogs ?? 1,
+            yardSize: contact.yardSize ?? null,
+          });
+        }
+      }
+
       res.json(contact);
     } catch (err) { handleError(res, err); }
   });
