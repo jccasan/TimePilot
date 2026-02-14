@@ -414,7 +414,9 @@ export async function registerRoutes(
   app.post("/api/routes", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const parsed = insertRouteSchema.parse({ ...req.body, companyId });
+      const body = { ...req.body, companyId };
+      if (body.technicianId === "") body.technicianId = null;
+      const parsed = insertRouteSchema.parse(body);
       const route = await storage.createRoute(parsed);
       res.status(201).json(route);
     } catch (err) { handleError(res, err); }
