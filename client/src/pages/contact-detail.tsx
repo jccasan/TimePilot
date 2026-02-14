@@ -217,6 +217,14 @@ export default function ContactDetail() {
                   lastName: contact.lastName,
                   email: contact.email,
                   phone: contact.phone,
+                  streetAddress: contact.streetAddress,
+                  address2: contact.address2,
+                  city: contact.city,
+                  state: contact.state,
+                  zipCode: contact.zipCode,
+                  yardSize: contact.yardSize,
+                  numberOfDogs: contact.numberOfDogs,
+                  serviceFrequency: contact.serviceFrequency,
                   status: contact.status,
                 });
               }}
@@ -255,6 +263,76 @@ export default function ContactDetail() {
                   data-testid="input-edit-phone"
                 />
               </div>
+              <Input
+                placeholder="Street Address"
+                value={editForm.streetAddress || ""}
+                onChange={(e) => setEditForm({ ...editForm, streetAddress: e.target.value })}
+                data-testid="input-edit-street-address"
+              />
+              <Input
+                placeholder="Address 2 (Suite, Apt, etc.)"
+                value={editForm.address2 || ""}
+                onChange={(e) => setEditForm({ ...editForm, address2: e.target.value })}
+                data-testid="input-edit-address2"
+              />
+              <div className="grid grid-cols-3 gap-3">
+                <Input
+                  placeholder="City"
+                  value={editForm.city || ""}
+                  onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                  data-testid="input-edit-city"
+                />
+                <Input
+                  placeholder="State"
+                  value={editForm.state || ""}
+                  onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                  data-testid="input-edit-state"
+                />
+                <Input
+                  placeholder="Zip Code"
+                  value={editForm.zipCode || ""}
+                  onChange={(e) => setEditForm({ ...editForm, zipCode: e.target.value })}
+                  data-testid="input-edit-zip-code"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Select
+                  value={editForm.yardSize || ""}
+                  onValueChange={(v) => setEditForm({ ...editForm, yardSize: v })}
+                >
+                  <SelectTrigger data-testid="select-edit-yard-size">
+                    <SelectValue placeholder="Yard Size" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="small">Small</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="large">Large</SelectItem>
+                    <SelectItem value="extra_large">Extra Large</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="# of Dogs"
+                  value={editForm.numberOfDogs ?? ""}
+                  onChange={(e) => setEditForm({ ...editForm, numberOfDogs: e.target.value ? parseInt(e.target.value) : null })}
+                  data-testid="input-edit-number-of-dogs"
+                />
+                <Select
+                  value={editForm.serviceFrequency || ""}
+                  onValueChange={(v) => setEditForm({ ...editForm, serviceFrequency: v })}
+                >
+                  <SelectTrigger data-testid="select-edit-service-frequency">
+                    <SelectValue placeholder="Service Frequency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1_per_week">1x per week</SelectItem>
+                    <SelectItem value="2_per_week">2x per week</SelectItem>
+                    <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                    <SelectItem value="as_needed">As needed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Select
                 value={editForm.status || "lead"}
                 onValueChange={(v) => setEditForm({ ...editForm, status: v as any })}
@@ -278,6 +356,22 @@ export default function ContactDetail() {
             <div className="space-y-1 text-sm">
               <p data-testid="text-contact-email">Email: {contact.email || "N/A"}</p>
               <p data-testid="text-contact-phone">Phone: {contact.phone || "N/A"}</p>
+              {contact.streetAddress && (
+                <p data-testid="text-contact-address">
+                  Address: {contact.streetAddress}{contact.address2 ? `, ${contact.address2}` : ""}{contact.city ? `, ${contact.city}` : ""}{contact.state ? `, ${contact.state}` : ""} {contact.zipCode || ""}
+                </p>
+              )}
+              {contact.yardSize && (
+                <p data-testid="text-contact-yard-size">Yard Size: {contact.yardSize === "extra_large" ? "Extra Large" : contact.yardSize.charAt(0).toUpperCase() + contact.yardSize.slice(1)}</p>
+              )}
+              {contact.numberOfDogs != null && (
+                <p data-testid="text-contact-dogs"># of Dogs: {contact.numberOfDogs}</p>
+              )}
+              {contact.serviceFrequency && (
+                <p data-testid="text-contact-frequency">Service Frequency: {
+                  { "1_per_week": "1x per week", "2_per_week": "2x per week", "biweekly": "Bi-weekly", "as_needed": "As needed" }[contact.serviceFrequency] || contact.serviceFrequency
+                }</p>
+              )}
             </div>
           )}
         </CardContent>

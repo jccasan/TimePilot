@@ -50,6 +50,14 @@ const contactFormSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
+  streetAddress: z.string().optional().or(z.literal("")),
+  address2: z.string().optional().or(z.literal("")),
+  city: z.string().optional().or(z.literal("")),
+  state: z.string().optional().or(z.literal("")),
+  zipCode: z.string().optional().or(z.literal("")),
+  yardSize: z.string().optional().or(z.literal("")),
+  numberOfDogs: z.coerce.number().min(0).optional(),
+  serviceFrequency: z.string().optional().or(z.literal("")),
   status: z.enum(["lead", "estimate", "active", "paused", "cancelled"]),
 });
 
@@ -77,6 +85,14 @@ export default function Contacts() {
       lastName: "",
       email: "",
       phone: "",
+      streetAddress: "",
+      address2: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      yardSize: "",
+      numberOfDogs: undefined,
+      serviceFrequency: "",
       status: "lead",
     },
   });
@@ -199,6 +215,134 @@ export default function Contacts() {
                   />
                   <FormField
                     control={form.control}
+                    name="streetAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Street Address</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-street-address" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="address2"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Address 2 (Suite, Apt, etc.)</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-address2" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-3 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="city"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>City</FormLabel>
+                          <FormControl>
+                            <Input {...field} data-testid="input-city" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="state"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>State</FormLabel>
+                          <FormControl>
+                            <Input {...field} data-testid="input-state" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="zipCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Zip Code</FormLabel>
+                          <FormControl>
+                            <Input {...field} data-testid="input-zip-code" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="yardSize"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Yard Size</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-yard-size">
+                                <SelectValue placeholder="Select size" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="small">Small</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="large">Large</SelectItem>
+                              <SelectItem value="extra_large">Extra Large</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="numberOfDogs"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel># of Dogs</FormLabel>
+                          <FormControl>
+                            <Input type="number" min="0" {...field} value={field.value ?? ""} data-testid="input-number-of-dogs" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="serviceFrequency"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Frequency</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-service-frequency">
+                              <SelectValue placeholder="Select frequency" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="1_per_week">1x per week</SelectItem>
+                            <SelectItem value="2_per_week">2x per week</SelectItem>
+                            <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                            <SelectItem value="as_needed">As needed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
                     name="status"
                     render={({ field }) => (
                       <FormItem>
@@ -272,6 +416,11 @@ export default function Contacts() {
                     <p className="text-sm text-muted-foreground">
                       {contact.email || "No email"} {contact.phone ? ` | ${contact.phone}` : ""}
                     </p>
+                    {contact.streetAddress && (
+                      <p className="text-sm text-muted-foreground" data-testid={`text-contact-address-${contact.id}`}>
+                        {contact.streetAddress}{contact.address2 ? `, ${contact.address2}` : ""}{contact.city ? `, ${contact.city}` : ""}{contact.state ? `, ${contact.state}` : ""} {contact.zipCode || ""}
+                      </p>
+                    )}
                   </div>
                   <Badge
                     variant="secondary"
