@@ -12,7 +12,7 @@ import {
   Webhook,
   ExternalLink,
 } from "lucide-react";
-import logoCircle from "@assets/ScooPilot_Circle_(4)_1771083595162.png";
+import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 import {
   Sidebar,
   SidebarContent,
@@ -71,7 +71,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1">
-          <img src={logoCircle} alt="ScooPilot" className="h-8 w-8 rounded-full" data-testid="img-brand-logo" />
+          <img src={logoSquare} alt="ScooPilot" className="h-8 w-8 rounded-md object-cover" data-testid="img-brand-logo" />
           <span className="text-lg font-bold" data-testid="text-brand-name">ScooPilot</span>
         </div>
       </SidebarHeader>
