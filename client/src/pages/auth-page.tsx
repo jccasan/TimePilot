@@ -1,6 +1,7 @@
-import { Footprints, ClipboardList, Calendar, MapPin, FileText, ExternalLink } from "lucide-react";
+import { ClipboardList, Calendar, MapPin, FileText, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import logoWide from "@assets/ScooPilot_Circle_(3)_1771083595163.png";
 
 const features = [
   { icon: ClipboardList, title: "CRM", description: "Manage contacts and leads" },
@@ -15,9 +16,9 @@ export default function AuthPage() {
     <div className="min-h-screen flex flex-col md:flex-row">
       <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-card">
         <div className="w-full max-w-md space-y-6">
-          <div className="flex items-center gap-3">
-            <Footprints className="h-10 w-10 text-primary" />
-            <h1 className="text-3xl font-bold" data-testid="text-brand-title">Scoopilot</h1>
+          <div className="flex flex-col items-start gap-4">
+            <img src={logoWide} alt="ScooPilot" className="h-24 w-auto" data-testid="img-brand-logo" />
+            <h1 className="text-3xl font-bold" data-testid="text-brand-title">ScooPilot</h1>
           </div>
           <p className="text-muted-foreground text-lg">
             Professional Pet Waste Removal Management
