@@ -95,6 +95,15 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
 - Messages table logs all communication history (email/sms, inbound/outbound)
 
 ## Recent Changes
+- 2026-02-14: Advanced invoicing system with billing preferences, auto-generation, line items
+  - Contacts have invoiceTiming (before/after service) and invoiceFrequency (per service/week/month)
+  - Auto-invoice generation on visit completion for "after_service + per_service" contacts
+  - Manual invoice creation with service pricing catalog selection, tax rate %, discount ($/%)
+  - Server-side total calculations (subtotal, discount, tax, total)
+  - Invoice detail view with line items breakdown
+  - Auto-generate invoices from date range (completed or scheduled visits)
+  - POST /api/invoices/generate endpoint for batch invoice creation
+  - PATCH /api/contacts/:id/billing-preferences endpoint
 - 2026-02-14: Added Communications module (SendGrid email + Twilio SMS)
 - 2026-02-14: Routes page: delete functionality, service plans display
 - 2026-02-14: Invoice email sending via SendGrid

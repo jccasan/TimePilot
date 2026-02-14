@@ -103,6 +103,11 @@ export interface IStorage {
   // Invoice Line Items
   getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]>;
   createInvoiceLineItem(data: InsertInvoiceLineItem): Promise<InvoiceLineItem>;
+  deleteInvoiceLineItems(invoiceId: string): Promise<void>;
+  isVisitInvoiced(visitId: string): Promise<boolean>;
+  getUninvoicedCompletedVisits(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]>;
+  getScheduledVisitsForRange(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]>;
+  createInvoiceWithLineItems(invoiceData: InsertInvoice, lineItems: Omit<InsertInvoiceLineItem, "invoiceId">[]): Promise<Invoice>;
 
   // Automation Rules
   getAutomationRules(companyId: string): Promise<AutomationRule[]>;
@@ -451,6 +456,64 @@ export class DatabaseStorage implements IStorage {
   async createInvoiceLineItem(data: InsertInvoiceLineItem): Promise<InvoiceLineItem> {
     const [item] = await db.insert(invoiceLineItems).values(data).returning();
     return item;
+  }
+
+  async deleteInvoiceLineItems(invoiceId: string): Promise<void> {
+    await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId));
+  }
+
+  async isVisitInvoiced(visitId: string): Promise<boolean> {
+    const [result] = await db.select({ count: count() }).from(invoiceLineItems).where(eq(invoiceLineItems.visitId, visitId));
+    return (result?.count ?? 0) > 0;
+  }
+
+  async getUninvoicedCompletedVisits(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]> {
+    const allVisits = await db.select().from(visits).where(and(
+      eq(visits.companyId, companyId),
+      eq(visits.status, "completed"),
+      gte(visits.scheduledDate, startDate),
+      lte(visits.scheduledDate, endDate),
+    ));
+    const contactPlans = await db.select().from(servicePlans).where(and(
+      eq(servicePlans.companyId, companyId),
+      eq(servicePlans.contactId, contactId),
+    ));
+    const planIds = new Set(contactPlans.map(p => p.id));
+    const contactVisits = allVisits.filter(v => planIds.has(v.servicePlanId));
+    const uninvoiced: Visit[] = [];
+    for (const v of contactVisits) {
+      const invoiced = await this.isVisitInvoiced(v.id);
+      if (!invoiced) uninvoiced.push(v);
+    }
+    return uninvoiced;
+  }
+
+  async getScheduledVisitsForRange(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]> {
+    const allVisits = await db.select().from(visits).where(and(
+      eq(visits.companyId, companyId),
+      gte(visits.scheduledDate, startDate),
+      lte(visits.scheduledDate, endDate),
+    ));
+    const contactPlans = await db.select().from(servicePlans).where(and(
+      eq(servicePlans.companyId, companyId),
+      eq(servicePlans.contactId, contactId),
+    ));
+    const planIds = new Set(contactPlans.map(p => p.id));
+    const contactVisits = allVisits.filter(v => planIds.has(v.servicePlanId));
+    const uninvoiced: Visit[] = [];
+    for (const v of contactVisits) {
+      const invoiced = await this.isVisitInvoiced(v.id);
+      if (!invoiced) uninvoiced.push(v);
+    }
+    return uninvoiced;
+  }
+
+  async createInvoiceWithLineItems(invoiceData: InsertInvoice, lineItems: Omit<InsertInvoiceLineItem, "invoiceId">[]): Promise<Invoice> {
+    const [invoice] = await db.insert(invoices).values(invoiceData).returning();
+    for (const item of lineItems) {
+      await db.insert(invoiceLineItems).values({ ...item, invoiceId: invoice.id });
+    }
+    return invoice;
   }
 
   // ================ Automation Rules ================

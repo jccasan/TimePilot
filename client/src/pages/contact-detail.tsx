@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { useForm } from "react-hook-form";
@@ -35,7 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, X, Edit2, Save } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt } from "lucide-react";
 
 const statusColors: Record<string, string> = {
   lead: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -381,6 +382,8 @@ export default function ContactDetail() {
         </CardContent>
       </Card>
 
+      <BillingPreferences contact={contact} contactId={id!} />
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-lg">Properties</CardTitle>
@@ -542,5 +545,107 @@ export default function ContactDetail() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function BillingPreferences({ contact, contactId }: { contact: Contact; contactId: string }) {
+  const { toast } = useToast();
+  const [timing, setTiming] = useState<string>(contact.invoiceTiming || "after_service");
+  const [frequency, setFrequency] = useState<string>(contact.invoiceFrequency || "per_service");
+
+  useEffect(() => {
+    setTiming(contact.invoiceTiming || "after_service");
+    setFrequency(contact.invoiceFrequency || "per_service");
+  }, [contact.invoiceTiming, contact.invoiceFrequency]);
+
+  const updateBillingMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PATCH", `/api/contacts/${contactId}/billing-preferences`, {
+        invoiceTiming: timing,
+        invoiceFrequency: frequency,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
+      toast({ title: "Updated", description: "Billing preferences saved." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const timingLabels: Record<string, string> = {
+    before_service: "Before Service",
+    after_service: "After Service",
+  };
+  const frequencyLabels: Record<string, string> = {
+    per_service: "Per Service",
+    per_week: "Per Week",
+    per_month: "Per Month",
+  };
+
+  const hasChanges = timing !== (contact.invoiceTiming || "after_service") || frequency !== (contact.invoiceFrequency || "per_service");
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Receipt className="h-5 w-5" /> Billing Preferences
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label className="text-sm text-muted-foreground">Invoice Timing</Label>
+            <Select value={timing} onValueChange={setTiming}>
+              <SelectTrigger data-testid="select-billing-timing">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="before_service">Before Service</SelectItem>
+                <SelectItem value="after_service">After Service</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              {timing === "before_service"
+                ? "Invoice created before scheduled services"
+                : "Invoice created after services are completed"}
+            </p>
+          </div>
+          <div>
+            <Label className="text-sm text-muted-foreground">Invoice Frequency</Label>
+            <Select value={frequency} onValueChange={setFrequency}>
+              <SelectTrigger data-testid="select-billing-frequency">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="per_service">Per Service</SelectItem>
+                <SelectItem value="per_week">Per Week</SelectItem>
+                <SelectItem value="per_month">Per Month</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              {frequency === "per_service" && "One invoice generated per visit"}
+              {frequency === "per_week" && "One invoice per week covering all visits"}
+              {frequency === "per_month" && "One invoice per month covering all visits"}
+            </p>
+          </div>
+        </div>
+        {hasChanges && (
+          <Button
+            size="sm"
+            onClick={() => updateBillingMutation.mutate()}
+            disabled={updateBillingMutation.isPending}
+            data-testid="button-save-billing"
+          >
+            <Save className="mr-1 h-4 w-4" />
+            {updateBillingMutation.isPending ? "Saving..." : "Save Billing Preferences"}
+          </Button>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Current: {timingLabels[contact.invoiceTiming || "after_service"]} / {frequencyLabels[contact.invoiceFrequency || "per_service"]}
+        </p>
+      </CardContent>
+    </Card>
   );
 }
