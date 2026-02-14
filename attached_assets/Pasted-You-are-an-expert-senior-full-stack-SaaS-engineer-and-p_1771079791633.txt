@@ -1,0 +1,122 @@
+You are an expert senior full-stack SaaS engineer and product architect. Build “Scoopilot” — a vertical SaaS for pet waste removal businesses (poop scooping). This must be production-oriented (auth, tenancy, billing, auditability), but ship an MVP fast.
+
+TECH STACK (use exactly this unless impossible)
+- Frontend: Next.js (App Router) + TypeScript + Tailwind
+- Backend/API: Next.js Route Handlers (or a small FastAPI service if needed for background jobs)
+- Database: Postgres (use Prisma ORM)
+- Auth: Auth.js (NextAuth) with email+password and magic link option
+- Payments: Stripe (subscriptions + per-seat add-ons)
+- File storage: S3-compatible (or Supabase storage) for proof-of-service photos
+- Deploy: Replit defaults
+- Testing: lightweight (playwright optional)
+
+CORE PRINCIPLES
+- Multi-tenant: one “Company” per customer account. Every record belongs to a Company.
+- RBAC: Owner, Admin, Tech. Tech has limited access (today’s route only, notes, photo upload).
+- Simple UI: fast, minimal taps, mobile-first for technicians.
+- MVP focus: implement only the critical workflows. Defer route optimization and advanced AI.
+- Seed data: include a demo company with a few clients, properties, and recurring services.
+
+MVP SCOPE (V1)
+1) CRM
+- Contacts (clients/prospects), Properties (service addresses), Tags, Notes, Attachments
+- Lead status pipeline: Lead → Estimate → Active → Paused → Cancelled
+- Fast search and filters (frequency, route/day, status)
+- CSV import/export (Sweep & Go / Jobber style mapping; provide a simple mapper UI)
+
+2) Scheduling + Recurring Services
+- Create recurring schedules: weekly/biweekly/monthly
+- One-time cleanups
+- Vacation hold and skip service
+- Drag-and-drop reschedule (basic)
+- Recurring job engine: generate Visits for the next 4–8 weeks on a schedule; allow manual override
+
+3) Route Management + Technician Mobile
+- Routes: define Route/Day (Mon/Tue etc) and assign techs
+- Technician mobile view:
+  - Today’s route list
+  - Tap into job: notes, gate code, instructions
+  - “Start” / “Complete” with timestamps
+  - Upload proof-of-service photo
+  - Add internal note / report issue
+- Must be extremely simple and fast
+
+4) Invoicing + Payments
+- Stripe subscriptions:
+  - Plan “Run” ($49.99/mo) includes 1 user
+  - Add users at $7/mo each (per-seat)
+- Client payments:
+  - Store card on file (Stripe Customer)
+  - Auto-charge day before scheduled service OR weekly batch (make this configurable per company)
+  - Failed payment workflow: mark invoice failed, create task/notification
+- Basic revenue report: MRR, last 30 days revenue, failed payments count
+
+5) Client Portal (basic)
+- Client login (separate “Client” role linked to Contact)
+- View upcoming service dates
+- Update payment method
+- Download invoices/receipts
+- Pause service / request extra service (creates a request ticket)
+
+6) Automations (light V1, no GHL dependency)
+- Event-driven automations:
+  - Lead created → task “Send estimate”
+  - Service completed → send review request email/SMS (stub)
+  - Failed payment → notify owner
+- Implement as internal “Automation Rules” table + simple trigger runner (no external platform)
+
+DEFER (explicitly do NOT build in V1)
+- Google Maps route optimization
+- GPS tracking beyond timestamps
+- Full marketing suite
+- “AI Employees” beyond basic summaries
+- White-label custom domains (leave placeholder)
+
+DATA MODEL (must implement)
+- Company
+- User (belongs to Company) + Role
+- Contact (client/prospect) (belongs to Company)
+- Property (belongs to Company, linked to Contact)
+- Tag + ContactTag join
+- Note (linked to Contact or Property)
+- ServicePlan (recurring definition: frequency, start date, pause flags, price)
+- Visit (generated instances: scheduled date, status, assigned tech, timestamps)
+- RouteDay (Mon–Sun) + Route (name) + assignments
+- Invoice + InvoiceLine
+- PaymentAttempt
+- ClientUser (portal login linked to Contact)
+- Attachment (photo file pointers)
+- AutomationRule + AutomationEventLog
+- Referral/Affiliate tables (stub only, schema placeholder)
+
+PAGES / UX (must implement)
+- Auth: login/register, forgot password
+- Owner dashboard: MRR, today’s visits, failed payments, quick actions
+- CRM: contacts list with filters, contact detail, property detail
+- Scheduling: calendar week view + list view; create/edit service plan
+- Routes: route/day assignments; tech list
+- Tech mobile: /m/today, /m/visit/[id]
+- Billing: subscription status, seats, invoices, payment failures
+- Client portal: /portal
+
+IMPLEMENTATION REQUIREMENTS
+- Include a README with:
+  - how to run locally on Replit
+  - environment variables needed (DATABASE_URL, NEXTAUTH_SECRET, STRIPE keys, S3/SUPABASE storage keys)
+  - how to seed demo data
+- Include migrations and Prisma schema
+- Include basic input validation (zod)
+- Include server-side authorization checks on every API route
+- Include a simple background job mechanism for recurring Visit generation (cron-like scheduled function or queue)
+- Add logging for key events (visit generation, payment attempts, failures)
+
+OUTPUT
+- Create the full project in this Replit workspace: code, schema, migrations, seed script, and minimal styling.
+- Prioritize correctness and shippable workflow over fancy UI.
+- If something is ambiguous, make a reasonable assumption and note it in README under “Assumptions”.
+
+Start by:
+1) Scaffolding the project structure
+2) Implementing Auth + multi-tenant base
+3) Implementing the data model and seed
+4) Building the MVP flows in the order above
