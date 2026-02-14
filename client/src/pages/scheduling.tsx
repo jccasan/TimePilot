@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -121,6 +121,28 @@ export default function Scheduling() {
     },
   });
 
+  const selectedContactId = form.watch("contactId");
+
+  const contactProperties = useMemo(() => {
+    if (!selectedContactId || !properties) return [];
+    return properties.filter((p) => p.contactId === selectedContactId);
+  }, [selectedContactId, properties]);
+
+  useEffect(() => {
+    if (!selectedContactId) {
+      form.setValue("propertyId", "");
+      return;
+    }
+    if (contactProperties.length === 1) {
+      form.setValue("propertyId", contactProperties[0].id);
+    } else {
+      const currentPropertyId = form.getValues("propertyId");
+      if (currentPropertyId && !contactProperties.some((p) => p.id === currentPropertyId)) {
+        form.setValue("propertyId", "");
+      }
+    }
+  }, [selectedContactId, contactProperties, form]);
+
   const createMutation = useMutation({
     mutationFn: async (data: ServicePlanFormValues) => {
       await apiRequest("POST", "/api/service-plans", data);
@@ -193,13 +215,16 @@ export default function Scheduling() {
                   <FormItem>
                     <FormLabel>Property</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger data-testid="select-property"><SelectValue placeholder="Select property" /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger data-testid="select-property"><SelectValue placeholder={selectedContactId ? (contactProperties.length === 0 ? "No properties for this contact" : "Select property") : "Select a contact first"} /></SelectTrigger></FormControl>
                       <SelectContent>
-                        {properties?.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>{p.streetAddress}</SelectItem>
+                        {contactProperties.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.streetAddress}, {p.city}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {selectedContactId && contactProperties.length === 0 && (
+                      <p className="text-sm text-muted-foreground">This contact has no properties. Add one from their contact detail page first.</p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )} />
