@@ -5,8 +5,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Route } from "@shared/schema";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { Route, ServicePlan, Contact, Property } from "@shared/schema";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Form,
   FormControl,
@@ -34,7 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, MapPin } from "lucide-react";
+import { Plus, Trash2, Users, MapPin } from "lucide-react";
 
 const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
@@ -61,6 +72,18 @@ export default function RoutesPage() {
     },
   });
 
+  const { data: servicePlans } = useQuery<ServicePlan[]>({
+    queryKey: ["/api/service-plans"],
+  });
+
+  const { data: contacts } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+  });
+
+  const { data: properties } = useQuery<Property[]>({
+    queryKey: ["/api/properties"],
+  });
+
   const form = useForm<RouteFormValues>({
     resolver: zodResolver(routeFormSchema),
     defaultValues: {
@@ -85,6 +108,33 @@ export default function RoutesPage() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/routes/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      toast({ title: "Route deleted" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const getPlansForRoute = (routeId: string) => {
+    return servicePlans?.filter(sp => sp.routeId === routeId && sp.isActive) || [];
+  };
+
+  const getContactName = (contactId: string) => {
+    const c = contacts?.find(ct => ct.id === contactId);
+    return c ? `${c.firstName} ${c.lastName}`.trim() : "Unknown";
+  };
+
+  const getPropertyAddress = (propertyId: string) => {
+    const p = properties?.find(pr => pr.id === propertyId);
+    return p ? `${p.street}` : "Unknown";
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
@@ -160,28 +210,77 @@ export default function RoutesPage() {
         </div>
       ) : routes && routes.length > 0 ? (
         <div className="space-y-3">
-          {routes.map((route) => (
-            <Card key={route.id} data-testid={`card-route-${route.id}`}>
-              <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-4 h-4 rounded-full shrink-0"
-                    style={{ backgroundColor: route.color || "#3b82f6" }}
-                  />
-                  <div>
-                    <p className="font-medium" data-testid={`text-route-name-${route.id}`}>{route.name}</p>
-                    <p className="text-sm text-muted-foreground capitalize">{route.dayOfWeek}</p>
+          {routes.map((route) => {
+            const plans = getPlansForRoute(route.id);
+            return (
+              <Card key={route.id} data-testid={`card-route-${route.id}`}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-4 h-4 rounded-full shrink-0"
+                        style={{ backgroundColor: route.color || "#3b82f6" }}
+                      />
+                      <div>
+                        <p className="font-medium" data-testid={`text-route-name-${route.id}`}>{route.name}</p>
+                        <p className="text-sm text-muted-foreground capitalize">{route.dayOfWeek}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" data-testid={`badge-route-plans-${route.id}`}>
+                        <Users className="h-3 w-3 mr-1" />
+                        {plans.length} {plans.length === 1 ? "plan" : "plans"}
+                      </Badge>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" data-testid={`button-delete-route-${route.id}`}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Route</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete "{route.name}"? {plans.length > 0 && `This route has ${plans.length} assigned service plan(s) that will be unassigned.`}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deleteMutation.mutate(route.id)}
+                              data-testid={`button-confirm-delete-route-${route.id}`}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <Badge variant="secondary" data-testid={`badge-route-tech-${route.id}`}>
-                    {route.technicianId ? "Assigned" : "Unassigned"}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                  {plans.length > 0 && (
+                    <div className="border-t pt-3 space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Assigned Service Plans</p>
+                      {plans.map((plan) => (
+                        <div key={plan.id} className="flex flex-wrap items-center justify-between gap-2 text-sm" data-testid={`row-plan-${plan.id}`}>
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-3 w-3 text-muted-foreground" />
+                            <span>{getContactName(plan.contactId)}</span>
+                            <span className="text-muted-foreground">-</span>
+                            <span className="text-muted-foreground">{getPropertyAddress(plan.propertyId)}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="capitalize">{plan.frequency}</Badge>
+                            <span className="font-medium">${plan.pricePerVisit}/visit</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <Card>

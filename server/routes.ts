@@ -5,6 +5,8 @@ import { storage } from "./storage";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { sendEmail, generateInvoiceEmailHtml } from "./services/email";
+import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
 import {
   TIER_CONFIG,
   insertContactSchema,
@@ -843,6 +845,208 @@ export async function registerRoutes(
       requireRole(role);
       await storage.deleteServicePackage(req.params.id, companyId);
       res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Messages / Communications ================
+
+  app.get("/api/messages", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const filters: { contactId?: string; channel?: string; direction?: string } = {};
+      if (req.query.contactId) filters.contactId = req.query.contactId as string;
+      if (req.query.channel) filters.channel = req.query.channel as string;
+      if (req.query.direction) filters.direction = req.query.direction as string;
+      const msgs = await storage.getMessages(companyId, filters);
+      res.json(msgs);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/messages/email", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId } = await getCompanyContext(req);
+      const { contactId, to, subject, body, htmlBody } = req.body;
+      if (!to || !subject || !body) {
+        return res.status(400).json({ error: "to, subject, and body are required" });
+      }
+
+      if (contactId) {
+        const contact = await storage.getContact(contactId, companyId);
+        if (!contact) return res.status(400).json({ error: "Contact not found in your company" });
+      }
+
+      const company = await storage.getCompany(companyId);
+      const fromAddress = company?.email || "noreply@scoopilot.com";
+
+      const msg = await storage.createMessage({
+        companyId,
+        contactId: contactId || null,
+        channel: "email",
+        direction: "outbound",
+        status: "queued",
+        fromAddress,
+        toAddress: to,
+        subject,
+        body,
+        htmlBody: htmlBody || null,
+        sentBy: userId,
+      });
+
+      const result = await sendEmail({ to, from: fromAddress, subject, text: body, html: htmlBody || body });
+
+      if (result.success) {
+        const updated = await storage.updateMessageStatus(msg.id, "sent");
+        res.json(updated);
+      } else {
+        const updated = await storage.updateMessageStatus(msg.id, "failed", result.error);
+        res.status(500).json({ error: result.error, message: updated });
+      }
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/messages/sms", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId } = await getCompanyContext(req);
+      const { contactId, to, body } = req.body;
+      if (!to || !body) {
+        return res.status(400).json({ error: "to and body are required" });
+      }
+
+      if (contactId) {
+        const contact = await storage.getContact(contactId, companyId);
+        if (!contact) return res.status(400).json({ error: "Contact not found in your company" });
+      }
+
+      const fromPhone = getTwilioPhoneNumber();
+
+      const msg = await storage.createMessage({
+        companyId,
+        contactId: contactId || null,
+        channel: "sms",
+        direction: "outbound",
+        status: "queued",
+        fromAddress: fromPhone,
+        toAddress: to,
+        body,
+        sentBy: userId,
+      });
+
+      const result = await sendSms({ to, body });
+
+      if (result.success) {
+        const updated = await storage.updateMessageStatus(msg.id, "sent");
+        res.json(updated);
+      } else {
+        const updated = await storage.updateMessageStatus(msg.id, "failed", result.error);
+        res.status(500).json({ error: result.error, message: updated });
+      }
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/messages/config", isAuthenticated, async (_req: Request, res: Response) => {
+    res.json({
+      email: { configured: !!process.env.SENDGRID_API_KEY },
+      sms: { configured: isTwilioConfigured(), phoneNumber: getTwilioPhoneNumber() },
+    });
+  });
+
+  // Twilio incoming SMS webhook
+  app.post("/api/webhooks/twilio/sms", async (req: Request, res: Response) => {
+    try {
+      const { From, Body, MessageSid } = req.body;
+      if (!From || !Body) {
+        return res.status(400).send("<Response></Response>");
+      }
+
+      const allCompanies = await storage.listCompanies();
+      if (allCompanies.length > 0) {
+        const companyId = allCompanies[0].id;
+        const allContacts = await storage.getContacts(companyId);
+        const digits = From.replace(/\D/g, "");
+        const matchedContact = allContacts.find(c => {
+          const cDigits = (c.phone || "").replace(/\D/g, "");
+          return cDigits.length >= 10 && digits.endsWith(cDigits.slice(-10));
+        });
+
+        await storage.createMessage({
+          companyId,
+          contactId: matchedContact?.id || null,
+          channel: "sms",
+          direction: "inbound",
+          status: "received",
+          fromAddress: From,
+          toAddress: getTwilioPhoneNumber(),
+          body: Body,
+          externalId: MessageSid,
+        });
+      }
+
+      res.type("text/xml").send("<Response></Response>");
+    } catch (err) {
+      console.error("Twilio webhook error:", err);
+      res.type("text/xml").send("<Response></Response>");
+    }
+  });
+
+  // Send invoice via email
+  app.post("/api/invoices/:id/send-email", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId } = await getCompanyContext(req);
+      const invoice = await storage.getInvoice(req.params.id, companyId);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+      const contact = await storage.getContact(invoice.contactId, companyId);
+      if (!contact?.email) return res.status(400).json({ error: "Contact has no email address" });
+
+      const company = await storage.getCompany(companyId);
+      const lineItems = await storage.getInvoiceLineItems(invoice.id);
+
+      const emailContent = generateInvoiceEmailHtml({
+        companyName: company?.name || "ScooPilot",
+        contactName: `${contact.firstName} ${contact.lastName}`.trim(),
+        invoiceNumber: invoice.invoiceNumber,
+        dueDate: invoice.dueDate,
+        total: invoice.total,
+        lineItems: lineItems.map(li => ({
+          description: li.description,
+          quantity: li.quantity,
+          unitPrice: li.unitPrice,
+          total: li.total,
+        })),
+      });
+
+      const fromAddress = company?.email || "noreply@scoopilot.com";
+
+      const msg = await storage.createMessage({
+        companyId,
+        contactId: contact.id,
+        channel: "email",
+        direction: "outbound",
+        status: "queued",
+        fromAddress,
+        toAddress: contact.email,
+        subject: emailContent.subject,
+        body: emailContent.text,
+        htmlBody: emailContent.html,
+        sentBy: userId,
+        metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
+      });
+
+      const result = await sendEmail({
+        to: contact.email,
+        from: fromAddress,
+        subject: emailContent.subject,
+        text: emailContent.text,
+        html: emailContent.html,
+      });
+
+      if (result.success) {
+        await storage.updateMessageStatus(msg.id, "sent");
+        res.json({ success: true, messageId: msg.id });
+      } else {
+        await storage.updateMessageStatus(msg.id, "failed", result.error);
+        res.status(500).json({ error: result.error });
+      }
     } catch (err) { handleError(res, err); }
   });
 

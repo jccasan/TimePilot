@@ -12,6 +12,7 @@ import {
   Key,
   Webhook,
   ExternalLink,
+  MessageSquare,
 } from "lucide-react";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 import {
@@ -40,6 +41,7 @@ const menuSections = [
       { title: "Scheduling", url: "/scheduling", icon: Calendar },
       { title: "Routes", url: "/routes", icon: MapPin },
       { title: "Tech Mobile", url: "/m/today", icon: Smartphone },
+      { title: "Communications", url: "/communications", icon: MessageSquare },
     ],
   },
   {

@@ -145,7 +145,7 @@ export const servicePlans = pgTable("service_plans", {
   isActive: boolean("is_active").notNull().default(true),
   startDate: date("start_date").notNull(),
   endDate: date("end_date"),
-  routeId: varchar("route_id").references(() => routes.id),
+  routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -167,7 +167,7 @@ export const visits = pgTable("visits", {
   companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   servicePlanId: varchar("service_plan_id").notNull().references(() => servicePlans.id, { onDelete: "cascade" }),
   propertyId: varchar("property_id").notNull().references(() => properties.id, { onDelete: "cascade" }),
-  routeId: varchar("route_id").references(() => routes.id),
+  routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),
   scheduledDate: date("scheduled_date").notNull(),
   status: visitStatusEnum("status").notNull().default("scheduled"),
   startedAt: timestamp("started_at"),
@@ -285,6 +285,33 @@ export const attachments = pgTable("attachments", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const messageChannelEnum = pgEnum("message_channel", ["email", "sms"]);
+export const messageDirectionEnum = pgEnum("message_direction", ["inbound", "outbound"]);
+export const messageStatusEnum = pgEnum("message_status", ["queued", "sent", "delivered", "failed", "received"]);
+
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+  channel: messageChannelEnum("channel").notNull(),
+  direction: messageDirectionEnum("direction").notNull(),
+  status: messageStatusEnum("status").notNull().default("queued"),
+  fromAddress: varchar("from_address", { length: 255 }).notNull(),
+  toAddress: varchar("to_address", { length: 255 }).notNull(),
+  subject: varchar("subject", { length: 500 }),
+  body: text("body").notNull(),
+  htmlBody: text("html_body"),
+  externalId: varchar("external_id", { length: 255 }),
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  sentBy: varchar("sent_by").references(() => users.id),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_messages_company").on(table.companyId),
+  index("idx_messages_contact").on(table.contactId),
+  index("idx_messages_channel").on(table.channel),
+]);
+
 export const pricingCategoryEnum = pgEnum("pricing_category", [
   "recurring_service", "one_time_service", "add_on", "package"
 ]);
@@ -323,6 +350,12 @@ export const servicePackages = pgTable("service_packages", {
   index("idx_spkg_company").on(table.companyId),
 ]);
 
+export const messageRelations = relations(messages, ({ one }) => ({
+  company: one(companies, { fields: [messages.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [messages.contactId], references: [contacts.id] }),
+  sentByUser: one(users, { fields: [messages.sentBy], references: [users.id] }),
+}));
+
 export const companyRelations = relations(companies, ({ many }) => ({
   companyUsers: many(companyUsers),
   contacts: many(contacts),
@@ -332,6 +365,7 @@ export const companyRelations = relations(companies, ({ many }) => ({
   invoices: many(invoices),
   automationRules: many(automationRules),
   apiKeys: many(apiKeys),
+  messages: many(messages),
 }));
 
 export const companyUserRelations = relations(companyUsers, ({ one }) => ({
@@ -446,6 +480,7 @@ export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
 export type Webhook = typeof webhooks.$inferSelect;
 export type InsertWebhook = z.infer<typeof insertWebhookSchema>;
 
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
 export const insertServicePricingSchema = createInsertSchema(servicePricing).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true, updatedAt: true });
 export type ServicePricingItem = typeof servicePricing.$inferSelect;
@@ -454,3 +489,5 @@ export type ServicePackage = typeof servicePackages.$inferSelect;
 export type InsertServicePackage = z.infer<typeof insertServicePackageSchema>;
 export type Attachment = typeof attachments.$inferSelect;
 export type InsertAttachment = z.infer<typeof insertAttachmentSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;

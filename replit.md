@@ -48,6 +48,7 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
 - `vacation_holds` - Temporary service pauses
 - `visits` - Individual scheduled/completed visits
 - `invoices` / `invoice_line_items` - Billing records
+- `messages` - Email/SMS communication log (inbound/outbound)
 - `automation_rules` / `automation_event_logs` - Event-driven automation
 - `api_keys` - Scoped API keys for external integrations
 - `webhooks` - Webhook subscriptions for events
@@ -62,19 +63,24 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
 | tier_6_10 | 6-10 | $349.99/mo |
 | tier_10_plus | 10+ | $599.99/mo |
 
+### Key Service Files
+- `server/services/email.ts` - SendGrid email service (invoice emails, general comms)
+- `server/services/sms.ts` - Twilio SMS service (outbound/inbound texting)
+
 ### Pages
 1. **Dashboard** (`/`) - MRR stats, today's visits, quick actions
 2. **Contacts** (`/contacts`) - CRM with search, filters, CSV import/export
 3. **Contact Detail** (`/contacts/:id`) - Full contact with properties, plans, tags
 4. **Scheduling** (`/scheduling`) - Week view with service plans and visits
-5. **Routes** (`/routes`) - Route management by day of week
+5. **Routes** (`/routes`) - Route management with delete and service plan display
 6. **Tech Mobile** (`/m/today`) - Mobile-optimized field view
-7. **Invoices** (`/invoices`) - Invoice management with status tracking
-8. **Billing** (`/billing`) - Subscription tier management
-9. **Automation** (`/automation`) - Event-driven rules
-10. **API Keys** (`/api-keys`) - API key management with scopes
-11. **Webhooks** (`/webhooks`) - Webhook subscriptions
-12. **Portal** (`/portal`) - Client portal (placeholder)
+7. **Communications** (`/communications`) - Email/SMS message center
+8. **Invoices** (`/invoices`) - Invoice management with email sending
+9. **Billing** (`/billing`) - Subscription tier management
+10. **Automation** (`/automation`) - Event-driven rules
+11. **API Keys** (`/api-keys`) - API key management with scopes
+12. **Webhooks** (`/webhooks`) - Webhook subscriptions
+13. **Portal** (`/portal`) - Client portal (placeholder)
 
 ### API Hooks for AI Integration
 - REST API with scoped API key authentication
@@ -82,10 +88,20 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
 - Endpoints for contacts, visits, invoices CRUD
 - Designed for AI phone assistants and AI employee agents
 
+### Communication Services
+- **Email**: SendGrid integration for outbound emails (invoice emails, general communications)
+- **SMS**: Twilio integration for outbound/inbound texting (phone: +15715824054)
+- **Webhook**: POST /api/webhooks/twilio/sms for incoming SMS messages
+- Messages table logs all communication history (email/sms, inbound/outbound)
+
 ## Recent Changes
+- 2026-02-14: Added Communications module (SendGrid email + Twilio SMS)
+- 2026-02-14: Routes page: delete functionality, service plans display
+- 2026-02-14: Invoice email sending via SendGrid
+- 2026-02-14: Messages database table for communication history
 - 2026-02-14: Initial build of complete application
 - All database tables created and seeded with demo data
-- Full frontend with 12 pages built
+- Full frontend with 13 pages built
 - Auto-setup flow for first-time users (assigns to demo company)
 
 ## User Preferences

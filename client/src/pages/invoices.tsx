@@ -34,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText } from "lucide-react";
+import { Plus, FileText, Mail } from "lucide-react";
 
 const invoiceStatusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
@@ -79,6 +79,18 @@ export default function Invoices() {
       subtotal: "",
       tax: "0",
       total: "",
+    },
+  });
+
+  const sendEmailMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      await apiRequest("POST", `/api/invoices/${invoiceId}/send-email`);
+    },
+    onSuccess: () => {
+      toast({ title: "Invoice emailed", description: "Invoice sent to the client's email." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to send", description: error.message, variant: "destructive" });
     },
   });
 
@@ -212,6 +224,15 @@ export default function Invoices() {
                   <Badge variant="secondary" className={invoiceStatusColors[invoice.status] || ""} data-testid={`badge-invoice-status-${invoice.id}`}>
                     {invoice.status}
                   </Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => sendEmailMutation.mutate(invoice.id)}
+                    disabled={sendEmailMutation.isPending}
+                    data-testid={`button-email-invoice-${invoice.id}`}
+                  >
+                    <Mail className="h-4 w-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>

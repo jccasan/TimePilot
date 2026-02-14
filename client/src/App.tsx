@@ -26,6 +26,7 @@ import ApiKeysPage from "@/pages/api-keys";
 import WebhooksPage from "@/pages/webhooks-page";
 import Portal from "@/pages/portal";
 import Pricing from "@/pages/pricing";
+import Communications from "@/pages/communications";
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -51,6 +52,7 @@ function Router() {
       <Route path="/api-keys" component={ApiKeysPage} />
       <Route path="/webhooks" component={WebhooksPage} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/communications" component={Communications} />
       <Route path="/portal" component={Portal} />
       <Route component={NotFound} />
     </Switch>

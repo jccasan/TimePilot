@@ -5,7 +5,7 @@ import {
   properties, routes, servicePlans, vacationHolds,
   visits, invoices, invoiceLineItems, automationRules,
   automationEventLogs, apiKeys, webhooks, attachments,
-  servicePricing, servicePackages,
+  servicePricing, servicePackages, messages,
   type Company, type InsertCompany,
   type CompanyUser, type InsertCompanyUser,
   type Contact, type InsertContact,
@@ -23,6 +23,7 @@ import {
   type Attachment, type InsertAttachment,
   type ServicePricingItem, type InsertServicePricing,
   type ServicePackage, type InsertServicePackage,
+  type Message, type InsertMessage,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -140,6 +141,11 @@ export interface IStorage {
   createServicePackage(data: InsertServicePackage): Promise<ServicePackage>;
   updateServicePackage(id: string, companyId: string, data: Partial<InsertServicePackage>): Promise<ServicePackage>;
   deleteServicePackage(id: string, companyId: string): Promise<void>;
+
+  // Messages
+  getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string }): Promise<Message[]>;
+  createMessage(data: InsertMessage): Promise<Message>;
+  updateMessageStatus(id: string, status: string, errorMessage?: string): Promise<Message>;
 
   // Seed default pricing
   seedDefaultPricing(companyId: string): Promise<void>;
@@ -657,6 +663,27 @@ export class DatabaseStorage implements IStorage {
         await this.createServicePackage({ ...pkg, companyId });
       }
     }
+  }
+
+  // ================ Messages ================
+  async getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string }): Promise<Message[]> {
+    const conditions = [eq(messages.companyId, companyId)];
+    if (filters?.contactId) conditions.push(eq(messages.contactId, filters.contactId));
+    if (filters?.channel) conditions.push(eq(messages.channel, filters.channel as any));
+    if (filters?.direction) conditions.push(eq(messages.direction, filters.direction as any));
+    return db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt));
+  }
+
+  async createMessage(data: InsertMessage): Promise<Message> {
+    const [msg] = await db.insert(messages).values(data).returning();
+    return msg;
+  }
+
+  async updateMessageStatus(id: string, status: string, errorMessage?: string): Promise<Message> {
+    const updateData: any = { status };
+    if (errorMessage) updateData.errorMessage = errorMessage;
+    const [msg] = await db.update(messages).set(updateData).where(eq(messages.id, id)).returning();
+    return msg;
   }
 }
 
