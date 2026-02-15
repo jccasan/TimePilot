@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Eye, Zap } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer } from "lucide-react";
 
 const invoiceStatusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
@@ -537,6 +537,15 @@ export default function Invoices() {
                       data-testid={`button-view-invoice-${invoice.id}`}
                     >
                       <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => window.open(`/invoice/${invoice.id}/render`, "_blank")}
+                      data-testid={`button-print-invoice-${invoice.id}`}
+                      title="Print invoice"
+                    >
+                      <Printer className="h-4 w-4" />
                     </Button>
                     {invoice.status !== "paid" && (
                       <Button

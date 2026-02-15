@@ -1,0 +1,12 @@
+{
+  "primaryColor": "#1a7a4c",
+  "accentColor": "#15533c",
+  "textColor": "#1e293b",
+  "mutedColor": "#64748b",
+  "borderColor": "#e2e8f0",
+  "backgroundColor": "#f8fafc",
+  "cardColor": "#ffffff",
+  "fontFamily": "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
+  "logoSize": 56,
+  "borderRadius": 8
+}

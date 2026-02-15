@@ -1,0 +1,75 @@
+{
+  "business": {
+    "name": "Green Paws Scooping",
+    "address": "123 Main Street, Suite 4, Springfield, IL 62701",
+    "phone": "(555) 123-4567",
+    "email": "billing@greenpaws.com",
+    "website": "www.greenpaws.com",
+    "logo": ""
+  },
+  "invoice": {
+    "number": "INV-2026-0042",
+    "status": "Pending",
+    "issue_date": "2026-02-01",
+    "due_date": "2026-03-03",
+    "terms": "Net 30",
+    "service_period": "Feb 1 - Feb 28, 2026"
+  },
+  "customer": {
+    "name": "Sarah Mitchell",
+    "email": "sarah.mitchell@email.com",
+    "phone": "(555) 987-6543"
+  },
+  "billing_address": {
+    "line1": "456 Oak Avenue",
+    "line2": "Apt 2B",
+    "city": "Springfield",
+    "state": "IL",
+    "zip": "62702"
+  },
+  "service_address": {
+    "line1": "456 Oak Avenue",
+    "line2": "",
+    "city": "Springfield",
+    "state": "IL",
+    "zip": "62702"
+  },
+  "line_items": [
+    {
+      "description": "Weekly Yard Cleanup",
+      "details": "Full backyard service - 4 visits",
+      "qty": 4,
+      "unit_price": 35.00,
+      "line_total": 140.00
+    },
+    {
+      "description": "Deodorizer Treatment",
+      "details": "Enzyme-based yard deodorizer application",
+      "qty": 2,
+      "unit_price": 15.00,
+      "line_total": 30.00
+    },
+    {
+      "description": "One-Time Deep Clean",
+      "details": "Initial property deep clean",
+      "qty": 1,
+      "unit_price": 89.00,
+      "line_total": 89.00
+    }
+  ],
+  "totals": {
+    "subtotal": 259.00,
+    "discount": 10.00,
+    "tax_rate": 0.053,
+    "paid": 0
+  },
+  "visits": [
+    { "date": "Feb 3, 2026", "time": "9:00 AM",  "status": "completed" },
+    { "date": "Feb 10, 2026", "time": "9:15 AM", "status": "completed" },
+    { "date": "Feb 17, 2026", "time": "10:00 AM","status": "completed" },
+    { "date": "Feb 24, 2026", "time": "",         "status": "scheduled" }
+  ],
+  "notes": "Gate code: 4523. Please latch gate after service. Dogs will be inside during service hours.",
+  "payment_instructions": "Pay online at greenpaws.com/pay or mail a check to 123 Main Street, Suite 4, Springfield, IL 62701. Make checks payable to Green Paws Scooping.",
+  "thank_you": "Thank you for choosing Green Paws Scooping. We appreciate your business!"
+}

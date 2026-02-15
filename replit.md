@@ -94,7 +94,26 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
 - **Webhook**: POST /api/webhooks/twilio/sms for incoming SMS messages
 - Messages table logs all communication history (email/sms, inbound/outbound)
 
+### Invoice Template Engine
+- **Location**: `server/invoice-engine/` (compute + render), `server/templates/` (HTML template + theme + examples)
+- **Template**: `server/templates/invoice.default.html` - mustache-style HTML with `{{path.to.value}}`, `{{#block}}...{{/block}}`
+- **Theme**: `server/templates/invoice.theme.json` - controls colors, fonts, logoSize, borderRadius (edit JSON to rebrand)
+- **Compute**: `server/invoice-engine/invoice.compute.ts` - calculates subtotal, discount, tax, total, balance; formats USD
+- **Render**: `server/invoice-engine/invoice.render.ts` - loads template, merges theme + data, processes blocks/loops/conditionals
+- **Example data**: `server/templates/examples/invoice.example.json`
+- **Routes**:
+  - `GET /invoice/example` - renders sample invoice (no auth)
+  - `GET /invoice/:invoiceId/render` - renders real invoice from DB (auth required)
+- **Frontend**: Print button on each invoice card opens rendered template in new tab
+
 ## Recent Changes
+- 2026-02-15: Customizable invoice template system
+  - Mustache-style template engine (no dependencies)
+  - Theme JSON controls all branding (colors, fonts, logo, border radius)
+  - Printable + mobile-friendly HTML invoice template
+  - Business header, invoice meta, customer/addresses, line items, visits, totals, notes, payment instructions
+  - GET /invoice/example for preview, GET /invoice/:id/render for real invoices
+  - Print button added to invoice list cards
 - 2026-02-14: Advanced invoicing system with billing preferences, auto-generation, line items
   - Contacts have invoiceTiming (before/after service) and invoiceFrequency (per service/week/month)
   - Auto-invoice generation on visit completion for "after_service + per_service" contacts

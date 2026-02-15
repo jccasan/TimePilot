@@ -1,12 +1,16 @@
 import type { Express, Request, Response } from "express";
 import { type Server } from "http";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { storage } from "./storage";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sendEmail, generateInvoiceEmailHtml } from "./services/email";
 import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
+import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
+import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import {
   TIER_CONFIG,
   insertContactSchema,
@@ -1216,6 +1220,107 @@ export async function registerRoutes(
         await storage.updateMessageStatus(msg.id, "failed", result.error);
         res.status(500).json({ error: result.error });
       }
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ── Invoice Template Rendering ──────────────────────────────────────
+
+  app.get("/invoice/example", (_req: Request, res: Response) => {
+    try {
+      const examplePath = path.join(path.dirname(new URL(import.meta.url).pathname), "templates", "examples", "invoice.example.json");
+      const rawData = JSON.parse(fs.readFileSync(examplePath, "utf-8"));
+      const computed = computeInvoice(rawData);
+      const tpl = loadTemplate(getDefaultTemplatePath());
+      const theme = loadTheme(getDefaultThemePath());
+      const html = renderInvoice(tpl, theme, computed);
+      res.setHeader("Content-Type", "text/html");
+      res.send(html);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/invoice/:invoiceId/render", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const invoice = await storage.getInvoice(req.params.invoiceId, companyId);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+      const lineItems = await storage.getInvoiceLineItems(invoice.id);
+      const contact = await storage.getContact(invoice.contactId, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      const properties = await storage.getProperties(companyId, contact.id);
+      const company = await storage.getCompany(companyId);
+
+      const serviceAddr = properties.length > 0 ? properties[0] : null;
+      const statusRaw = invoice.status || "draft";
+      const taxRateNum = parseFloat(invoice.taxRate || "0") / 100;
+      const discountNum = parseFloat(invoice.discountAmount || "0");
+      const paidNum = invoice.paidAt ? parseFloat(invoice.total) : 0;
+
+      const invoiceData: any = {
+        business: {
+          name: company?.name || "",
+          address: company?.address || "",
+          phone: company?.phone || "",
+          email: company?.email || "",
+          website: "",
+          logo: "",
+        },
+        invoice: {
+          number: invoice.invoiceNumber,
+          status: statusRaw,
+          issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
+          due_date: invoice.dueDate,
+          terms: "Net 30",
+          service_period: "",
+        },
+        customer: {
+          name: `${contact.firstName} ${contact.lastName || ""}`.trim(),
+          email: contact.email || "",
+          phone: contact.phone || "",
+        },
+        billing_address: contact.address ? {
+          line1: contact.address,
+          line2: "",
+          city: "",
+          state: "",
+          zip: "",
+        } : null,
+        service_address: serviceAddr ? {
+          line1: serviceAddr.street || "",
+          line2: "",
+          city: serviceAddr.city || "",
+          state: serviceAddr.state || "",
+          zip: serviceAddr.zip || "",
+        } : null,
+        line_items: lineItems.map((li: any) => ({
+          description: li.description,
+          details: "",
+          qty: li.quantity,
+          unit_price: parseFloat(li.unitPrice),
+          line_total: parseFloat(li.total),
+        })),
+        totals: {
+          subtotal: parseFloat(invoice.subtotal),
+          discount: discountNum,
+          tax_rate: taxRateNum,
+          paid: paidNum,
+        },
+        visits: [],
+        notes: "",
+        payment_instructions: "",
+        thank_you: "Thank you for your business!",
+      };
+
+      const computed = computeInvoice(invoiceData);
+      const tpl = loadTemplate(getDefaultTemplatePath());
+      const theme = loadTheme(getDefaultThemePath());
+      const html = renderInvoice(tpl, theme, computed);
+
+      res.setHeader("Content-Type", "text/html");
+      res.send(html);
     } catch (err) { handleError(res, err); }
   });
 
