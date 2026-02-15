@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, like, or, gte, lte, inArray, count } from "drizzle-orm";
+import { eq, and, desc, asc, sql, like, or, gte, lte, lt, inArray, count } from "drizzle-orm";
 import { db } from "./db";
 import {
   companies, companyUsers, contacts, tags, contactTags,
@@ -91,6 +91,10 @@ export interface IStorage {
   createVisit(data: InsertVisit): Promise<Visit>;
   updateVisit(id: string, data: Partial<InsertVisit>): Promise<Visit>;
   getTodaysVisitsCount(companyId: string): Promise<number>;
+  getTodaysVisits(companyId: string): Promise<Visit[]>;
+  getOverdueInvoicesCount(companyId: string): Promise<number>;
+  getActiveContactsCount(companyId: string): Promise<number>;
+  getActiveServicePlansCount(companyId: string): Promise<number>;
 
   // Invoices
   getInvoice(id: string, companyId: string): Promise<Invoice | undefined>;
@@ -411,6 +415,37 @@ export class DatabaseStorage implements IStorage {
   async getTodaysVisitsCount(companyId: string): Promise<number> {
     const today = new Date().toISOString().split("T")[0];
     const [result] = await db.select({ count: count() }).from(visits).where(and(eq(visits.companyId, companyId), eq(visits.scheduledDate, today)));
+    return result?.count ?? 0;
+  }
+
+  async getTodaysVisits(companyId: string): Promise<Visit[]> {
+    const today = new Date().toISOString().split("T")[0];
+    return db.select().from(visits).where(and(eq(visits.companyId, companyId), eq(visits.scheduledDate, today)));
+  }
+
+  async getOverdueInvoicesCount(companyId: string): Promise<number> {
+    const today = new Date().toISOString().split("T")[0];
+    const [result] = await db.select({ count: count() }).from(invoices).where(and(
+      eq(invoices.companyId, companyId),
+      inArray(invoices.status, ["sent", "pending"]),
+      lt(invoices.dueDate, today)
+    ));
+    return result?.count ?? 0;
+  }
+
+  async getActiveContactsCount(companyId: string): Promise<number> {
+    const [result] = await db.select({ count: count() }).from(contacts).where(and(
+      eq(contacts.companyId, companyId),
+      eq(contacts.status, "active")
+    ));
+    return result?.count ?? 0;
+  }
+
+  async getActiveServicePlansCount(companyId: string): Promise<number> {
+    const [result] = await db.select({ count: count() }).from(servicePlans).where(and(
+      eq(servicePlans.companyId, companyId),
+      eq(servicePlans.isActive, true)
+    ));
     return result?.count ?? 0;
   }
 

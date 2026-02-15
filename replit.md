@@ -141,6 +141,14 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
 - Displayed inline in visit detail with proof of service section
 
 ## Recent Changes
+- 2026-02-15: MVP Completion - Visit Generation, Dashboard, Reports, Onboarding
+  - POST /api/visits/generate - auto-generate visits from active service plans for date range
+  - Generate Visits button on scheduling page with confirmation dialog
+  - Enhanced dashboard with overdue invoices, month revenue, visit progress, active clients/plans
+  - GET /api/onboarding/status - guided setup checklist on dashboard for new users
+  - Reports page (/reports) with 6-month revenue chart, visit stats, contact/invoice breakdowns
+  - GET /api/reports/summary - reporting data endpoint
+  - Added sidebar link for Reports page
 - 2026-02-15: Tier 1 MVP features (Stripe, Portal, Tech Photos)
   - Stripe payment processing with charge/checkout on invoices
   - Payment methods management on contact detail page

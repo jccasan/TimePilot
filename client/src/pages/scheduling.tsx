@@ -33,7 +33,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { ChevronLeft, ChevronRight, Plus, Wand2 } from "lucide-react";
 
 const visitStatusColors: Record<string, string> = {
   scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -143,6 +154,26 @@ export default function Scheduling() {
     }
   }, [selectedContactId, contactProperties, form]);
 
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/visits/generate", {
+        startDate: startStr,
+        endDate: endStr,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      toast({
+        title: `${data.generated} visit${data.generated === 1 ? "" : "s"} generated`,
+        description: data.generated > 0 ? "Visits created from active service plans." : "No new visits needed for this week.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const createMutation = useMutation({
     mutationFn: async (data: ServicePlanFormValues) => {
       await apiRequest("POST", "/api/service-plans", data);
@@ -185,12 +216,35 @@ export default function Scheduling() {
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold" data-testid="text-scheduling-heading">Scheduling</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-service-plan">
-              <Plus className="mr-1 h-4 w-4" /> Create Service Plan
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" disabled={generateMutation.isPending} data-testid="button-generate-visits">
+                <Wand2 className="mr-1 h-4 w-4" />
+                {generateMutation.isPending ? "Generating..." : "Generate Visits"}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Generate Visits</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will create scheduled visits for the current week ({weekStart.toLocaleDateString()} - {weekEnd.toLocaleDateString()}) based on all active service plans. Existing visits will not be duplicated.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => generateMutation.mutate()} data-testid="button-confirm-generate">
+                  Generate
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-create-service-plan">
+                <Plus className="mr-1 h-4 w-4" /> Create Service Plan
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create Service Plan</DialogTitle>
@@ -292,6 +346,7 @@ export default function Scheduling() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

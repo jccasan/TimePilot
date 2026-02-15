@@ -98,6 +98,28 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/onboarding/status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const contactsList = await storage.getContacts(companyId);
+      const routesList = await storage.getRoutes(companyId);
+      const plansList = await storage.getServicePlans(companyId);
+
+      const hasContacts = contactsList.length > 0;
+      const hasRoutes = routesList.length > 0;
+      const hasServicePlans = plansList.length > 0;
+
+      const steps = [
+        { key: "contact", label: "Add your first client", completed: hasContacts },
+        { key: "route", label: "Create a route", completed: hasRoutes },
+        { key: "service_plan", label: "Set up a service plan", completed: hasServicePlans },
+      ];
+
+      const isComplete = steps.every(s => s.completed);
+      res.json({ isComplete, steps, totalContacts: contactsList.length, totalRoutes: routesList.length, totalServicePlans: plansList.length });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/company/invite", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
@@ -186,19 +208,95 @@ export async function registerRoutes(
       const tierInfo = TIER_CONFIG[tier];
       const mrr = tierInfo?.price ?? 0;
 
-      const [todaysVisits, failedPayments, activeUsers] = await Promise.all([
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+
+      const [todaysVisits, todaysVisitsList, failedPayments, activeUsers, overdueInvoices, activeContacts, activeServicePlans, monthRevenue] = await Promise.all([
         storage.getTodaysVisitsCount(companyId),
+        storage.getTodaysVisits(companyId),
         storage.getFailedPaymentsCount(companyId),
         storage.countActiveCompanyUsers(companyId),
+        storage.getOverdueInvoicesCount(companyId),
+        storage.getActiveContactsCount(companyId),
+        storage.getActiveServicePlansCount(companyId),
+        storage.getRevenueForPeriod(companyId, monthStart, monthEnd),
       ]);
+
+      const completedToday = todaysVisitsList.filter(v => v.status === "completed").length;
+      const scheduledToday = todaysVisitsList.filter(v => v.status === "scheduled").length;
+      const inProgressToday = todaysVisitsList.filter(v => v.status === "in_progress").length;
 
       res.json({
         mrr,
         todaysVisits,
+        todaysVisitBreakdown: { completed: completedToday, scheduled: scheduledToday, inProgress: inProgressToday },
         failedPayments,
+        overdueInvoices,
         activeUsers,
+        activeContacts,
+        activeServicePlans,
+        monthRevenue,
         subscriptionTier: tier,
         tierName: tierInfo?.name ?? "Unknown",
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/reports/summary", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+
+      const now = new Date();
+      const monthlyRevenue: { month: string; revenue: number }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const start = d.toISOString().split("T")[0];
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0];
+        const revenue = await storage.getRevenueForPeriod(companyId, start, end);
+        monthlyRevenue.push({
+          month: d.toLocaleString("default", { month: "short", year: "numeric" }),
+          revenue,
+        });
+      }
+
+      const allContacts = await storage.getContacts(companyId);
+      const statusCounts: Record<string, number> = {};
+      for (const c of allContacts) {
+        statusCounts[c.status] = (statusCounts[c.status] || 0) + 1;
+      }
+
+      const allInvoices = await storage.getInvoices(companyId);
+      const invoiceStatusCounts: Record<string, number> = {};
+      let totalOutstanding = 0;
+      let totalCollected = 0;
+      for (const inv of allInvoices) {
+        invoiceStatusCounts[inv.status] = (invoiceStatusCounts[inv.status] || 0) + 1;
+        if (inv.status === "paid") totalCollected += parseFloat(inv.total);
+        if (inv.status === "sent" || inv.status === "pending") totalOutstanding += parseFloat(inv.total);
+      }
+
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+      const thisMonthVisits = await storage.getVisitsForDateRange(companyId, thisMonthStart, thisMonthEnd);
+      const visitsCompleted = thisMonthVisits.filter(v => v.status === "completed").length;
+      const visitsScheduled = thisMonthVisits.filter(v => v.status === "scheduled").length;
+      const visitsSkipped = thisMonthVisits.filter(v => v.status === "skipped").length;
+
+      res.json({
+        monthlyRevenue,
+        contactsByStatus: statusCounts,
+        totalContacts: allContacts.length,
+        invoicesByStatus: invoiceStatusCounts,
+        totalInvoices: allInvoices.length,
+        totalOutstanding,
+        totalCollected,
+        thisMonthVisits: {
+          completed: visitsCompleted,
+          scheduled: visitsScheduled,
+          skipped: visitsSkipped,
+          total: thisMonthVisits.length,
+        },
       });
     } catch (err) { handleError(res, err); }
   });
@@ -663,6 +761,99 @@ export async function registerRoutes(
       }
 
       res.json(visit);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/visits/generate", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { startDate, endDate } = req.body;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: "startDate and endDate are required" });
+      }
+
+      const plans = await storage.getServicePlans(companyId, { isActive: true });
+      const existingVisits = await storage.getVisitsForDateRange(companyId, startDate, endDate);
+      const existingKeys = new Set(
+        existingVisits.map((v) => `${v.servicePlanId}_${v.scheduledDate}`)
+      );
+
+      const dayMap: Record<string, number> = {
+        monday: 1, tuesday: 2, wednesday: 3, thursday: 4,
+        friday: 5, saturday: 6, sunday: 0,
+      };
+
+      const created: any[] = [];
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      for (const plan of plans) {
+        if (!plan.dayOfWeek) continue;
+        const targetDay = dayMap[plan.dayOfWeek];
+        if (targetDay === undefined) continue;
+
+        const planStart = plan.startDate ? new Date(plan.startDate) : start;
+        const planEnd = plan.endDate ? new Date(plan.endDate) : end;
+        const effectiveStart = planStart > start ? planStart : start;
+        const effectiveEnd = planEnd < end ? planEnd : end;
+
+        const current = new Date(effectiveStart);
+        while (current <= effectiveEnd) {
+          if (current.getDay() === targetDay) {
+            const dateStr = current.toISOString().split("T")[0];
+            const key = `${plan.id}_${dateStr}`;
+
+            if (!existingKeys.has(key)) {
+              let shouldGenerate = true;
+
+              if (plan.frequency === "biweekly") {
+                const planStartDate = new Date(plan.startDate);
+                const diffDays = Math.floor((current.getTime() - planStartDate.getTime()) / (1000 * 60 * 60 * 24));
+                const diffWeeks = Math.floor(diffDays / 7);
+                if (diffWeeks % 2 !== 0) shouldGenerate = false;
+              } else if (plan.frequency === "monthly") {
+                const planStartDate = new Date(plan.startDate);
+                if (current.getMonth() === planStartDate.getMonth() && current.getFullYear() === planStartDate.getFullYear()) {
+                  shouldGenerate = true;
+                } else {
+                  const firstOfMonth = new Date(current.getFullYear(), current.getMonth(), 1);
+                  let firstTargetDay = new Date(firstOfMonth);
+                  while (firstTargetDay.getDay() !== targetDay) {
+                    firstTargetDay.setDate(firstTargetDay.getDate() + 1);
+                  }
+                  if (current.getTime() !== firstTargetDay.getTime()) shouldGenerate = false;
+                }
+              } else if (plan.frequency === "onetime") {
+                const planStartDate = new Date(plan.startDate);
+                if (current.toISOString().split("T")[0] !== planStartDate.toISOString().split("T")[0]) {
+                  shouldGenerate = false;
+                }
+              }
+
+              if (shouldGenerate) {
+                const visit = await storage.createVisit({
+                  companyId,
+                  servicePlanId: plan.id,
+                  propertyId: plan.propertyId,
+                  routeId: plan.routeId || null,
+                  scheduledDate: dateStr,
+                  status: "scheduled",
+                });
+                created.push(visit);
+                existingKeys.add(key);
+              }
+            }
+
+            if (plan.frequency === "weekly" || plan.frequency === "biweekly") {
+              current.setDate(current.getDate() + 7);
+              continue;
+            }
+          }
+          current.setDate(current.getDate() + 1);
+        }
+      }
+
+      res.json({ generated: created.length, visits: created });
     } catch (err) { handleError(res, err); }
   });
 

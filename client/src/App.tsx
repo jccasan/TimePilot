@@ -29,6 +29,7 @@ import PortalLogin from "@/pages/portal-login";
 import PortalClient from "@/pages/portal-client";
 import Pricing from "@/pages/pricing";
 import Communications from "@/pages/communications";
+import Reports from "@/pages/reports";
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -55,6 +56,7 @@ function Router() {
       <Route path="/webhooks" component={WebhooksPage} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/communications" component={Communications} />
+      <Route path="/reports" component={Reports} />
       <Route path="/portal" component={Portal} />
       <Route component={NotFound} />
     </Switch>

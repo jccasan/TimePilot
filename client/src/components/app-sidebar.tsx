@@ -13,6 +13,7 @@ import {
   Webhook,
   ExternalLink,
   MessageSquare,
+  BarChart3,
 } from "lucide-react";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 import {
@@ -42,6 +43,7 @@ const menuSections = [
       { title: "Routes", url: "/routes", icon: MapPin },
       { title: "Tech Mobile", url: "/m/today", icon: Smartphone },
       { title: "Communications", url: "/communications", icon: MessageSquare },
+      { title: "Reports", url: "/reports", icon: BarChart3 },
     ],
   },
   {
