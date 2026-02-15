@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLink } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw } from "lucide-react";
 
 const invoiceStatusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
@@ -68,6 +68,10 @@ export default function Invoices() {
   const [genEndDate, setGenEndDate] = useState("");
   const [genMode, setGenMode] = useState("completed");
 
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
+  const [themeDialogOpen, setThemeDialogOpen] = useState(false);
+
   const queryParams = statusFilter !== "all" ? `?status=${statusFilter}` : "";
 
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
@@ -98,6 +102,39 @@ export default function Invoices() {
 
   const { data: stripeConfig } = useQuery<{ configured: boolean }>({
     queryKey: ["/api/stripe/config"],
+  });
+
+  interface InvoiceTheme {
+    primaryColor: string;
+    accentColor: string;
+    textColor: string;
+    mutedColor: string;
+    borderColor: string;
+    backgroundColor: string;
+    cardColor: string;
+    fontFamily: string;
+    logoSize: number;
+    borderRadius: number;
+  }
+
+  const { data: invoiceTheme } = useQuery<InvoiceTheme>({
+    queryKey: ["/api/invoice-theme"],
+  });
+
+  const [editTheme, setEditTheme] = useState<InvoiceTheme | null>(null);
+
+  const saveThemeMutation = useMutation({
+    mutationFn: async (theme: InvoiceTheme) => {
+      await apiRequest("PUT", "/api/invoice-theme", theme);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoice-theme"] });
+      toast({ title: "Theme saved", description: "Your invoice template has been updated." });
+      setThemeDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const sendEmailMutation = useMutation({
@@ -323,6 +360,9 @@ export default function Invoices() {
               </div>
             </DialogContent>
           </Dialog>
+          <Button variant="outline" onClick={() => setThemeDialogOpen(true)} data-testid="button-customize-template">
+                <Palette className="mr-1 h-4 w-4" /> Customize Template
+              </Button>
           <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateForm(); }}>
             <DialogTrigger asChild>
               <Button data-testid="button-create-invoice">
@@ -578,9 +618,12 @@ export default function Invoices() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => window.open(`/invoice/${invoice.id}/render`, "_blank")}
-                      data-testid={`button-print-invoice-${invoice.id}`}
-                      title="Print invoice"
+                      onClick={() => {
+                        setPreviewInvoiceId(invoice.id);
+                        setPreviewDialogOpen(true);
+                      }}
+                      data-testid={`button-preview-invoice-${invoice.id}`}
+                      title="Preview invoice"
                     >
                       <Printer className="h-4 w-4" />
                     </Button>
@@ -642,6 +685,313 @@ export default function Invoices() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle data-testid="text-preview-title">Invoice Preview</DialogTitle>
+            <DialogDescription>Preview of the rendered invoice template</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 px-6 pb-6 min-h-0">
+            {previewInvoiceId && (
+              <iframe
+                key={previewInvoiceId}
+                src={`/invoice/${previewInvoiceId}/render`}
+                className="w-full h-full border rounded-md"
+                title="Invoice Preview"
+                data-testid="iframe-invoice-preview"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={themeDialogOpen} onOpenChange={(open) => {
+        setThemeDialogOpen(open);
+        if (open && invoiceTheme) {
+          setEditTheme({ ...invoiceTheme });
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle data-testid="text-theme-title">Customize Invoice Template</DialogTitle>
+            <DialogDescription>Adjust colors, fonts, and styling for your invoice template</DialogDescription>
+          </DialogHeader>
+          {editTheme && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <h3 className="font-medium text-sm">Colors</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Primary Color</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={editTheme.primaryColor}
+                        onChange={e => setEditTheme({ ...editTheme, primaryColor: e.target.value })}
+                        className="h-9 w-12 rounded-md border cursor-pointer"
+                        data-testid="input-theme-primary"
+                      />
+                      <Input
+                        value={editTheme.primaryColor}
+                        onChange={e => setEditTheme({ ...editTheme, primaryColor: e.target.value })}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Accent Color</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={editTheme.accentColor}
+                        onChange={e => setEditTheme({ ...editTheme, accentColor: e.target.value })}
+                        className="h-9 w-12 rounded-md border cursor-pointer"
+                        data-testid="input-theme-accent"
+                      />
+                      <Input
+                        value={editTheme.accentColor}
+                        onChange={e => setEditTheme({ ...editTheme, accentColor: e.target.value })}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Text Color</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={editTheme.textColor}
+                        onChange={e => setEditTheme({ ...editTheme, textColor: e.target.value })}
+                        className="h-9 w-12 rounded-md border cursor-pointer"
+                        data-testid="input-theme-text"
+                      />
+                      <Input
+                        value={editTheme.textColor}
+                        onChange={e => setEditTheme({ ...editTheme, textColor: e.target.value })}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Muted Color</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={editTheme.mutedColor}
+                        onChange={e => setEditTheme({ ...editTheme, mutedColor: e.target.value })}
+                        className="h-9 w-12 rounded-md border cursor-pointer"
+                        data-testid="input-theme-muted"
+                      />
+                      <Input
+                        value={editTheme.mutedColor}
+                        onChange={e => setEditTheme({ ...editTheme, mutedColor: e.target.value })}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Border Color</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={editTheme.borderColor}
+                        onChange={e => setEditTheme({ ...editTheme, borderColor: e.target.value })}
+                        className="h-9 w-12 rounded-md border cursor-pointer"
+                        data-testid="input-theme-border"
+                      />
+                      <Input
+                        value={editTheme.borderColor}
+                        onChange={e => setEditTheme({ ...editTheme, borderColor: e.target.value })}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Background</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={editTheme.backgroundColor}
+                        onChange={e => setEditTheme({ ...editTheme, backgroundColor: e.target.value })}
+                        className="h-9 w-12 rounded-md border cursor-pointer"
+                        data-testid="input-theme-bg"
+                      />
+                      <Input
+                        value={editTheme.backgroundColor}
+                        onChange={e => setEditTheme({ ...editTheme, backgroundColor: e.target.value })}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Card Background</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={editTheme.cardColor}
+                        onChange={e => setEditTheme({ ...editTheme, cardColor: e.target.value })}
+                        className="h-9 w-12 rounded-md border cursor-pointer"
+                        data-testid="input-theme-card"
+                      />
+                      <Input
+                        value={editTheme.cardColor}
+                        onChange={e => setEditTheme({ ...editTheme, cardColor: e.target.value })}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <h3 className="font-medium text-sm pt-2">Typography & Layout</h3>
+                <div>
+                  <Label className="text-xs">Font Family</Label>
+                  <Select
+                    value={editTheme.fontFamily.includes("Inter") ? "inter" : editTheme.fontFamily.includes("Georgia") ? "georgia" : editTheme.fontFamily.includes("Roboto") ? "roboto" : "custom"}
+                    onValueChange={(val) => {
+                      const fonts: Record<string, string> = {
+                        inter: "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
+                        roboto: "'Roboto', 'Helvetica Neue', Arial, sans-serif",
+                        georgia: "'Georgia', 'Times New Roman', serif",
+                      };
+                      if (fonts[val]) setEditTheme({ ...editTheme, fontFamily: fonts[val] });
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-theme-font"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inter">Inter (Default)</SelectItem>
+                      <SelectItem value="roboto">Roboto</SelectItem>
+                      <SelectItem value="georgia">Georgia (Serif)</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={editTheme.fontFamily}
+                    onChange={e => setEditTheme({ ...editTheme, fontFamily: e.target.value })}
+                    className="mt-1 font-mono text-xs"
+                    data-testid="input-theme-font-raw"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Border Radius (px)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="24"
+                      value={editTheme.borderRadius}
+                      onChange={e => setEditTheme({ ...editTheme, borderRadius: parseInt(e.target.value) || 0 })}
+                      data-testid="input-theme-radius"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Logo Size (px)</Label>
+                    <Input
+                      type="number"
+                      min="24"
+                      max="120"
+                      value={editTheme.logoSize}
+                      onChange={e => setEditTheme({ ...editTheme, logoSize: parseInt(e.target.value) || 56 })}
+                      data-testid="input-theme-logo-size"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button
+                    onClick={() => editTheme && saveThemeMutation.mutate(editTheme)}
+                    disabled={saveThemeMutation.isPending}
+                    data-testid="button-save-theme"
+                  >
+                    {saveThemeMutation.isPending ? "Saving..." : "Save Theme"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (invoiceTheme) setEditTheme({ ...invoiceTheme });
+                    }}
+                    data-testid="button-reset-theme"
+                  >
+                    <RotateCcw className="mr-1 h-4 w-4" /> Reset
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="font-medium text-sm">Live Preview</h3>
+                <div
+                  className="border rounded-md p-4 text-sm"
+                  style={{
+                    backgroundColor: editTheme.backgroundColor,
+                    color: editTheme.textColor,
+                    fontFamily: editTheme.fontFamily,
+                    borderRadius: `${editTheme.borderRadius}px`,
+                  }}
+                  data-testid="div-theme-preview"
+                >
+                  <div
+                    className="p-3 mb-3"
+                    style={{
+                      backgroundColor: editTheme.primaryColor,
+                      color: "#ffffff",
+                      borderRadius: `${editTheme.borderRadius}px`,
+                    }}
+                  >
+                    <p className="font-bold text-base">Your Business Name</p>
+                    <p style={{ opacity: 0.8 }} className="text-xs">123 Main St | (555) 123-4567</p>
+                  </div>
+                  <div
+                    className="p-3 mb-3"
+                    style={{
+                      backgroundColor: editTheme.cardColor,
+                      border: `1px solid ${editTheme.borderColor}`,
+                      borderRadius: `${editTheme.borderRadius}px`,
+                    }}
+                  >
+                    <p className="font-semibold mb-1">Invoice #INV-001</p>
+                    <p style={{ color: editTheme.mutedColor }} className="text-xs">Due: March 15, 2026</p>
+                  </div>
+                  <table className="w-full text-xs mb-3" style={{ borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: `2px solid ${editTheme.primaryColor}` }}>
+                        <th className="text-left py-1">Description</th>
+                        <th className="text-right py-1">Qty</th>
+                        <th className="text-right py-1">Price</th>
+                        <th className="text-right py-1">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: `1px solid ${editTheme.borderColor}` }}>
+                        <td className="py-1">Weekly Yard Cleanup</td>
+                        <td className="text-right py-1">4</td>
+                        <td className="text-right py-1">$35.00</td>
+                        <td className="text-right py-1">$140.00</td>
+                      </tr>
+                      <tr style={{ borderBottom: `1px solid ${editTheme.borderColor}` }}>
+                        <td className="py-1">Initial Deep Clean</td>
+                        <td className="text-right py-1">1</td>
+                        <td className="text-right py-1">$75.00</td>
+                        <td className="text-right py-1">$75.00</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div
+                    className="p-2 text-right"
+                    style={{
+                      backgroundColor: editTheme.cardColor,
+                      border: `1px solid ${editTheme.borderColor}`,
+                      borderRadius: `${editTheme.borderRadius}px`,
+                    }}
+                  >
+                    <p style={{ color: editTheme.mutedColor }} className="text-xs">Subtotal: $215.00</p>
+                    <p className="font-bold" style={{ color: editTheme.accentColor }}>Total: $215.00</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
         <DialogContent className="max-w-lg">
@@ -715,6 +1065,13 @@ export default function Invoices() {
               </Card>
 
               <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => {
+                  setDetailDialogOpen(false);
+                  setPreviewInvoiceId(selectedInvoice.id);
+                  setPreviewDialogOpen(true);
+                }} data-testid="button-detail-preview">
+                  <Printer className="mr-1 h-3 w-3" /> Preview
+                </Button>
                 {selectedInvoice.status !== "paid" && stripeConfig?.configured && (
                   <>
                     <Button size="sm" variant="outline" onClick={() => { chargeMutation.mutate(selectedInvoice.id); setDetailDialogOpen(false); }} disabled={chargeMutation.isPending}>

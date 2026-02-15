@@ -40,6 +40,7 @@ export const companies = pgTable("companies", {
   subscriptionTier: subscriptionTierEnum("subscription_tier").notNull().default("tier_1"),
   subscriptionStatus: subscriptionStatusEnum("subscription_status").notNull().default("trialing"),
   chargeTiming: chargeTimingEnum("charge_timing").notNull().default("day_before"),
+  invoiceTheme: text("invoice_theme"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

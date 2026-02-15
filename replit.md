@@ -97,14 +97,17 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
 ### Invoice Template Engine
 - **Location**: `server/invoice-engine/` (compute + render), `server/templates/` (HTML template + theme + examples)
 - **Template**: `server/templates/invoice.default.html` - mustache-style HTML with `{{path.to.value}}`, `{{#block}}...{{/block}}`
-- **Theme**: `server/templates/invoice.theme.json` - controls colors, fonts, logoSize, borderRadius (edit JSON to rebrand)
+- **Theme**: `server/templates/invoice.theme.json` - default theme (colors, fonts, logoSize, borderRadius); per-company overrides stored in `companies.invoiceTheme` column
 - **Compute**: `server/invoice-engine/invoice.compute.ts` - calculates subtotal, discount, tax, total, balance; formats USD
 - **Render**: `server/invoice-engine/invoice.render.ts` - loads template, merges theme + data, processes blocks/loops/conditionals
 - **Example data**: `server/templates/examples/invoice.example.json`
 - **Routes**:
   - `GET /invoice/example` - renders sample invoice (no auth)
   - `GET /invoice/:invoiceId/render` - renders real invoice from DB (auth required)
-- **Frontend**: Print button on each invoice card opens rendered template in new tab
+- **Frontend**: Preview button on each invoice card opens inline preview dialog; Customize Template button opens theme editor
+- **Theme API**:
+  - `GET /api/invoice-theme` - Returns merged theme (company custom + defaults)
+  - `PUT /api/invoice-theme` - Save custom theme overrides per company
 
 ### Stripe Payment Integration
 - **Service**: `server/services/stripe.ts` - Stripe customer creation, setup intents, payment intents, checkout sessions, webhook handling

@@ -1671,6 +1671,41 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ── Invoice Theme Settings ─────────────────────────────────────────
+
+  app.get("/api/invoice-theme", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const defaultTheme = loadTheme(getDefaultThemePath());
+      if (company?.invoiceTheme) {
+        try {
+          const custom = JSON.parse(company.invoiceTheme);
+          res.json({ ...defaultTheme, ...custom });
+        } catch {
+          res.json(defaultTheme);
+        }
+      } else {
+        res.json(defaultTheme);
+      }
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.put("/api/invoice-theme", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const theme = req.body;
+      const allowed = ["primaryColor", "accentColor", "textColor", "mutedColor", "borderColor", "backgroundColor", "cardColor", "fontFamily", "logoSize", "borderRadius"];
+      const filtered: any = {};
+      for (const key of allowed) {
+        if (theme[key] !== undefined) filtered[key] = theme[key];
+      }
+      await storage.updateCompany(companyId, { invoiceTheme: JSON.stringify(filtered) });
+      const defaultTheme = loadTheme(getDefaultThemePath());
+      res.json({ ...defaultTheme, ...filtered });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ── Invoice Template Rendering ──────────────────────────────────────
 
   app.get("/invoice/example", (_req: Request, res: Response) => {
@@ -1764,7 +1799,14 @@ export async function registerRoutes(
 
       const computed = computeInvoice(invoiceData);
       const tpl = loadTemplate(getDefaultTemplatePath());
-      const theme = loadTheme(getDefaultThemePath());
+      const defaultTheme = loadTheme(getDefaultThemePath());
+      let theme = defaultTheme;
+      if (company?.invoiceTheme) {
+        try {
+          const custom = JSON.parse(company.invoiceTheme);
+          theme = { ...defaultTheme, ...custom };
+        } catch {}
+      }
       const html = renderInvoice(tpl, theme, computed);
 
       res.setHeader("Content-Type", "text/html");
