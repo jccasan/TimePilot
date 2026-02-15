@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
 import { isAuthenticated } from "./replit_integrations/auth";
+import { authStorage } from "./replit_integrations/auth/storage";
 import { registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sendEmail, generateInvoiceEmailHtml } from "./services/email";
@@ -139,8 +140,30 @@ export async function registerRoutes(
   app.get("/api/company/users", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const users = await storage.getCompanyUsers(companyId);
-      res.json(users);
+      const companyUsersList = await storage.getCompanyUsers(companyId);
+      res.json(companyUsersList);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/company/team", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const companyUsersList = await storage.getCompanyUsers(companyId);
+      const teamMembers = await Promise.all(
+        companyUsersList.filter(cu => cu.isActive).map(async (cu) => {
+          const user = await authStorage.getUser(cu.userId);
+          return {
+            id: cu.userId,
+            companyUserId: cu.id,
+            role: cu.role,
+            firstName: user?.firstName || "",
+            lastName: user?.lastName || "",
+            email: user?.email || "",
+            profileImageUrl: user?.profileImageUrl || null,
+          };
+        })
+      );
+      res.json(teamMembers);
     } catch (err) { handleError(res, err); }
   });
 
