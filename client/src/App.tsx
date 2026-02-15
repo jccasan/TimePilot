@@ -25,6 +25,8 @@ import Automation from "@/pages/automation";
 import ApiKeysPage from "@/pages/api-keys";
 import WebhooksPage from "@/pages/webhooks-page";
 import Portal from "@/pages/portal";
+import PortalLogin from "@/pages/portal-login";
+import PortalClient from "@/pages/portal-client";
 import Pricing from "@/pages/pricing";
 import Communications from "@/pages/communications";
 
@@ -128,8 +130,26 @@ function AuthenticatedLayout() {
   );
 }
 
+function PortalRouter() {
+  return (
+    <Switch>
+      <Route path="/portal/login" component={PortalLogin} />
+      <Route path="/portal/client" component={PortalClient} />
+      <Route>{() => { window.location.href = "/portal/login"; return null; }}</Route>
+    </Switch>
+  );
+}
+
 function AppContent() {
   const { isAuthenticated, isLoading } = useAuth();
+  const isPortalPath = typeof window !== "undefined" && (
+    window.location.pathname.startsWith("/portal/login") ||
+    window.location.pathname.startsWith("/portal/client")
+  );
+
+  if (isPortalPath) {
+    return <PortalRouter />;
+  }
 
   if (isLoading) {
     return (

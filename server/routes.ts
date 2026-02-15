@@ -9,6 +9,17 @@ import { registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sendEmail, generateInvoiceEmailHtml } from "./services/email";
 import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
+import {
+  isStripeConfigured,
+  createStripeCustomer,
+  createSetupIntent,
+  getCustomerPaymentMethods,
+  createPaymentIntent,
+  chargeInvoiceAutomatically,
+  constructWebhookEvent,
+  createCheckoutSession,
+  detachPaymentMethod,
+} from "./services/stripe";
 import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import {
@@ -1220,6 +1231,443 @@ export async function registerRoutes(
         await storage.updateMessageStatus(msg.id, "failed", result.error);
         res.status(500).json({ error: result.error });
       }
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Stripe Payment Routes ================
+
+  app.get("/api/stripe/config", isAuthenticated, async (_req: Request, res: Response) => {
+    res.json({ configured: isStripeConfigured() });
+  });
+
+  app.post("/api/contacts/:id/stripe-customer", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      if (contact.stripeCustomerId) {
+        return res.json({ stripeCustomerId: contact.stripeCustomerId, alreadyExists: true });
+      }
+
+      const stripeCustomerId = await createStripeCustomer({
+        email: contact.email || undefined,
+        name: `${contact.firstName} ${contact.lastName}`.trim(),
+        phone: contact.phone || undefined,
+        metadata: { contactId: contact.id, companyId },
+      });
+
+      await storage.updateContact(req.params.id, { stripeCustomerId });
+      res.json({ stripeCustomerId, alreadyExists: false });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/contacts/:id/setup-intent", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (!contact.stripeCustomerId) return res.status(400).json({ error: "Contact has no Stripe customer. Create one first." });
+
+      const result = await createSetupIntent(contact.stripeCustomerId);
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/contacts/:id/payment-methods", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (!contact.stripeCustomerId) return res.json([]);
+
+      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId);
+      res.json(methods);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/payment-methods/:pmId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      await getCompanyContext(req);
+      await detachPaymentMethod(req.params.pmId);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/invoices/:id/charge", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const invoice = await storage.getInvoice(req.params.id, companyId);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+      if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
+
+      const contact = await storage.getContact(invoice.contactId, companyId);
+      if (!contact?.stripeCustomerId) return res.status(400).json({ error: "Contact has no payment method on file" });
+
+      const result = await chargeInvoiceAutomatically({
+        customerId: contact.stripeCustomerId,
+        amount: parseFloat(invoice.total),
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+      });
+
+      const updateData: any = {
+        paymentAttempts: (invoice.paymentAttempts || 0) + 1,
+        lastPaymentAttempt: new Date(),
+      };
+
+      if (result.status === "succeeded") {
+        updateData.status = "paid";
+        updateData.paidAt = new Date();
+        updateData.stripePaymentIntentId = result.paymentIntentId;
+      } else {
+        updateData.status = "failed";
+        if (result.paymentIntentId) updateData.stripePaymentIntentId = result.paymentIntentId;
+      }
+
+      const updated = await storage.updateInvoice(invoice.id, updateData);
+      res.json({ ...updated, chargeResult: result });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/invoices/:id/checkout", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const invoice = await storage.getInvoice(req.params.id, companyId);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+      if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
+
+      const contact = await storage.getContact(invoice.contactId, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      let stripeCustomerId = contact.stripeCustomerId;
+      if (!stripeCustomerId) {
+        stripeCustomerId = await createStripeCustomer({
+          email: contact.email || undefined,
+          name: `${contact.firstName} ${contact.lastName}`.trim(),
+          metadata: { contactId: contact.id, companyId },
+        });
+        await storage.updateContact(contact.id, { stripeCustomerId });
+      }
+
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const result = await createCheckoutSession({
+        customerId: stripeCustomerId,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        amount: parseFloat(invoice.total),
+        successUrl: `${baseUrl}/invoices?paid=${invoice.id}`,
+        cancelUrl: `${baseUrl}/invoices`,
+      });
+
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/webhooks/stripe", async (req: Request, res: Response) => {
+    try {
+      const sig = req.headers["stripe-signature"] as string;
+      const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+      if (!sig || !endpointSecret) {
+        return res.status(400).json({ error: "Missing signature or webhook secret" });
+      }
+
+      let event;
+      try {
+        const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+        event = constructWebhookEvent(rawBody, sig, endpointSecret);
+      } catch (err: any) {
+        console.error("Stripe webhook signature verification failed:", err.message);
+        return res.status(400).json({ error: "Webhook signature verification failed" });
+      }
+
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object as any;
+        const invoiceId = session.metadata?.invoiceId;
+        if (invoiceId) {
+          const allCompanies = await storage.listCompanies();
+          for (const company of allCompanies) {
+            const invoice = await storage.getInvoice(invoiceId, company.id);
+            if (invoice && invoice.status !== "paid") {
+              await storage.updateInvoice(invoiceId, {
+                status: "paid",
+                paidAt: new Date(),
+                stripePaymentIntentId: session.payment_intent,
+              });
+              break;
+            }
+          }
+        }
+      }
+
+      if (event.type === "payment_intent.succeeded") {
+        const pi = event.data.object as any;
+        const invoiceId = pi.metadata?.invoiceId;
+        if (invoiceId) {
+          const allCompanies = await storage.listCompanies();
+          for (const company of allCompanies) {
+            const invoice = await storage.getInvoice(invoiceId, company.id);
+            if (invoice && invoice.status !== "paid") {
+              await storage.updateInvoice(invoiceId, {
+                status: "paid",
+                paidAt: new Date(),
+                stripePaymentIntentId: pi.id,
+              });
+              break;
+            }
+          }
+        }
+      }
+
+      if (event.type === "payment_intent.payment_failed") {
+        const pi = event.data.object as any;
+        const invoiceId = pi.metadata?.invoiceId;
+        if (invoiceId) {
+          const allCompanies = await storage.listCompanies();
+          for (const company of allCompanies) {
+            const invoice = await storage.getInvoice(invoiceId, company.id);
+            if (invoice) {
+              await storage.updateInvoice(invoiceId, {
+                status: "failed",
+                paymentAttempts: (invoice.paymentAttempts || 0) + 1,
+                lastPaymentAttempt: new Date(),
+              });
+              break;
+            }
+          }
+        }
+      }
+
+      res.json({ received: true });
+    } catch (err) {
+      console.error("Stripe webhook error:", err);
+      res.status(500).json({ error: "Webhook processing failed" });
+    }
+  });
+
+  // ================ Client Portal Routes ================
+
+  app.post("/api/portal/login", async (req: Request, res: Response) => {
+    try {
+      const { email, lastName } = req.body;
+      if (!email || !lastName) {
+        return res.status(400).json({ error: "Email and last name are required" });
+      }
+
+      const allCompanies = await storage.listCompanies();
+      let foundContact = null;
+      for (const company of allCompanies) {
+        const companyContacts = await storage.getContacts(company.id, { search: email });
+        const match = companyContacts.find(
+          (c) => c.email?.toLowerCase() === email.toLowerCase() && c.lastName?.toLowerCase() === lastName.toLowerCase() && c.hasPortalAccess
+        );
+        if (match) {
+          foundContact = match;
+          break;
+        }
+      }
+
+      if (!foundContact) {
+        return res.status(401).json({ error: "No portal access found for this email and last name" });
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      await storage.createPortalSession({
+        contactId: foundContact.id,
+        companyId: foundContact.companyId,
+        tokenHash,
+        expiresAt,
+      });
+
+      await storage.deleteExpiredPortalSessions();
+
+      res.json({ token, contactId: foundContact.id });
+    } catch (err) { handleError(res, err); }
+  });
+
+  async function getPortalContext(req: Request) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      throw { status: 401, message: "Portal authentication required" };
+    }
+    const token = authHeader.slice(7);
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const session = await storage.getPortalSessionByToken(tokenHash);
+    if (!session) {
+      throw { status: 401, message: "Invalid or expired portal session" };
+    }
+    return { contactId: session.contactId, companyId: session.companyId, sessionId: session.id };
+  }
+
+  app.get("/api/portal/me", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const company = await storage.getCompany(companyId);
+      res.json({
+        id: contact.id,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        email: contact.email,
+        phone: contact.phone,
+        companyName: company?.name || "",
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/portal/schedule", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const plans = await storage.getServicePlans(companyId, { contactId });
+      const today = new Date().toISOString().split("T")[0];
+      const futureDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const upcomingVisits = await storage.getVisitsForDateRange(companyId, today, futureDate);
+
+      const planIds = new Set(plans.map((p) => p.id));
+      const myVisits = upcomingVisits.filter((v) => planIds.has(v.servicePlanId));
+
+      const props = await storage.getProperties(companyId, contactId);
+
+      res.json({
+        servicePlans: plans.map((p) => ({
+          id: p.id,
+          frequency: p.frequency,
+          dayOfWeek: p.dayOfWeek,
+          pricePerVisit: p.pricePerVisit,
+          isActive: p.isActive,
+        })),
+        upcomingVisits: myVisits.map((v: any) => ({
+          id: v.id,
+          scheduledDate: v.scheduledDate,
+          status: v.status,
+          propertyAddress: props.find((p) => p.id === v.propertyId)?.streetAddress || "",
+        })),
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/portal/invoices", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const invoicesList = await storage.getInvoices(companyId, { contactId });
+      res.json(invoicesList.map((inv) => ({
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        dueDate: inv.dueDate,
+        total: inv.total,
+        status: inv.status,
+        createdAt: inv.createdAt,
+      })));
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/portal/invoices/:id/pay", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const invoice = await storage.getInvoice(req.params.id, companyId);
+      if (!invoice || invoice.contactId !== contactId) return res.status(404).json({ error: "Invoice not found" });
+      if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
+
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      let stripeCustomerId = contact.stripeCustomerId;
+      if (!stripeCustomerId) {
+        stripeCustomerId = await createStripeCustomer({
+          email: contact.email || undefined,
+          name: `${contact.firstName} ${contact.lastName}`.trim(),
+          metadata: { contactId: contact.id, companyId },
+        });
+        await storage.updateContact(contact.id, { stripeCustomerId });
+      }
+
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const result = await createCheckoutSession({
+        customerId: stripeCustomerId,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        amount: parseFloat(invoice.total),
+        successUrl: `${baseUrl}/portal/client?paid=${invoice.id}`,
+        cancelUrl: `${baseUrl}/portal/client`,
+      });
+
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/portal/pause", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      await storage.updateContact(contactId, { status: "paused" });
+
+      const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+      for (const plan of plans) {
+        await storage.updateServicePlan(plan.id, { isActive: false });
+      }
+
+      res.json({ success: true, status: "paused" });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/portal/resume", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      await storage.updateContact(contactId, { status: "active" });
+
+      const plans = await storage.getServicePlans(companyId, { contactId });
+      for (const plan of plans) {
+        if (!plan.isActive) {
+          await storage.updateServicePlan(plan.id, { isActive: true });
+        }
+      }
+
+      res.json({ success: true, status: "active" });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/portal/logout", async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = await getPortalContext(req);
+      await storage.deletePortalSession(sessionId);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // Admin route: generate portal invite link
+  app.post("/api/contacts/:id/portal-access", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      await storage.updateContact(req.params.id, { hasPortalAccess: true });
+      res.json({ success: true, message: "Portal access enabled. Customer can log in with their email and last name." });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/contacts/:id/portal-access", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      await storage.updateContact(req.params.id, { hasPortalAccess: false });
+      res.json({ success: true, message: "Portal access disabled." });
     } catch (err) { handleError(res, err); }
   });
 

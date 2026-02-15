@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLink } from "lucide-react";
 
 const invoiceStatusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
@@ -96,6 +96,10 @@ export default function Invoices() {
   const taxAmount = afterDiscount * (parsedTaxRate / 100);
   const total = afterDiscount + taxAmount;
 
+  const { data: stripeConfig } = useQuery<{ configured: boolean }>({
+    queryKey: ["/api/stripe/config"],
+  });
+
   const sendEmailMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
       await apiRequest("POST", `/api/invoices/${invoiceId}/send-email`);
@@ -105,6 +109,39 @@ export default function Invoices() {
     },
     onError: (error: Error) => {
       toast({ title: "Failed to send", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const chargeMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("POST", `/api/invoices/${invoiceId}/charge`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      if (data.status === "paid") {
+        toast({ title: "Payment successful", description: "Invoice charged to card on file." });
+      } else {
+        toast({ title: "Payment processing", description: "Payment is being processed." });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Charge failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const checkoutMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("POST", `/api/invoices/${invoiceId}/checkout`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.url) {
+        window.open(data.url, "_blank");
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Checkout failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -547,6 +584,30 @@ export default function Invoices() {
                     >
                       <Printer className="h-4 w-4" />
                     </Button>
+                    {invoice.status !== "paid" && stripeConfig?.configured && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => chargeMutation.mutate(invoice.id)}
+                          disabled={chargeMutation.isPending}
+                          data-testid={`button-charge-invoice-${invoice.id}`}
+                          title="Charge card on file"
+                        >
+                          <CreditCard className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => checkoutMutation.mutate(invoice.id)}
+                          disabled={checkoutMutation.isPending}
+                          data-testid={`button-checkout-invoice-${invoice.id}`}
+                          title="Send to Stripe Checkout"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
                     {invoice.status !== "paid" && (
                       <Button
                         variant="ghost"
@@ -654,6 +715,16 @@ export default function Invoices() {
               </Card>
 
               <div className="flex flex-wrap gap-2">
+                {selectedInvoice.status !== "paid" && stripeConfig?.configured && (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => { chargeMutation.mutate(selectedInvoice.id); setDetailDialogOpen(false); }} disabled={chargeMutation.isPending}>
+                      <CreditCard className="mr-1 h-3 w-3" /> Charge Card
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => { checkoutMutation.mutate(selectedInvoice.id); }} disabled={checkoutMutation.isPending}>
+                      <ExternalLink className="mr-1 h-3 w-3" /> Checkout Link
+                    </Button>
+                  </>
+                )}
                 {selectedInvoice.status !== "paid" && (
                   <Button size="sm" variant="outline" onClick={() => { markPaidMutation.mutate(selectedInvoice.id); setDetailDialogOpen(false); }}>
                     Mark as Paid

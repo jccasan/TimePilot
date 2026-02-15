@@ -362,6 +362,22 @@ export const servicePackages = pgTable("service_packages", {
   index("idx_spkg_company").on(table.companyId),
 ]);
 
+export const portalSessions = pgTable("portal_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 255 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ps_contact").on(table.contactId),
+  index("idx_ps_token").on(table.tokenHash),
+]);
+
+export const insertPortalSessionSchema = createInsertSchema(portalSessions).omit({ id: true, createdAt: true });
+export type PortalSession = typeof portalSessions.$inferSelect;
+export type InsertPortalSession = z.infer<typeof insertPortalSessionSchema>;
+
 export const messageRelations = relations(messages, ({ one }) => ({
   company: one(companies, { fields: [messages.companyId], references: [companies.id] }),
   contact: one(contacts, { fields: [messages.contactId], references: [contacts.id] }),

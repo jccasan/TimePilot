@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { isAuthenticated } from "../auth";
 
 /**
  * Register object storage routes for file uploads.
@@ -35,7 +36,7 @@ export function registerObjectStorageRoutes(app: Express): void {
    * IMPORTANT: The client should NOT send the file to this endpoint.
    * Send JSON metadata only, then upload the file directly to uploadURL.
    */
-  app.post("/api/uploads/request-url", async (req, res) => {
+  app.post("/api/uploads/request-url", isAuthenticated, async (req, res) => {
     try {
       const { name, size, contentType } = req.body;
 

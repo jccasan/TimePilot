@@ -5,7 +5,7 @@ import {
   properties, routes, servicePlans, vacationHolds,
   visits, invoices, invoiceLineItems, automationRules,
   automationEventLogs, apiKeys, webhooks, attachments,
-  servicePricing, servicePackages, messages,
+  servicePricing, servicePackages, messages, portalSessions,
   type Company, type InsertCompany,
   type CompanyUser, type InsertCompanyUser,
   type Contact, type InsertContact,
@@ -24,6 +24,7 @@ import {
   type ServicePricingItem, type InsertServicePricing,
   type ServicePackage, type InsertServicePackage,
   type Message, type InsertMessage,
+  type PortalSession, type InsertPortalSession,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -151,6 +152,15 @@ export interface IStorage {
   getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string }): Promise<Message[]>;
   createMessage(data: InsertMessage): Promise<Message>;
   updateMessageStatus(id: string, status: string, errorMessage?: string): Promise<Message>;
+
+  // Portal Sessions
+  createPortalSession(data: InsertPortalSession): Promise<PortalSession>;
+  getPortalSessionByToken(tokenHash: string): Promise<PortalSession | undefined>;
+  deleteExpiredPortalSessions(): Promise<void>;
+  deletePortalSession(id: string): Promise<void>;
+
+  // Contact by ID (without company scope - for portal)
+  getContactById(id: string): Promise<Contact | undefined>;
 
   // Seed default pricing
   seedDefaultPricing(companyId: string): Promise<void>;
@@ -747,6 +757,31 @@ export class DatabaseStorage implements IStorage {
     if (errorMessage) updateData.errorMessage = errorMessage;
     const [msg] = await db.update(messages).set(updateData).where(eq(messages.id, id)).returning();
     return msg;
+  }
+
+  // ================ Portal Sessions ================
+  async createPortalSession(data: InsertPortalSession): Promise<PortalSession> {
+    const [session] = await db.insert(portalSessions).values(data).returning();
+    return session;
+  }
+
+  async getPortalSessionByToken(tokenHash: string): Promise<PortalSession | undefined> {
+    const [session] = await db.select().from(portalSessions)
+      .where(and(eq(portalSessions.tokenHash, tokenHash), gte(portalSessions.expiresAt, new Date())));
+    return session;
+  }
+
+  async deleteExpiredPortalSessions(): Promise<void> {
+    await db.delete(portalSessions).where(lte(portalSessions.expiresAt, new Date()));
+  }
+
+  async deletePortalSession(id: string): Promise<void> {
+    await db.delete(portalSessions).where(eq(portalSessions.id, id));
+  }
+
+  async getContactById(id: string): Promise<Contact | undefined> {
+    const [contact] = await db.select().from(contacts).where(eq(contacts.id, id));
+    return contact;
   }
 }
 

@@ -106,7 +106,45 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
   - `GET /invoice/:invoiceId/render` - renders real invoice from DB (auth required)
 - **Frontend**: Print button on each invoice card opens rendered template in new tab
 
+### Stripe Payment Integration
+- **Service**: `server/services/stripe.ts` - Stripe customer creation, setup intents, payment intents, checkout sessions, webhook handling
+- **Routes**: 
+  - `POST /api/contacts/:id/stripe-customer` - Create Stripe customer for contact
+  - `POST /api/contacts/:id/setup-intent` - Create setup intent for adding cards
+  - `GET /api/contacts/:id/payment-methods` - List payment methods
+  - `DELETE /api/payment-methods/:pmId` - Remove payment method
+  - `POST /api/invoices/:id/charge` - Charge card on file
+  - `POST /api/invoices/:id/checkout` - Create Stripe checkout session
+  - `POST /api/webhooks/stripe` - Stripe webhook handler
+- **Secrets**: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET (optional, graceful degradation)
+
+### Client Portal
+- **Auth**: Token-based sessions (not Replit OIDC) for contacts/customers
+- **Schema**: `portal_sessions` table with tokenHash, expiresAt (7-day sessions)
+- **Routes**: 
+  - `POST /api/portal/login` - Email + last name auth
+  - `GET /api/portal/me` - Profile info
+  - `GET /api/portal/schedule` - Service plans and upcoming visits
+  - `GET /api/portal/invoices` - Invoice list
+  - `POST /api/portal/invoices/:id/pay` - Pay via Stripe checkout
+  - `POST /api/portal/pause` / `POST /api/portal/resume` - Service control
+  - `POST /api/portal/logout`
+  - `POST/DELETE /api/contacts/:id/portal-access` - Admin toggle
+- **Frontend**: `/portal/login` and `/portal/client` (outside main auth flow)
+
+### Tech Photo Upload
+- Camera button on tech mobile view uploads via object storage presigned URLs
+- Photos stored as `proofOfServicePhoto` on visits table
+- Displayed inline in visit detail with proof of service section
+
 ## Recent Changes
+- 2026-02-15: Tier 1 MVP features (Stripe, Portal, Tech Photos)
+  - Stripe payment processing with charge/checkout on invoices
+  - Payment methods management on contact detail page
+  - Client portal with login, schedule, invoices, pause/resume
+  - Portal access toggle on contact detail page
+  - Tech photo upload via object storage presigned URLs
+  - Upload route secured with authentication
 - 2026-02-15: Customizable invoice template system
   - Mustache-style template engine (no dependencies)
   - Theme JSON controls all branding (colors, fonts, logo, border radius)
