@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -46,9 +46,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Users, MapPin, Pencil, UserPlus, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Trash2, Users, MapPin, Pencil, GripVertical, ArrowRight } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from "@dnd-kit/core";
+import { useDraggable } from "@dnd-kit/core";
 
 const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const UNASSIGNED_ID = "__unassigned__";
 
 const routeFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -68,14 +90,115 @@ interface TeamMember {
   email: string;
 }
 
+interface MoveOption {
+  id: string;
+  label: string;
+  color?: string;
+}
+
+function DraggablePlanCard({
+  plan,
+  contactName,
+  propertyAddress,
+  moveOptions,
+  onMove,
+}: {
+  plan: ServicePlan;
+  contactName: string;
+  propertyAddress: string;
+  moveOptions: MoveOption[];
+  onMove: (planId: string, targetRouteId: string | null) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: plan.id,
+    data: { plan },
+  });
+
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 text-sm border rounded-md p-2 bg-background transition-opacity ${isDragging ? "opacity-30" : ""}`}
+      data-testid={`draggable-plan-${plan.id}`}
+    >
+      <div className="cursor-grab active:cursor-grabbing touch-none" {...listeners} {...attributes}>
+        <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      </div>
+      <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="font-medium truncate">{contactName}</p>
+        <p className="text-muted-foreground text-xs truncate">{propertyAddress}</p>
+      </div>
+      <Badge variant="outline" className="capitalize shrink-0">{plan.frequency}</Badge>
+      <span className="font-medium text-xs shrink-0 whitespace-nowrap">${plan.pricePerVisit}/visit</span>
+      {moveOptions.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="shrink-0" data-testid={`button-move-plan-${plan.id}`}>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {moveOptions.map((opt) => (
+              <DropdownMenuItem
+                key={opt.id}
+                onClick={() => onMove(plan.id, opt.id === UNASSIGNED_ID ? null : opt.id)}
+                data-testid={`menu-move-${plan.id}-to-${opt.id}`}
+              >
+                {opt.color && (
+                  <div className="w-2.5 h-2.5 rounded-full shrink-0 mr-1.5" style={{ backgroundColor: opt.color }} />
+                )}
+                {opt.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
+  );
+}
+
+function DroppableContainer({
+  id,
+  children,
+  isOver,
+  label,
+}: {
+  id: string;
+  children: React.ReactNode;
+  isOver: boolean;
+  label?: string;
+}) {
+  const { setNodeRef } = useDroppable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`min-h-[60px] rounded-md p-2 space-y-1.5 transition-colors ${isOver ? "bg-primary/10 ring-2 ring-primary/30" : ""}`}
+      data-testid={`drop-zone-${id}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function RoutesPage() {
   const { toast } = useToast();
   const [selectedDay, setSelectedDay] = useState("monday");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingRoute, setEditingRoute] = useState<Route | null>(null);
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
-  const [assigningRouteId, setAssigningRouteId] = useState<string | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [overContainerId, setOverContainerId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  );
 
   const { data: routes, isLoading } = useQuery<Route[]>({
     queryKey: ["/api/routes", selectedDay],
@@ -162,6 +285,7 @@ export default function RoutesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       toast({ title: "Route deleted" });
     },
     onError: (error: Error) => {
@@ -176,36 +300,35 @@ export default function RoutesPage() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
-      toast({ title: variables.routeId ? "Service plan assigned" : "Service plan unassigned" });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error moving client", description: error.message, variant: "destructive" });
     },
   });
 
-  const getPlansForRoute = (routeId: string) => {
+  const getPlansForRoute = useCallback((routeId: string) => {
     return servicePlans?.filter(sp => sp.routeId === routeId && sp.isActive) || [];
-  };
+  }, [servicePlans]);
 
   const unassignedPlans = useMemo(() => {
     return servicePlans?.filter(sp => !sp.routeId && sp.isActive) || [];
   }, [servicePlans]);
 
-  const getContactName = (contactId: string) => {
+  const getContactName = useCallback((contactId: string) => {
     const c = contacts?.find(ct => ct.id === contactId);
     return c ? `${c.firstName} ${c.lastName}`.trim() : "Unknown";
-  };
+  }, [contacts]);
 
-  const getPropertyAddress = (propertyId: string) => {
+  const getPropertyAddress = useCallback((propertyId: string) => {
     const p = properties?.find(pr => pr.id === propertyId);
     return p ? `${p.street}` : "Unknown";
-  };
+  }, [properties]);
 
-  const getTechName = (techId: string | null) => {
+  const getTechName = useCallback((techId: string | null) => {
     if (!techId || !team) return null;
     const t = team.find(m => m.id === techId);
     return t ? `${t.firstName} ${t.lastName}`.trim() : null;
-  };
+  }, [team]);
 
   function openEditDialog(route: Route) {
     setEditingRoute(route);
@@ -216,6 +339,62 @@ export default function RoutesPage() {
       color: route.color || "#3b82f6",
     });
     setEditDialogOpen(true);
+  }
+
+  const handleMovePlan = useCallback((planId: string, targetRouteId: string | null) => {
+    assignPlanMutation.mutate({ planId, routeId: targetRouteId });
+  }, [assignPlanMutation]);
+
+  const getMoveOptions = useCallback((currentRouteId: string | null): MoveOption[] => {
+    const options: MoveOption[] = [];
+    if (currentRouteId) {
+      options.push({ id: UNASSIGNED_ID, label: "Unassigned" });
+    }
+    routes?.forEach((r) => {
+      if (r.id !== currentRouteId) {
+        options.push({ id: r.id, label: r.name, color: r.color || "#3b82f6" });
+      }
+    });
+    return options;
+  }, [routes]);
+
+  const activePlan = useMemo(() => {
+    if (!activeDragId || !servicePlans) return null;
+    return servicePlans.find(sp => sp.id === activeDragId) || null;
+  }, [activeDragId, servicePlans]);
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveDragId(event.active.id as string);
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const overId = event.over?.id as string | null;
+    setOverContainerId(overId);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveDragId(null);
+    setOverContainerId(null);
+
+    const { active, over } = event;
+    if (!over) return;
+
+    const planId = active.id as string;
+    const targetContainer = over.id as string;
+
+    const plan = servicePlans?.find(sp => sp.id === planId);
+    if (!plan) return;
+
+    const currentRouteId = plan.routeId || UNASSIGNED_ID;
+    if (currentRouteId === targetContainer) return;
+
+    const newRouteId = targetContainer === UNASSIGNED_ID ? null : targetContainer;
+    assignPlanMutation.mutate({ planId, routeId: newRouteId });
+  }
+
+  function handleDragCancel() {
+    setActiveDragId(null);
+    setOverContainerId(null);
   }
 
   function RouteFormFields({ form, teamMembers }: { form: any; teamMembers: TeamMember[] }) {
@@ -319,126 +498,160 @@ export default function RoutesPage() {
             <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
-      ) : routes && routes.length > 0 ? (
-        <div className="space-y-3">
-          {routes.map((route) => {
-            const plans = getPlansForRoute(route.id);
-            const techName = getTechName(route.technicianId);
-            return (
-              <Card key={route.id} data-testid={`card-route-${route.id}`}>
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-4 h-4 rounded-full shrink-0"
-                        style={{ backgroundColor: route.color || "#3b82f6" }}
-                      />
-                      <div>
-                        <p className="font-medium" data-testid={`text-route-name-${route.id}`}>{route.name}</p>
-                        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                          <span className="capitalize">{route.dayOfWeek}</span>
-                          {techName && (
-                            <>
-                              <span>-</span>
-                              <span data-testid={`text-route-tech-${route.id}`}>{techName}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Badge variant="secondary" data-testid={`badge-route-plans-${route.id}`}>
-                        <Users className="h-3 w-3 mr-1" />
-                        {plans.length} {plans.length === 1 ? "stop" : "stops"}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEditDialog(route)}
-                        data-testid={`button-edit-route-${route.id}`}
-                        title="Edit route"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setAssigningRouteId(route.id);
-                          setAssignDialogOpen(true);
-                        }}
-                        data-testid={`button-assign-route-${route.id}`}
-                        title="Assign service plans"
-                      >
-                        <UserPlus className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" data-testid={`button-delete-route-${route.id}`}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Route</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete "{route.name}"? {plans.length > 0 && `This route has ${plans.length} assigned service plan(s) that will be unassigned.`}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deleteMutation.mutate(route.id)}
-                              data-testid={`button-confirm-delete-route-${route.id}`}
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-
-                  {plans.length > 0 && (
-                    <div className="border-t pt-3 space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Assigned Service Plans</p>
-                      {plans.map((plan) => (
-                        <div key={plan.id} className="flex flex-wrap items-center justify-between gap-2 text-sm" data-testid={`row-plan-${plan.id}`}>
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-                            <span>{getContactName(plan.contactId)}</span>
-                            <span className="text-muted-foreground">-</span>
-                            <span className="text-muted-foreground">{getPropertyAddress(plan.propertyId)}</span>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+            <div className="space-y-3">
+              {routes && routes.length > 0 ? (
+                routes.map((route) => {
+                  const plans = getPlansForRoute(route.id);
+                  const techName = getTechName(route.technicianId);
+                  const isOverThis = overContainerId === route.id;
+                  return (
+                    <Card key={route.id} data-testid={`card-route-${route.id}`}>
+                      <CardContent className="p-4 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-4 h-4 rounded-full shrink-0"
+                              style={{ backgroundColor: route.color || "#3b82f6" }}
+                            />
+                            <div>
+                              <p className="font-medium" data-testid={`text-route-name-${route.id}`}>{route.name}</p>
+                              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                <span className="capitalize">{route.dayOfWeek}</span>
+                                {techName && (
+                                  <>
+                                    <span>-</span>
+                                    <span data-testid={`text-route-tech-${route.id}`}>{techName}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="capitalize">{plan.frequency}</Badge>
-                            <span className="font-medium">${plan.pricePerVisit}/visit</span>
+                          <div className="flex items-center gap-1">
+                            <Badge variant="secondary" data-testid={`badge-route-plans-${route.id}`}>
+                              <Users className="h-3 w-3 mr-1" />
+                              {plans.length} {plans.length === 1 ? "stop" : "stops"}
+                            </Badge>
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => assignPlanMutation.mutate({ planId: plan.id, routeId: null })}
-                              disabled={assignPlanMutation.isPending}
-                              data-testid={`button-unassign-plan-${plan.id}`}
-                              title="Remove from route"
+                              onClick={() => openEditDialog(route)}
+                              data-testid={`button-edit-route-${route.id}`}
+                              title="Edit route"
                             >
-                              <X className="h-3 w-3" />
+                              <Pencil className="h-4 w-4" />
                             </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" data-testid={`button-delete-route-${route.id}`}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Route</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete "{route.name}"? {plans.length > 0 && `This route has ${plans.length} assigned service plan(s) that will be unassigned.`}
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteMutation.mutate(route.id)}
+                                    data-testid={`button-confirm-delete-route-${route.id}`}
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+
+                        <DroppableContainer id={route.id} isOver={isOverThis}>
+                          {plans.length > 0 ? (
+                            plans.map((plan) => (
+                              <DraggablePlanCard
+                                key={plan.id}
+                                plan={plan}
+                                contactName={getContactName(plan.contactId)}
+                                propertyAddress={getPropertyAddress(plan.propertyId)}
+                                moveOptions={getMoveOptions(route.id)}
+                                onMove={handleMovePlan}
+                              />
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground text-center py-3">
+                              Drag clients here to add stops
+                            </p>
+                          )}
+                        </DroppableContainer>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              ) : (
+                <Card>
+                  <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-no-routes">
+                    No routes for {selectedDay}. Create one to get started.
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            <div className="lg:sticky lg:top-0">
+              <Card>
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-sm" data-testid="text-unassigned-heading">Unassigned Clients</p>
+                    <Badge variant="secondary">{unassignedPlans.length}</Badge>
+                  </div>
+                  <DroppableContainer id={UNASSIGNED_ID} isOver={overContainerId === UNASSIGNED_ID}>
+                    {unassignedPlans.length > 0 ? (
+                      unassignedPlans.map((plan) => (
+                        <DraggablePlanCard
+                          key={plan.id}
+                          plan={plan}
+                          contactName={getContactName(plan.contactId)}
+                          propertyAddress={getPropertyAddress(plan.propertyId)}
+                          moveOptions={getMoveOptions(null)}
+                          onMove={handleMovePlan}
+                        />
+                      ))
+                    ) : (
+                      <p className="text-xs text-muted-foreground text-center py-3" data-testid="text-no-unassigned-plans">
+                        All active service plans are assigned to routes.
+                      </p>
+                    )}
+                  </DroppableContainer>
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-no-routes">
-            No routes for {selectedDay}. Create one to get started.
-          </CardContent>
-        </Card>
+            </div>
+          </div>
+
+          <DragOverlay>
+            {activePlan ? (
+              <div className="flex items-center gap-2 text-sm border rounded-md p-2 bg-background shadow-lg opacity-90 max-w-sm">
+                <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{getContactName(activePlan.contactId)}</p>
+                  <p className="text-muted-foreground text-xs truncate">{getPropertyAddress(activePlan.propertyId)}</p>
+                </div>
+                <Badge variant="outline" className="capitalize shrink-0">{activePlan.frequency}</Badge>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
       <Dialog open={editDialogOpen} onOpenChange={(open) => {
@@ -458,58 +671,6 @@ export default function RoutesPage() {
               </Button>
             </form>
           </Form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={assignDialogOpen} onOpenChange={(open) => {
-        setAssignDialogOpen(open);
-        if (!open) setAssigningRouteId(null);
-      }}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Assign Service Plans</DialogTitle>
-            <DialogDescription>
-              Select service plans to add to this route. Only unassigned active plans are shown.
-            </DialogDescription>
-          </DialogHeader>
-          {unassignedPlans.length > 0 ? (
-            <div className="space-y-2">
-              {unassignedPlans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className="flex flex-wrap items-center justify-between gap-2 text-sm border rounded-md p-3"
-                  data-testid={`row-unassigned-plan-${plan.id}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="font-medium">{getContactName(plan.contactId)}</p>
-                      <p className="text-muted-foreground text-xs">{getPropertyAddress(plan.propertyId)}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="capitalize">{plan.frequency}</Badge>
-                    {plan.dayOfWeek && (
-                      <Badge variant="secondary" className="capitalize text-xs">{plan.dayOfWeek}</Badge>
-                    )}
-                    <span className="font-medium text-xs">${plan.pricePerVisit}/visit</span>
-                    <Button
-                      size="sm"
-                      onClick={() => assigningRouteId && assignPlanMutation.mutate({ planId: plan.id, routeId: assigningRouteId })}
-                      disabled={assignPlanMutation.isPending}
-                      data-testid={`button-add-plan-${plan.id}`}
-                    >
-                      <Plus className="mr-1 h-3 w-3" /> Add
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-unassigned-plans">
-              All active service plans are already assigned to routes.
-            </p>
-          )}
         </DialogContent>
       </Dialog>
     </div>

@@ -508,7 +508,9 @@ export async function registerRoutes(
   app.post("/api/service-plans", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const parsed = insertServicePlanSchema.parse({ ...req.body, companyId });
+      const body = { ...req.body, companyId };
+      if (!body.routeId || body.routeId === "") body.routeId = null;
+      const parsed = insertServicePlanSchema.parse(body);
       const plan = await storage.createServicePlan(parsed);
       res.status(201).json(plan);
     } catch (err) { handleError(res, err); }
@@ -519,7 +521,9 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getServicePlan(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Service plan not found" });
-      const plan = await storage.updateServicePlan(req.params.id, req.body);
+      const body = { ...req.body };
+      if (body.routeId === "" || body.routeId === undefined) body.routeId = null;
+      const plan = await storage.updateServicePlan(req.params.id, body);
       res.json(plan);
     } catch (err) { handleError(res, err); }
   });
