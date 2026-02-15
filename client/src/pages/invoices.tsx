@@ -360,7 +360,10 @@ export default function Invoices() {
               </div>
             </DialogContent>
           </Dialog>
-          <Button variant="outline" onClick={() => setThemeDialogOpen(true)} data-testid="button-customize-template">
+          <Button variant="outline" onClick={() => {
+                if (invoiceTheme) setEditTheme({ ...invoiceTheme });
+                setThemeDialogOpen(true);
+              }} data-testid="button-customize-template">
                 <Palette className="mr-1 h-4 w-4" /> Customize Template
               </Button>
           <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateForm(); }}>
