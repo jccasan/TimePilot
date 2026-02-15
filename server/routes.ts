@@ -1928,7 +1928,7 @@ export async function registerRoutes(
 
   app.get("/invoice/example", (_req: Request, res: Response) => {
     try {
-      const examplePath = path.join(path.dirname(new URL(import.meta.url).pathname), "templates", "examples", "invoice.example.json");
+      const examplePath = path.join(process.cwd(), "server", "templates", "examples", "invoice.example.json");
       const rawData = JSON.parse(fs.readFileSync(examplePath, "utf-8"));
       const computed = computeInvoice(rawData);
       const tpl = loadTemplate(getDefaultTemplatePath());

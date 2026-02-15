@@ -92,7 +92,7 @@ export function renderInvoice(templateHtml: string, theme: any, invoiceData: any
   return renderTemplate(templateHtml, mergedData);
 }
 
-const TEMPLATES_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "templates");
+const TEMPLATES_DIR = path.join(process.cwd(), "server", "templates");
 
 export function getDefaultTemplatePath(): string {
   return path.join(TEMPLATES_DIR, "invoice.default.html");
