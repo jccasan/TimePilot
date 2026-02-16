@@ -4,10 +4,9 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
-import { isAuthenticated } from "./replit_integrations/auth";
-import { authStorage } from "./replit_integrations/auth/storage";
-import { registerAuthRoutes } from "./replit_integrations/auth";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { registerUser, loginUser, getUserById } from "./services/app-auth";
+import type { RequestHandler } from "express";
 import { sendEmail, generateInvoiceEmailHtml } from "./services/email";
 import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
 import {
@@ -41,8 +40,15 @@ import {
   insertServicePackageSchema,
 } from "@shared/schema";
 
+const isAuthenticated: RequestHandler = (req, res, next) => {
+  if ((req.session as any)?.userId) {
+    return next();
+  }
+  return res.status(401).json({ message: "Unauthorized" });
+};
+
 async function getCompanyContext(req: Request) {
-  const userId = (req as any).user?.claims?.sub;
+  const userId = (req.session as any)?.userId;
   if (!userId) {
     throw { status: 401, message: "Not authenticated" };
   }
@@ -76,15 +82,61 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  registerAuthRoutes(app);
   registerObjectStorageRoutes(app);
+
+  // ================ Auth Routes ================
+
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
+    try {
+      const { email, password, firstName, lastName } = req.body;
+      const result = await registerUser(email, password, firstName || "", lastName || "");
+      if ("error" in result) {
+        return res.status(400).json({ error: result.error });
+      }
+      (req.session as any).userId = result.user.id;
+      const { passwordHash, ...safeUser } = result.user;
+      return res.json(safeUser);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const { email, password } = req.body;
+      const result = await loginUser(email, password);
+      if ("error" in result) {
+        return res.status(401).json({ error: result.error });
+      }
+      (req.session as any).userId = result.user.id;
+      const { passwordHash, ...safeUser } = result.user;
+      return res.json(safeUser);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/auth/user", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId;
+      const user = await getUserById(userId);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      const { passwordHash, ...safeUser } = user;
+      return res.json(safeUser);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
+    req.session.destroy((err) => {
+      if (err) return res.status(500).json({ error: "Logout failed" });
+      res.clearCookie("connect.sid");
+      return res.json({ ok: true });
+    });
+  });
 
   // ================ Setup / Onboarding ================
 
   app.post("/api/setup", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.claims?.sub;
-      const username = (req as any).user?.claims?.name || "User";
+      const userId = (req.session as any).userId;
+      const user = await getUserById(userId);
+      const username = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User" : "User";
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
       const existing = await storage.getCompaniesForUser(userId);
@@ -178,7 +230,7 @@ export async function registerRoutes(
       const companyUsersList = await storage.getCompanyUsers(companyId);
       const teamMembers = await Promise.all(
         companyUsersList.filter(cu => cu.isActive).map(async (cu) => {
-          const user = await authStorage.getUser(cu.userId);
+          const user = await getUserById(cu.userId);
           return {
             id: cu.userId,
             companyUserId: cu.id,
