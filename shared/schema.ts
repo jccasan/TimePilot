@@ -649,6 +649,30 @@ export const adminSessions = pgTable("admin_sessions", {
 export type AdminUser = typeof adminUsers.$inferSelect;
 export type AdminSession = typeof adminSessions.$inferSelect;
 
+export const notificationTypeEnum = pgEnum("notification_type", [
+  "invoice_paid", "invoice_overdue", "visit_completed", "new_lead",
+  "payment_failed", "service_paused", "service_resumed", "portal_login",
+  "team_joined", "general",
+]);
+
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  type: notificationTypeEnum("type").notNull().default("general"),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  isRead: boolean("is_read").notNull().default(false),
+  linkUrl: varchar("link_url", { length: 500 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_notif_company").on(table.companyId),
+  index("idx_notif_read").on(table.companyId, table.isRead),
+]);
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
 export const insertServicePricingSchema = createInsertSchema(servicePricing).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true, updatedAt: true });

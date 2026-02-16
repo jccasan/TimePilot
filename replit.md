@@ -154,7 +154,29 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
 - **Frontend**: `/admin` (dashboard), `/admin/companies/:id` (detail)
 - **Sidebar**: "Platform" section with Shield icon, only visible to admin users
 
+### Notifications System
+- **Schema**: `notifications` table with type enum (invoice_paid, visit_completed, new_lead, payment_failed, service_paused, service_resumed, portal_login, team_joined, general)
+- **Routes**:
+  - `GET /api/notifications` - List notifications (with limit query param)
+  - `GET /api/notifications/unread-count` - Unread count
+  - `PATCH /api/notifications/:id/read` - Mark single notification read
+  - `POST /api/notifications/mark-all-read` - Mark all read
+- **Triggers**: Notifications auto-fire on contact creation (new_lead), visit completion, invoice payment/failure, service pause/resume via portal
+- **Frontend**: Bell icon in header with dropdown, unread badge, auto-polling every 30s
+
+### Settings Page
+- **Route**: `/settings`
+- Company information editing (name, email, phone, address)
+- Team member list with roles and avatars
+- Subscription status display
+
 ## Recent Changes
+- 2026-02-16: Settings, Portal improvements, Notifications
+  - Settings page with company info editing and team member display
+  - Portal page enhanced with shareable login link, portal-enabled contacts list, copy-to-clipboard
+  - In-app notification system with bell icon, dropdown, unread counts, auto-polling
+  - Notification triggers for key business events (new lead, visit completed, invoice paid/failed, service pause/resume)
+  - Sidebar reorganized: Settings section now includes Settings page and Client Portal
 - 2026-02-16: Platform Admin Dashboard
   - Admin CRM for managing all tenant accounts
   - Platform stats (total tenants, users, contacts, visits, MRR)

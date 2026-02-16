@@ -67,6 +67,10 @@ function handleError(res: Response, err: any) {
   return res.status(500).json({ error: "Internal server error" });
 }
 
+function notify(companyId: string, type: string, title: string, message: string, linkUrl?: string) {
+  storage.createNotification({ companyId, type: type as any, title, message, isRead: false, linkUrl: linkUrl || null }).catch(console.error);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -393,6 +397,10 @@ export async function registerRoutes(
           numberOfDogs: contact.numberOfDogs ?? 1,
           yardSize: contact.yardSize ?? null,
         });
+      }
+
+      if (contact.status === "lead") {
+        notify(companyId, "new_lead", "New Lead", `${contact.firstName} ${contact.lastName} was added as a new lead.`, `/contacts/${contact.id}`);
       }
 
       res.status(201).json(contact);
@@ -758,6 +766,7 @@ export async function registerRoutes(
         } catch (autoErr) {
           console.error("Auto-invoice generation failed:", autoErr);
         }
+        notify(companyId, "visit_completed", "Visit Completed", `Visit on ${visit.scheduledDate} has been marked as completed.`, `/scheduling`);
       }
 
       res.json(visit);
@@ -1540,9 +1549,11 @@ export async function registerRoutes(
         updateData.status = "paid";
         updateData.paidAt = new Date();
         updateData.stripePaymentIntentId = result.paymentIntentId;
+        notify(companyId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
       } else {
         updateData.status = "failed";
         if (result.paymentIntentId) updateData.stripePaymentIntentId = result.paymentIntentId;
+        notify(companyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}.`, `/invoices`);
       }
 
       const updated = await storage.updateInvoice(invoice.id, updateData);
@@ -1615,6 +1626,7 @@ export async function registerRoutes(
                 paidAt: new Date(),
                 stripePaymentIntentId: session.payment_intent,
               });
+              notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
               break;
             }
           }
@@ -1634,6 +1646,7 @@ export async function registerRoutes(
                 paidAt: new Date(),
                 stripePaymentIntentId: pi.id,
               });
+              notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
               break;
             }
           }
@@ -1833,6 +1846,7 @@ export async function registerRoutes(
         await storage.updateServicePlan(plan.id, { isActive: false });
       }
 
+      notify(companyId, "service_paused", "Service Paused", `${contact.firstName} ${contact.lastName} paused their service via the portal.`, `/contacts/${contactId}`);
       res.json({ success: true, status: "paused" });
     } catch (err) { handleError(res, err); }
   });
@@ -1852,6 +1866,7 @@ export async function registerRoutes(
         }
       }
 
+      notify(companyId, "service_resumed", "Service Resumed", `${contact.firstName} ${contact.lastName} resumed their service via the portal.`, `/contacts/${contactId}`);
       res.json({ success: true, status: "active" });
     } catch (err) { handleError(res, err); }
   });
@@ -2029,6 +2044,42 @@ export async function registerRoutes(
 
       res.setHeader("Content-Type", "text/html");
       res.send(html);
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Notifications ================
+
+  app.get("/api/notifications", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const limit = parseInt(req.query.limit as string) || 50;
+      const notifs = await storage.getNotifications(companyId, limit);
+      res.json(notifs);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/notifications/unread-count", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const count = await storage.getUnreadNotificationCount(companyId);
+      res.json({ count });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/notifications/:id/read", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const notif = await storage.markNotificationRead(req.params.id, companyId);
+      if (!notif) return res.status(404).json({ error: "Notification not found" });
+      res.json(notif);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/notifications/mark-all-read", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      await storage.markAllNotificationsRead(companyId);
+      res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
 

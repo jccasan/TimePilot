@@ -36,6 +36,8 @@ import AdminCompanyDetail from "@/pages/admin-company-detail";
 import AdminAnalytics from "@/pages/admin-analytics";
 import AdminLogin from "@/pages/admin-login";
 import AdminChangePassword from "@/pages/admin-change-password";
+import Settings from "@/pages/settings";
+import { NotificationBell } from "@/components/notification-bell";
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -64,6 +66,7 @@ function Router() {
       <Route path="/communications" component={Communications} />
       <Route path="/reports" component={Reports} />
       <Route path="/portal" component={Portal} />
+      <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -117,6 +120,7 @@ function AuthenticatedLayout() {
           <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex items-center gap-1">
+              <NotificationBell />
               <ThemeToggle />
               <Button
                 variant="ghost"

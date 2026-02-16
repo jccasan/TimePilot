@@ -14,6 +14,7 @@ import {
   ExternalLink,
   MessageSquare,
   BarChart3,
+  Settings,
 } from "lucide-react";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 import {
@@ -57,14 +58,10 @@ const menuSections = [
   {
     label: "Settings",
     items: [
+      { title: "Settings", url: "/settings", icon: Settings },
       { title: "Automation", url: "/automation", icon: Zap },
       { title: "API Keys", url: "/api-keys", icon: Key },
       { title: "Webhooks", url: "/webhooks", icon: Webhook },
-    ],
-  },
-  {
-    label: "Portal",
-    items: [
       { title: "Client Portal", url: "/portal", icon: ExternalLink },
     ],
   },
