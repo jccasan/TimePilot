@@ -21,6 +21,7 @@ import {
   createCheckoutSession,
   detachPaymentMethod,
 } from "./services/stripe";
+import { optimizeRoute } from "./services/route-optimizer";
 import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import {
@@ -585,6 +586,62 @@ export async function registerRoutes(
       if (!existing) return res.status(404).json({ error: "Route not found" });
       await storage.deleteRoute(req.params.id);
       res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/routes/:id/optimize", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const route = await storage.getRoute(req.params.id, companyId);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+
+      const plans = await storage.getServicePlans(companyId, { isActive: true });
+      const routePlans = plans.filter(sp => sp.routeId === route.id);
+
+      if (routePlans.length <= 1) {
+        return res.json({ optimized: false, message: "Not enough stops to optimize", totalDistance: 0, stopCount: routePlans.length });
+      }
+
+      const allProperties = await storage.getProperties(companyId);
+      const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+
+      const stops = routePlans
+        .map(sp => {
+          const prop = propertyMap.get(sp.propertyId);
+          if (!prop || !prop.latitude || !prop.longitude) return null;
+          return {
+            id: sp.id,
+            latitude: parseFloat(String(prop.latitude)),
+            longitude: parseFloat(String(prop.longitude)),
+          };
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null);
+
+      if (stops.length < 2) {
+        return res.json({ optimized: false, message: "Not enough geocoded properties to optimize", totalDistance: 0, stopCount: routePlans.length });
+      }
+
+      const result = optimizeRoute(stops);
+
+      for (let i = 0; i < result.orderedIds.length; i++) {
+        await storage.updateServicePlan(result.orderedIds[i], { stopOrder: i + 1 });
+      }
+
+      const plansWithoutCoords = routePlans.filter(sp => {
+        const prop = propertyMap.get(sp.propertyId);
+        return !prop || !prop.latitude || !prop.longitude;
+      });
+      for (const plan of plansWithoutCoords) {
+        await storage.updateServicePlan(plan.id, { stopOrder: result.orderedIds.length + 1 });
+      }
+
+      res.json({
+        optimized: true,
+        totalDistance: result.totalDistance,
+        stopCount: routePlans.length,
+        geocodedCount: stops.length,
+        order: result.orderedIds,
+      });
     } catch (err) { handleError(res, err); }
   });
 

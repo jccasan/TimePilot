@@ -53,7 +53,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Trash2, Users, MapPin, Pencil, GripVertical, ArrowRight } from "lucide-react";
+import { Plus, Trash2, Users, MapPin, Pencil, GripVertical, ArrowRight, Route as RouteIcon, Loader2 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   DndContext,
   DragOverlay,
@@ -102,12 +107,14 @@ function DraggablePlanCard({
   propertyAddress,
   moveOptions,
   onMove,
+  stopNumber,
 }: {
   plan: ServicePlan;
   contactName: string;
   propertyAddress: string;
   moveOptions: MoveOption[];
   onMove: (planId: string, targetRouteId: string | null) => void;
+  stopNumber?: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: plan.id,
@@ -128,7 +135,13 @@ function DraggablePlanCard({
       <div className="cursor-grab active:cursor-grabbing touch-none" {...listeners} {...attributes}>
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       </div>
-      <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+      {stopNumber ? (
+        <span className="flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold shrink-0" data-testid={`badge-stop-number-${plan.id}`}>
+          {stopNumber}
+        </span>
+      ) : (
+        <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+      )}
       <div className="flex-1 min-w-0">
         <p className="font-medium truncate">{contactName}</p>
         <p className="text-muted-foreground text-xs truncate">{propertyAddress}</p>
@@ -306,8 +319,27 @@ export default function RoutesPage() {
     },
   });
 
+  const optimizeMutation = useMutation({
+    mutationFn: async (routeId: string) => {
+      const res = await apiRequest("POST", `/api/routes/${routeId}/optimize`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      if (data.optimized) {
+        toast({ title: "Route optimized", description: `${data.stopCount} stops reordered. Estimated distance: ${data.totalDistance} mi` });
+      } else {
+        toast({ title: "Could not optimize", description: data.message, variant: "destructive" });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const getPlansForRoute = useCallback((routeId: string) => {
-    return servicePlans?.filter(sp => sp.routeId === routeId && sp.isActive) || [];
+    return (servicePlans?.filter(sp => sp.routeId === routeId && sp.isActive) || [])
+      .sort((a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0));
   }, [servicePlans]);
 
   const unassignedPlans = useMemo(() => {
@@ -321,7 +353,7 @@ export default function RoutesPage() {
 
   const getPropertyAddress = useCallback((propertyId: string) => {
     const p = properties?.find(pr => pr.id === propertyId);
-    return p ? `${p.street}` : "Unknown";
+    return p ? `${p.streetAddress}` : "Unknown";
   }, [properties]);
 
   const getTechName = useCallback((techId: string | null) => {
@@ -541,6 +573,24 @@ export default function RoutesPage() {
                               <Users className="h-3 w-3 mr-1" />
                               {plans.length} {plans.length === 1 ? "stop" : "stops"}
                             </Badge>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => optimizeMutation.mutate(route.id)}
+                                  disabled={plans.length < 2 || optimizeMutation.isPending}
+                                  data-testid={`button-optimize-route-${route.id}`}
+                                >
+                                  {optimizeMutation.isPending && optimizeMutation.variables === route.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <RouteIcon className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Optimize stop order</TooltipContent>
+                            </Tooltip>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -579,7 +629,7 @@ export default function RoutesPage() {
 
                         <DroppableContainer id={route.id} isOver={isOverThis}>
                           {plans.length > 0 ? (
-                            plans.map((plan) => (
+                            plans.map((plan, idx) => (
                               <DraggablePlanCard
                                 key={plan.id}
                                 plan={plan}
@@ -587,6 +637,7 @@ export default function RoutesPage() {
                                 propertyAddress={getPropertyAddress(plan.propertyId)}
                                 moveOptions={getMoveOptions(route.id)}
                                 onMove={handleMovePlan}
+                                stopNumber={plan.stopOrder > 0 ? plan.stopOrder : undefined}
                               />
                             ))
                           ) : (

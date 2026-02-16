@@ -49,11 +49,11 @@ async function seed() {
   const [sarah, mike, emily, , , james, , david] = insertedContacts;
 
   const propertiesData = [
-    { companyId, contactId: sarah.id, streetAddress: "123 Oak Street", city: "Austin", state: "TX", zipCode: "78701", numberOfDogs: 2, yardSize: "medium", gateCode: "1234" },
-    { companyId, contactId: mike.id, streetAddress: "456 Elm Avenue", city: "Austin", state: "TX", zipCode: "78702", numberOfDogs: 1, yardSize: "large", specialInstructions: "Dogs are in backyard" },
-    { companyId, contactId: emily.id, streetAddress: "789 Pine Road", city: "Austin", state: "TX", zipCode: "78703", numberOfDogs: 3, yardSize: "small" },
-    { companyId, contactId: james.id, streetAddress: "321 Cedar Lane", city: "Austin", state: "TX", zipCode: "78704", numberOfDogs: 2, yardSize: "large", gateCode: "5678" },
-    { companyId, contactId: david.id, streetAddress: "654 Birch Court", city: "Austin", state: "TX", zipCode: "78705", numberOfDogs: 1, yardSize: "medium" },
+    { companyId, contactId: sarah.id, streetAddress: "123 Oak Street", city: "Austin", state: "TX", zipCode: "78701", numberOfDogs: 2, yardSize: "medium", gateCode: "1234", latitude: "30.2672", longitude: "-97.7431" },
+    { companyId, contactId: mike.id, streetAddress: "456 Elm Avenue", city: "Austin", state: "TX", zipCode: "78702", numberOfDogs: 1, yardSize: "large", specialInstructions: "Dogs are in backyard", latitude: "30.2550", longitude: "-97.7260" },
+    { companyId, contactId: emily.id, streetAddress: "789 Pine Road", city: "Austin", state: "TX", zipCode: "78703", numberOfDogs: 3, yardSize: "small", latitude: "30.2980", longitude: "-97.7610" },
+    { companyId, contactId: james.id, streetAddress: "321 Cedar Lane", city: "Austin", state: "TX", zipCode: "78704", numberOfDogs: 2, yardSize: "large", gateCode: "5678", latitude: "30.2400", longitude: "-97.7590" },
+    { companyId, contactId: david.id, streetAddress: "654 Birch Court", city: "Austin", state: "TX", zipCode: "78705", numberOfDogs: 1, yardSize: "medium", latitude: "30.2920", longitude: "-97.7380" },
   ];
 
   const insertedProperties = await db.insert(properties).values(propertiesData).returning();
