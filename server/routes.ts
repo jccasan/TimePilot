@@ -2033,15 +2033,63 @@ export async function registerRoutes(
   });
 
   // ================ Admin (Platform-level) Routes ================
-  const adminUserIds = (process.env.ADMIN_USER_IDS || "").split(",").map(s => s.trim()).filter(Boolean);
-
-  function isAdmin(req: Request, res: Response, next: Function) {
-    const userId = (req as any).user?.claims?.sub;
-    if (!userId || !adminUserIds.includes(userId)) {
-      return res.status(403).json({ error: "Forbidden" });
+  // Seed admin user on startup
+  import("./services/admin-auth").then(({ seedAdminUser }) => {
+    const email = process.env.ADMIN_EMAIL;
+    const password = process.env.ADMIN_INITIAL_PASSWORD;
+    if (email && password) {
+      seedAdminUser(email, password).catch(console.error);
     }
+  });
+
+  async function isAdmin(req: Request, res: Response, next: Function) {
+    const token = req.headers["x-admin-token"] as string;
+    if (!token) return res.status(401).json({ error: "Admin authentication required" });
+    const { validateAdminSession } = await import("./services/admin-auth");
+    const session = await validateAdminSession(token);
+    if (!session) return res.status(401).json({ error: "Invalid or expired session" });
+    (req as any).adminUser = session;
     next();
   }
+
+  app.post("/api/admin/login", async (req: Request, res: Response) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+      const { loginAdmin } = await import("./services/admin-auth");
+      const result = await loginAdmin(email, password);
+      if ("error" in result) return res.status(401).json({ error: result.error });
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/logout", async (req: Request, res: Response) => {
+    try {
+      const token = req.headers["x-admin-token"] as string;
+      if (token) {
+        const { logoutAdmin } = await import("./services/admin-auth");
+        await logoutAdmin(token);
+      }
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/change-password", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) return res.status(400).json({ error: "Both passwords required" });
+      const { changeAdminPassword } = await import("./services/admin-auth");
+      const result = await changeAdminPassword((req as any).adminUser.userId, currentPassword, newPassword);
+      if (result.error) return res.status(400).json({ error: result.error });
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/admin/check", isAdmin, async (req: Request, res: Response) => {
+    const { isPasswordExpired } = await import("./services/admin-auth");
+    const expired = await isPasswordExpired((req as any).adminUser.userId);
+    res.json({ isAdmin: true, email: (req as any).adminUser.email, mustChangePassword: expired });
+  });
 
   app.get("/api/admin/stats", isAdmin, async (_req: Request, res: Response) => {
     try {
@@ -2095,11 +2143,10 @@ export async function registerRoutes(
     try {
       const { content } = req.body;
       if (!content) return res.status(400).json({ error: "Content required" });
-      const userId = (req as any).user?.claims?.sub;
       const note = await storage.createAdminNote({
         companyId: req.params.id,
         content,
-        createdBy: userId,
+        createdBy: (req as any).adminUser.email,
       });
       res.json(note);
     } catch (err) { handleError(res, err); }
@@ -2110,11 +2157,6 @@ export async function registerRoutes(
       await storage.deleteAdminNote(req.params.noteId);
       res.json({ ok: true });
     } catch (err) { handleError(res, err); }
-  });
-
-  app.get("/api/admin/check", isAdmin, async (req: Request, res: Response) => {
-    const userId = (req as any).user?.claims?.sub;
-    res.json({ isAdmin: true, userId });
   });
 
   return httpServer;

@@ -521,6 +521,26 @@ export const insertAdminNoteSchema = createInsertSchema(adminNotes).omit({ id: t
 export type AdminNote = typeof adminNotes.$inferSelect;
 export type InsertAdminNote = z.infer<typeof insertAdminNoteSchema>;
 
+export const adminUsers = pgTable("admin_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  previousPasswordHashes: text("previous_password_hashes").array().notNull().default(sql`'{}'::text[]`),
+  passwordChangedAt: timestamp("password_changed_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const adminSessions = pgTable("admin_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminUserId: varchar("admin_user_id").notNull().references(() => adminUsers.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type AdminSession = typeof adminSessions.$inferSelect;
+
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
 export const insertServicePricingSchema = createInsertSchema(servicePricing).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true, updatedAt: true });
