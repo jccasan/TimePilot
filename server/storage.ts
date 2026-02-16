@@ -5,7 +5,7 @@ import {
   properties, routes, servicePlans, vacationHolds,
   visits, invoices, invoiceLineItems, automationRules,
   automationEventLogs, apiKeys, webhooks, attachments,
-  servicePricing, servicePackages, messages, portalSessions,
+  servicePricing, servicePackages, messages, portalSessions, adminNotes,
   type Company, type InsertCompany,
   type CompanyUser, type InsertCompanyUser,
   type Contact, type InsertContact,
@@ -24,6 +24,7 @@ import {
   type ServicePricingItem, type InsertServicePricing,
   type ServicePackage, type InsertServicePackage,
   type Message, type InsertMessage,
+  type AdminNote, type InsertAdminNote,
   type PortalSession, type InsertPortalSession,
 } from "@shared/schema";
 
@@ -168,6 +169,14 @@ export interface IStorage {
 
   // Seed default pricing
   seedDefaultPricing(companyId: string): Promise<void>;
+
+  // Admin (platform-level)
+  getAllCompanies(): Promise<Company[]>;
+  getAdminNotes(companyId: string): Promise<AdminNote[]>;
+  createAdminNote(data: InsertAdminNote): Promise<AdminNote>;
+  deleteAdminNote(id: string): Promise<void>;
+  updateCompanySubscription(companyId: string, tier: string): Promise<Company>;
+  getPlatformStats(): Promise<{ totalCompanies: number; totalUsers: number; totalContacts: number; totalVisits: number; mrr: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -817,6 +826,50 @@ export class DatabaseStorage implements IStorage {
   async getContactById(id: string): Promise<Contact | undefined> {
     const [contact] = await db.select().from(contacts).where(eq(contacts.id, id));
     return contact;
+  }
+
+  // ================ Admin (Platform-level) ================
+  async getAllCompanies(): Promise<Company[]> {
+    return db.select().from(companies).orderBy(desc(companies.createdAt));
+  }
+
+  async getAdminNotes(companyId: string): Promise<AdminNote[]> {
+    return db.select().from(adminNotes).where(eq(adminNotes.companyId, companyId)).orderBy(desc(adminNotes.createdAt));
+  }
+
+  async createAdminNote(data: InsertAdminNote): Promise<AdminNote> {
+    const [note] = await db.insert(adminNotes).values(data).returning();
+    return note;
+  }
+
+  async deleteAdminNote(id: string): Promise<void> {
+    await db.delete(adminNotes).where(eq(adminNotes.id, id));
+  }
+
+  async updateCompanySubscription(companyId: string, tier: string): Promise<Company> {
+    const [updated] = await db.update(companies)
+      .set({ subscriptionTier: tier as any })
+      .where(eq(companies.id, companyId))
+      .returning();
+    return updated;
+  }
+
+  async getPlatformStats(): Promise<{ totalCompanies: number; totalUsers: number; totalContacts: number; totalVisits: number; mrr: number }> {
+    const tierPricing: Record<string, number> = {
+      tier_1: 49.99, tier_1_3: 99.99, tier_3_5: 199.99, tier_6_10: 349.99, tier_10_plus: 599.99,
+    };
+    const allCompanies = await db.select().from(companies);
+    const [usersCount] = await db.select({ count: count() }).from(companyUsers);
+    const [contactsCount] = await db.select({ count: count() }).from(contacts);
+    const [visitsCount] = await db.select({ count: count() }).from(visits);
+    const mrr = allCompanies.reduce((sum, c) => sum + (tierPricing[c.subscriptionTier] || 0), 0);
+    return {
+      totalCompanies: allCompanies.length,
+      totalUsers: usersCount.count,
+      totalContacts: contactsCount.count,
+      totalVisits: visitsCount.count,
+      mrr,
+    };
   }
 }
 

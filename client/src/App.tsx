@@ -30,6 +30,8 @@ import PortalClient from "@/pages/portal-client";
 import Pricing from "@/pages/pricing";
 import Communications from "@/pages/communications";
 import Reports from "@/pages/reports";
+import AdminDashboard from "@/pages/admin-dashboard";
+import AdminCompanyDetail from "@/pages/admin-company-detail";
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -57,6 +59,8 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
       <Route path="/communications" component={Communications} />
       <Route path="/reports" component={Reports} />
+      <Route path="/admin" component={AdminDashboard} />
+      <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
       <Route path="/portal" component={Portal} />
       <Route component={NotFound} />
     </Switch>

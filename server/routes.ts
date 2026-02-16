@@ -2032,5 +2032,90 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Admin (Platform-level) Routes ================
+  const adminUserIds = (process.env.ADMIN_USER_IDS || "").split(",").map(s => s.trim()).filter(Boolean);
+
+  function isAdmin(req: Request, res: Response, next: Function) {
+    const userId = (req as any).user?.claims?.sub;
+    if (!userId || !adminUserIds.includes(userId)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    next();
+  }
+
+  app.get("/api/admin/stats", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const stats = await storage.getPlatformStats();
+      res.json(stats);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/admin/companies", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const allCompanies = await storage.getAllCompanies();
+      const enriched = await Promise.all(allCompanies.map(async (c) => {
+        const users = await storage.getCompanyUsers(c.id);
+        const contactList = await storage.getContacts(c.id);
+        return { ...c, userCount: users.length, contactCount: contactList.length };
+      }));
+      res.json(enriched);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/admin/companies/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const company = await storage.getCompany(req.params.id);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const users = await storage.getCompanyUsers(company.id);
+      const contactList = await storage.getContacts(company.id);
+      const invoiceList = await storage.getInvoices(company.id);
+      const notes = await storage.getAdminNotes(company.id);
+      res.json({ ...company, users, contacts: contactList, invoices: invoiceList, notes });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/admin/companies/:id/subscription", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { tier } = req.body;
+      const validTiers = ["tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
+      if (!tier || !validTiers.includes(tier)) return res.status(400).json({ error: "Invalid tier" });
+      const updated = await storage.updateCompanySubscription(req.params.id, tier);
+      res.json(updated);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/admin/companies/:id/notes", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const notes = await storage.getAdminNotes(req.params.id);
+      res.json(notes);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/companies/:id/notes", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { content } = req.body;
+      if (!content) return res.status(400).json({ error: "Content required" });
+      const userId = (req as any).user?.claims?.sub;
+      const note = await storage.createAdminNote({
+        companyId: req.params.id,
+        content,
+        createdBy: userId,
+      });
+      res.json(note);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/admin/notes/:noteId", isAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteAdminNote(req.params.noteId);
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/admin/check", isAdmin, async (req: Request, res: Response) => {
+    const userId = (req as any).user?.claims?.sub;
+    res.json({ isAdmin: true, userId });
+  });
+
   return httpServer;
 }

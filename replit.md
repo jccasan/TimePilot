@@ -140,7 +140,28 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
 - Photos stored as `proofOfServicePhoto` on visits table
 - Displayed inline in visit detail with proof of service section
 
+### Platform Admin Dashboard
+- **Auth**: ADMIN_USER_IDS env var (comma-separated user IDs)
+- **Schema**: `admin_notes` table (id, companyId, content, createdBy, createdAt)
+- **Routes**:
+  - `GET /api/admin/check` - Verify admin access
+  - `GET /api/admin/stats` - Platform-wide stats (companies, users, contacts, visits, MRR)
+  - `GET /api/admin/companies` - List all tenant accounts with user/contact counts
+  - `GET /api/admin/companies/:id` - Company detail with users, contacts, invoices, notes
+  - `PATCH /api/admin/companies/:id/subscription` - Change subscription tier
+  - `GET/POST /api/admin/companies/:id/notes` - Admin notes CRUD
+  - `DELETE /api/admin/notes/:noteId` - Delete admin note
+- **Frontend**: `/admin` (dashboard), `/admin/companies/:id` (detail)
+- **Sidebar**: "Platform" section with Shield icon, only visible to admin users
+
 ## Recent Changes
+- 2026-02-16: Platform Admin Dashboard
+  - Admin CRM for managing all tenant accounts
+  - Platform stats (total tenants, users, contacts, visits, MRR)
+  - Company detail with users, contacts, invoices, admin notes
+  - Subscription tier management from admin panel
+  - Admin notes system for internal account annotations
+  - Conditional sidebar visibility for admin users
 - 2026-02-15: MVP Completion - Visit Generation, Dashboard, Reports, Onboarding
   - POST /api/visits/generate - auto-generate visits from active service plans for date range
   - Generate Visits button on scheduling page with confirmation dialog

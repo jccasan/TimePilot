@@ -509,6 +509,18 @@ export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
 export type Webhook = typeof webhooks.$inferSelect;
 export type InsertWebhook = z.infer<typeof insertWebhookSchema>;
 
+export const adminNotes = pgTable("admin_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAdminNoteSchema = createInsertSchema(adminNotes).omit({ id: true, createdAt: true });
+export type AdminNote = typeof adminNotes.$inferSelect;
+export type InsertAdminNote = z.infer<typeof insertAdminNoteSchema>;
+
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
 export const insertServicePricingSchema = createInsertSchema(servicePricing).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true, updatedAt: true });

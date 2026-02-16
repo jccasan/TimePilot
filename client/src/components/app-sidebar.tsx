@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Users,
@@ -14,6 +15,7 @@ import {
   ExternalLink,
   MessageSquare,
   BarChart3,
+  Shield,
 } from "lucide-react";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 import {
@@ -73,6 +75,14 @@ const menuSections = [
 export function AppSidebar() {
   const [location] = useLocation();
 
+  const { data: adminCheck } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/admin/check"],
+    retry: false,
+    staleTime: Infinity,
+  });
+
+  const isAdmin = adminCheck?.isAdmin === true;
+
   return (
     <Sidebar>
       <SidebarHeader>
@@ -105,6 +115,27 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Platform</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    data-active={location === "/admin" || location.startsWith("/admin/")}
+                    tooltip="Admin"
+                  >
+                    <Link href="/admin" data-testid="link-admin">
+                      <Shield />
+                      <span>Admin</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
     </Sidebar>
   );
