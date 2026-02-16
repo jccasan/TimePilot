@@ -13,6 +13,18 @@ const EMAIL_COST_PER_UNIT_CENTS = 10;
 const STRIPE_PCT = 2.9;
 const STRIPE_FIXED_CENTS = 30;
 
+const PLAN_WEIGHT: Record<string, number> = {
+  tier_1: 1,
+  tier_1_3: 2,
+  tier_3_5: 3,
+  tier_6_10: 5,
+  tier_10_plus: 8,
+};
+
+function getPlanWeight(tier: string): number {
+  return PLAN_WEIGHT[tier] ?? 1;
+}
+
 function getTierPrice(tier: string): number {
   const config = TIER_CONFIG[tier as keyof typeof TIER_CONFIG];
   return config?.price ?? 0;
@@ -109,6 +121,16 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
 
       let allCompanies = await db.select().from(companies);
 
+      const allActive = allCompanies.filter(c => c.subscriptionStatus === "active");
+      const totalActiveWeight = allActive.reduce((s, c) => s + getPlanWeight(c.subscriptionTier), 0);
+      const currentMonthKey = monthKey(now);
+      const allSaasCosts = await db.select().from(saasCostsMonthly);
+      const currentMonthCost = allSaasCosts.find(sc => sc.month === currentMonthKey);
+      const monthlyFixedTotal = currentMonthCost
+        ? ((currentMonthCost.hostingCents + currentMonthCost.dbCents + currentMonthCost.emailPlatformCents + currentMonthCost.smsPlatformCents + currentMonthCost.monitoringCents + currentMonthCost.otherCents + currentMonthCost.supportLaborCents) / 100)
+        : 0;
+      const fixedCostPerWeight = totalActiveWeight > 0 ? monthlyFixedTotal / totalActiveWeight : 0;
+
       if (search) {
         const s = search.toLowerCase();
         allCompanies = allCompanies.filter(c => c.name.toLowerCase().includes(s));
@@ -167,7 +189,9 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
         const smsCost30dCents = smsSeg30d * SMS_COST_PER_SEGMENT_CENTS;
 
         const mrrCents = Math.round(getTierPrice(c.subscriptionTier) * 100);
-        const estimatedMargin30d = mrrCents - smsCost30dCents;
+        const accountWeight = getPlanWeight(c.subscriptionTier);
+        const allocatedFixedCostCents = Math.round(accountWeight * fixedCostPerWeight * 100);
+        const estimatedMargin30d = mrrCents - smsCost30dCents - allocatedFixedCostCents;
 
         const hasEnoughContacts = contactCount >= 10;
         const hasRecurringPlan = recurringPlanCount >= 1;
@@ -574,6 +598,8 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
         );
         const revenueGross = activeForMonth.reduce((s, c) => s + getTierPrice(c.subscriptionTier), 0);
 
+        const totalActiveWeight = activeForMonth.reduce((s, c) => s + getPlanWeight(c.subscriptionTier), 0);
+
         const monthPaidInvoices = await db.select().from(invoices).where(and(
           eq(invoices.status, "paid"),
           gte(invoices.paidAt, d),
@@ -596,10 +622,18 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
           ? ((sc.hostingCents + sc.dbCents + sc.emailPlatformCents + sc.smsPlatformCents + sc.monitoringCents + sc.otherCents + sc.supportLaborCents) / 100)
           : 0;
 
+        const costPerWeight = totalActiveWeight > 0 ? fixedCosts / totalActiveWeight : 0;
+
         const contributionMargin = revenueGross - totalVariableCosts;
         const contributionMarginPct = revenueGross > 0 ? (contributionMargin / revenueGross) * 100 : 0;
         const netMargin = revenueGross - totalVariableCosts - fixedCosts;
         const netMarginPct = revenueGross > 0 ? (netMargin / revenueGross) * 100 : 0;
+
+        const perAccountFixed: Record<string, number> = {};
+        for (const c of activeForMonth) {
+          const w = getPlanWeight(c.subscriptionTier);
+          perAccountFixed[c.id] = Math.round(w * costPerWeight * 100) / 100;
+        }
 
         months.push({
           month: mKey,
@@ -609,10 +643,13 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
           sendgridCost: Math.round(sendgridCost * 100) / 100,
           totalVariableCosts: Math.round(totalVariableCosts * 100) / 100,
           fixedCosts: Math.round(fixedCosts * 100) / 100,
+          totalActiveWeight,
+          costPerWeight: Math.round(costPerWeight * 100) / 100,
           contributionMargin: Math.round(contributionMargin * 100) / 100,
           contributionMarginPct: Math.round(contributionMarginPct * 100) / 100,
           netMargin: Math.round(netMargin * 100) / 100,
           netMarginPct: Math.round(netMarginPct * 100) / 100,
+          perAccountFixed,
         });
       }
 

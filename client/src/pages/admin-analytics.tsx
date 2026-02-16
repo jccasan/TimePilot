@@ -525,6 +525,8 @@ function UnitEconomicsTab() {
                     <TableHead className="text-right">Twilio</TableHead>
                     <TableHead className="text-right">SendGrid</TableHead>
                     <TableHead className="text-right">Fixed</TableHead>
+                    <TableHead className="text-right">Weight</TableHead>
+                    <TableHead className="text-right">$/wt</TableHead>
                     <TableHead className="text-right">Contrib. Margin</TableHead>
                     <TableHead className="text-right">Net Margin</TableHead>
                   </TableRow>
@@ -538,6 +540,8 @@ function UnitEconomicsTab() {
                       <TableCell className="text-right text-muted-foreground">{fmt(m.twilioCost)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{fmt(m.sendgridCost)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{fmt(m.fixedCosts)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-weight-${m.month}`}>{m.totalActiveWeight ?? 0}</TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-cost-per-weight-${m.month}`}>{fmt(m.costPerWeight)}</TableCell>
                       <TableCell className="text-right">
                         <span className={`font-medium ${marginColor(m.contributionMargin)}`} data-testid={`text-contrib-margin-${m.month}`}>
                           {fmt(m.contributionMargin)} ({pct(m.contributionMarginPct)})
