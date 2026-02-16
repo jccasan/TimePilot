@@ -41,6 +41,10 @@ export const companies = pgTable("companies", {
   subscriptionStatus: subscriptionStatusEnum("subscription_status").notNull().default("trialing"),
   chargeTiming: chargeTimingEnum("charge_timing").notNull().default("day_before"),
   invoiceTheme: text("invoice_theme"),
+  mrrCents: integer("mrr_cents").notNull().default(0),
+  canceledAt: timestamp("canceled_at"),
+  churnReason: varchar("churn_reason", { length: 100 }),
+  churnNotes: text("churn_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -508,6 +512,110 @@ export type ApiKey = typeof apiKeys.$inferSelect;
 export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
 export type Webhook = typeof webhooks.$inferSelect;
 export type InsertWebhook = z.infer<typeof insertWebhookSchema>;
+
+export const churnReasonEnum = pgEnum("churn_reason", [
+  "too_expensive", "not_enough_features", "switched_competitor", "business_closed", "seasonal", "poor_support", "other"
+]);
+
+export const smsDirectionEnum = pgEnum("sms_direction", ["inbound", "outbound"]);
+export const smsStatusEnum = pgEnum("sms_status", ["queued", "sent", "delivered", "failed", "received"]);
+
+export const smsMessages = pgTable("sms_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  direction: smsDirectionEnum("direction").notNull(),
+  segments: integer("segments").notNull().default(1),
+  toNumber: varchar("to_number", { length: 50 }).notNull(),
+  fromNumber: varchar("from_number", { length: 50 }).notNull(),
+  toCountry: varchar("to_country", { length: 10 }).default("US"),
+  status: smsStatusEnum("status").notNull().default("queued"),
+  twilioSid: varchar("twilio_sid", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sms_company").on(table.companyId),
+  index("idx_sms_created").on(table.createdAt),
+]);
+
+export const emailStatusEnum = pgEnum("email_status", ["queued", "sent", "delivered", "bounced", "failed"]);
+
+export const emailsSent = pgTable("emails_sent", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  category: varchar("category", { length: 100 }).default("general"),
+  status: emailStatusEnum("email_log_status").notNull().default("sent"),
+  toAddress: varchar("to_address", { length: 255 }).notNull(),
+  subject: varchar("subject", { length: 500 }),
+  sendgridMessageId: varchar("sendgrid_message_id", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_emails_company").on(table.companyId),
+  index("idx_emails_created").on(table.createdAt),
+]);
+
+export const accountDailyMetrics = pgTable("account_daily_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  date: date("date").notNull(),
+  logins: integer("logins").notNull().default(0),
+  jobsScheduled: integer("jobs_scheduled").notNull().default(0),
+  jobsCompleted: integer("jobs_completed").notNull().default(0),
+  invoicesSent: integer("invoices_sent").notNull().default(0),
+  paymentsCount: integer("payments_count").notNull().default(0),
+  paymentsGrossCents: integer("payments_gross_cents").notNull().default(0),
+  paymentsNetCents: integer("payments_net_cents").notNull().default(0),
+  twilioSmsOutbound: integer("twilio_sms_outbound").notNull().default(0),
+  twilioSmsInbound: integer("twilio_sms_inbound").notNull().default(0),
+  twilioCostCentsEst: integer("twilio_cost_cents_est").notNull().default(0),
+  sendgridEmailsSent: integer("sendgrid_emails_sent").notNull().default(0),
+  sendgridCostCentsEst: integer("sendgrid_cost_cents_est").notNull().default(0),
+  churnRiskScore: integer("churn_risk_score").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_adm_company").on(table.companyId),
+  index("idx_adm_date").on(table.date),
+  unique().on(table.companyId, table.date),
+]);
+
+export const saasCostsMonthly = pgTable("saas_costs_monthly", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  month: varchar("month", { length: 7 }).notNull(),
+  hostingCents: integer("hosting_cents").notNull().default(0),
+  dbCents: integer("db_cents").notNull().default(0),
+  emailPlatformCents: integer("email_platform_cents").notNull().default(0),
+  smsPlatformCents: integer("sms_platform_cents").notNull().default(0),
+  monitoringCents: integer("monitoring_cents").notNull().default(0),
+  otherCents: integer("other_cents").notNull().default(0),
+  supportLaborCents: integer("support_labor_cents").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique().on(table.month),
+]);
+
+export const costConfig = pgTable("cost_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key", { length: 100 }).notNull().unique(),
+  valueCents: integer("value_cents").notNull().default(0),
+  valuePct: decimal("value_pct", { precision: 8, scale: 4 }),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertSmsMessageSchema = createInsertSchema(smsMessages).omit({ id: true, createdAt: true });
+export const insertEmailSentSchema = createInsertSchema(emailsSent).omit({ id: true, createdAt: true });
+export const insertAccountDailyMetricsSchema = createInsertSchema(accountDailyMetrics).omit({ id: true, createdAt: true });
+export const insertSaasCostsMonthlySchema = createInsertSchema(saasCostsMonthly).omit({ id: true, createdAt: true });
+export const insertCostConfigSchema = createInsertSchema(costConfig).omit({ id: true, updatedAt: true });
+
+export type SmsMessage = typeof smsMessages.$inferSelect;
+export type InsertSmsMessage = z.infer<typeof insertSmsMessageSchema>;
+export type EmailSent = typeof emailsSent.$inferSelect;
+export type InsertEmailSent = z.infer<typeof insertEmailSentSchema>;
+export type AccountDailyMetric = typeof accountDailyMetrics.$inferSelect;
+export type InsertAccountDailyMetric = z.infer<typeof insertAccountDailyMetricsSchema>;
+export type SaasCostMonthly = typeof saasCostsMonthly.$inferSelect;
+export type InsertSaasCostMonthly = z.infer<typeof insertSaasCostsMonthlySchema>;
+export type CostConfigItem = typeof costConfig.$inferSelect;
+export type InsertCostConfig = z.infer<typeof insertCostConfigSchema>;
 
 export const adminNotes = pgTable("admin_notes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

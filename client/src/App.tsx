@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation, Link as WouterLink } from "wouter";
 import { queryClient, apiRequest } from "./lib/queryClient";
 import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,7 +9,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, LogOut } from "lucide-react";
+import { Moon, Sun, LogOut, BarChart3, Building2, Home } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
 import NotFound from "@/pages/not-found";
@@ -33,6 +33,7 @@ import Communications from "@/pages/communications";
 import Reports from "@/pages/reports";
 import AdminDashboard from "@/pages/admin-dashboard";
 import AdminCompanyDetail from "@/pages/admin-company-detail";
+import AdminAnalytics from "@/pages/admin-analytics";
 import AdminLogin from "@/pages/admin-login";
 import AdminChangePassword from "@/pages/admin-change-password";
 
@@ -156,10 +157,33 @@ function AdminLayout() {
     return <AdminChangePassword />;
   }
 
+  const [location] = useLocation();
+
   return (
     <div className="flex flex-col h-screen">
       <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
-        <span className="text-sm font-medium px-2" data-testid="text-admin-header">Admin Dashboard</span>
+        <div className="flex items-center gap-1">
+          <WouterLink
+            href="/admin"
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors ${
+              location === "/admin" ? "bg-muted font-medium" : "text-muted-foreground"
+            }`}
+            data-testid="link-admin-overview"
+          >
+            <Home className="h-4 w-4" />
+            Overview
+          </WouterLink>
+          <WouterLink
+            href="/admin/analytics"
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors ${
+              location === "/admin/analytics" ? "bg-muted font-medium" : "text-muted-foreground"
+            }`}
+            data-testid="link-admin-analytics"
+          >
+            <BarChart3 className="h-4 w-4" />
+            Analytics
+          </WouterLink>
+        </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />
           <Button
@@ -175,6 +199,7 @@ function AdminLayout() {
       <main className="flex-1 overflow-auto">
         <Switch>
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/analytics" component={AdminAnalytics} />
           <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
           <Route path="/admin/login">{() => { window.location.href = "/admin"; return null; }}</Route>
           <Route component={NotFound} />

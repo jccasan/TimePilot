@@ -2159,5 +2159,21 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/admin/rollup", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { runNightlyRollup } = await import("./jobs/nightly-rollup");
+      await runNightlyRollup();
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  const { registerAdminAnalyticsRoutes } = await import("./admin-analytics");
+  registerAdminAnalyticsRoutes(app, isAdmin);
+
+  import("./jobs/nightly-rollup").then(({ runNightlyRollup }) => {
+    setTimeout(() => runNightlyRollup().catch(console.error), 30000);
+    setInterval(() => runNightlyRollup().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
   return httpServer;
 }

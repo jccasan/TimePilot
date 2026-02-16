@@ -1,3 +1,6 @@
+import { db } from "../db";
+import { smsMessages } from "@shared/schema";
+
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER || "+15715824054";
@@ -74,4 +77,15 @@ export function getTwilioPhoneNumber(): string {
 
 export function isTwilioConfigured(): boolean {
   return !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN);
+}
+
+export async function logSmsMessage(companyId: string, to: string, from: string, direction: "inbound" | "outbound", twilioSid?: string, segments?: number): Promise<void> {
+  await db.insert(smsMessages).values({
+    companyId,
+    toNumber: to,
+    fromNumber: from,
+    direction,
+    twilioSid,
+    segments: segments ?? 1,
+  });
 }

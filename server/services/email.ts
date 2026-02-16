@@ -1,4 +1,6 @@
 import sgMail from "@sendgrid/mail";
+import { db } from "../db";
+import { emailsSent } from "@shared/schema";
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 if (SENDGRID_API_KEY) {
@@ -110,4 +112,14 @@ export function generateInvoiceEmailHtml(data: {
   `;
 
   return { subject, text, html };
+}
+
+export async function logEmailSent(companyId: string, toAddress: string, subject: string, category: string, sendgridMessageId?: string): Promise<void> {
+  await db.insert(emailsSent).values({
+    companyId,
+    toAddress,
+    subject,
+    category,
+    sendgridMessageId,
+  });
 }

@@ -6,6 +6,7 @@ import {
   visits, invoices, invoiceLineItems, automationRules,
   automationEventLogs, apiKeys, webhooks, attachments,
   servicePricing, servicePackages, messages, portalSessions, adminNotes,
+  smsMessages, emailsSent, accountDailyMetrics, saasCostsMonthly, costConfig,
   type Company, type InsertCompany,
   type CompanyUser, type InsertCompanyUser,
   type Contact, type InsertContact,
@@ -26,6 +27,11 @@ import {
   type Message, type InsertMessage,
   type AdminNote, type InsertAdminNote,
   type PortalSession, type InsertPortalSession,
+  type SmsMessage, type InsertSmsMessage,
+  type EmailSent, type InsertEmailSent,
+  type AccountDailyMetric, type InsertAccountDailyMetric,
+  type SaasCostMonthly, type InsertSaasCostMonthly,
+  type CostConfigItem, type InsertCostConfig,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -177,6 +183,28 @@ export interface IStorage {
   deleteAdminNote(id: string): Promise<void>;
   updateCompanySubscription(companyId: string, tier: string): Promise<Company>;
   getPlatformStats(): Promise<{ totalCompanies: number; totalUsers: number; totalContacts: number; totalVisits: number; mrr: number }>;
+
+  // SMS Messages
+  createSmsMessage(data: InsertSmsMessage): Promise<SmsMessage>;
+  getSmsMessages(companyId: string, startDate?: string, endDate?: string): Promise<SmsMessage[]>;
+
+  // Email Logs
+  createEmailLog(data: InsertEmailSent): Promise<EmailSent>;
+  getEmailLogs(companyId: string, startDate?: string, endDate?: string): Promise<EmailSent[]>;
+
+  // Account Daily Metrics
+  upsertDailyMetrics(data: InsertAccountDailyMetric): Promise<AccountDailyMetric>;
+  getDailyMetrics(companyId: string, startDate: string, endDate: string): Promise<AccountDailyMetric[]>;
+  getAllDailyMetrics(startDate: string, endDate: string): Promise<AccountDailyMetric[]>;
+
+  // SaaS Costs
+  getSaasCosts(month: string): Promise<SaasCostMonthly | undefined>;
+  upsertSaasCosts(data: InsertSaasCostMonthly): Promise<SaasCostMonthly>;
+  getAllSaasCosts(): Promise<SaasCostMonthly[]>;
+
+  // Cost Config
+  getCostConfig(): Promise<CostConfigItem[]>;
+  upsertCostConfig(key: string, valueCents: number, valuePct?: string, description?: string): Promise<CostConfigItem>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -870,6 +898,115 @@ export class DatabaseStorage implements IStorage {
       totalVisits: visitsCount.count,
       mrr,
     };
+  }
+
+  // ================ SMS Messages ================
+  async createSmsMessage(data: InsertSmsMessage): Promise<SmsMessage> {
+    const [msg] = await db.insert(smsMessages).values(data).returning();
+    return msg;
+  }
+
+  async getSmsMessages(companyId: string, startDate?: string, endDate?: string): Promise<SmsMessage[]> {
+    const conditions = [eq(smsMessages.companyId, companyId)];
+    if (startDate) conditions.push(gte(smsMessages.createdAt, new Date(startDate)));
+    if (endDate) conditions.push(lte(smsMessages.createdAt, new Date(endDate)));
+    return db.select().from(smsMessages).where(and(...conditions)).orderBy(desc(smsMessages.createdAt));
+  }
+
+  // ================ Email Logs ================
+  async createEmailLog(data: InsertEmailSent): Promise<EmailSent> {
+    const [log] = await db.insert(emailsSent).values(data).returning();
+    return log;
+  }
+
+  async getEmailLogs(companyId: string, startDate?: string, endDate?: string): Promise<EmailSent[]> {
+    const conditions = [eq(emailsSent.companyId, companyId)];
+    if (startDate) conditions.push(gte(emailsSent.createdAt, new Date(startDate)));
+    if (endDate) conditions.push(lte(emailsSent.createdAt, new Date(endDate)));
+    return db.select().from(emailsSent).where(and(...conditions)).orderBy(desc(emailsSent.createdAt));
+  }
+
+  // ================ Account Daily Metrics ================
+  async upsertDailyMetrics(data: InsertAccountDailyMetric): Promise<AccountDailyMetric> {
+    const [metric] = await db.insert(accountDailyMetrics).values(data)
+      .onConflictDoUpdate({
+        target: [accountDailyMetrics.companyId, accountDailyMetrics.date],
+        set: {
+          logins: data.logins ?? 0,
+          jobsScheduled: data.jobsScheduled ?? 0,
+          jobsCompleted: data.jobsCompleted ?? 0,
+          invoicesSent: data.invoicesSent ?? 0,
+          paymentsCount: data.paymentsCount ?? 0,
+          paymentsGrossCents: data.paymentsGrossCents ?? 0,
+          paymentsNetCents: data.paymentsNetCents ?? 0,
+          twilioSmsOutbound: data.twilioSmsOutbound ?? 0,
+          twilioSmsInbound: data.twilioSmsInbound ?? 0,
+          twilioCostCentsEst: data.twilioCostCentsEst ?? 0,
+          sendgridEmailsSent: data.sendgridEmailsSent ?? 0,
+          sendgridCostCentsEst: data.sendgridCostCentsEst ?? 0,
+          churnRiskScore: data.churnRiskScore ?? 0,
+        },
+      })
+      .returning();
+    return metric;
+  }
+
+  async getDailyMetrics(companyId: string, startDate: string, endDate: string): Promise<AccountDailyMetric[]> {
+    return db.select().from(accountDailyMetrics).where(and(
+      eq(accountDailyMetrics.companyId, companyId),
+      gte(accountDailyMetrics.date, startDate),
+      lte(accountDailyMetrics.date, endDate),
+    )).orderBy(desc(accountDailyMetrics.date));
+  }
+
+  async getAllDailyMetrics(startDate: string, endDate: string): Promise<AccountDailyMetric[]> {
+    return db.select().from(accountDailyMetrics).where(and(
+      gte(accountDailyMetrics.date, startDate),
+      lte(accountDailyMetrics.date, endDate),
+    )).orderBy(desc(accountDailyMetrics.date));
+  }
+
+  // ================ SaaS Costs ================
+  async getSaasCosts(month: string): Promise<SaasCostMonthly | undefined> {
+    const [cost] = await db.select().from(saasCostsMonthly).where(eq(saasCostsMonthly.month, month));
+    return cost;
+  }
+
+  async upsertSaasCosts(data: InsertSaasCostMonthly): Promise<SaasCostMonthly> {
+    const [cost] = await db.insert(saasCostsMonthly).values(data)
+      .onConflictDoUpdate({
+        target: [saasCostsMonthly.month],
+        set: {
+          hostingCents: data.hostingCents ?? 0,
+          dbCents: data.dbCents ?? 0,
+          emailPlatformCents: data.emailPlatformCents ?? 0,
+          smsPlatformCents: data.smsPlatformCents ?? 0,
+          monitoringCents: data.monitoringCents ?? 0,
+          otherCents: data.otherCents ?? 0,
+          supportLaborCents: data.supportLaborCents ?? 0,
+        },
+      })
+      .returning();
+    return cost;
+  }
+
+  async getAllSaasCosts(): Promise<SaasCostMonthly[]> {
+    return db.select().from(saasCostsMonthly).orderBy(desc(saasCostsMonthly.month));
+  }
+
+  // ================ Cost Config ================
+  async getCostConfig(): Promise<CostConfigItem[]> {
+    return db.select().from(costConfig);
+  }
+
+  async upsertCostConfig(key: string, valueCents: number, valuePct?: string, description?: string): Promise<CostConfigItem> {
+    const [item] = await db.insert(costConfig).values({ key, valueCents, valuePct, description })
+      .onConflictDoUpdate({
+        target: [costConfig.key],
+        set: { valueCents, valuePct, description, updatedAt: new Date() },
+      })
+      .returning();
+    return item;
   }
 }
 
