@@ -26,6 +26,8 @@ async function seed() {
     subscriptionTier: "tier_1_3",
     subscriptionStatus: "active",
     chargeTiming: "day_before",
+    startLatitude: "30.2500",
+    startLongitude: "-97.7500",
   }).returning();
   const companyId = company.id;
   console.log("Created company:", companyId);

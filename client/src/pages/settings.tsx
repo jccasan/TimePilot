@@ -20,6 +20,8 @@ const companyFormSchema = z.object({
   email: z.string().email("Invalid email").or(z.literal("")).optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
+  startLatitude: z.string().optional(),
+  startLongitude: z.string().optional(),
 });
 
 type CompanyFormValues = z.infer<typeof companyFormSchema>;
@@ -30,6 +32,8 @@ type Company = {
   email: string | null;
   phone: string | null;
   address: string | null;
+  startLatitude: string | null;
+  startLongitude: string | null;
   subscriptionTier: string;
   subscriptionStatus: string;
 };
@@ -74,6 +78,8 @@ export default function Settings() {
       email: company?.email || "",
       phone: company?.phone || "",
       address: company?.address || "",
+      startLatitude: company?.startLatitude || "",
+      startLongitude: company?.startLongitude || "",
     },
   });
 
@@ -179,6 +185,46 @@ export default function Settings() {
                       </FormItem>
                     )}
                   />
+                  <div className="pt-2 border-t">
+                    <p className="text-sm font-medium mb-1">Route Starting Point</p>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Set your home base coordinates for route optimization. Routes will be ordered starting from this location.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField
+                        control={form.control}
+                        name="startLatitude"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Latitude</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input {...field} placeholder="e.g. 30.2672" className="pl-10" data-testid="input-start-latitude" />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="startLongitude"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Longitude</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input {...field} placeholder="e.g. -97.7431" className="pl-10" data-testid="input-start-longitude" />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
                   <Button type="submit" disabled={updateMutation.isPending} data-testid="button-save-company">
                     <Save className="h-4 w-4 mr-2" />
                     {updateMutation.isPending ? "Saving..." : "Save Changes"}

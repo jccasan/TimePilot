@@ -327,7 +327,8 @@ export default function RoutesPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       if (data.optimized) {
-        toast({ title: "Route optimized", description: `${data.stopCount} stops reordered. Estimated distance: ${data.totalDistance} mi` });
+        const startInfo = data.hasStartPoint ? " from home base" : "";
+        toast({ title: "Route optimized", description: `${data.stopCount} stops reordered${startInfo}. Estimated distance: ${data.totalDistance} mi` });
       } else {
         toast({ title: "Could not optimize", description: data.message, variant: "destructive" });
       }

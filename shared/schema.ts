@@ -35,6 +35,8 @@ export const companies = pgTable("companies", {
   email: varchar("email", { length: 255 }),
   phone: varchar("phone", { length: 50 }),
   address: text("address"),
+  startLatitude: decimal("start_latitude", { precision: 10, scale: 7 }),
+  startLongitude: decimal("start_longitude", { precision: 10, scale: 7 }),
   stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
   stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
   subscriptionTier: subscriptionTierEnum("subscription_tier").notNull().default("tier_1"),

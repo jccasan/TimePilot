@@ -621,7 +621,16 @@ export async function registerRoutes(
         return res.json({ optimized: false, message: "Not enough geocoded properties to optimize", totalDistance: 0, stopCount: routePlans.length });
       }
 
-      const result = optimizeRoute(stops);
+      const company = await storage.getCompany(companyId);
+      let startPoint: { latitude: number; longitude: number } | undefined;
+      if (company?.startLatitude && company?.startLongitude) {
+        startPoint = {
+          latitude: parseFloat(String(company.startLatitude)),
+          longitude: parseFloat(String(company.startLongitude)),
+        };
+      }
+
+      const result = optimizeRoute(stops, startPoint);
 
       for (let i = 0; i < result.orderedIds.length; i++) {
         await storage.updateServicePlan(result.orderedIds[i], { stopOrder: i + 1 });
@@ -640,6 +649,7 @@ export async function registerRoutes(
         totalDistance: result.totalDistance,
         stopCount: routePlans.length,
         geocodedCount: stops.length,
+        hasStartPoint: !!startPoint,
         order: result.orderedIds,
       });
     } catch (err) { handleError(res, err); }
