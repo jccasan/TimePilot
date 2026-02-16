@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Building2, Users, Contact2, CalendarCheck, DollarSign, Search, ChevronRight } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState, useMemo } from "react";
+import { adminFetchFn } from "@/lib/adminApi";
 
 const tierColors: Record<string, string> = {
   tier_1: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
@@ -26,10 +27,12 @@ export default function AdminDashboard() {
     mrr: number;
   }>({
     queryKey: ["/api/admin/stats"],
+    queryFn: adminFetchFn("/api/admin/stats"),
   });
 
   const { data: companies, isLoading: companiesLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/companies"],
+    queryFn: adminFetchFn("/api/admin/companies"),
   });
 
   const filtered = useMemo(() => {

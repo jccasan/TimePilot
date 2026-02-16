@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
+import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun, LogOut } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,6 +33,8 @@ import Communications from "@/pages/communications";
 import Reports from "@/pages/reports";
 import AdminDashboard from "@/pages/admin-dashboard";
 import AdminCompanyDetail from "@/pages/admin-company-detail";
+import AdminLogin from "@/pages/admin-login";
+import AdminChangePassword from "@/pages/admin-change-password";
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -59,8 +62,6 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
       <Route path="/communications" component={Communications} />
       <Route path="/reports" component={Reports} />
-      <Route path="/admin" component={AdminDashboard} />
-      <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
       <Route path="/portal" component={Portal} />
       <Route component={NotFound} />
     </Switch>
@@ -136,6 +137,53 @@ function AuthenticatedLayout() {
   );
 }
 
+function AdminLayout() {
+  const { isAuthenticated, isLoading, mustChangePassword, logout } = useAdminAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Skeleton className="h-12 w-48" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AdminLogin />;
+  }
+
+  if (mustChangePassword) {
+    return <AdminChangePassword />;
+  }
+
+  return (
+    <div className="flex flex-col h-screen">
+      <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
+        <span className="text-sm font-medium px-2" data-testid="text-admin-header">Admin Dashboard</span>
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => logout()}
+            data-testid="button-admin-logout"
+          >
+            <LogOut />
+          </Button>
+        </div>
+      </header>
+      <main className="flex-1 overflow-auto">
+        <Switch>
+          <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
+          <Route path="/admin/login">{() => { window.location.href = "/admin"; return null; }}</Route>
+          <Route component={NotFound} />
+        </Switch>
+      </main>
+    </div>
+  );
+}
+
 function PortalRouter() {
   return (
     <Switch>
@@ -152,9 +200,19 @@ function AppContent() {
     window.location.pathname.startsWith("/portal/login") ||
     window.location.pathname.startsWith("/portal/client")
   );
+  const isAdminPath = typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/admin");
 
   if (isPortalPath) {
     return <PortalRouter />;
+  }
+
+  if (isAdminPath) {
+    return (
+      <AdminAuthProvider>
+        <AdminLayout />
+      </AdminAuthProvider>
+    );
   }
 
   if (isLoading) {

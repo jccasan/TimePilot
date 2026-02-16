@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState } from "react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
 
 export default function AdminCompanyDetail() {
@@ -18,11 +19,12 @@ export default function AdminCompanyDetail() {
 
   const { data: company, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/companies", id],
+    queryFn: adminFetchFn(`/api/admin/companies/${id}`),
   });
 
   const tierMutation = useMutation({
     mutationFn: async (tier: string) => {
-      return apiRequest("PATCH", `/api/admin/companies/${id}/subscription`, { tier });
+      return adminRequest("PATCH", `/api/admin/companies/${id}/subscription`, { tier });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/companies", id] });
@@ -34,7 +36,7 @@ export default function AdminCompanyDetail() {
 
   const addNoteMutation = useMutation({
     mutationFn: async (content: string) => {
-      return apiRequest("POST", `/api/admin/companies/${id}/notes`, { content });
+      return adminRequest("POST", `/api/admin/companies/${id}/notes`, { content });
     },
     onSuccess: () => {
       setNoteText("");
@@ -45,7 +47,7 @@ export default function AdminCompanyDetail() {
 
   const deleteNoteMutation = useMutation({
     mutationFn: async (noteId: string) => {
-      return apiRequest("DELETE", `/api/admin/notes/${noteId}`);
+      return adminRequest("DELETE", `/api/admin/notes/${noteId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/companies", id] });
