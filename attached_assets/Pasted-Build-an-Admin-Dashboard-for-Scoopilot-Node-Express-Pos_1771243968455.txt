@@ -1,0 +1,39 @@
+Build an Admin Dashboard for Scoopilot (Node/Express + Postgres + React admin UI).
+
+We use Stripe for subscriptions/payments, Twilio for SMS, SendGrid for email. Jobs/services already exist in DB.
+
+Requirements:
+1) Database changes:
+- accounts: add plan (SOLO/RUN/GROW), stripe_customer_id, stripe_subscription_id, mrr_cents, created_at, canceled_at, churn_reason(enum+text), migration_source, migration_status.
+- create sms_messages table: account_id, created_at, direction(in/out), segments(int), to_country, status, twilio_sid.
+- create emails_sent table: account_id, created_at, category, status, sendgrid_message_id.
+- create account_daily_metrics table (rollup): account_id, date, logins, jobs_scheduled, jobs_completed, invoices_sent, payments_count, payments_gross_cents, payments_net_cents, twilio_sms_outbound, twilio_sms_inbound, twilio_cost_cents_est, sendgrid_emails_sent, sendgrid_cost_cents_est.
+- create saas_costs_monthly table: month, hosting_cents, db_cents, email_platform_cents, sms_platform_cents, monitoring_cents, other_cents, support_labor_cents (optional).
+- create cost_config table for rates: twilio_outbound_cents_per_segment, twilio_inbound_cents_per_segment, carrier_fee_buffer_pct, sendgrid_cents_per_email, stripe_pct_fee, stripe_fixed_cents.
+
+2) Stripe integration:
+- Add webhook handlers for subscription created/updated/canceled to keep accounts.mrr_cents and status accurate.
+- Add webhook/payment event handling to store payments_gross and if possible actual stripe fees via balance_transaction; if not available, estimate with config rates.
+
+3) Twilio/SendGrid logging:
+- Every time the app sends an SMS, write to sms_messages with segments and direction=out.
+- If inbound messages are handled, log direction=in.
+- Every time an email is sent via SendGrid, write to emails_sent.
+
+4) Nightly rollup job:
+- Aggregate previous day into account_daily_metrics per account:
+  logins, jobs scheduled/completed, invoices, payments gross/net, twilio segments and estimated cost, sendgrid emails and estimated cost.
+
+5) Admin UI pages:
+A) Executive Overview: active accounts, MRR/ARR, new MRR, churned MRR, logo churn %, NRR/GRR, payment failure+recovery, total Twilio+SendGrid estimated cost, estimated gross margin.
+B) Accounts Table with filters: inactive >14d, high SMS cost, failed payments, not activated within 7d. Show columns including estimated margin (last 30d).
+C) Billing Health: failed payment rate, recovery rate, past due aging, refunds, chargebacks, Stripe fees (actual or estimated).
+D) Retention: cohort retention, churn reasons by plan, churn by tenure buckets.
+E) Activation: activation definition = >=10 clients AND >=1 recurring schedule AND (>=1 invoice OR >=1 payment). Show activation rate and time-to-activation.
+F) Messaging & Cost: top accounts by Twilio cost, email volume; detect anomalies (>3x trailing 7d).
+G) Unit Economics: monthly revenue gross/net, variable costs (stripe fees + twilio + sendgrid), allocated fixed costs from saas_costs_monthly (equal and weighted by plan), contribution margin $ and %; show break-even active accounts.
+
+6) Churn Risk Score:
+Compute nightly using: inactive >14d (+3), jobs_completed 14d=0 (+3), failed_payments 30d>=2 (+2), not activated within 7d (+3), messaging spike >3x (+2). Show score and a “risk” filter.
+
+Deliver: DB migrations, webhook endpoints, rollup job, admin UI with charts and tables, and API endpoints for all reports.
