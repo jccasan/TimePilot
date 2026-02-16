@@ -24,7 +24,7 @@ export default function AuthPage() {
             Professional Pet Waste Removal Management
           </p>
           <Button asChild size="lg" data-testid="button-login">
-            <a href="/api/login">Sign in with Replit</a>
+            <a href="/api/login">Sign in</a>
           </Button>
         </div>
       </div>
