@@ -156,6 +156,7 @@ export const servicePlans = pgTable("service_plans", {
   startDate: date("start_date").notNull(),
   endDate: date("end_date"),
   routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),
+  stopOrder: integer("stop_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
