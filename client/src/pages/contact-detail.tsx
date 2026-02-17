@@ -228,6 +228,7 @@ export default function ContactDetail() {
                   yardSize: contact.yardSize,
                   numberOfDogs: contact.numberOfDogs,
                   serviceFrequency: contact.serviceFrequency,
+                  leadSource: contact.leadSource,
                   status: contact.status,
                 });
               }}
@@ -343,6 +344,23 @@ export default function ContactDetail() {
                     <SelectItem value="as_needed">As needed</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select
+                  value={editForm.leadSource || ""}
+                  onValueChange={(v) => setEditForm({ ...editForm, leadSource: v })}
+                >
+                  <SelectTrigger data-testid="select-edit-lead-source">
+                    <SelectValue placeholder="Lead Source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="referral">Referral</SelectItem>
+                    <SelectItem value="facebook">Facebook</SelectItem>
+                    <SelectItem value="google">Google</SelectItem>
+                    <SelectItem value="bing">Bing</SelectItem>
+                    <SelectItem value="nextdoor">NextDoor</SelectItem>
+                    <SelectItem value="yard_sign">Yard Sign</SelectItem>
+                    <SelectItem value="local_advertising">Local Advertising</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <Select
                 value={editForm.status || "lead"}
@@ -383,6 +401,11 @@ export default function ContactDetail() {
               {contact.serviceFrequency && (
                 <p data-testid="text-contact-frequency">Service Frequency: {
                   { "1_per_week": "1x per week", "2_per_week": "2x per week", "biweekly": "Bi-weekly", "as_needed": "As needed" }[contact.serviceFrequency] || contact.serviceFrequency
+                }</p>
+              )}
+              {contact.leadSource && (
+                <p data-testid="text-contact-lead-source">Lead Source: {
+                  { "referral": "Referral", "facebook": "Facebook", "google": "Google", "bing": "Bing", "nextdoor": "NextDoor", "yard_sign": "Yard Sign", "local_advertising": "Local Advertising" }[contact.leadSource] || contact.leadSource
                 }</p>
               )}
             </div>

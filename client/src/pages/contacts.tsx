@@ -59,6 +59,7 @@ const contactFormSchema = z.object({
   yardSize: z.string().optional().or(z.literal("")),
   numberOfDogs: z.coerce.number().min(0).optional(),
   serviceFrequency: z.string().optional().or(z.literal("")),
+  leadSource: z.string().optional().or(z.literal("")),
   status: z.enum(["lead", "estimate", "active", "paused", "cancelled"]),
 });
 
@@ -94,6 +95,7 @@ export default function Contacts() {
       yardSize: "",
       numberOfDogs: undefined,
       serviceFrequency: "",
+      leadSource: "",
       status: "lead",
     },
   });
@@ -347,6 +349,32 @@ export default function Contacts() {
                             <SelectItem value="2_per_week">2x per week</SelectItem>
                             <SelectItem value="biweekly">Bi-weekly</SelectItem>
                             <SelectItem value="as_needed">As needed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="leadSource"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Lead Source</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-lead-source">
+                              <SelectValue placeholder="Select source" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="referral">Referral</SelectItem>
+                            <SelectItem value="facebook">Facebook</SelectItem>
+                            <SelectItem value="google">Google</SelectItem>
+                            <SelectItem value="bing">Bing</SelectItem>
+                            <SelectItem value="nextdoor">NextDoor</SelectItem>
+                            <SelectItem value="yard_sign">Yard Sign</SelectItem>
+                            <SelectItem value="local_advertising">Local Advertising</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />

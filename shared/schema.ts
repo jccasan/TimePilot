@@ -80,6 +80,7 @@ export const contacts = pgTable("contacts", {
   yardSize: varchar("yard_size", { length: 50 }),
   numberOfDogs: integer("number_of_dogs"),
   serviceFrequency: varchar("service_frequency", { length: 50 }),
+  leadSource: varchar("lead_source", { length: 50 }),
   status: leadStatusEnum("status").notNull().default("lead"),
   hasPortalAccess: boolean("has_portal_access").notNull().default(false),
   portalUserId: varchar("portal_user_id").references(() => users.id),
