@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Download, Upload } from "lucide-react";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 const statusColors: Record<string, string> = {
   lead: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -220,7 +221,17 @@ export default function Contacts() {
                       <FormItem>
                         <FormLabel>Street Address</FormLabel>
                         <FormControl>
-                          <Input {...field} data-testid="input-street-address" />
+                          <AddressAutocomplete
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                            onSelect={(addr) => {
+                              form.setValue("streetAddress", addr.streetAddress);
+                              form.setValue("city", addr.city);
+                              form.setValue("state", addr.state);
+                              form.setValue("zipCode", addr.zipCode);
+                            }}
+                            data-testid="input-street-address"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

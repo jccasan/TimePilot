@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { useForm } from "react-hook-form";
@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2 } from "lucide-react";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 const statusColors: Record<string, string> = {
   lead: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -265,10 +266,17 @@ export default function ContactDetail() {
                   data-testid="input-edit-phone"
                 />
               </div>
-              <Input
-                placeholder="Street Address"
+              <AddressAutocomplete
                 value={editForm.streetAddress || ""}
-                onChange={(e) => setEditForm({ ...editForm, streetAddress: e.target.value })}
+                onChange={(v) => setEditForm({ ...editForm, streetAddress: v })}
+                onSelect={(addr) => setEditForm({
+                  ...editForm,
+                  streetAddress: addr.streetAddress,
+                  city: addr.city,
+                  state: addr.state,
+                  zipCode: addr.zipCode,
+                })}
+                placeholder="Street Address"
                 data-testid="input-edit-street-address"
               />
               <Input
@@ -404,7 +412,19 @@ export default function ContactDetail() {
               <Form {...propertyForm}>
                 <form onSubmit={propertyForm.handleSubmit((v) => createPropertyMutation.mutate(v))} className="space-y-3">
                   <FormField control={propertyForm.control} name="streetAddress" render={({ field }) => (
-                    <FormItem><FormLabel>Street Address</FormLabel><FormControl><Input {...field} data-testid="input-street" /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Street Address</FormLabel><FormControl>
+                      <AddressAutocomplete
+                        value={field.value || ""}
+                        onChange={field.onChange}
+                        onSelect={(addr) => {
+                          propertyForm.setValue("streetAddress", addr.streetAddress);
+                          propertyForm.setValue("city", addr.city);
+                          propertyForm.setValue("state", addr.state);
+                          propertyForm.setValue("zipCode", addr.zipCode);
+                        }}
+                        data-testid="input-street"
+                      />
+                    </FormControl><FormMessage /></FormItem>
                   )} />
                   <div className="grid grid-cols-2 gap-3">
                     <FormField control={propertyForm.control} name="city" render={({ field }) => (

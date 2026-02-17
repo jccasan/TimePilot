@@ -84,6 +84,25 @@ export async function registerRoutes(
 ): Promise<Server> {
   registerObjectStorageRoutes(app);
 
+  // ================ Geocode Proxy ================
+
+  app.get("/api/geocode/autocomplete", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const q = req.query.q as string;
+      if (!q || q.length < 3) return res.json([]);
+
+      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=us&q=${encodeURIComponent(q)}`;
+      const response = await fetch(url, {
+        headers: { "User-Agent": "Scoopilot/1.0 (pet-waste-saas)" },
+      });
+      if (!response.ok) return res.json([]);
+      const data = await response.json();
+      res.json(data);
+    } catch {
+      res.json([]);
+    }
+  });
+
   // ================ Auth Routes ================
 
   app.post("/api/auth/register", async (req: Request, res: Response) => {
