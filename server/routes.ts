@@ -91,15 +91,34 @@ export async function registerRoutes(
       const q = req.query.q as string;
       if (!q || q.length < 3) return res.json([]);
 
-      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=us&q=${encodeURIComponent(q)}`;
-      const response = await fetch(url, {
-        headers: { "User-Agent": "Scoopilot/1.0 (pet-waste-saas)" },
-      });
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) return res.json([]);
+
+      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(q)}&types=address&components=country:us&key=${apiKey}`;
+      const response = await fetch(url);
       if (!response.ok) return res.json([]);
       const data = await response.json();
-      res.json(data);
+      res.json(data.predictions || []);
     } catch {
       res.json([]);
+    }
+  });
+
+  app.get("/api/geocode/place-details", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const placeId = req.query.placeId as string;
+      if (!placeId) return res.json(null);
+
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) return res.json(null);
+
+      const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=address_components,geometry,formatted_address&key=${apiKey}`;
+      const response = await fetch(url);
+      if (!response.ok) return res.json(null);
+      const data = await response.json();
+      res.json(data.result || null);
+    } catch {
+      res.json(null);
     }
   });
 

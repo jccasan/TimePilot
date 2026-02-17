@@ -229,6 +229,7 @@ export default function ContactDetail() {
                   numberOfDogs: contact.numberOfDogs,
                   serviceFrequency: contact.serviceFrequency,
                   leadSource: contact.leadSource,
+                  serviceDay: contact.serviceDay,
                   status: contact.status,
                 });
               }}
@@ -361,6 +362,23 @@ export default function ContactDetail() {
                     <SelectItem value="local_advertising">Local Advertising</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select
+                  value={editForm.serviceDay || ""}
+                  onValueChange={(v) => setEditForm({ ...editForm, serviceDay: v })}
+                >
+                  <SelectTrigger data-testid="select-edit-service-day">
+                    <SelectValue placeholder="Service Day" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monday">Monday</SelectItem>
+                    <SelectItem value="tuesday">Tuesday</SelectItem>
+                    <SelectItem value="wednesday">Wednesday</SelectItem>
+                    <SelectItem value="thursday">Thursday</SelectItem>
+                    <SelectItem value="friday">Friday</SelectItem>
+                    <SelectItem value="saturday">Saturday</SelectItem>
+                    <SelectItem value="sunday">Sunday</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <Select
                 value={editForm.status || "lead"}
@@ -407,6 +425,9 @@ export default function ContactDetail() {
                 <p data-testid="text-contact-lead-source">Lead Source: {
                   { "referral": "Referral", "facebook": "Facebook", "google": "Google", "bing": "Bing", "nextdoor": "NextDoor", "yard_sign": "Yard Sign", "local_advertising": "Local Advertising" }[contact.leadSource] || contact.leadSource
                 }</p>
+              )}
+              {contact.serviceDay && (
+                <p data-testid="text-contact-service-day">Service Day: <span className="capitalize">{contact.serviceDay}</span></p>
               )}
             </div>
           )}

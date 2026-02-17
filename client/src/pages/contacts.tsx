@@ -60,6 +60,7 @@ const contactFormSchema = z.object({
   numberOfDogs: z.coerce.number().min(0).optional(),
   serviceFrequency: z.string().optional().or(z.literal("")),
   leadSource: z.string().optional().or(z.literal("")),
+  serviceDay: z.string().optional().or(z.literal("")),
   status: z.enum(["lead", "estimate", "active", "paused", "cancelled"]),
 });
 
@@ -96,6 +97,7 @@ export default function Contacts() {
       numberOfDogs: undefined,
       serviceFrequency: "",
       leadSource: "",
+      serviceDay: "",
       status: "lead",
     },
   });
@@ -375,6 +377,32 @@ export default function Contacts() {
                             <SelectItem value="nextdoor">NextDoor</SelectItem>
                             <SelectItem value="yard_sign">Yard Sign</SelectItem>
                             <SelectItem value="local_advertising">Local Advertising</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="serviceDay"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Day</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-service-day">
+                              <SelectValue placeholder="Select day" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="monday">Monday</SelectItem>
+                            <SelectItem value="tuesday">Tuesday</SelectItem>
+                            <SelectItem value="wednesday">Wednesday</SelectItem>
+                            <SelectItem value="thursday">Thursday</SelectItem>
+                            <SelectItem value="friday">Friday</SelectItem>
+                            <SelectItem value="saturday">Saturday</SelectItem>
+                            <SelectItem value="sunday">Sunday</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
