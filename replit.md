@@ -34,6 +34,7 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **Theme**: Green/earth tone palette (primary: hsl(152 60% 36%))
 - **Forms**: react-hook-form with zodResolver for robust form handling and validation.
 - **Mobile View**: Dedicated mobile-optimized views for field technicians.
+- **Technician Layout**: Role-based UI for technicians showing only Routes (with scheduled/completed/cancelled status tracking per day) and Clients (read-only searchable list). Technicians with role="tech" are automatically routed to this simplified interface. Visit statuses persist in localStorage keyed by day+date.
 - **Client Portal**: Separate authentication and UI for client self-service, allowing clients to view schedules, invoices, and manage service pauses.
 - **Admin Dashboard**: A platform-level administration interface for managing tenant accounts, subscriptions, and platform-wide statistics.
 - **Notifications System**: In-app notifications for various business events, with a bell icon and unread count in the UI.

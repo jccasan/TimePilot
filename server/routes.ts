@@ -156,7 +156,9 @@ export async function registerRoutes(
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ message: "User not found" });
       const { passwordHash, ...safeUser } = user;
-      return res.json(safeUser);
+      const memberships = await storage.getCompaniesForUser(userId);
+      const role = memberships.length > 0 ? memberships[0].role : "tech";
+      return res.json({ ...safeUser, role });
     } catch (err) { handleError(res, err); }
   });
 

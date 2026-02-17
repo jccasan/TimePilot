@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
 
-type SafeUser = Omit<User, "passwordHash">;
+type SafeUser = Omit<User, "passwordHash"> & { role?: string };
 
 async function fetchUser(): Promise<SafeUser | null> {
   const response = await fetch("/api/auth/user", {
