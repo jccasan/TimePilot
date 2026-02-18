@@ -33,6 +33,7 @@ import PortalClient from "@/pages/portal-client";
 import Pricing from "@/pages/pricing";
 import Communications from "@/pages/communications";
 import Reports from "@/pages/reports";
+import Analytics from "@/pages/analytics";
 import AdminDashboard from "@/pages/admin-dashboard";
 import AdminCompanyDetail from "@/pages/admin-company-detail";
 import AdminAnalytics from "@/pages/admin-analytics";
@@ -68,6 +69,7 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
       <Route path="/communications" component={Communications} />
       <Route path="/reports" component={Reports} />
+      <Route path="/analytics" component={Analytics} />
       <Route path="/portal" component={Portal} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />

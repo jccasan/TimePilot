@@ -398,6 +398,218 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/analytics/dashboard", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const now = new Date();
+
+      const allContacts = await storage.getContacts(companyId);
+      const allInvoices = await storage.getInvoices(companyId);
+
+      // --- Monthly Revenue (last 12 months) ---
+      const monthlyRevenue: { month: string; revenue: number }[] = [];
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const start = d.toISOString().split("T")[0];
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0];
+        const revenue = await storage.getRevenueForPeriod(companyId, start, end);
+        monthlyRevenue.push({
+          month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
+          revenue,
+        });
+      }
+
+      // --- Yearly Revenue (current + prior) ---
+      const yearlyRevenue: { year: string; revenue: number }[] = [];
+      for (let y = now.getFullYear() - 2; y <= now.getFullYear(); y++) {
+        const yStart = `${y}-01-01`;
+        const yEnd = `${y}-12-31`;
+        const rev = await storage.getRevenueForPeriod(companyId, yStart, yEnd);
+        yearlyRevenue.push({ year: String(y), revenue: rev });
+      }
+
+      // --- Customer Acquisition (last 12 months) ---
+      const customerAcquisition: { month: string; newClients: number; total: number }[] = [];
+      let runningTotal = 0;
+      const contactsByCreatedMonth: Record<string, number> = {};
+      for (const c of allContacts) {
+        const created = new Date(c.createdAt);
+        const key = `${created.getFullYear()}-${String(created.getMonth()).padStart(2, "0")}`;
+        contactsByCreatedMonth[key] = (contactsByCreatedMonth[key] || 0) + 1;
+      }
+      const contactsBeforeWindow = allContacts.filter(c => {
+        const created = new Date(c.createdAt);
+        const windowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+        return created < windowStart;
+      }).length;
+      runningTotal = contactsBeforeWindow;
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+        const newClients = contactsByCreatedMonth[key] || 0;
+        runningTotal += newClients;
+        customerAcquisition.push({
+          month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
+          newClients,
+          total: runningTotal,
+        });
+      }
+
+      // --- Route Performance (visits by day of week, last 30 days) ---
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const recentVisits = await storage.getVisitsForDateRange(
+        companyId,
+        thirtyDaysAgo.toISOString().split("T")[0],
+        now.toISOString().split("T")[0],
+      );
+      const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const routePerformance = dayNames.map(day => ({
+        day,
+        completed: 0,
+        scheduled: 0,
+        skipped: 0,
+        cancelled: 0,
+      }));
+      for (const v of recentVisits) {
+        const parts = String(v.scheduledDate).split("-");
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        const dayIdx = d.getDay();
+        const entry = routePerformance[dayIdx];
+        if (v.status === "completed") entry.completed++;
+        else if (v.status === "scheduled") entry.scheduled++;
+        else if (v.status === "skipped") entry.skipped++;
+        else if (v.status === "cancelled") entry.cancelled++;
+      }
+
+      // --- Weekly Visit Trends (last 8 weeks) ---
+      const weeklyVisits: { week: string; completed: number; total: number; completionRate: number }[] = [];
+      const currentMonday = new Date(now);
+      const dayOfWeek = currentMonday.getDay();
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      currentMonday.setDate(currentMonday.getDate() - diffToMonday);
+      currentMonday.setHours(0, 0, 0, 0);
+      for (let w = 7; w >= 0; w--) {
+        const weekStart = new Date(currentMonday);
+        weekStart.setDate(weekStart.getDate() - (w * 7));
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        const ws = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, "0")}-${String(weekStart.getDate()).padStart(2, "0")}`;
+        const we = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, "0")}-${String(weekEnd.getDate()).padStart(2, "0")}`;
+        const weekVisits = await storage.getVisitsForDateRange(companyId, ws, we);
+        const comp = weekVisits.filter(v => v.status === "completed").length;
+        const tot = weekVisits.length;
+        weeklyVisits.push({
+          week: `${weekStart.toLocaleString("default", { month: "short" })} ${weekStart.getDate()}`,
+          completed: comp,
+          total: tot,
+          completionRate: tot > 0 ? Math.round((comp / tot) * 100) : 0,
+        });
+      }
+
+      // --- Client Retention ---
+      const activeContacts = allContacts.filter(c => c.status === "active").length;
+      const pausedContacts = allContacts.filter(c => c.status === "paused").length;
+      const cancelledContacts = allContacts.filter(c => c.status === "cancelled").length;
+      const leadContacts = allContacts.filter(c => c.status === "lead").length;
+      const estimateContacts = allContacts.filter(c => c.status === "estimate").length;
+      const totalContacts = allContacts.length;
+      const retentionRate = totalContacts > 0
+        ? Math.round(((activeContacts + pausedContacts) / totalContacts) * 100)
+        : 0;
+
+      const clientStatusBreakdown = [
+        { status: "Active", count: activeContacts, color: "#22c55e" },
+        { status: "Lead", count: leadContacts, color: "#3b82f6" },
+        { status: "Estimate", count: estimateContacts, color: "#eab308" },
+        { status: "Paused", count: pausedContacts, color: "#f97316" },
+        { status: "Cancelled", count: cancelledContacts, color: "#ef4444" },
+      ];
+
+      // --- Average Service Cost ---
+      const paidInvoices = allInvoices.filter(i => i.status === "paid");
+      const totalPaidRevenue = paidInvoices.reduce((sum, i) => sum + parseFloat(i.total), 0);
+      const avgInvoiceAmount = paidInvoices.length > 0 ? totalPaidRevenue / paidInvoices.length : 0;
+
+      const allServicePlans = await storage.getServicePlans(companyId);
+      const activeServicePlans = allServicePlans.filter(sp => sp.isActive);
+      const avgPricePerVisit = activeServicePlans.length > 0
+        ? activeServicePlans.reduce((sum, sp) => sum + parseFloat(sp.pricePerVisit), 0) / activeServicePlans.length
+        : 0;
+
+      // --- Lead Source Distribution ---
+      const leadSourceCounts: Record<string, number> = {};
+      for (const c of allContacts) {
+        const src = c.leadSource || "unknown";
+        leadSourceCounts[src] = (leadSourceCounts[src] || 0) + 1;
+      }
+      const leadSourceDistribution = Object.entries(leadSourceCounts)
+        .map(([source, count]) => ({ source, count }))
+        .sort((a, b) => b.count - a.count);
+
+      // --- Revenue KPIs ---
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0];
+      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0];
+      const thisMonthRev = await storage.getRevenueForPeriod(companyId, thisMonthStart, thisMonthEnd);
+      const lastMonthRev = await storage.getRevenueForPeriod(companyId, lastMonthStart, lastMonthEnd);
+      const revenueGrowth = lastMonthRev > 0 ? Math.round(((thisMonthRev - lastMonthRev) / lastMonthRev) * 100) : 0;
+
+      const totalOutstanding = allInvoices
+        .filter(i => i.status === "sent" || i.status === "pending")
+        .reduce((sum, i) => sum + parseFloat(i.total), 0);
+
+      // --- Service Day Distribution ---
+      const serviceDayCounts: Record<string, number> = {};
+      const daysOrder = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+      for (const day of daysOrder) serviceDayCounts[day] = 0;
+      for (const c of allContacts) {
+        if (c.serviceDay) {
+          serviceDayCounts[c.serviceDay] = (serviceDayCounts[c.serviceDay] || 0) + 1;
+        }
+      }
+      const serviceDayDistribution = daysOrder.map(day => ({
+        day: day.charAt(0).toUpperCase() + day.slice(1, 3),
+        count: serviceDayCounts[day],
+      }));
+
+      res.json({
+        monthlyRevenue,
+        yearlyRevenue,
+        customerAcquisition,
+        routePerformance,
+        weeklyVisits,
+        clientRetention: {
+          retentionRate,
+          statusBreakdown: clientStatusBreakdown,
+          total: totalContacts,
+          active: activeContacts,
+        },
+        avgServiceCost: {
+          avgPricePerVisit: Math.round(avgPricePerVisit * 100) / 100,
+          avgInvoiceAmount: Math.round(avgInvoiceAmount * 100) / 100,
+          totalPaidInvoices: paidInvoices.length,
+          activeServicePlans: activeServicePlans.length,
+        },
+        leadSourceDistribution,
+        serviceDayDistribution,
+        kpis: {
+          thisMonthRevenue: thisMonthRev,
+          lastMonthRevenue: lastMonthRev,
+          revenueGrowth,
+          totalOutstanding,
+          totalContacts,
+          activeContacts,
+          completionRate: recentVisits.length > 0
+            ? Math.round((recentVisits.filter(v => v.status === "completed").length / recentVisits.length) * 100)
+            : 0,
+          totalVisitsLast30Days: recentVisits.length,
+        },
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Contact Routes ================
 
   app.get("/api/contacts/export/csv", isAuthenticated, async (req: Request, res: Response) => {
