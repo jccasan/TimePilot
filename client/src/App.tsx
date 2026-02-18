@@ -41,6 +41,7 @@ import AdminLogin from "@/pages/admin-login";
 import AdminChangePassword from "@/pages/admin-change-password";
 import Settings from "@/pages/settings";
 import { NotificationBell } from "@/components/notification-bell";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 
 function ThemeToggle() {
@@ -363,6 +364,7 @@ function App() {
         <TooltipProvider>
           <AppContent />
           <Toaster />
+          <PwaInstallPrompt />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

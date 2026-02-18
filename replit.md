@@ -33,6 +33,7 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **UI Components**: Shadcn/ui with Tailwind CSS for a consistent and modern look.
 - **Theme**: Green/earth tone palette (primary: hsl(152 60% 36%))
 - **Forms**: react-hook-form with zodResolver for robust form handling and validation.
+- **PWA Support**: Progressive Web App with manifest, service worker, offline fallback page, and install prompt for mobile/tablet users. Icons in client/public/icons/, manifest at client/public/manifest.json, service worker at client/public/sw.js.
 - **Mobile View**: Dedicated mobile-optimized views for field technicians.
 - **Technician Layout**: Role-based UI for technicians showing only Routes (with scheduled/completed/cancelled status tracking per day) and Clients (read-only searchable list). Technicians with role="tech" are automatically routed to this simplified interface. Visit statuses persist in localStorage keyed by day+date.
 - **Client Portal**: Separate authentication and UI for client self-service, allowing clients to view schedules, invoices, and manage service pauses.
