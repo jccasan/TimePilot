@@ -44,6 +44,7 @@ export const companies = pgTable("companies", {
   chargeTiming: chargeTimingEnum("charge_timing").notNull().default("day_before"),
   invoiceTheme: text("invoice_theme"),
   mrrCents: integer("mrr_cents").notNull().default(0),
+  routeCredits: integer("route_credits").notNull().default(10),
   canceledAt: timestamp("canceled_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
   churnNotes: text("churn_notes"),

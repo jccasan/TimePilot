@@ -20,7 +20,7 @@ import {
   createCheckoutSession,
   detachPaymentMethod,
 } from "./services/stripe";
-import { optimizeRoute } from "./services/route-optimizer";
+import { optimizeRoute, calculateTotalDistance } from "./services/route-optimizer";
 import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import {
@@ -893,6 +893,27 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/route-credits", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      res.json({ credits: company?.routeCredits ?? 0 });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/route-credits/add", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Only owners/admins can add credits" });
+      const { amount } = req.body;
+      if (!amount || typeof amount !== "number" || amount < 1) return res.status(400).json({ error: "Invalid amount" });
+      const company = await storage.getCompany(companyId);
+      const currentCredits = company?.routeCredits ?? 0;
+      const updated = await storage.updateCompany(companyId, { routeCredits: currentCredits + amount } as any);
+      res.json({ credits: updated.routeCredits });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/routes/:id/optimize", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -904,6 +925,22 @@ export async function registerRoutes(
 
       if (routePlans.length <= 1) {
         return res.json({ optimized: false, message: "Not enough stops to optimize", totalDistance: 0, stopCount: routePlans.length });
+      }
+
+      if (routePlans.length > 60) {
+        return res.status(400).json({ error: "Route exceeds maximum of 60 stops. Please split into smaller routes." });
+      }
+
+      const creditsRequired = routePlans.length <= 30 ? 1 : 2;
+
+      const company = await storage.getCompany(companyId);
+      const currentCredits = company?.routeCredits ?? 0;
+      if (currentCredits < creditsRequired) {
+        return res.status(402).json({
+          error: "Insufficient route credits",
+          creditsRequired,
+          creditsAvailable: currentCredits,
+        });
       }
 
       const allProperties = await storage.getProperties(companyId);
@@ -925,7 +962,6 @@ export async function registerRoutes(
         return res.json({ optimized: false, message: "Not enough geocoded properties to optimize", totalDistance: 0, stopCount: routePlans.length });
       }
 
-      const company = await storage.getCompany(companyId);
       let startPoint: { latitude: number; longitude: number } | undefined;
       if (company?.startLatitude && company?.startLongitude) {
         startPoint = {
@@ -933,6 +969,10 @@ export async function registerRoutes(
           longitude: parseFloat(String(company.startLongitude)),
         };
       }
+
+      const originalDistance = calculateTotalDistance(stops, startPoint);
+      const avgSpeedMph = 25;
+      const originalMinutes = (originalDistance / avgSpeedMph) * 60;
 
       const result = optimizeRoute(stops, startPoint);
 
@@ -948,13 +988,73 @@ export async function registerRoutes(
         await storage.updateServicePlan(plan.id, { stopOrder: result.orderedIds.length + 1 });
       }
 
+      await storage.updateCompany(companyId, { routeCredits: currentCredits - creditsRequired } as any);
+
+      const optimizedMinutes = (result.totalDistance / avgSpeedMph) * 60;
+      const milesSaved = Math.max(0, Math.round((originalDistance - result.totalDistance) * 10) / 10);
+      const minutesSaved = Math.max(0, Math.round(originalMinutes - optimizedMinutes));
+
       res.json({
         optimized: true,
         totalDistance: result.totalDistance,
+        originalDistance,
+        milesSaved,
+        minutesSaved,
         stopCount: routePlans.length,
         geocodedCount: stops.length,
         hasStartPoint: !!startPoint,
         order: result.orderedIds,
+        creditsUsed: creditsRequired,
+        creditsRemaining: currentCredits - creditsRequired,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/routes/:id/dispatch", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const route = await storage.getRoute(req.params.id, companyId);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+      if (!route.technicianId) return res.status(400).json({ error: "No technician assigned to this route" });
+
+      const targetDate = req.body.date || new Date().toISOString().split("T")[0];
+
+      const plans = await storage.getServicePlans(companyId, { isActive: true });
+      const routePlans = plans.filter(sp => sp.routeId === route.id).sort((a, b) => a.stopOrder - b.stopOrder);
+
+      if (routePlans.length === 0) {
+        return res.status(400).json({ error: "No stops in this route to dispatch" });
+      }
+
+      const existingVisits = await storage.getVisits(companyId, { date: targetDate });
+      const existingSet = new Set(existingVisits.map(v => `${v.servicePlanId}_${v.scheduledDate}`));
+
+      let created = 0;
+      let skipped = 0;
+      for (const plan of routePlans) {
+        const key = `${plan.id}_${targetDate}`;
+        if (existingSet.has(key)) {
+          skipped++;
+          continue;
+        }
+        await storage.createVisit({
+          companyId,
+          servicePlanId: plan.id,
+          propertyId: plan.propertyId,
+          routeId: route.id,
+          scheduledDate: targetDate,
+          status: "scheduled",
+        });
+        created++;
+      }
+
+      res.json({
+        dispatched: true,
+        technicianId: route.technicianId,
+        date: targetDate,
+        visitsCreated: created,
+        visitsSkipped: skipped,
+        totalStops: routePlans.length,
       });
     } catch (err) { handleError(res, err); }
   });
