@@ -5,7 +5,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Visit, Contact, Property, Route } from "@shared/schema";
+import type { Visit, Contact, Property, Route, ServicePricingItem } from "@shared/schema";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,6 +120,15 @@ export default function Scheduling() {
     queryKey: ["/api/routes"],
   });
 
+  const { data: pricingItems } = useQuery<ServicePricingItem[]>({
+    queryKey: ["/api/pricing"],
+  });
+
+  const recurringPricing = useMemo(() => {
+    if (!pricingItems) return [];
+    return pricingItems.filter((p) => p.category === "recurring_service" && p.isActive);
+  }, [pricingItems]);
+
   const form = useForm<ServicePlanFormValues>({
     resolver: zodResolver(servicePlanSchema),
     defaultValues: {
@@ -153,6 +163,12 @@ export default function Scheduling() {
       }
     }
   }, [selectedContactId, contactProperties, form]);
+
+  useEffect(() => {
+    if (dialogOpen && recurringPricing.length > 0 && !form.getValues("pricePerVisit")) {
+      form.setValue("pricePerVisit", recurringPricing[0].basePrice);
+    }
+  }, [dialogOpen, recurringPricing, form]);
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -311,6 +327,24 @@ export default function Scheduling() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                {recurringPricing.length > 0 && (
+                  <div>
+                    <Label className="text-sm">Use Pricing Template</Label>
+                    <Select onValueChange={(v) => {
+                      const item = pricingItems?.find((p) => p.id === v);
+                      if (item) form.setValue("pricePerVisit", item.basePrice);
+                    }}>
+                      <SelectTrigger data-testid="select-pricing-template">
+                        <SelectValue placeholder="Select pricing template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {recurringPricing.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.name} - ${p.basePrice}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <FormField control={form.control} name="pricePerVisit" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Price Per Visit ($)</FormLabel>
