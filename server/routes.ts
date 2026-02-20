@@ -20,7 +20,7 @@ import {
   createCheckoutSession,
   detachPaymentMethod,
 } from "./services/stripe";
-import { optimizeRoute, calculateTotalDistance } from "./services/route-optimizer";
+import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics } from "./services/route-optimizer";
 import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import {
@@ -84,42 +84,100 @@ export async function registerRoutes(
 ): Promise<Server> {
   registerObjectStorageRoutes(app);
 
-  // ================ Geocode Proxy ================
+  // ================ Geocode Proxy (Mapbox) ================
 
   app.get("/api/geocode/autocomplete", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const q = req.query.q as string;
       if (!q || q.length < 3) return res.json([]);
 
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) return res.json([]);
+      const token = process.env.MAPBOX_SECRET_TOKEN || process.env.MAPBOX_PUBLIC_TOKEN;
+      if (!token) return res.json([]);
 
-      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(q)}&types=address&components=country:us&key=${apiKey}`;
+      const params = new URLSearchParams({
+        q,
+        access_token: token,
+        autocomplete: "true",
+        country: "us",
+        types: "address",
+        limit: "5",
+      });
+      const url = `https://api.mapbox.com/search/geocode/v6/forward?${params}`;
       const response = await fetch(url);
       if (!response.ok) return res.json([]);
       const data = await response.json();
-      res.json(data.predictions || []);
+      const features = (data.features || []).map((f: any) => {
+        const props = f.properties || {};
+        const ctx = props.context || {};
+        const coords = f.geometry?.coordinates;
+        const fullAddr = props.full_address || "";
+
+        let city = ctx.place?.name || ctx.locality?.name || "";
+        let state = ctx.region?.region_code || ctx.region?.name || "";
+        let zipCode = ctx.postcode?.name || "";
+
+        if ((!city || !state || !zipCode) && fullAddr) {
+          const parts = fullAddr.split(",").map((p: string) => p.trim());
+          if (!city && parts.length >= 2) city = parts[1] || "";
+          if (!state && parts.length >= 3) {
+            const stateZip = (parts[2] || "").trim().split(/\s+/);
+            state = state || stateZip[0] || "";
+            zipCode = zipCode || stateZip[1] || "";
+          }
+        }
+
+        return {
+          id: f.id || "",
+          full_address: fullAddr,
+          name: props.name || props.address || "",
+          place_formatted: props.place_formatted || "",
+          coordinates: coords ? { longitude: coords[0], latitude: coords[1] } : null,
+          city,
+          state,
+          zipCode,
+        };
+      });
+      res.json(features);
     } catch {
       res.json([]);
     }
   });
 
-  app.get("/api/geocode/place-details", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/geocode/forward", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const placeId = req.query.placeId as string;
-      if (!placeId) return res.json(null);
+      const q = req.query.q as string;
+      if (!q) return res.json(null);
 
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) return res.json(null);
+      const token = process.env.MAPBOX_SECRET_TOKEN || process.env.MAPBOX_PUBLIC_TOKEN;
+      if (!token) return res.json(null);
 
-      const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=address_components,geometry,formatted_address&key=${apiKey}`;
+      const params = new URLSearchParams({
+        q,
+        access_token: token,
+        country: "us",
+        types: "address",
+        limit: "1",
+      });
+      const url = `https://api.mapbox.com/search/geocode/v6/forward?${params}`;
       const response = await fetch(url);
       if (!response.ok) return res.json(null);
       const data = await response.json();
-      res.json(data.result || null);
+      const feature = data.features?.[0];
+      if (!feature) return res.json(null);
+      const coords = feature.geometry?.coordinates;
+      res.json({
+        full_address: feature.properties?.full_address || "",
+        name: feature.properties?.name || "",
+        coordinates: coords ? { longitude: coords[0], latitude: coords[1] } : null,
+      });
     } catch {
       res.json(null);
     }
+  });
+
+  app.get("/api/mapbox-token", (_req: Request, res: Response) => {
+    const token = process.env.MAPBOX_PUBLIC_TOKEN || "";
+    res.json({ token });
   });
 
   // ================ Auth Routes ================
@@ -970,11 +1028,14 @@ export async function registerRoutes(
         };
       }
 
-      const originalDistance = calculateTotalDistance(stops, startPoint);
-      const avgSpeedMph = 25;
-      const originalMinutes = (originalDistance / avgSpeedMph) * 60;
+      const originalMapbox = await getMapboxRouteMetrics(stops, startPoint);
+      const originalDistance = originalMapbox?.distance ?? calculateTotalDistance(stops, startPoint);
+      const originalMinutes = originalMapbox?.duration ?? (originalDistance / 25) * 60;
 
       const result = optimizeRoute(stops, startPoint);
+
+      const stopsById = new Map(stops.map(s => [s.id, s]));
+      const optimizedStops = result.orderedIds.map(id => stopsById.get(id)!);
 
       for (let i = 0; i < result.orderedIds.length; i++) {
         await storage.updateServicePlan(result.orderedIds[i], { stopOrder: i + 1 });
@@ -990,14 +1051,17 @@ export async function registerRoutes(
 
       await storage.updateCompany(companyId, { routeCredits: currentCredits - creditsRequired } as any);
 
-      const optimizedMinutes = (result.totalDistance / avgSpeedMph) * 60;
-      const milesSaved = Math.max(0, Math.round((originalDistance - result.totalDistance) * 10) / 10);
+      const optimizedMapbox = await getMapboxRouteMetrics(optimizedStops, startPoint);
+      const optimizedDistance = optimizedMapbox?.distance ?? result.totalDistance;
+      const optimizedMinutes = optimizedMapbox?.duration ?? (result.totalDistance / 25) * 60;
+
+      const milesSaved = Math.max(0, Math.round((originalDistance - optimizedDistance) * 10) / 10);
       const minutesSaved = Math.max(0, Math.round(originalMinutes - optimizedMinutes));
 
       res.json({
         optimized: true,
-        totalDistance: result.totalDistance,
-        originalDistance,
+        totalDistance: Math.round(optimizedDistance * 10) / 10,
+        originalDistance: Math.round(originalDistance * 10) / 10,
         milesSaved,
         minutesSaved,
         stopCount: routePlans.length,
@@ -1006,6 +1070,7 @@ export async function registerRoutes(
         order: result.orderedIds,
         creditsUsed: creditsRequired,
         creditsRemaining: currentCredits - creditsRequired,
+        routingEngine: optimizedMapbox ? "mapbox" : "haversine",
       });
     } catch (err) { handleError(res, err); }
   });

@@ -121,3 +121,79 @@ export function optimizeRoute(stops: Stop[], startPoint?: StartPoint): { ordered
     totalDistance: calculateTotalDistance(optimized, startPoint),
   };
 }
+
+async function fetchMapboxDirections(coordinates: { longitude: number; latitude: number }[]): Promise<{ distance: number; duration: number } | null> {
+  const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
+  if (!token || coordinates.length < 2) return null;
+
+  const MAX_COORDS = 25;
+  let totalDistance = 0;
+  let totalDuration = 0;
+
+  if (coordinates.length <= MAX_COORDS) {
+    const coordStr = coordinates.map(c => `${c.longitude},${c.latitude}`).join(";");
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordStr}?overview=false&access_token=${token}`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.log(`[route-optimizer] Mapbox Directions API returned ${res.status}, falling back to haversine`);
+        return null;
+      }
+      const data = await res.json();
+      const route = data.routes?.[0];
+      if (!route) return null;
+      return { distance: route.distance / 1609.34, duration: route.duration / 60 };
+    } catch (err) {
+      console.log("[route-optimizer] Mapbox Directions API error, falling back to haversine");
+      return null;
+    }
+  }
+
+  for (let i = 0; i < coordinates.length - 1; i += MAX_COORDS - 1) {
+    const end = Math.min(i + MAX_COORDS, coordinates.length);
+    const chunk = coordinates.slice(i, end);
+    if (chunk.length < 2) break;
+
+    const coordStr = chunk.map(c => `${c.longitude},${c.latitude}`).join(";");
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordStr}?overview=false&access_token=${token}`;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.log(`[route-optimizer] Mapbox Directions API returned ${res.status} for chunk, falling back to haversine`);
+        return null;
+      }
+      const data = await res.json();
+      const route = data.routes?.[0];
+      if (!route) return null;
+      totalDistance += route.distance;
+      totalDuration += route.duration;
+    } catch {
+      return null;
+    }
+  }
+
+  return {
+    distance: totalDistance / 1609.34,
+    duration: totalDuration / 60,
+  };
+}
+
+export async function getMapboxRouteMetrics(
+  stops: Stop[],
+  startPoint?: StartPoint
+): Promise<{ distance: number; duration: number } | null> {
+  const coords: { longitude: number; latitude: number }[] = [];
+
+  if (startPoint) {
+    coords.push({ longitude: startPoint.longitude, latitude: startPoint.latitude });
+  }
+
+  for (const stop of stops) {
+    coords.push({ longitude: stop.longitude, latitude: stop.latitude });
+  }
+
+  if (coords.length < 2) return null;
+
+  return fetchMapboxDirections(coords);
+}

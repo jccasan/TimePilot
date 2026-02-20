@@ -2,13 +2,15 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { MapPin, Loader2 } from "lucide-react";
 
-interface GooglePrediction {
-  place_id: string;
-  description: string;
-  structured_formatting: {
-    main_text: string;
-    secondary_text: string;
-  };
+interface MapboxSuggestion {
+  id: string;
+  full_address: string;
+  name: string;
+  place_formatted: string;
+  coordinates: { longitude: number; latitude: number } | null;
+  city: string;
+  state: string;
+  zipCode: string;
 }
 
 interface ParsedAddress {
@@ -28,31 +30,6 @@ interface AddressAutocompleteProps {
   "data-testid"?: string;
 }
 
-function parseAddressComponents(components: any[]): Omit<ParsedAddress, "latitude" | "longitude"> {
-  let streetNumber = "";
-  let route = "";
-  let city = "";
-  let state = "";
-  let zipCode = "";
-
-  for (const comp of components) {
-    const types = comp.types || [];
-    if (types.includes("street_number")) streetNumber = comp.long_name;
-    else if (types.includes("route")) route = comp.long_name;
-    else if (types.includes("locality")) city = comp.long_name;
-    else if (types.includes("sublocality_level_1") && !city) city = comp.long_name;
-    else if (types.includes("administrative_area_level_1")) state = comp.short_name;
-    else if (types.includes("postal_code")) zipCode = comp.long_name;
-  }
-
-  return {
-    streetAddress: [streetNumber, route].filter(Boolean).join(" "),
-    city,
-    state,
-    zipCode,
-  };
-}
-
 export function AddressAutocomplete({
   value,
   onChange,
@@ -60,7 +37,7 @@ export function AddressAutocomplete({
   placeholder = "Start typing an address...",
   "data-testid": testId,
 }: AddressAutocompleteProps) {
-  const [suggestions, setSuggestions] = useState<GooglePrediction[]>([]);
+  const [suggestions, setSuggestions] = useState<MapboxSuggestion[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
@@ -81,7 +58,7 @@ export function AddressAutocomplete({
         credentials: "include",
       });
       if (res.ok) {
-        const data = await res.json();
+        const data: MapboxSuggestion[] = await res.json();
         setSuggestions(data);
         setIsOpen(data.length > 0);
         setHighlightIndex(-1);
@@ -117,43 +94,22 @@ export function AddressAutocomplete({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  async function handleSelect(prediction: GooglePrediction) {
+  function handleSelect(suggestion: MapboxSuggestion) {
     suppressFetchRef.current = true;
-    onChange(prediction.structured_formatting.main_text);
+    const streetAddress = suggestion.name || "";
+
+    onChange(streetAddress || suggestion.full_address);
     setIsOpen(false);
     setSuggestions([]);
 
-    try {
-      const res = await fetch(`/api/geocode/place-details?placeId=${encodeURIComponent(prediction.place_id)}`, {
-        credentials: "include",
-      });
-      if (res.ok) {
-        const details = await res.json();
-        if (details) {
-          const parsed = parseAddressComponents(details.address_components || []);
-          const lat = details.geometry?.location?.lat?.toString() || "";
-          const lng = details.geometry?.location?.lng?.toString() || "";
-          onSelect({
-            ...parsed,
-            latitude: lat,
-            longitude: lng,
-          });
-          if (parsed.streetAddress) {
-            suppressFetchRef.current = true;
-            onChange(parsed.streetAddress);
-          }
-        }
-      }
-    } catch {
-      onSelect({
-        streetAddress: prediction.structured_formatting.main_text,
-        city: "",
-        state: "",
-        zipCode: "",
-        latitude: "",
-        longitude: "",
-      });
-    }
+    onSelect({
+      streetAddress,
+      city: suggestion.city || "",
+      state: suggestion.state || "",
+      zipCode: suggestion.zipCode || "",
+      latitude: suggestion.coordinates?.latitude?.toString() || "",
+      longitude: suggestion.coordinates?.longitude?.toString() || "",
+    });
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -194,7 +150,7 @@ export function AddressAutocomplete({
         <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto" data-testid="address-suggestions-list">
           {suggestions.map((s, i) => (
             <button
-              key={s.place_id}
+              key={s.id}
               type="button"
               className={`w-full text-left px-3 py-2 text-sm cursor-pointer hover-elevate ${
                 i === highlightIndex ? "bg-accent" : ""
@@ -202,8 +158,8 @@ export function AddressAutocomplete({
               onClick={() => handleSelect(s)}
               data-testid={`address-suggestion-${i}`}
             >
-              <p className="font-medium truncate">{s.structured_formatting.main_text}</p>
-              <p className="text-xs text-muted-foreground truncate">{s.structured_formatting.secondary_text}</p>
+              <p className="font-medium truncate">{s.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{s.place_formatted}</p>
             </button>
           ))}
         </div>

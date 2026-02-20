@@ -1,0 +1,85 @@
+Objective: Build a high-performance, industry-specific CRM for pet waste removal that disrupts the market with AI automation and predictable tiered pricing.
+
+1. Automated Client Onboarding (The "Squeeze Page"):
+
+
+Instant Quote Engine: Build a streamlined, high-converting landing page where leads enter their zip code, number of dogs, and frequency to receive an instant price.
++4
+
+
+Frictionless Signup: Allow customers to sign up, enter a primary and backup credit card, and sign a service agreement in under two minutes.
++4
+
+
+Conversion Tracking: Integrate server-side event tracking for Google/Facebook ads so users can see a true Cost Per Acquisition (CPA).
++4
+
+2. The AI-First Admin Dashboard:
+
+
+Bird’s Eye View: Create an admin home screen showing overdue invoices, failed payments, and high-level growth metrics (Average Ticket, Churn Rate, LTV, and Yards Per Hour).
++4
+
+
+Staff Management: Build an employee portal that supports "Pay for Performance" logic (hourly, per-yard, or % of revenue) to drive technician productivity.
++4
+
+
+Revenue Management: Automate recurring billing and one-time invoicing with automated "coupon code" tracking for affiliate marketing.
++4
+
+3. Advanced Routing & Field Ops:
+
+
+AI Route Builder (Unit-Based): Implement the "Route Credit" system where 1 credit optimizes up to 30 stops.
++3
+
+
+Visual Dispatch Board: Create a map-view dashboard where staff are color-coded and route progress is tracked in real-time.
++4
+
+
+Efficiency Warnings: Implement logic that flags yards taking significantly longer than the historical average with a "warning sign" for the office.
++3
+
+4. Field Technician Mobile App:
+
+
+Optimized Job List: Display a daily route that is pre-sequenced by the AI for maximum density.
++3
+
+
+Proof of Service: Technicians must be able to attach "Photo of Closed Gate" and "Yard Notes" to every job.
++4
+
+
+Automated Comms: Include a one-tap "On My Way" SMS feature to warn clients with unsafe dogs to bring them inside.
++4
+
+5. Self-Service Client Portal:
+
+
+Subscription Management: Clients must be able to pause service, add/remove dogs, or change frequency without calling the office (submitting a "Change Request" for admin approval).
++4
+
+
+Payment History: Display all past cleanups with timestamps, invoices, and a "Leave a Tip" feature for technicians.
++4
+
+6. The "Disruptor" Features (Scoopilot's Edge):
+
+
+AI Chat & Phone Agents: Build a-la-carte modules for automated lead capture and phone reception to handle common inquiries (rescheduling, pricing, gates).
++3
+
+
+Developer Sandbox: Provide an API and Webhook portal so users can connect their data to external marketing tools like Mailchimp or EasyText.
++2
+
+Technical Constraints:
+
+Backend: Node.js/PostgreSQL on Replit with autoscale compute.
+
+Maps: Mapbox SDK for routing and navigation.
+
+AI: Use Gemini 1.5 Flash for high-speed, low-cost chatbot interactions to protect margins.

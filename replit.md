@@ -24,7 +24,9 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **SMS Service**: Twilio for inbound and outbound text messaging
 - **Payment Processing**: Stripe for secure payment gateway integration, including customer management, setup intents, payment intents, and webhook handling.
 - **Invoice Template Engine**: Custom mustache-style HTML template engine for flexible and customizable invoice generation, supporting per-company theme overrides.
-- **Route Optimization**: Implements a nearest-neighbor TSP with 2-opt improvement algorithm using haversine distance to optimize service routes.
+- **Route Optimization**: Implements a nearest-neighbor TSP with 2-opt improvement algorithm, with Mapbox Directions API for real road-based distance and duration metrics. Falls back to haversine if Mapbox is unavailable.
+- **Geocoding**: Mapbox Geocoding API v6 for address autocomplete and forward geocoding. Public token exposed via /api/mapbox-token endpoint.
+- **Maps**: Mapbox SDK for routing, navigation, and geocoding (tokens stored as MAPBOX_PUBLIC_TOKEN and MAPBOX_SECRET_TOKEN secrets).
 
 ### Frontend
 - **Framework**: React with TypeScript
