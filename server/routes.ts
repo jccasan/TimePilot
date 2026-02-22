@@ -191,6 +191,27 @@ export async function registerRoutes(
       }
       (req.session as any).userId = result.user.id;
       const { passwordHash, ...safeUser } = result.user;
+
+      const displayName = [firstName, lastName].filter(Boolean).join(" ") || "there";
+      sendEmail({
+        to: email,
+        subject: "Welcome to ScooPilot",
+        text: `Hi ${displayName},\n\nWelcome to ScooPilot! Your account has been created successfully.\n\nYou can now sign in and start managing your pet waste removal business.\n\nThank you for choosing ScooPilot!`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+              <h1 style="color: white; margin: 0;">ScooPilot</h1>
+            </div>
+            <div style="padding: 20px; border: 1px solid #e5e7eb;">
+              <h2 style="color: #2d8a5e;">Welcome, ${displayName}!</h2>
+              <p>Your account has been created successfully.</p>
+              <p>You can now sign in and start managing your pet waste removal business with ScooPilot.</p>
+              <p style="margin-top: 20px; color: #6b7280; font-size: 14px;">Thank you for choosing ScooPilot!</p>
+            </div>
+          </div>
+        `,
+      }).catch((err) => console.error("Failed to send welcome email:", err));
+
       return res.json(safeUser);
     } catch (err) { handleError(res, err); }
   });
