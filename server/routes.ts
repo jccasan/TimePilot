@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { registerUser, loginUser, getUserById } from "./services/app-auth";
+import { registerUser, loginUser, getUserById, createPasswordResetToken, resetPasswordWithToken } from "./services/app-auth";
 import type { RequestHandler } from "express";
 import { sendEmail, generateInvoiceEmailHtml } from "./services/email";
 import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
@@ -226,6 +226,82 @@ export async function registerRoutes(
       res.clearCookie("connect.sid");
       return res.json({ ok: true });
     });
+  });
+
+  const resetRateLimits = new Map<string, { count: number; resetAt: number }>();
+  function checkResetRateLimit(key: string, maxAttempts: number, windowMs: number): boolean {
+    const now = Date.now();
+    const entry = resetRateLimits.get(key);
+    if (!entry || now > entry.resetAt) {
+      resetRateLimits.set(key, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    if (entry.count >= maxAttempts) return false;
+    entry.count++;
+    return true;
+  }
+
+  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ error: "Email is required" });
+
+      const ip = req.ip || req.socket.remoteAddress || "unknown";
+      if (!checkResetRateLimit(`forgot:${ip}`, 5, 15 * 60 * 1000) ||
+          !checkResetRateLimit(`forgot:${email.toLowerCase()}`, 3, 15 * 60 * 1000)) {
+        return res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+      }
+
+      const result = await createPasswordResetToken(email);
+      if ("error" in result) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      if (result.token !== "noop") {
+        const protocol = req.headers["x-forwarded-proto"] || "https";
+        const host = req.headers.host || "localhost:5000";
+        const resetUrl = `${protocol}://${host}/reset-password?token=${result.token}`;
+
+        await sendEmail({
+          to: email,
+          subject: "Reset your ScooPilot password",
+          text: `You requested a password reset. Click the link below to set a new password:\n\n${resetUrl}\n\nThis link expires in 1 hour. If you didn't request this, you can safely ignore this email.`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">ScooPilot</h1>
+              </div>
+              <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                <h2 style="margin-top: 0;">Password Reset</h2>
+                <p>You requested a password reset. Click the button below to set a new password:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${resetUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
+                </div>
+                <p style="color: #6b7280; font-size: 14px;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+                <p style="color: #9ca3af; font-size: 12px; margin-top: 20px;">If the button doesn't work, copy and paste this link into your browser:<br/>${resetUrl}</p>
+              </div>
+            </div>
+          `,
+        });
+      }
+
+      return res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+    try {
+      const { token, password } = req.body;
+      const ip = req.ip || req.socket.remoteAddress || "unknown";
+      if (!checkResetRateLimit(`reset:${ip}`, 10, 15 * 60 * 1000)) {
+        return res.status(429).json({ error: "Too many attempts. Please try again later." });
+      }
+      const result = await resetPasswordWithToken(token, password);
+      if ("error" in result) {
+        return res.status(400).json({ error: result.error });
+      }
+      return res.json({ message: "Password has been reset successfully. You can now sign in." });
+    } catch (err) { handleError(res, err); }
   });
 
   // ================ Setup / Onboarding ================

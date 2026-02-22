@@ -3,7 +3,7 @@ import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export { sessions, users } from "./models/auth";
+export { sessions, users, passwordResetTokens } from "./models/auth";
 export type { User, UpsertUser } from "./models/auth";
 import { users } from "./models/auth";
 

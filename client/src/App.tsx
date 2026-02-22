@@ -40,6 +40,7 @@ import AdminAnalytics from "@/pages/admin-analytics";
 import AdminLogin from "@/pages/admin-login";
 import AdminChangePassword from "@/pages/admin-change-password";
 import Settings from "@/pages/settings";
+import ResetPassword from "@/pages/reset-password";
 import { NotificationBell } from "@/components/notification-bell";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
@@ -325,6 +326,12 @@ function AppContent() {
   );
   const isAdminPath = typeof window !== "undefined" &&
     window.location.pathname.startsWith("/admin");
+  const isResetPasswordPath = typeof window !== "undefined" &&
+    window.location.pathname === "/reset-password";
+
+  if (isResetPasswordPath) {
+    return <ResetPassword />;
+  }
 
   if (isPortalPath) {
     return <PortalRouter />;
