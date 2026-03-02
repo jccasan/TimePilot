@@ -190,6 +190,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: result.error });
       }
       (req.session as any).userId = result.user.id;
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
       const { passwordHash, ...safeUser } = result.user;
 
       const displayName = [firstName, lastName].filter(Boolean).join(" ") || "there";
@@ -224,6 +227,9 @@ export async function registerRoutes(
         return res.status(401).json({ error: result.error });
       }
       (req.session as any).userId = result.user.id;
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
       const { passwordHash, ...safeUser } = result.user;
       return res.json(safeUser);
     } catch (err) { handleError(res, err); }
