@@ -1932,6 +1932,76 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/pricing/confirm-and-generate-packages", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const pricing = await storage.getServicePricing(companyId);
+      const recurringItems = pricing.filter(
+        (p) => p.category === "recurring_service" && p.isActive && !(p.metadata as any)?.callForQuote
+      );
+
+      const existingPackages = await storage.getServicePackages(companyId);
+      for (const pkg of existingPackages) {
+        await storage.deleteServicePackage(pkg.id, companyId);
+      }
+
+      const addOns = pricing.filter((p) => p.category === "add_on" && p.isActive);
+      const lotAddOn = addOns.find((a) => a.name.toLowerCase().includes("lot size"));
+      const wasteAddOn = addOns.find((a) => a.name.toLowerCase().includes("waste"));
+      const deodorizingAddOn = addOns.find((a) => a.name.toLowerCase().includes("deodori"));
+
+      const frequencyGroups: Record<string, typeof recurringItems> = {};
+      for (const item of recurringItems) {
+        const nameLower = item.name.toLowerCase();
+        let freq = "weekly";
+        if (nameLower.includes("twice")) freq = "twice_weekly";
+        else if (nameLower.includes("bi-weekly") || nameLower.includes("biweekly")) freq = "biweekly";
+        if (!frequencyGroups[freq]) frequencyGroups[freq] = [];
+        frequencyGroups[freq].push(item);
+      }
+
+      let sortOrder = 1;
+      for (const [freq, items] of Object.entries(frequencyGroups)) {
+        const freqLabel = freq === "twice_weekly" ? "Twice Weekly" : freq === "biweekly" ? "Bi-Weekly" : "Weekly";
+        const displayFreq = freq === "twice_weekly" ? "weekly" : freq;
+
+        for (const item of items) {
+          const includedItems: string[] = [item.name];
+          if (lotAddOn) includedItems.push(lotAddOn.name);
+
+          const dogMatch = item.name.match(/(\d+)\+?\s*Dogs?/i);
+          const dogCount = dogMatch ? parseInt(dogMatch[1]) : 1;
+
+          let totalPrice = parseFloat(item.basePrice);
+          if (freq === "twice_weekly") totalPrice = totalPrice * 2;
+
+          if (dogCount >= 3 && wasteAddOn) {
+            includedItems.push(wasteAddOn.name);
+            totalPrice += parseFloat(wasteAddOn.basePrice);
+          }
+          if (dogCount >= 4 && deodorizingAddOn) {
+            includedItems.push(deodorizingAddOn.name);
+            totalPrice += parseFloat(deodorizingAddOn.basePrice);
+          }
+
+          await storage.createServicePackage({
+            companyId,
+            name: `${freqLabel} - ${dogMatch ? dogMatch[0] : "1 Dog"}`,
+            description: `${freqLabel} service for ${dogMatch ? dogMatch[0].toLowerCase() : "1 dog"}`,
+            frequency: displayFreq,
+            basePrice: totalPrice.toFixed(2),
+            includedItems,
+            sortOrder: sortOrder++,
+          });
+        }
+      }
+
+      const newPackages = await storage.getServicePackages(companyId);
+      res.json({ success: true, packagesCreated: newPackages.length, packages: newPackages });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Messages / Communications ================
 
   app.get("/api/messages", isAuthenticated, async (req: Request, res: Response) => {

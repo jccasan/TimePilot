@@ -18,7 +18,7 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **Framework**: Express.js with TypeScript
 - **Database**: PostgreSQL (Neon-backed)
 - **ORM**: Drizzle ORM with drizzle-zod for validation
-- **Authentication**: Replit Auth (session-based)
+- **Authentication**: Custom email/password auth with session cookies + Bearer token fallback (tokens stored in localStorage for iframe compatibility). Password recovery via SendGrid email with secure reset tokens.
 - **Storage**: Object Storage for file uploads (e.g., proof-of-service photos)
 - **Email Service**: SendGrid for transactional and marketing emails
 - **SMS Service**: Twilio for inbound and outbound text messaging
@@ -54,7 +54,7 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.
-- **Replit Auth**: User authentication and session management.
+- **Custom Auth**: Email/password authentication with session cookies and Bearer token fallback.
 - **Object Storage**: For storing file uploads such as proof-of-service photos.
 - **SendGrid**: Email sending service for notifications and invoices.
 - **Twilio**: SMS messaging service for customer communications.

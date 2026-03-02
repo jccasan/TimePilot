@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Save, DollarSign, Package, Sparkles, RefreshCw } from "lucide-react";
+import { Plus, Trash2, DollarSign, Package, Sparkles, RefreshCw, CheckCircle2, Phone } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -71,9 +71,27 @@ const packageFormSchema = z.object({
 type PricingFormValues = z.infer<typeof pricingFormSchema>;
 type PackageFormValues = z.infer<typeof packageFormSchema>;
 
-function EditablePriceCell({ item, onSave }: { item: ServicePricingItem; onSave: (id: string, data: Partial<ServicePricingItem>) => void }) {
+function EditablePriceCell({
+  item,
+  onSave,
+  disabled,
+}: {
+  item: ServicePricingItem;
+  onSave: (id: string, data: Partial<ServicePricingItem>) => void;
+  disabled?: boolean;
+}) {
   const [editing, setEditing] = useState(false);
   const [price, setPrice] = useState(item.basePrice);
+  const isCallForQuote = (item.metadata as any)?.callForQuote === true;
+
+  if (isCallForQuote || disabled) {
+    return (
+      <span className="text-sm text-muted-foreground italic px-2 py-1" data-testid={`text-call-quote-${item.id}`}>
+        <Phone className="inline h-3 w-3 mr-1" />
+        Call for Quote
+      </span>
+    );
+  }
 
   if (editing) {
     return (
@@ -115,6 +133,11 @@ function EditablePriceCell({ item, onSave }: { item: ServicePricingItem; onSave:
       ${parseFloat(item.basePrice).toFixed(2)}
     </button>
   );
+}
+
+function getDogCount(name: string): number | null {
+  const match = name.match(/(\d+)\+?\s*Dogs?/i);
+  return match ? parseInt(match[1]) : null;
 }
 
 export default function Pricing() {
@@ -160,7 +183,7 @@ export default function Pricing() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
       queryClient.invalidateQueries({ queryKey: ["/api/packages"] });
-      toast({ title: "Pricing loaded", description: "Default pricing and packages have been set up." });
+      toast({ title: "Pricing loaded", description: "Default pricing has been set up. Review and confirm your pricing." });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -237,12 +260,38 @@ export default function Pricing() {
     },
   });
 
+  const confirmPricingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/pricing/confirm-and-generate-packages");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/packages"] });
+      toast({
+        title: "Pricing confirmed",
+        description: `${data.packagesCreated} packages generated from your pricing.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handlePriceSave = (id: string, data: Partial<ServicePricingItem>) => {
     updatePricingMutation.mutate({ id, data });
   };
 
   const handleToggleActive = (id: string, isActive: boolean) => {
     updatePricingMutation.mutate({ id, data: { isActive } as any });
+  };
+
+  const handleToggleCallForQuote = (item: ServicePricingItem, checked: boolean) => {
+    const currentMeta = (item.metadata as Record<string, any>) || {};
+    updatePricingMutation.mutate({
+      id: item.id,
+      data: { metadata: { ...currentMeta, callForQuote: checked } } as any,
+    });
   };
 
   const handlePackageToggleActive = (id: string, isActive: boolean) => {
@@ -257,7 +306,7 @@ export default function Pricing() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-pricing-heading">Pricing & Packages</h1>
-          <p className="text-sm text-muted-foreground">Customize your service pricing, packages, and add-on options</p>
+          <p className="text-sm text-muted-foreground">Customize your service pricing, then confirm to generate packages</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!hasPricing && (
@@ -267,62 +316,72 @@ export default function Pricing() {
             </Button>
           )}
           {hasPricing && (
-            <Dialog open={pricingDialogOpen} onOpenChange={setPricingDialogOpen}>
-              <DialogTrigger asChild>
-                <Button data-testid="button-add-service">
-                  <Plus className="mr-1 h-4 w-4" /> Add Service
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Service / Option</DialogTitle>
-                </DialogHeader>
-                <Form {...pricingForm}>
-                  <form onSubmit={pricingForm.handleSubmit((v) => createPricingMutation.mutate(v))} className="space-y-4">
-                    <FormField control={pricingForm.control} name="name" render={({ field }) => (
-                      <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} data-testid="input-service-name" /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={pricingForm.control} name="description" render={({ field }) => (
-                      <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} data-testid="input-service-description" /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <div className="grid grid-cols-2 gap-3">
-                      <FormField control={pricingForm.control} name="category" render={({ field }) => (
-                        <FormItem><FormLabel>Category</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl><SelectTrigger data-testid="select-category"><SelectValue /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              <SelectItem value="recurring_service">Recurring Service</SelectItem>
-                              <SelectItem value="one_time_service">One-Time Service</SelectItem>
-                              <SelectItem value="add_on">Add-On</SelectItem>
-                            </SelectContent>
-                          </Select><FormMessage />
-                        </FormItem>
+            <>
+              <Dialog open={pricingDialogOpen} onOpenChange={setPricingDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" data-testid="button-add-service">
+                    <Plus className="mr-1 h-4 w-4" /> Add Service
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add Service / Option</DialogTitle>
+                  </DialogHeader>
+                  <Form {...pricingForm}>
+                    <form onSubmit={pricingForm.handleSubmit((v) => createPricingMutation.mutate(v))} className="space-y-4">
+                      <FormField control={pricingForm.control} name="name" render={({ field }) => (
+                        <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} data-testid="input-service-name" /></FormControl><FormMessage /></FormItem>
                       )} />
-                      <FormField control={pricingForm.control} name="unit" render={({ field }) => (
-                        <FormItem><FormLabel>Billing Unit</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl><SelectTrigger data-testid="select-unit"><SelectValue /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              <SelectItem value="per_visit">Per Visit</SelectItem>
-                              <SelectItem value="per_week">Per Week</SelectItem>
-                              <SelectItem value="per_month">Per Month</SelectItem>
-                              <SelectItem value="flat_rate">Flat Rate</SelectItem>
-                              <SelectItem value="one_time">One-Time</SelectItem>
-                            </SelectContent>
-                          </Select><FormMessage />
-                        </FormItem>
+                      <FormField control={pricingForm.control} name="description" render={({ field }) => (
+                        <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} data-testid="input-service-description" /></FormControl><FormMessage /></FormItem>
                       )} />
-                    </div>
-                    <FormField control={pricingForm.control} name="basePrice" render={({ field }) => (
-                      <FormItem><FormLabel>Base Price ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} data-testid="input-service-price" /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <Button type="submit" disabled={createPricingMutation.isPending} data-testid="button-submit-service">
-                      {createPricingMutation.isPending ? "Adding..." : "Add Service"}
-                    </Button>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormField control={pricingForm.control} name="category" render={({ field }) => (
+                          <FormItem><FormLabel>Category</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl><SelectTrigger data-testid="select-category"><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="recurring_service">Recurring Service</SelectItem>
+                                <SelectItem value="one_time_service">One-Time Service</SelectItem>
+                                <SelectItem value="add_on">Add-On</SelectItem>
+                              </SelectContent>
+                            </Select><FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={pricingForm.control} name="unit" render={({ field }) => (
+                          <FormItem><FormLabel>Billing Unit</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl><SelectTrigger data-testid="select-unit"><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="per_visit">Per Visit</SelectItem>
+                                <SelectItem value="per_week">Per Week</SelectItem>
+                                <SelectItem value="per_month">Per Month</SelectItem>
+                                <SelectItem value="flat_rate">Flat Rate</SelectItem>
+                                <SelectItem value="one_time">One-Time</SelectItem>
+                              </SelectContent>
+                            </Select><FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                      <FormField control={pricingForm.control} name="basePrice" render={({ field }) => (
+                        <FormItem><FormLabel>Base Price ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} data-testid="input-service-price" /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <Button type="submit" disabled={createPricingMutation.isPending} data-testid="button-submit-service">
+                        {createPricingMutation.isPending ? "Adding..." : "Add Service"}
+                      </Button>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+              <Button
+                onClick={() => confirmPricingMutation.mutate()}
+                disabled={confirmPricingMutation.isPending}
+                data-testid="button-confirm-pricing"
+              >
+                <CheckCircle2 className="mr-1 h-4 w-4" />
+                {confirmPricingMutation.isPending ? "Generating..." : "Confirm Pricing"}
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -373,46 +432,74 @@ export default function Pricing() {
                 <p className="text-sm text-muted-foreground text-center py-4">No items in this category yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {filteredItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex flex-wrap items-center justify-between gap-3 border rounded-md p-3"
-                      data-testid={`pricing-item-${item.id}`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium truncate">{item.name}</p>
-                          <Badge variant="secondary" className="no-default-active-elevate">
-                            {UNIT_LABELS[item.unit] || item.unit}
-                          </Badge>
-                          {!item.isActive && (
-                            <Badge variant="outline" className="no-default-active-elevate text-muted-foreground">
-                              Inactive
-                            </Badge>
-                          )}
-                        </div>
-                        {item.description && (
-                          <p className="text-sm text-muted-foreground truncate">{item.description}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <EditablePriceCell item={item} onSave={handlePriceSave} />
-                        <Switch
-                          checked={item.isActive}
-                          onCheckedChange={(checked) => handleToggleActive(item.id, checked)}
-                          data-testid={`switch-active-${item.id}`}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deletePricingMutation.mutate(item.id)}
-                          data-testid={`button-delete-pricing-${item.id}`}
+                  {filteredItems
+                    .sort((a, b) => a.sortOrder - b.sortOrder)
+                    .map((item) => {
+                      const dogCount = getDogCount(item.name);
+                      const isCallForQuote = (item.metadata as any)?.callForQuote === true;
+                      const is7Plus = item.name.includes("7+");
+                      const canToggleQuote = dogCount !== null && dogCount >= 4;
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={`flex flex-wrap items-center justify-between gap-3 border rounded-md p-3 ${isCallForQuote ? "bg-muted/50" : ""}`}
+                          data-testid={`pricing-item-${item.id}`}
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className={`font-medium truncate ${isCallForQuote ? "text-muted-foreground" : ""}`}>{item.name}</p>
+                              <Badge variant="secondary" className="no-default-active-elevate">
+                                {UNIT_LABELS[item.unit] || item.unit}
+                              </Badge>
+                              {is7Plus && (
+                                <Badge variant="outline" className="no-default-active-elevate text-muted-foreground">
+                                  <Phone className="h-3 w-3 mr-1" /> Custom Quote
+                                </Badge>
+                              )}
+                              {!item.isActive && (
+                                <Badge variant="outline" className="no-default-active-elevate text-muted-foreground">
+                                  Inactive
+                                </Badge>
+                              )}
+                            </div>
+                            {item.description && (
+                              <p className="text-sm text-muted-foreground truncate">{item.description}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {(canToggleQuote || is7Plus) && !is7Plus && (
+                              <div className="flex items-center gap-1.5">
+                                <Switch
+                                  checked={isCallForQuote}
+                                  onCheckedChange={(checked) => handleToggleCallForQuote(item, checked)}
+                                  data-testid={`switch-call-quote-${item.id}`}
+                                />
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">Call for Quote</span>
+                              </div>
+                            )}
+                            <EditablePriceCell
+                              item={item}
+                              onSave={handlePriceSave}
+                              disabled={isCallForQuote}
+                            />
+                            <Switch
+                              checked={item.isActive}
+                              onCheckedChange={(checked) => handleToggleActive(item.id, checked)}
+                              data-testid={`switch-active-${item.id}`}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deletePricingMutation.mutate(item.id)}
+                              data-testid={`button-delete-pricing-${item.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </CardContent>
@@ -422,7 +509,7 @@ export default function Pricing() {
             <h2 className="text-xl font-bold" data-testid="text-packages-heading">Service Packages</h2>
             <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
               <DialogTrigger asChild>
-                <Button data-testid="button-add-package">
+                <Button variant="outline" data-testid="button-add-package">
                   <Package className="mr-1 h-4 w-4" /> Add Package
                 </Button>
               </DialogTrigger>
@@ -527,8 +614,11 @@ export default function Pricing() {
             </div>
           ) : (
             <Card>
-              <CardContent className="p-6 text-center text-muted-foreground">
-                No packages created yet. Packages bundle services at a discounted rate.
+              <CardContent className="p-6 text-center">
+                <Package className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  No packages yet. Confirm your pricing above to auto-generate packages, or add one manually.
+                </p>
               </CardContent>
             </Card>
           )}
