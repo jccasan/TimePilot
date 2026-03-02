@@ -60,6 +60,7 @@ const contactFormSchema = z.object({
   numberOfDogs: z.coerce.number().min(0).optional(),
   serviceFrequency: z.string().optional().or(z.literal("")),
   leadSource: z.string().optional().or(z.literal("")),
+  referralSource: z.string().optional().or(z.literal("")),
   serviceDay: z.string().optional().or(z.literal("")),
   status: z.enum(["lead", "estimate", "active", "paused", "cancelled"]),
 });
@@ -97,6 +98,7 @@ export default function Contacts() {
       numberOfDogs: undefined,
       serviceFrequency: "",
       leadSource: "",
+      referralSource: "",
       serviceDay: "",
       status: "lead",
     },
@@ -160,7 +162,7 @@ export default function Contacts() {
                 Add Contact
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add Contact</DialogTitle>
               </DialogHeader>
@@ -379,6 +381,19 @@ export default function Contacts() {
                             <SelectItem value="local_advertising">Local Advertising</SelectItem>
                           </SelectContent>
                         </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="referralSource"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Referral Source</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="e.g. John Smith, Google Ad" data-testid="input-referral-source" />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

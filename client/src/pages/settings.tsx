@@ -1,3 +1,4 @@
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
@@ -11,15 +12,18 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, UserPlus, Shield, Wrench, Crown } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { TIER_CONFIG } from "@shared/schema";
+import { useUpload } from "@/hooks/use-upload";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 const companyFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
   email: z.string().email("Invalid email").or(z.literal("")).optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
+  startAddress: z.string().optional(),
   startLatitude: z.string().optional(),
   startLongitude: z.string().optional(),
 });
@@ -32,8 +36,10 @@ type Company = {
   email: string | null;
   phone: string | null;
   address: string | null;
+  startAddress: string | null;
   startLatitude: string | null;
   startLongitude: string | null;
+  logoUrl: string | null;
   subscriptionTier: string;
   subscriptionStatus: string;
 };
@@ -62,6 +68,8 @@ const roleLabels: Record<string, string> = {
 
 export default function Settings() {
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   const { data: company, isLoading: loadingCompany } = useQuery<Company>({
     queryKey: ["/api/company"],
@@ -71,6 +79,17 @@ export default function Settings() {
     queryKey: ["/api/company/team"],
   });
 
+  const { uploadFile, isUploading } = useUpload({
+    onSuccess: async (response) => {
+      await apiRequest("PATCH", "/api/company", { logoUrl: response.objectPath });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Logo uploaded", description: "Your company logo has been updated." });
+    },
+    onError: (error) => {
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   const form = useForm<CompanyFormValues>({
     resolver: zodResolver(companyFormSchema),
     values: {
@@ -78,6 +97,7 @@ export default function Settings() {
       email: company?.email || "",
       phone: company?.phone || "",
       address: company?.address || "",
+      startAddress: company?.startAddress || "",
       startLatitude: company?.startLatitude || "",
       startLongitude: company?.startLongitude || "",
     },
@@ -97,143 +117,194 @@ export default function Settings() {
     },
   });
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please select an image file.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setLogoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+    await uploadFile(file);
+  };
+
   const currentTier = company?.subscriptionTier as keyof typeof TIER_CONFIG | undefined;
   const tierInfo = currentTier ? TIER_CONFIG[currentTier] : null;
+
+  const displayLogo = logoPreview || (company?.logoUrl ? `/api/objects${company.logoUrl}` : null);
 
   return (
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
       <h1 className="text-2xl font-bold" data-testid="text-settings-heading">Settings</h1>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
-              Company Information
-            </CardTitle>
-            <CardDescription>Update your business details</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loadingCompany ? (
-              <div className="space-y-3">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-20 w-full" />
-              </div>
-            ) : (
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit((data) => updateMutation.mutate(data))} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Company Name</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input {...field} className="pl-10" data-testid="input-company-name" />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Image className="h-5 w-5" />
+                Company Logo
+              </CardTitle>
+              <CardDescription>Upload a logo to display on invoices and your portal</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 rounded-lg border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50">
+                  {displayLogo ? (
+                    <img src={displayLogo} alt="Company logo" className="w-full h-full object-cover rounded-lg" data-testid="img-company-logo" />
+                  ) : (
+                    <Building2 className="h-8 w-8 text-muted-foreground/50" />
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="hidden"
                   />
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input {...field} type="email" className="pl-10" data-testid="input-company-email" />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input {...field} className="pl-10" data-testid="input-company-phone" />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="address"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Business Address</FormLabel>
-                        <FormControl>
-                          <Textarea {...field} rows={3} data-testid="input-company-address" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="pt-2 border-t">
-                    <p className="text-sm font-medium mb-1">Route Starting Point</p>
-                    <p className="text-xs text-muted-foreground mb-3">
-                      Set your home base coordinates for route optimization. Routes will be ordered starting from this location.
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <FormField
-                        control={form.control}
-                        name="startLatitude"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Latitude</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input {...field} placeholder="e.g. 30.2672" className="pl-10" data-testid="input-start-latitude" />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="startLongitude"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Longitude</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input {...field} placeholder="e.g. -97.7431" className="pl-10" data-testid="input-start-longitude" />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
-                  <Button type="submit" disabled={updateMutation.isPending} data-testid="button-save-company">
-                    <Save className="h-4 w-4 mr-2" />
-                    {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    data-testid="button-upload-logo"
+                  >
+                    <Upload className="mr-1 h-4 w-4" />
+                    {isUploading ? "Uploading..." : "Upload Logo"}
                   </Button>
-                </form>
-              </Form>
-            )}
-          </CardContent>
-        </Card>
+                  <p className="text-xs text-muted-foreground">Recommended: 200x200px, PNG or JPG</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Company Information
+              </CardTitle>
+              <CardDescription>Update your business details</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCompany ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
+              ) : (
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit((data) => updateMutation.mutate(data))} className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Company Name</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input {...field} className="pl-10" data-testid="input-company-name" />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input {...field} type="email" className="pl-10" data-testid="input-company-email" />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input {...field} className="pl-10" data-testid="input-company-phone" />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="address"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Business Address</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} rows={3} data-testid="input-company-address" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="pt-2 border-t">
+                      <p className="text-sm font-medium mb-1">Route Starting Point</p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Enter your home base address for route optimization. Routes will be ordered starting from this location.
+                      </p>
+                      <FormField
+                        control={form.control}
+                        name="startAddress"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Starting Address</FormLabel>
+                            <FormControl>
+                              <AddressAutocomplete
+                                value={field.value || ""}
+                                onChange={field.onChange}
+                                onSelect={(addr) => {
+                                  form.setValue("startAddress", `${addr.streetAddress}, ${addr.city}, ${addr.state} ${addr.zipCode}`);
+                                  if (addr.latitude) form.setValue("startLatitude", String(addr.latitude));
+                                  if (addr.longitude) form.setValue("startLongitude", String(addr.longitude));
+                                }}
+                                data-testid="input-start-address"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {(form.watch("startLatitude") || form.watch("startLongitude")) && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Coordinates: {form.watch("startLatitude") || "—"}, {form.watch("startLongitude") || "—"}
+                        </p>
+                      )}
+                    </div>
+                    <Button type="submit" disabled={updateMutation.isPending} data-testid="button-save-company">
+                      <Save className="h-4 w-4 mr-2" />
+                      {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </form>
+                </Form>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         <div className="space-y-6">
           <Card>

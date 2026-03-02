@@ -25,11 +25,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Ban } from "lucide-react";
 
 const invoiceStatusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   pending: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  voided: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
   paid: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   refunded: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
@@ -251,6 +252,19 @@ export default function Invoices() {
     onSuccess: () => {
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
       toast({ title: "Invoice updated", description: "Invoice marked as paid." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const voidMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      await apiRequest("PATCH", `/api/invoices/${invoiceId}`, { status: "voided" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      toast({ title: "Invoice voided", description: "Invoice has been voided." });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -683,6 +697,18 @@ export default function Invoices() {
                     >
                       <Mail className="h-4 w-4" />
                     </Button>
+                    {invoice.status !== "paid" && invoice.status !== "voided" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => voidMutation.mutate(invoice.id)}
+                        disabled={voidMutation.isPending}
+                        data-testid={`button-void-invoice-${invoice.id}`}
+                        title="Void invoice"
+                      >
+                        <Ban className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

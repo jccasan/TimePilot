@@ -11,13 +11,13 @@ export default function PortalLogin() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [email, setEmail] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !lastName) {
-      toast({ title: "Required", description: "Please enter your email and last name.", variant: "destructive" });
+    if (!email || !password) {
+      toast({ title: "Required", description: "Please enter your email and password.", variant: "destructive" });
       return;
     }
 
@@ -26,7 +26,7 @@ export default function PortalLogin() {
       const res = await fetch("/api/portal/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, lastName }),
+        body: JSON.stringify({ email, password }),
       });
 
       if (!res.ok) {
@@ -68,14 +68,14 @@ export default function PortalLogin() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="lastName">Last Name</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
-                id="lastName"
-                type="text"
-                placeholder="Your last name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                data-testid="input-portal-lastname"
+                id="password"
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                data-testid="input-portal-password"
               />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-portal-login">

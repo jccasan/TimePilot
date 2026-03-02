@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Users,
@@ -54,7 +55,7 @@ const menuSections = [
     items: [
       { title: "Pricing", url: "/pricing", icon: DollarSign },
       { title: "Invoices", url: "/invoices", icon: FileText },
-      { title: "Subscription", url: "/billing", icon: CreditCard },
+      { title: "Scoopilot Subscription", url: "/billing", icon: CreditCard },
     ],
   },
   {
@@ -71,12 +72,17 @@ const menuSections = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { data: company } = useQuery<{ logoUrl: string | null; name: string }>({
+    queryKey: ["/api/company"],
+  });
+
+  const sidebarLogo = company?.logoUrl ? `/api/objects${company.logoUrl}` : logoSquare;
 
   return (
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1">
-          <img src={logoSquare} alt="ScooPilot" className="h-8 w-8 rounded-md object-cover" data-testid="img-brand-logo" />
+          <img src={sidebarLogo} alt="ScooPilot" className="h-8 w-8 rounded-md object-cover" data-testid="img-brand-logo" />
           <span className="text-lg font-bold" data-testid="text-brand-name">ScooPilot</span>
         </div>
       </SidebarHeader>

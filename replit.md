@@ -23,7 +23,7 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **Email Service**: SendGrid for transactional and marketing emails
 - **SMS Service**: Twilio for inbound and outbound text messaging
 - **Payment Processing**: Stripe for secure payment gateway integration, including customer management, setup intents, payment intents, and webhook handling.
-- **Invoice Template Engine**: Custom mustache-style HTML template engine for flexible and customizable invoice generation, supporting per-company theme overrides.
+- **Invoice Template Engine**: Custom mustache-style HTML template engine for flexible and customizable invoice generation, supporting per-company theme overrides and company logo integration.
 - **Route Optimization**: Implements a nearest-neighbor TSP with 2-opt improvement algorithm, with Mapbox Directions API for real road-based distance and duration metrics. Falls back to haversine if Mapbox is unavailable.
 - **Geocoding**: Mapbox Geocoding API v6 for address autocomplete and forward geocoding. Public token exposed via /api/mapbox-token endpoint.
 - **Maps**: Mapbox SDK for routing, navigation, and geocoding (tokens stored as MAPBOX_PUBLIC_TOKEN and MAPBOX_SECRET_TOKEN secrets).
@@ -38,14 +38,14 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **PWA Support**: Progressive Web App with manifest, service worker, offline fallback page, and install prompt for mobile/tablet users. Icons in client/public/icons/, manifest at client/public/manifest.json, service worker at client/public/sw.js.
 - **Mobile View**: Dedicated mobile-optimized views for field technicians.
 - **Technician Layout**: Role-based UI for technicians showing only Routes (with scheduled/completed/cancelled status tracking per day) and Clients (read-only searchable list). Technicians with role="tech" are automatically routed to this simplified interface. Visit statuses persist in localStorage keyed by day+date.
-- **Client Portal**: Separate authentication and UI for client self-service, allowing clients to view schedules, invoices, and manage service pauses.
+- **Client Portal**: Separate authentication (email + password) and UI for client self-service, allowing clients to view schedules, past visits, invoices, manage service pauses, and contact the business owner via email. Temporary passwords are emailed via SendGrid when portal access is granted.
 - **Admin Dashboard**: A platform-level administration interface for managing tenant accounts, subscriptions, and platform-wide statistics.
 - **Notifications System**: In-app notifications for various business events, with a bell icon and unread count in the UI.
 
 ### Key Features
-- **CRM**: Manages contacts, properties, and includes a tagging system and status pipeline.
+- **CRM**: Manages contacts, properties, referral sources, and includes a tagging system and status pipeline.
 - **Scheduling**: Recurring service plans, visit management, and route assignments.
-- **Invoicing**: Detailed invoicing with line items, tax, discounts, payment processing via Stripe, and customizable templates.
+- **Invoicing**: Detailed invoicing with line items, tax, discounts, payment processing via Stripe, customizable templates with company logo, and invoice voiding capability.
 - **Communication**: Integrated email and SMS services with a centralized communication log.
 - **Automation**: Event-driven automation rules with logs.
 - **API & Webhooks**: Comprehensive REST API with scoped API keys and webhooks for external integrations, particularly with AI agents.

@@ -12,7 +12,7 @@ export const leadStatusEnum = pgEnum("lead_status", ["lead", "estimate", "active
 export const serviceFrequencyEnum = pgEnum("service_frequency", ["weekly", "biweekly", "monthly", "onetime"]);
 export const dayOfWeekEnum = pgEnum("day_of_week", ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
 export const visitStatusEnum = pgEnum("visit_status", ["scheduled", "in_progress", "completed", "skipped", "cancelled"]);
-export const invoiceStatusEnum = pgEnum("invoice_status", ["draft", "pending", "paid", "failed", "refunded"]);
+export const invoiceStatusEnum = pgEnum("invoice_status", ["draft", "pending", "paid", "failed", "refunded", "voided"]);
 export const chargeTimingEnum = pgEnum("charge_timing", ["day_before", "weekly_batch"]);
 export const invoiceTimingEnum = pgEnum("invoice_timing", ["before_service", "after_service"]);
 export const invoiceFrequencyEnum = pgEnum("invoice_frequency", ["per_service", "per_week", "per_month"]);
@@ -35,8 +35,10 @@ export const companies = pgTable("companies", {
   email: varchar("email", { length: 255 }),
   phone: varchar("phone", { length: 50 }),
   address: text("address"),
+  startAddress: text("start_address"),
   startLatitude: decimal("start_latitude", { precision: 10, scale: 7 }),
   startLongitude: decimal("start_longitude", { precision: 10, scale: 7 }),
+  logoUrl: text("logo_url"),
   stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
   stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
   subscriptionTier: subscriptionTierEnum("subscription_tier").notNull().default("tier_1"),
@@ -89,6 +91,8 @@ export const contacts = pgTable("contacts", {
   stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
   invoiceTiming: invoiceTimingEnum("invoice_timing").default("after_service"),
   invoiceFrequency: invoiceFrequencyEnum("invoice_frequency").default("per_service"),
+  referralSource: varchar("referral_source", { length: 255 }),
+  portalPasswordHash: varchar("portal_password_hash", { length: 255 }),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

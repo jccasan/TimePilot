@@ -2426,9 +2426,9 @@ export async function registerRoutes(
 
   app.post("/api/portal/login", async (req: Request, res: Response) => {
     try {
-      const { email, lastName } = req.body;
-      if (!email || !lastName) {
-        return res.status(400).json({ error: "Email and last name are required" });
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
       }
 
       const allCompanies = await storage.listCompanies();
@@ -2436,7 +2436,7 @@ export async function registerRoutes(
       for (const company of allCompanies) {
         const companyContacts = await storage.getContacts(company.id, { search: email });
         const match = companyContacts.find(
-          (c) => c.email?.toLowerCase() === email.toLowerCase() && c.lastName?.toLowerCase() === lastName.toLowerCase() && c.hasPortalAccess
+          (c) => c.email?.toLowerCase() === email.toLowerCase() && c.hasPortalAccess && c.portalPasswordHash
         );
         if (match) {
           foundContact = match;
@@ -2444,8 +2444,19 @@ export async function registerRoutes(
         }
       }
 
-      if (!foundContact) {
-        return res.status(401).json({ error: "No portal access found for this email and last name" });
+      if (!foundContact || !foundContact.portalPasswordHash) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      const [salt, hash] = foundContact.portalPasswordHash.split(":");
+      const passwordValid = await new Promise<boolean>((resolve, reject) => {
+        crypto.scrypt(password, salt, 64, (err, key) => {
+          if (err) reject(err);
+          resolve(key.toString("hex") === hash);
+        });
+      });
+      if (!passwordValid) {
+        return res.status(401).json({ error: "Invalid email or password" });
       }
 
       const token = crypto.randomBytes(32).toString("hex");
@@ -2614,6 +2625,84 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/portal/visits/history", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const plans = await storage.getServicePlans(companyId, { contactId });
+      const planIds = new Set(plans.map((p) => p.id));
+
+      const pastDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const today = new Date().toISOString().split("T")[0];
+      const allVisits = await storage.getVisitsForDateRange(companyId, pastDate, today);
+      const pastVisits = allVisits
+        .filter((v: any) => planIds.has(v.servicePlanId) && (v.status === "completed" || v.status === "skipped" || v.status === "cancelled"))
+        .sort((a: any, b: any) => b.scheduledDate.localeCompare(a.scheduledDate));
+
+      const props = await storage.getProperties(companyId, contactId);
+
+      res.json(pastVisits.slice(0, 50).map((v: any) => ({
+        id: v.id,
+        scheduledDate: v.scheduledDate,
+        status: v.status,
+        propertyAddress: props.find((p) => p.id === v.propertyId)?.streetAddress || "",
+        completedAt: v.completedAt || null,
+      })));
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/portal/contact-us", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const { subject, message } = req.body;
+      if (!message) return res.status(400).json({ error: "Message is required" });
+
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      const company = await storage.getCompany(companyId);
+      const companyEmail = company?.email;
+      if (!companyEmail) return res.status(400).json({ error: "Company does not have a contact email configured" });
+
+      const emailSubject = subject || `Message from ${contact.firstName} ${contact.lastName}`;
+      await sendEmail({
+        to: companyEmail,
+        subject: emailSubject,
+        replyTo: contact.email || undefined,
+        text: `Message from portal client: ${contact.firstName} ${contact.lastName} (${contact.email || "no email"})\n\n${message}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #2d8a5e; padding: 16px; text-align: center;">
+              <h2 style="color: white; margin: 0;">Client Portal Message</h2>
+            </div>
+            <div style="padding: 20px; border: 1px solid #e5e7eb;">
+              <p><strong>From:</strong> ${contact.firstName} ${contact.lastName}</p>
+              <p><strong>Email:</strong> ${contact.email || "Not provided"}</p>
+              <p><strong>Phone:</strong> ${contact.phone || "Not provided"}</p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
+              <p>${message.replace(/\n/g, "<br />")}</p>
+            </div>
+          </div>
+        `,
+      });
+
+      await storage.createMessage({
+        companyId,
+        contactId,
+        direction: "inbound",
+        channel: "email",
+        subject: emailSubject,
+        body: message,
+        fromAddress: contact.email || "",
+        toAddress: companyEmail,
+        status: "sent",
+      });
+
+      notify(companyId, "portal_message", "New Portal Message", `${contact.firstName} ${contact.lastName} sent a message via the portal.`, `/contacts/${contactId}`);
+
+      res.json({ success: true, message: "Your message has been sent." });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/portal/logout", async (req: Request, res: Response) => {
     try {
       const { sessionId } = await getPortalContext(req);
@@ -2629,9 +2718,44 @@ export async function registerRoutes(
       requireRole(role);
       const contact = await storage.getContact(req.params.id, companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (!contact.email) return res.status(400).json({ error: "Contact must have an email address to enable portal access" });
 
-      await storage.updateContact(req.params.id, { hasPortalAccess: true });
-      res.json({ success: true, message: "Portal access enabled. Customer can log in with their email and last name." });
+      const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
+      const salt = crypto.randomBytes(16).toString("hex");
+      const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+        crypto.scrypt(tempPassword, salt, 64, (err, key) => {
+          if (err) reject(err);
+          resolve(`${salt}:${key.toString("hex")}`);
+        });
+      });
+
+      await storage.updateContact(req.params.id, { hasPortalAccess: true, portalPasswordHash });
+
+      const company = await storage.getCompany(companyId);
+      sendEmail({
+        to: contact.email,
+        subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
+        text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nYour temporary password is: ${tempPassword}\n\nPlease log in at the portal with your email address and this password.\n\nThank you!`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+              <h1 style="color: white; margin: 0;">${company?.name || "ScooPilot"}</h1>
+            </div>
+            <div style="padding: 20px; border: 1px solid #e5e7eb;">
+              <p>Hi ${contact.firstName},</p>
+              <p>You now have access to the client portal.</p>
+              <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
+                <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>
+                <p style="margin: 0;">Temporary Password: <strong>${tempPassword}</strong></p>
+              </div>
+              <p style="color: #6b7280; font-size: 14px;">Log in to view your service schedule, invoices, and manage your account.</p>
+            </div>
+          </div>
+        `,
+      }).catch((err) => console.error("Failed to send portal access email:", err));
+
+      res.json({ success: true, message: "Portal access enabled. Temporary password has been emailed to the customer." });
     } catch (err) { handleError(res, err); }
   });
 
@@ -2718,6 +2842,7 @@ export async function registerRoutes(
       const discountNum = parseFloat(invoice.discountAmount || "0");
       const paidNum = invoice.paidAt ? parseFloat(invoice.total) : 0;
 
+      const logoUrl = company?.logoUrl ? `${req.protocol}://${req.get("host")}/api/objects${company.logoUrl}` : "";
       const invoiceData: any = {
         business: {
           name: company?.name || "",
@@ -2725,7 +2850,7 @@ export async function registerRoutes(
           phone: company?.phone || "",
           email: company?.email || "",
           website: "",
-          logo: "",
+          logo: logoUrl,
         },
         invoice: {
           number: invoice.invoiceNumber,

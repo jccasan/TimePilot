@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   Calendar,
@@ -12,7 +15,9 @@ import {
   LogOut,
   Pause,
   Play,
-  ExternalLink,
+  Clock,
+  Mail,
+  Send,
 } from "lucide-react";
 
 interface PortalProfile {
@@ -47,6 +52,14 @@ interface PortalInvoice {
   total: string;
   status: string;
   createdAt: string;
+}
+
+interface PastVisit {
+  id: string;
+  scheduledDate: string;
+  status: string;
+  propertyAddress: string;
+  completedAt: string | null;
 }
 
 function usePortalApi() {
@@ -94,6 +107,17 @@ const invoiceStatusColors: Record<string, string> = {
   pending: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   paid: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  voided: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+};
+
+const frequencyLabels: Record<string, string> = {
+  weekly: "Weekly",
+  "1_per_week": "Weekly",
+  twice_weekly: "Twice Weekly",
+  "2_per_week": "Twice Weekly",
+  biweekly: "Bi-Weekly",
+  monthly: "Monthly",
+  as_needed: "As Needed",
 };
 
 export default function PortalClient() {
@@ -103,8 +127,12 @@ export default function PortalClient() {
   const [profile, setProfile] = useState<PortalProfile | null>(null);
   const [schedule, setSchedule] = useState<ScheduleData | null>(null);
   const [invoices, setInvoices] = useState<PortalInvoice[]>([]);
+  const [pastVisits, setPastVisits] = useState<PastVisit[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
+  const [contactSubject, setContactSubject] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -114,14 +142,16 @@ export default function PortalClient() {
 
     const loadData = async () => {
       try {
-        const [profileData, scheduleData, invoicesData] = await Promise.all([
+        const [profileData, scheduleData, invoicesData, pastVisitsData] = await Promise.all([
           portalFetch("/api/portal/me"),
           portalFetch("/api/portal/schedule"),
           portalFetch("/api/portal/invoices"),
+          portalFetch("/api/portal/visits/history").catch(() => []),
         ]);
         setProfile(profileData);
         setSchedule(scheduleData);
         setInvoices(invoicesData);
+        setPastVisits(pastVisitsData);
       } catch (err: any) {
         if (err.message !== "Not authenticated" && err.message !== "Session expired") {
           toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -180,6 +210,28 @@ export default function PortalClient() {
     }
   };
 
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contactMessage.trim()) {
+      toast({ title: "Required", description: "Please enter a message.", variant: "destructive" });
+      return;
+    }
+    setSendingMessage(true);
+    try {
+      await portalFetch("/api/portal/contact-us", {
+        method: "POST",
+        body: JSON.stringify({ subject: contactSubject, message: contactMessage }),
+      });
+      toast({ title: "Message sent", description: "Your message has been sent to the service provider." });
+      setContactSubject("");
+      setContactMessage("");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -193,6 +245,7 @@ export default function PortalClient() {
   }
 
   const hasActivePlans = schedule?.servicePlans.some((p) => p.isActive);
+  const activeInvoices = invoices.filter((inv) => inv.status !== "voided");
 
   return (
     <div className="min-h-screen bg-background">
@@ -246,9 +299,9 @@ export default function PortalClient() {
                 {schedule.servicePlans.map((plan) => (
                   <div key={plan.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border rounded-md p-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium capitalize">{plan.frequency}</span>
+                      <span className="font-medium">{frequencyLabels[plan.frequency] || plan.frequency}</span>
                       {plan.dayOfWeek && (
-                        <span className="text-muted-foreground capitalize">{plan.dayOfWeek}s</span>
+                        <span className="text-muted-foreground capitalize">- {plan.dayOfWeek}s</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -287,6 +340,33 @@ export default function PortalClient() {
           </CardContent>
         </Card>
 
+        {pastVisits.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Clock className="h-5 w-5" /> Past Visits
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {pastVisits.map((visit) => (
+                  <div key={visit.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border rounded-md p-2" data-testid={`card-past-visit-${visit.id}`}>
+                    <div>
+                      <span className="font-medium">{visit.scheduledDate}</span>
+                      {visit.propertyAddress && (
+                        <span className="text-muted-foreground ml-2">{visit.propertyAddress}</span>
+                      )}
+                    </div>
+                    <Badge variant="secondary" className={statusColors[visit.status] || ""}>
+                      {visit.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -294,9 +374,9 @@ export default function PortalClient() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {invoices.length > 0 ? (
+            {activeInvoices.length > 0 ? (
               <div className="space-y-2">
-                {invoices.map((inv) => (
+                {activeInvoices.map((inv) => (
                   <div key={inv.id} className="flex flex-wrap items-center justify-between gap-2 border rounded-md p-3" data-testid={`card-portal-invoice-${inv.id}`}>
                     <div>
                       <p className="font-medium text-sm">{inv.invoiceNumber}</p>
@@ -307,7 +387,7 @@ export default function PortalClient() {
                       <Badge variant="secondary" className={invoiceStatusColors[inv.status] || ""}>
                         {inv.status}
                       </Badge>
-                      {inv.status !== "paid" && (
+                      {inv.status !== "paid" && inv.status !== "voided" && (
                         <Button
                           size="sm"
                           onClick={() => handlePayInvoice(inv.id)}
@@ -326,6 +406,43 @@ export default function PortalClient() {
                 No invoices found.
               </p>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Mail className="h-5 w-5" /> Contact Us
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSendMessage} className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="contact-subject">Subject (optional)</Label>
+                <Input
+                  id="contact-subject"
+                  value={contactSubject}
+                  onChange={(e) => setContactSubject(e.target.value)}
+                  placeholder="What is this about?"
+                  data-testid="input-portal-contact-subject"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="contact-message">Message</Label>
+                <Textarea
+                  id="contact-message"
+                  value={contactMessage}
+                  onChange={(e) => setContactMessage(e.target.value)}
+                  placeholder="Type your message here..."
+                  rows={4}
+                  data-testid="input-portal-contact-message"
+                />
+              </div>
+              <Button type="submit" disabled={sendingMessage} data-testid="button-portal-send-message">
+                <Send className="mr-1 h-4 w-4" />
+                {sendingMessage ? "Sending..." : "Send Message"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </main>
