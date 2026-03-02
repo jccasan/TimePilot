@@ -682,7 +682,12 @@ function PaymentMethodsCard({ contact, contactId }: { contact: Contact; contactI
 
   const { data: paymentMethods, isLoading: pmLoading } = useQuery<any[]>({
     queryKey: ["/api/contacts", contactId, "payment-methods"],
-    queryFn: () => fetch(`/api/contacts/${contactId}/payment-methods`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      return fetch(`/api/contacts/${contactId}/payment-methods`, { credentials: "include", headers }).then(r => r.json());
+    },
     enabled: !!contact.stripeCustomerId && !!stripeConfig?.configured,
   });
 

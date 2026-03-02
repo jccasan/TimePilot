@@ -62,11 +62,13 @@ export function useUpload(options: UseUploadOptions = {}) {
    */
   const requestUploadUrl = useCallback(
     async (file: File): Promise<UploadResponse> => {
+      const token = localStorage.getItem("sessionToken");
+      const hdrs: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) hdrs["Authorization"] = `Bearer ${token}`;
       const response = await fetch("/api/uploads/request-url", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        credentials: "include",
+        headers: hdrs,
         body: JSON.stringify({
           name: file.name,
           size: file.size,
@@ -161,12 +163,13 @@ export function useUpload(options: UseUploadOptions = {}) {
       url: string;
       headers?: Record<string, string>;
     }> => {
-      // Use the actual file properties to request a per-file presigned URL
+      const token = localStorage.getItem("sessionToken");
+      const hdrs2: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) hdrs2["Authorization"] = `Bearer ${token}`;
       const response = await fetch("/api/uploads/request-url", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        credentials: "include",
+        headers: hdrs2,
         body: JSON.stringify({
           name: file.name,
           size: file.size,

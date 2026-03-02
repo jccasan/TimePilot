@@ -76,10 +76,15 @@ export default function Invoices() {
 
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices", statusFilter],
-    queryFn: () => fetch(`/api/invoices${queryParams}`, { credentials: "include" }).then(r => {
-      if (!r.ok) throw new Error("Failed to fetch invoices");
-      return r.json();
-    }),
+    queryFn: () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      return fetch(`/api/invoices${queryParams}`, { credentials: "include", headers }).then(r => {
+        if (!r.ok) throw new Error("Failed to fetch invoices");
+        return r.json();
+      });
+    },
   });
 
   const { data: contacts } = useQuery<Contact[]>({
@@ -291,7 +296,10 @@ export default function Invoices() {
 
   async function viewInvoiceDetail(invoiceId: string) {
     try {
-      const res = await fetch(`/api/invoices/${invoiceId}`, { credentials: "include" });
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`/api/invoices/${invoiceId}`, { credentials: "include", headers });
       const data = await res.json();
       setSelectedInvoice(data);
       setDetailDialogOpen(true);

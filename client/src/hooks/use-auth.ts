@@ -1,11 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
 
-type SafeUser = Omit<User, "passwordHash"> & { role?: string };
+type SafeUser = Omit<User, "passwordHash"> & { role?: string; setupDone?: boolean; sessionToken?: string };
 
 async function fetchUser(): Promise<SafeUser | null> {
+  const token = localStorage.getItem("sessionToken");
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const response = await fetch("/api/auth/user", {
     credentials: "include",
+    headers,
   });
 
   if (response.status === 401) {
@@ -30,9 +37,15 @@ export function useAuth() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include", headers });
     },
     onSuccess: () => {
+      localStorage.removeItem("sessionToken");
       queryClient.setQueryData(["/api/auth/user"], null);
     },
   });

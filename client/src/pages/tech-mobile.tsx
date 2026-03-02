@@ -92,9 +92,12 @@ export default function TechMobile() {
     setUploadingVisitId(visitId);
 
     try {
+      const token = localStorage.getItem("sessionToken");
+      const uploadHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) uploadHeaders["Authorization"] = `Bearer ${token}`;
       const urlRes = await fetch("/api/uploads/request-url", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: uploadHeaders,
         credentials: "include",
         body: JSON.stringify({
           name: file.name,

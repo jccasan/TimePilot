@@ -4,6 +4,8 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, createPasswordResetToken, resetPasswordWithToken } from "./services/app-auth";
 import type { RequestHandler } from "express";
@@ -40,9 +42,21 @@ import {
   insertServicePackageSchema,
 } from "@shared/schema";
 
-const isAuthenticated: RequestHandler = (req, res, next) => {
+const isAuthenticated: RequestHandler = async (req, res, next) => {
   if ((req.session as any)?.userId) {
     return next();
+  }
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const sessionRow = await db.execute(sql`SELECT sess FROM sessions WHERE sid = ${token} AND expire > NOW()`);
+    if (sessionRow.rows.length > 0) {
+      const sess = sessionRow.rows[0].sess as any;
+      if (sess?.userId) {
+        (req.session as any).userId = sess.userId;
+        return next();
+      }
+    }
   }
   return res.status(401).json({ message: "Unauthorized" });
 };
@@ -195,6 +209,14 @@ export async function registerRoutes(
       });
       const { passwordHash, ...safeUser } = result.user;
 
+      let setupDone = false;
+      try {
+        await ensureCompanySetup(result.user.id);
+        setupDone = true;
+      } catch (err) {
+        console.error("Setup during register failed:", err);
+      }
+
       const displayName = [firstName, lastName].filter(Boolean).join(" ") || "there";
       sendEmail({
         to: email,
@@ -215,7 +237,7 @@ export async function registerRoutes(
         `,
       }).catch((err) => console.error("Failed to send welcome email:", err));
 
-      return res.json(safeUser);
+      return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
     } catch (err) { handleError(res, err); }
   });
 
@@ -231,7 +253,16 @@ export async function registerRoutes(
         req.session.save((err) => (err ? reject(err) : resolve()));
       });
       const { passwordHash, ...safeUser } = result.user;
-      return res.json(safeUser);
+
+      let setupDone = false;
+      try {
+        await ensureCompanySetup(result.user.id);
+        setupDone = true;
+      } catch (err) {
+        console.error("Setup during login failed:", err);
+      }
+
+      return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
     } catch (err) { handleError(res, err); }
   });
 
@@ -333,26 +364,29 @@ export async function registerRoutes(
 
   // ================ Setup / Onboarding ================
 
+  async function ensureCompanySetup(userId: string): Promise<{ companyId: string; alreadySetup: boolean }> {
+    const existing = await storage.getCompaniesForUser(userId);
+    if (existing.length > 0) {
+      return { companyId: existing[0].companyId, alreadySetup: true };
+    }
+    const user = await getUserById(userId);
+    const username = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User" : "User";
+    const company = await storage.createCompany({
+      name: `${username}'s Company`,
+      email: "",
+      subscriptionTier: "tier_1",
+      subscriptionStatus: "active",
+    });
+    await storage.addUserToCompany(userId, company.id, "owner");
+    return { companyId: company.id, alreadySetup: false };
+  }
+
   app.post("/api/setup", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId;
-      const user = await getUserById(userId);
-      const username = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User" : "User";
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-
-      const existing = await storage.getCompaniesForUser(userId);
-      if (existing.length > 0) {
-        return res.json({ companyId: existing[0].companyId, alreadySetup: true });
-      }
-
-      const company = await storage.createCompany({
-        name: `${username}'s Company`,
-        email: "",
-        subscriptionTier: "tier_1",
-        subscriptionStatus: "active",
-      });
-      await storage.addUserToCompany(userId, company.id, "owner");
-      return res.json({ companyId: company.id, alreadySetup: false, created: true });
+      const result = await ensureCompanySetup(userId);
+      return res.json(result);
     } catch (err) { handleError(res, err); }
   });
 

@@ -80,8 +80,10 @@ function Router() {
 }
 
 function AuthenticatedLayout() {
-  const { logout, isLoggingOut } = useAuth();
-  const [setupState, setSetupState] = useState<"loading" | "ready" | "error">("loading");
+  const { logout, isLoggingOut, user } = useAuth();
+  const [setupState, setSetupState] = useState<"loading" | "ready" | "error">(
+    (user as any)?.setupDone ? "ready" : "loading"
+  );
 
   const setupMutation = useMutation({
     mutationFn: async () => {
@@ -97,7 +99,9 @@ function AuthenticatedLayout() {
   });
 
   useEffect(() => {
-    setupMutation.mutate();
+    if (setupState === "loading") {
+      setupMutation.mutate();
+    }
   }, []);
 
   if (setupState === "loading") {
@@ -152,7 +156,9 @@ function AuthenticatedLayout() {
 function TechnicianLayout() {
   const { logout, isLoggingOut, user } = useAuth();
   const [location] = useLocation();
-  const [setupState, setSetupState] = useState<"loading" | "ready" | "error">("loading");
+  const [setupState, setSetupState] = useState<"loading" | "ready" | "error">(
+    (user as any)?.setupDone ? "ready" : "loading"
+  );
 
   const setupMutation = useMutation({
     mutationFn: async () => {
@@ -164,7 +170,9 @@ function TechnicianLayout() {
   });
 
   useEffect(() => {
-    setupMutation.mutate();
+    if (setupState === "loading") {
+      setupMutation.mutate();
+    }
   }, []);
 
   if (setupState === "loading") {

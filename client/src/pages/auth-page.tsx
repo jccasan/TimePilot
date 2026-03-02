@@ -41,8 +41,11 @@ export default function AuthPage() {
       }
       return res.json();
     },
-    onSuccess: (user) => {
-      queryClient.setQueryData(["/api/auth/user"], user);
+    onSuccess: (data) => {
+      if (data.sessionToken) {
+        localStorage.setItem("sessionToken", data.sessionToken);
+      }
+      queryClient.setQueryData(["/api/auth/user"], data);
     },
     onError: (error: Error) => {
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
@@ -63,8 +66,11 @@ export default function AuthPage() {
       }
       return res.json();
     },
-    onSuccess: (user) => {
-      queryClient.setQueryData(["/api/auth/user"], user);
+    onSuccess: (data) => {
+      if (data.sessionToken) {
+        localStorage.setItem("sessionToken", data.sessionToken);
+      }
+      queryClient.setQueryData(["/api/auth/user"], data);
     },
     onError: (error: Error) => {
       toast({ title: "Registration failed", description: error.message, variant: "destructive" });

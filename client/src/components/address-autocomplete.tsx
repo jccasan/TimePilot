@@ -54,8 +54,12 @@ export function AddressAutocomplete({
 
     setIsLoading(true);
     try {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(`/api/geocode/autocomplete?q=${encodeURIComponent(query)}`, {
         credentials: "include",
+        headers,
       });
       if (res.ok) {
         const data: MapboxSuggestion[] = await res.json();
