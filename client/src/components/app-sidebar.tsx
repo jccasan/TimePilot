@@ -17,8 +17,8 @@ import {
   BarChart3,
   Settings,
   TrendingUp,
+  Building2,
 } from "lucide-react";
-import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 import {
   Sidebar,
   SidebarContent,
@@ -76,14 +76,18 @@ export function AppSidebar() {
     queryKey: ["/api/company"],
   });
 
-  const sidebarLogo = company?.logoUrl ? `/api/objects${company.logoUrl}` : logoSquare;
-
   return (
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1">
-          <img src={sidebarLogo} alt="ScooPilot" className="h-8 w-8 rounded-md object-cover" data-testid="img-brand-logo" />
-          <span className="text-lg font-bold" data-testid="text-brand-name">ScooPilot</span>
+          {company?.logoUrl ? (
+            <img src={`/api/objects${company.logoUrl}`} alt={company.name || "Company"} className="h-8 w-8 rounded-md object-cover" data-testid="img-tenant-logo" />
+          ) : (
+            <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center" data-testid="img-tenant-placeholder">
+              <Building2 className="h-5 w-5 text-muted-foreground" />
+            </div>
+          )}
+          <span className="text-lg font-bold truncate" data-testid="text-company-name">{company?.name || "My Company"}</span>
         </div>
       </SidebarHeader>
       <SidebarContent>

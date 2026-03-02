@@ -129,7 +129,11 @@ function AuthenticatedLayout() {
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
           <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <div className="flex items-center gap-2">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <img src={logoSquare} alt="ScooPilot" className="h-6 w-6 rounded object-cover" data-testid="img-platform-logo" />
+              <span className="text-sm font-semibold text-muted-foreground hidden sm:inline" data-testid="text-platform-name">ScooPilot</span>
+            </div>
             <div className="flex items-center gap-1">
               <NotificationBell />
               <ThemeToggle />
