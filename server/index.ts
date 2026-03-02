@@ -81,7 +81,7 @@ function setupSession(app: express.Express) {
       httpOnly: true,
       secure: true,
       maxAge: sessionTtl,
-      sameSite: "lax",
+      sameSite: "none",
     },
   }));
 }
