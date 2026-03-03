@@ -450,7 +450,7 @@ export default function Settings() {
                 </Button>
               </div>
               <div className="border-t pt-3">
-                <p className="text-sm text-muted-foreground mb-2">Need a template? Download a sample CSV with the correct column headers and example data.</p>
+                <p className="text-sm text-muted-foreground mb-2">Need a template? Download an import template with the correct column headers and example data.</p>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -458,7 +458,7 @@ export default function Settings() {
                   data-testid="button-download-sample-csv"
                 >
                   <FileDown className="mr-1 h-4 w-4" />
-                  Download Sample CSV
+                  Download Import Template
                 </Button>
               </div>
             </CardContent>

@@ -155,7 +155,7 @@ export default function Contacts() {
           </Button>
           <Button variant="ghost" size="sm" onClick={() => window.open("/api/contacts/sample-csv", "_blank")} data-testid="button-download-sample-csv">
             <FileDown className="mr-1 h-4 w-4" />
-            Sample
+            Import Template
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
