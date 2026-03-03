@@ -165,11 +165,26 @@ async function applyAdminCredentialMigration() {
           "UPDATE users SET email = 'jeremy@scoopilot.com', password_hash = $1, updated_at = NOW() WHERE id = $2",
           [targetHash, row.id]
         );
-        console.log("[Migration] Admin credentials updated successfully");
+        console.log("[Migration] Tenant credentials updated successfully");
       } else {
-        console.log("[Migration] Admin credentials already up to date");
+        console.log("[Migration] Tenant credentials already up to date");
       }
     }
+
+    const adminCheck = await pool.query("SELECT id, password_hash FROM admin_users WHERE email = 'jeremy@scoopilot.com'");
+    if (adminCheck.rows.length > 0) {
+      const adminRow = adminCheck.rows[0];
+      if (adminRow.password_hash !== targetHash) {
+        await pool.query(
+          "UPDATE admin_users SET password_hash = $1 WHERE id = $2",
+          [targetHash, adminRow.id]
+        );
+        console.log("[Migration] Platform admin credentials updated successfully");
+      } else {
+        console.log("[Migration] Platform admin credentials already up to date");
+      }
+    }
+
     await pool.end();
   } catch (err) {
     console.error("[Migration] Failed to apply admin credential migration:", err);
