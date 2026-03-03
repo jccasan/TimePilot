@@ -1,0 +1,23 @@
+Top priority (P0) – Must fix/ship next
+1.	Route Builder – Optimize Route actually works (or is removed)
+•	Implement a basic but real optimization (e.g., sort by distance from start or depot, then minimize backtracking) so clicking Optimize visibly reshuffles stops into a more efficient order.
+•	If true optimization is not ready, hide or disable the button with a tooltip (“Route optimization coming soon”) so it never appears broken.
+•	Reason for P0: A dead “Optimize route” button screams broken core workflow and undermines trust in the app’s routing capabilities, which is a primary value prop for field and pet service software.
+2.	Auto build routes from customer service date (no manual drag for new customers)
+•	When a customer is assigned a service day (and optional frequency), automatically place their job into that day’s route as “unassigned within that day” or into the default route for that day.
+•	Only require drag and drop when you are reassigning a customer between routes/techs, not for the initial placement.
+•	Reason for P0: This directly removes admin time every time a new customer is added, and it brings ScoopPilot in line with how modern field service tools auto schedule repeats based on service windows and dates.
+High priority (P1) – Next after core routing
+3.	Route Builder – “Unassign All” button
+•	Within a route (or route day view), add an “Unassign all” action that:
+•	Moves all customers in that route into a single generic “Unassigned – [Date]” bucket/job for that day, or
+•	Clears all assignments for that day and moves them into a common “Unassigned” pool tied to that date.
+•	Reason for P1: This makes re building a route from scratch a one click operation, which is especially useful after route changes, staff changes, or if you want to test a new optimization pattern.
+Medium priority (P2) – Important for transparency / billing
+4.	Dashboard usage counters – texts and emails used/remaining
+•	On the main user dashboard (and ideally in account/billing), add:
+•	“Texts used this billing period” and “Texts remaining”
+•	“Emails used this billing period” and “Emails remaining”
+•	Pull from your existing metering/billing or message log; keep it simple and prominent so users immediately see where they stand.
+•	Reason for P2: This is important for trust, billing predictability, and upsell triggers, but it doesn’t block day to day operations like routing does.
+
