@@ -1,12 +1,17 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Building2, Users, Contact2, CalendarCheck, DollarSign, Search, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { Building2, Users, Contact2, CalendarCheck, DollarSign, Search, ChevronRight, Plus } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState, useMemo } from "react";
-import { adminFetchFn } from "@/lib/adminApi";
+import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 
 const tierColors: Record<string, string> = {
   tier_1: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
@@ -18,6 +23,45 @@ const tierColors: Record<string, string> = {
 
 export default function AdminDashboard() {
   const [search, setSearch] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerFirstName, setOwnerFirstName] = useState("");
+  const [ownerLastName, setOwnerLastName] = useState("");
+  const [selectedTier, setSelectedTier] = useState("tier_1");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminRequest("POST", "/api/admin/companies", {
+        companyName,
+        ownerEmail,
+        ownerFirstName,
+        ownerLastName,
+        subscriptionTier: selectedTier,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create tenant");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Tenant created", description: `${data.name} has been created. Login credentials were sent to ${data.ownerEmail}.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setCreateOpen(false);
+      setCompanyName("");
+      setOwnerEmail("");
+      setOwnerFirstName("");
+      setOwnerLastName("");
+      setSelectedTier("tier_1");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to create tenant", description: error.message, variant: "destructive" });
+    },
+  });
 
   const { data: stats, isLoading: statsLoading } = useQuery<{
     totalCompanies: number;
@@ -91,6 +135,10 @@ export default function AdminDashboard() {
               data-testid="input-admin-search"
             />
           </div>
+          <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="button-add-tenant">
+            <Plus className="h-4 w-4 mr-1" />
+            Add Tenant
+          </Button>
         </div>
 
         {companiesLoading ? (
@@ -133,6 +181,86 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent data-testid="dialog-create-tenant">
+          <DialogHeader>
+            <DialogTitle>Create New Tenant</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="companyName">Company Name</Label>
+              <Input
+                id="companyName"
+                placeholder="e.g. Green Scoopers LLC"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                data-testid="input-company-name"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="ownerFirstName">Owner First Name</Label>
+                <Input
+                  id="ownerFirstName"
+                  placeholder="Jane"
+                  value={ownerFirstName}
+                  onChange={(e) => setOwnerFirstName(e.target.value)}
+                  data-testid="input-owner-first-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ownerLastName">Owner Last Name</Label>
+                <Input
+                  id="ownerLastName"
+                  placeholder="Doe"
+                  value={ownerLastName}
+                  onChange={(e) => setOwnerLastName(e.target.value)}
+                  data-testid="input-owner-last-name"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ownerEmail">Owner Email</Label>
+              <Input
+                id="ownerEmail"
+                type="email"
+                placeholder="owner@example.com"
+                value={ownerEmail}
+                onChange={(e) => setOwnerEmail(e.target.value)}
+                data-testid="input-owner-email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tier">Subscription Tier</Label>
+              <Select value={selectedTier} onValueChange={setSelectedTier}>
+                <SelectTrigger data-testid="select-tier">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TIER_CONFIG).map(([key, cfg]) => (
+                    <SelectItem key={key} value={key} data-testid={`select-item-${key}`}>
+                      {cfg.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} data-testid="button-cancel-create">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending || !companyName || !ownerEmail || !ownerFirstName}
+              data-testid="button-submit-create-tenant"
+            >
+              {createMutation.isPending ? "Creating..." : "Create Tenant"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

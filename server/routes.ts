@@ -426,12 +426,16 @@ export async function registerRoutes(
     });
     await storage.addUserToCompany(userId, company.id, "owner");
 
-    const defaultLeadSources = ["Referral", "Nextdoor", "Facebook", "Yelp", "Instagram", "Google Ad", "Organic Search", "Bing", "Yard Sign", "Local Advertising"];
-    for (const name of defaultLeadSources) {
-      await storage.createLeadSource({ companyId: company.id, name });
-    }
+    await seedDefaultLeadSources(company.id);
 
     return { companyId: company.id, alreadySetup: false };
+  }
+
+  async function seedDefaultLeadSources(companyId: string) {
+    const defaultLeadSources = ["Referral", "Nextdoor", "Facebook", "Yelp", "Instagram", "Google Ad", "Organic Search", "Bing", "Yard Sign", "Local Advertising"];
+    for (const name of defaultLeadSources) {
+      await storage.createLeadSource({ companyId, name });
+    }
   }
 
   app.post("/api/setup", isAuthenticated, async (req: Request, res: Response) => {
@@ -3590,6 +3594,106 @@ export async function registerRoutes(
       const invoiceList = await storage.getInvoices(company.id);
       const notes = await storage.getAdminNotes(company.id);
       res.json({ ...company, users, contacts: contactList, invoices: invoiceList, notes });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/companies", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { companyName, ownerEmail, ownerFirstName, ownerLastName, subscriptionTier } = req.body;
+      if (!companyName || !ownerEmail || !ownerFirstName) {
+        return res.status(400).json({ error: "Company name, owner email, and owner first name are required" });
+      }
+      if (typeof companyName !== "string" || companyName.trim().length < 2) {
+        return res.status(400).json({ error: "Company name must be at least 2 characters" });
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(ownerEmail)) {
+        return res.status(400).json({ error: "Invalid email address" });
+      }
+      const validTiers = ["tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
+      const tier = validTiers.includes(subscriptionTier) ? subscriptionTier : "tier_1";
+
+      let user = await getUserByEmail(ownerEmail);
+      let tempPassword: string | null = null;
+      let isExistingUser = false;
+
+      if (!user) {
+        const crypto = await import("crypto");
+        tempPassword = crypto.randomBytes(6).toString("base64url");
+        user = await createUserWithTempPassword(ownerEmail, ownerFirstName, ownerLastName || "", tempPassword);
+      } else {
+        isExistingUser = true;
+      }
+
+      const existingCompanies = await storage.getCompaniesForUser(user.id);
+      if (existingCompanies.length > 0) {
+        return res.status(409).json({ error: "This user already belongs to a company" });
+      }
+
+      const company = await storage.createCompany({
+        name: companyName.trim(),
+        email: ownerEmail,
+        subscriptionTier: tier,
+        subscriptionStatus: "active",
+      });
+      await storage.addUserToCompany(user.id, company.id, "owner");
+
+      await seedDefaultLeadSources(company.id);
+
+      let emailSent = false;
+      try {
+        const protocol = req.headers["x-forwarded-proto"] || "https";
+        const host = req.headers.host || "localhost:5000";
+        const appUrl = `${protocol}://${host}`;
+
+        if (tempPassword) {
+          await sendEmail({
+            to: ownerEmail,
+            subject: `Your ScooPilot account is ready`,
+            text: `Hi ${ownerFirstName},\n\nYour ScooPilot account "${companyName}" has been created.\n\nLog in at: ${appUrl}\nEmail: ${ownerEmail}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">ScooPilot</h1>
+                </div>
+                <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                  <h2 style="margin-top: 0;">Welcome to ScooPilot!</h2>
+                  <p>Hi ${ownerFirstName},</p>
+                  <p>Your account <strong>"${companyName}"</strong> has been created and is ready to use.</p>
+                  <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 4px 0;"><strong>Email:</strong> ${ownerEmail}</p>
+                    <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+                  </div>
+                  <div style="text-align: center; margin: 24px 0;">
+                    <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
+                  </div>
+                  <p style="color: #6b7280; font-size: 14px;">You'll be asked to set a new password when you first log in.</p>
+                </div>
+              </div>
+            `,
+          });
+          emailSent = true;
+        } else {
+          await sendEmail({
+            to: ownerEmail,
+            subject: `You've been added to ${companyName} on ScooPilot`,
+            text: `Hi,\n\nYou've been added as the owner of "${companyName}" on ScooPilot.\n\nLog in at: ${appUrl}`,
+            html: `<p>Hi,</p><p>You've been added as the owner of <strong>"${companyName}"</strong> on ScooPilot.</p><p><a href="${appUrl}">Log in now</a></p>`,
+          });
+          emailSent = true;
+        }
+      } catch (emailErr) {
+        console.error("[Admin] Failed to send welcome email:", emailErr);
+      }
+
+      res.status(201).json({
+        id: company.id,
+        name: companyName.trim(),
+        ownerEmail,
+        subscriptionTier: tier,
+        isExistingUser,
+        emailSent,
+      });
     } catch (err) { handleError(res, err); }
   });
 
