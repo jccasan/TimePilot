@@ -3135,7 +3135,7 @@ export async function registerRoutes(
       const discountNum = parseFloat(invoice.discountAmount || "0");
       const paidNum = invoice.paidAt ? parseFloat(invoice.total) : 0;
 
-      const logoUrl = company?.logoUrl ? `${req.protocol}://${req.get("host")}/api/objects${company.logoUrl}` : "";
+      const logoUrl = company?.logoUrl ? `${req.protocol}://${req.get("host")}${company.logoUrl}` : "";
       const invoiceData: any = {
         business: {
           name: company?.name || "",

@@ -197,11 +197,17 @@ export default function Settings() {
     },
   });
 
+  const MAX_LOGO_SIZE = 2 * 1024 * 1024;
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast({ title: "Invalid file", description: "Please select an image file.", variant: "destructive" });
+      toast({ title: "Invalid file", description: "Please select an image file (PNG or JPG).", variant: "destructive" });
+      return;
+    }
+    if (file.size > MAX_LOGO_SIZE) {
+      toast({ title: "File too large", description: "Logo must be under 2 MB. Please resize your image and try again.", variant: "destructive" });
       return;
     }
     const reader = new FileReader();
@@ -213,7 +219,7 @@ export default function Settings() {
   const currentTier = company?.subscriptionTier as keyof typeof TIER_CONFIG | undefined;
   const tierInfo = currentTier ? TIER_CONFIG[currentTier] : null;
 
-  const displayLogo = logoPreview || (company?.logoUrl ? `/api/objects${company.logoUrl}` : null);
+  const displayLogo = logoPreview || (company?.logoUrl ? company.logoUrl : null);
 
   return (
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
@@ -256,7 +262,7 @@ export default function Settings() {
                     <Upload className="mr-1 h-4 w-4" />
                     {isUploading ? "Uploading..." : "Upload Logo"}
                   </Button>
-                  <p className="text-xs text-muted-foreground">Recommended: 200x200px, PNG or JPG</p>
+                  <p className="text-xs text-muted-foreground">Recommended: 200x200px, PNG or JPG, max 2 MB</p>
                 </div>
               </div>
             </CardContent>

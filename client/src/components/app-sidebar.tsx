@@ -81,7 +81,7 @@ export function AppSidebar() {
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1">
           {company?.logoUrl ? (
-            <img src={`/api/objects${company.logoUrl}`} alt={company.name || "Company"} className="h-8 w-8 rounded-md object-cover" data-testid="img-tenant-logo" />
+            <img src={company.logoUrl} alt={company.name || "Company"} className="h-8 w-8 rounded-md object-cover" data-testid="img-tenant-logo" />
           ) : (
             <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center" data-testid="img-tenant-placeholder">
               <Building2 className="h-5 w-5 text-muted-foreground" />
