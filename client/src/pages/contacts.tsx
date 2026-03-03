@@ -68,6 +68,10 @@ const contactFormSchema = z.object({
 
 type ContactFormValues = z.infer<typeof contactFormSchema>;
 
+type ImportRow = Record<string, string>;
+
+type ColumnMapping = { csvHeader: string; mappedField: string };
+
 type ValidationResult = {
   totalRows: number;
   validCount: number;
@@ -75,14 +79,41 @@ type ValidationResult = {
   issues: { row: number; field: string; message: string }[];
   newLeadSources: string[];
   headers: string[];
+  columnMapping: ColumnMapping[];
+  rows: ImportRow[];
 };
+
+const CONTACT_FIELDS = [
+  { key: "firstName", label: "First Name" },
+  { key: "lastName", label: "Last Name" },
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Phone" },
+  { key: "streetAddress", label: "Street Address" },
+  { key: "address2", label: "Address 2" },
+  { key: "city", label: "City" },
+  { key: "state", label: "State" },
+  { key: "zipCode", label: "Zip Code" },
+  { key: "numberOfDogs", label: "# Dogs" },
+  { key: "yardSize", label: "Yard Size" },
+  { key: "serviceFrequency", label: "Frequency" },
+  { key: "serviceDay", label: "Service Day" },
+  { key: "leadSource", label: "Lead Source" },
+  { key: "referralSource", label: "Referral Source" },
+  { key: "status", label: "Status" },
+  { key: "notes", label: "Notes" },
+];
 
 export default function Contacts() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [csvPreview, setCsvPreview] = useState<{ validation: ValidationResult; csvText: string } | null>(null);
+  const [importStep, setImportStep] = useState<"idle" | "mapping" | "review">("idle");
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [rawCsvRows, setRawCsvRows] = useState<string[][]>([]);
+  const [rawCsvHeaders, setRawCsvHeaders] = useState<string[]>([]);
+  const [columnMapping, setColumnMapping] = useState<ColumnMapping[]>([]);
+  const [newLeadSources, setNewLeadSources] = useState<string[]>([]);
   const [isValidating, setIsValidating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
 
@@ -157,7 +188,12 @@ export default function Contacts() {
                 const text = await file.text();
                 const res = await apiRequest("POST", "/api/contacts/validate-csv", { csv: text });
                 const validation = await res.json();
-                setCsvPreview({ validation, csvText: text });
+                setColumnMapping(validation.columnMapping);
+                setNewLeadSources(validation.newLeadSources);
+                setRawCsvRows(validation.rawRows);
+                setRawCsvHeaders(validation.csvHeaders);
+                setImportRows(validation.rows);
+                setImportStep("mapping");
               } catch (err: any) {
                 toast({ title: "Validation failed", description: err.message, variant: "destructive" });
               } finally {
@@ -539,51 +575,61 @@ export default function Contacts() {
         </Card>
       )}
 
-      <Dialog open={!!csvPreview} onOpenChange={(open) => { if (!open) setCsvPreview(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <Dialog open={importStep !== "idle"} onOpenChange={(open) => { if (!open) { setImportStep("idle"); setImportRows([]); setRawCsvRows([]); setRawCsvHeaders([]); setColumnMapping([]); setNewLeadSources([]); } }}>
+        <DialogContent className="max-w-[95vw] w-[900px] max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Import Preview</DialogTitle>
+            <DialogTitle data-testid="text-import-title">
+              {importStep === "mapping" ? "Map Columns" : "Review & Edit Contacts"}
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              {importStep === "mapping"
+                ? "Verify how your CSV columns map to contact fields. Adjust any mismatched mappings."
+                : `${importRows.length} contact${importRows.length !== 1 ? "s" : ""} ready to import. Edit any field, or remove rows you don't want.`}
+            </p>
           </DialogHeader>
-          {csvPreview && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                  <div>
-                    <p className="text-sm font-medium">{csvPreview.validation.validCount} valid</p>
-                    <p className="text-xs text-muted-foreground">rows ready to import</p>
-                  </div>
-                </div>
-                {csvPreview.validation.invalidCount > 0 && (
-                  <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10">
-                    <AlertTriangle className="h-5 w-5 text-destructive" />
-                    <div>
-                      <p className="text-sm font-medium">{csvPreview.validation.invalidCount} invalid</p>
-                      <p className="text-xs text-muted-foreground">rows will be skipped</p>
+
+          {importStep === "mapping" && (
+            <div className="space-y-4 overflow-y-auto flex-1">
+              <div className="grid gap-2">
+                {columnMapping.map((col, idx) => (
+                  <div key={idx} className="flex items-center gap-3 p-2 rounded-md bg-muted/30">
+                    <div className="w-[200px] text-sm font-medium truncate" title={col.csvHeader}>
+                      {col.csvHeader}
                     </div>
+                    <span className="text-muted-foreground text-sm">-&gt;</span>
+                    <Select
+                      value={col.mappedField || "__skip__"}
+                      onValueChange={(v) => {
+                        const updated = [...columnMapping];
+                        updated[idx] = { ...updated[idx], mappedField: v === "__skip__" ? "" : v };
+                        setColumnMapping(updated);
+                      }}
+                    >
+                      <SelectTrigger className="w-[200px]" data-testid={`select-mapping-${idx}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__skip__">-- Skip this column --</SelectItem>
+                        {CONTACT_FIELDS.map(f => (
+                          <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {col.mappedField ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    )}
                   </div>
-                )}
+                ))}
               </div>
 
-              {csvPreview.validation.issues.length > 0 && (
-                <div className="border rounded-md p-3 space-y-1">
-                  <p className="text-sm font-medium text-destructive">Issues Found</p>
-                  <div className="max-h-32 overflow-y-auto space-y-1">
-                    {csvPreview.validation.issues.map((issue, idx) => (
-                      <p key={idx} className="text-xs text-muted-foreground">
-                        Row {issue.row}: {issue.message}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {csvPreview.validation.newLeadSources.length > 0 && (
+              {newLeadSources.length > 0 && (
                 <div className="border rounded-md p-3 space-y-1 border-amber-300 bg-amber-50 dark:bg-amber-950/20">
                   <p className="text-sm font-medium text-amber-700 dark:text-amber-400">New Lead Sources</p>
-                  <p className="text-xs text-muted-foreground">The following lead sources are not in your list and will be added automatically:</p>
+                  <p className="text-xs text-muted-foreground">These will be added to your lead sources list:</p>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {csvPreview.validation.newLeadSources.map((s) => (
+                    {newLeadSources.map((s) => (
                       <Badge key={s} variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-300">{s}</Badge>
                     ))}
                   </div>
@@ -591,39 +637,143 @@ export default function Contacts() {
               )}
             </div>
           )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setCsvPreview(null)} data-testid="button-cancel-import">
+
+          {importStep === "review" && (
+            <div className="flex-1 overflow-auto border rounded-md">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr>
+                    <th className="p-2 text-left font-medium w-8">#</th>
+                    {CONTACT_FIELDS.filter(f => importRows.some(r => r[f.key])).map(f => (
+                      <th key={f.key} className="p-2 text-left font-medium whitespace-nowrap">{f.label}</th>
+                    ))}
+                    <th className="p-2 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.map((row, rowIdx) => {
+                    const hasName = row.firstName && row.lastName;
+                    const visibleFields = CONTACT_FIELDS.filter(f => importRows.some(r => r[f.key]));
+                    return (
+                      <tr
+                        key={rowIdx}
+                        className={`border-t ${!hasName ? "bg-destructive/5" : ""}`}
+                        data-testid={`import-row-${rowIdx}`}
+                      >
+                        <td className="p-2 text-muted-foreground">{rowIdx + 1}</td>
+                        {visibleFields.map(f => (
+                          <td key={f.key} className="p-1">
+                            <Input
+                              value={row[f.key] || ""}
+                              onChange={(e) => {
+                                const updated = [...importRows];
+                                updated[rowIdx] = { ...updated[rowIdx], [f.key]: e.target.value };
+                                setImportRows(updated);
+                              }}
+                              className={`h-8 text-xs ${(f.key === "firstName" || f.key === "lastName") && !row[f.key] ? "border-destructive" : ""}`}
+                              data-testid={`input-import-${f.key}-${rowIdx}`}
+                            />
+                          </td>
+                        ))}
+                        <td className="p-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                            onClick={() => setImportRows(importRows.filter((_, i) => i !== rowIdx))}
+                            data-testid={`button-remove-row-${rowIdx}`}
+                          >
+                            X
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {importRows.length === 0 && (
+                <div className="p-8 text-center text-muted-foreground">
+                  All rows have been removed. Cancel to start over.
+                </div>
+              )}
+            </div>
+          )}
+
+          {importStep === "review" && (() => {
+            const missingNames = importRows.filter(r => !r.firstName || !r.lastName);
+            return missingNames.length > 0 ? (
+              <div className="border rounded-md p-3 space-y-1 border-destructive/50 bg-destructive/5 flex-shrink-0">
+                <p className="text-sm font-medium text-destructive">{missingNames.length} row{missingNames.length !== 1 ? "s" : ""} missing required fields</p>
+                <p className="text-xs text-muted-foreground">Rows without a first and last name will be skipped. Edit them above or remove them.</p>
+              </div>
+            ) : null;
+          })()}
+
+          <DialogFooter className="gap-2 flex-shrink-0">
+            <Button variant="outline" onClick={() => { setImportStep("idle"); setImportRows([]); setRawCsvRows([]); setRawCsvHeaders([]); setColumnMapping([]); setNewLeadSources([]); }} data-testid="button-cancel-import">
               Cancel
             </Button>
-            <Button
-              disabled={isImporting || (csvPreview?.validation.validCount === 0)}
-              onClick={async () => {
-                if (!csvPreview) return;
-                setIsImporting(true);
-                try {
-                  const res = await apiRequest("POST", "/api/contacts/import/csv", { csv: csvPreview.csvText });
-                  const result = await res.json();
-                  queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-                  queryClient.invalidateQueries({ queryKey: ["/api/lead-sources"] });
-                  let description = `${result.imported} contact${result.imported !== 1 ? "s" : ""} imported successfully.`;
-                  if (result.addedLeadSources?.length) {
-                    description += ` ${result.addedLeadSources.length} new lead source${result.addedLeadSources.length !== 1 ? "s" : ""} added: ${result.addedLeadSources.join(", ")}.`;
-                  }
-                  if (result.errors?.length) {
-                    description += ` ${result.errors.length} row(s) had issues.`;
-                  }
-                  toast({ title: "Import complete", description });
-                  setCsvPreview(null);
-                } catch (err: any) {
-                  toast({ title: "Import failed", description: err.message, variant: "destructive" });
-                } finally {
-                  setIsImporting(false);
-                }
-              }}
-              data-testid="button-confirm-import"
-            >
-              {isImporting ? "Importing..." : `Import ${csvPreview?.validation.validCount || 0} Contacts`}
-            </Button>
+            {importStep === "mapping" && (
+              <Button
+                onClick={() => {
+                  const remapped = rawCsvRows.map(values => {
+                    const row: ImportRow = {};
+                    columnMapping.forEach((col, idx) => {
+                      if (col.mappedField) {
+                        row[col.mappedField] = values[idx] || "";
+                      }
+                    });
+                    return row;
+                  });
+                  setImportRows(remapped);
+                  setImportStep("review");
+                }}
+                data-testid="button-continue-to-review"
+              >
+                Continue to Review
+              </Button>
+            )}
+            {importStep === "review" && (
+              <>
+                <Button variant="outline" onClick={() => setImportStep("mapping")} data-testid="button-back-to-mapping">
+                  Back
+                </Button>
+                <Button
+                  disabled={isImporting || importRows.filter(r => r.firstName && r.lastName).length === 0}
+                  onClick={async () => {
+                    setIsImporting(true);
+                    try {
+                      const validRows = importRows.filter(r => r.firstName && r.lastName);
+                      const res = await apiRequest("POST", "/api/contacts/import/json", { rows: validRows });
+                      const result = await res.json();
+                      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/lead-sources"] });
+                      let description = `${result.imported} contact${result.imported !== 1 ? "s" : ""} imported successfully.`;
+                      if (result.addedLeadSources?.length) {
+                        description += ` ${result.addedLeadSources.length} new lead source${result.addedLeadSources.length !== 1 ? "s" : ""} added.`;
+                      }
+                      if (result.errors?.length) {
+                        description += ` ${result.errors.length} row(s) had issues.`;
+                      }
+                      toast({ title: "Import complete", description });
+                      setImportStep("idle");
+                      setImportRows([]);
+                      setRawCsvRows([]);
+                      setRawCsvHeaders([]);
+                      setColumnMapping([]);
+                      setNewLeadSources([]);
+                    } catch (err: any) {
+                      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+                    } finally {
+                      setIsImporting(false);
+                    }
+                  }}
+                  data-testid="button-confirm-import"
+                >
+                  {isImporting ? "Importing..." : `Import ${importRows.filter(r => r.firstName && r.lastName).length} Contacts`}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

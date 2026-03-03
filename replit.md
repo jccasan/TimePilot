@@ -43,6 +43,8 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **Notifications System**: In-app notifications for various business events, with a bell icon and unread count in the UI.
 
 ### Key Features
+- **CSV Import**: One-click import flow with automatic column mapping (fuzzy header matching), editable preview table for row-level review/editing/removal, and new lead source auto-detection. Two-step dialog: Map Columns → Review & Edit. Uses POST /api/contacts/validate-csv for parsing + POST /api/contacts/import/json for final import.
+- **Dynamic Lead Sources**: Per-company lead sources managed via `lead_sources` table. Defaults seeded on company setup. Dropdowns in contacts, contact-detail use API data. Unknown lead sources from CSV imports auto-added.
 - **CRM**: Manages contacts, properties, referral sources, and includes a tagging system and status pipeline.
 - **Scheduling**: Recurring service plans, visit management, and route assignments.
 - **Invoicing**: Detailed invoicing with line items, tax, discounts, payment processing via Stripe, customizable templates with company logo, and invoice voiding capability.

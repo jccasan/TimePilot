@@ -872,31 +872,66 @@ export async function registerRoutes(
       const lines = csvText.split(/\r?\n/).filter((l: string) => l.trim());
       if (lines.length < 2) return res.status(400).json({ error: "CSV must have headers and at least one row" });
 
-      const headers = parseCsvLine(lines[0]).map((h: string) => h.replace(/"/g, "").trim());
+      const rawHeaders = parseCsvLine(lines[0]).map((h: string) => h.replace(/"/g, "").trim());
+
+      const knownFields = new Set(csvContactHeaders);
+      const headerAliases: Record<string, string> = {
+        "first name": "firstName", "first_name": "firstName", "firstname": "firstName", "first": "firstName",
+        "last name": "lastName", "last_name": "lastName", "lastname": "lastName", "last": "lastName",
+        "email address": "email", "e-mail": "email", "emailaddress": "email",
+        "phone number": "phone", "phonenumber": "phone", "telephone": "phone", "tel": "phone", "mobile": "phone", "cell": "phone",
+        "street address": "streetAddress", "street_address": "streetAddress", "address": "streetAddress", "address1": "streetAddress", "street": "streetAddress",
+        "address 2": "address2", "apt": "address2", "suite": "address2", "unit": "address2",
+        "zip": "zipCode", "zip_code": "zipCode", "postal": "zipCode", "postal_code": "zipCode", "postalcode": "zipCode", "zipcode": "zipCode",
+        "dogs": "numberOfDogs", "number_of_dogs": "numberOfDogs", "numberof dogs": "numberOfDogs", "num dogs": "numberOfDogs", "# dogs": "numberOfDogs", "numdogs": "numberOfDogs",
+        "yard": "yardSize", "yard_size": "yardSize",
+        "frequency": "serviceFrequency", "service_frequency": "serviceFrequency", "svc frequency": "serviceFrequency",
+        "day": "serviceDay", "service_day": "serviceDay", "svc day": "serviceDay",
+        "lead source": "leadSource", "lead_source": "leadSource", "source": "leadSource",
+        "referral source": "referralSource", "referral_source": "referralSource", "referral": "referralSource", "referred by": "referralSource",
+        "note": "notes", "comment": "notes", "comments": "notes",
+      };
+
+      const columnMapping: { csvHeader: string; mappedField: string }[] = rawHeaders.map(h => {
+        if (knownFields.has(h)) return { csvHeader: h, mappedField: h };
+        const normalized = h.toLowerCase().replace(/[^a-z0-9 #]/g, "").trim();
+        if (headerAliases[normalized]) return { csvHeader: h, mappedField: headerAliases[normalized] };
+        return { csvHeader: h, mappedField: "" };
+      });
+
       const existingSources = await storage.getLeadSources(companyId);
       const sourceNames = new Set(existingSources.map(s => s.name.toLowerCase()));
 
       const rows: any[] = [];
+      const rawRows: string[][] = [];
       const issues: { row: number; field: string; message: string }[] = [];
       const newLeadSources: string[] = [];
       const newLeadSourceSet = new Set<string>();
 
       for (let i = 1; i < lines.length; i++) {
-        const values = parseCsvLine(lines[i]);
-        const row: any = {};
-        headers.forEach((h: string, idx: number) => { row[h] = values[idx] || ""; });
-        row._row = i + 1;
+        const values = parseCsvLine(lines[i]).map(v => v.replace(/^"|"$/g, ""));
+        rawRows.push(values);
+        const row: Record<string, string> = {};
+        columnMapping.forEach((col, idx) => {
+          if (col.mappedField) {
+            row[col.mappedField] = values[idx] || "";
+          }
+        });
 
-        if (!row.firstName) issues.push({ row: i + 1, field: "firstName", message: "Missing first name" });
-        if (!row.lastName) issues.push({ row: i + 1, field: "lastName", message: "Missing last name" });
+        const rowIssues: string[] = [];
+        if (!row.firstName) rowIssues.push("Missing first name");
+        if (!row.lastName) rowIssues.push("Missing last name");
+        if (row.numberOfDogs && isNaN(parseInt(row.numberOfDogs, 10))) {
+          rowIssues.push(`Invalid number of dogs: "${row.numberOfDogs}"`);
+        }
+
+        if (rowIssues.length > 0) {
+          rowIssues.forEach(msg => issues.push({ row: i + 1, field: "", message: msg }));
+        }
 
         if (row.leadSource && !sourceNames.has(row.leadSource.toLowerCase()) && !newLeadSourceSet.has(row.leadSource.toLowerCase())) {
           newLeadSources.push(row.leadSource);
           newLeadSourceSet.add(row.leadSource.toLowerCase());
-        }
-
-        if (row.numberOfDogs && isNaN(parseInt(row.numberOfDogs, 10))) {
-          issues.push({ row: i + 1, field: "numberOfDogs", message: `Invalid number: "${row.numberOfDogs}"` });
         }
 
         rows.push(row);
@@ -905,7 +940,88 @@ export async function registerRoutes(
       const validCount = rows.filter(r => r.firstName && r.lastName).length;
       const invalidCount = rows.length - validCount;
 
-      res.json({ totalRows: rows.length, validCount, invalidCount, issues, newLeadSources, headers });
+      res.json({
+        totalRows: rows.length,
+        validCount,
+        invalidCount,
+        issues,
+        newLeadSources,
+        headers: csvContactHeaders,
+        columnMapping,
+        rows,
+        rawRows,
+        csvHeaders: rawHeaders,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/contacts/import/json", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { rows } = req.body;
+      if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ error: "No rows provided" });
+
+      const existingSources = await storage.getLeadSources(companyId);
+      const sourceNames = new Set(existingSources.map(s => s.name.toLowerCase()));
+      const imported: any[] = [];
+      const errors: string[] = [];
+      const addedLeadSources: string[] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row.firstName || !row.lastName) {
+          errors.push(`Row ${i + 1}: missing firstName or lastName, skipped`);
+          continue;
+        }
+
+        if (row.leadSource && !sourceNames.has(row.leadSource.toLowerCase())) {
+          await storage.createLeadSource({ companyId, name: row.leadSource });
+          sourceNames.add(row.leadSource.toLowerCase());
+          addedLeadSources.push(row.leadSource);
+        }
+
+        try {
+          const contact = await storage.createContact({
+            companyId,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            email: row.email || null,
+            phone: row.phone || null,
+            streetAddress: row.streetAddress || null,
+            address2: row.address2 || null,
+            city: row.city || null,
+            state: row.state || null,
+            zipCode: row.zipCode || null,
+            numberOfDogs: row.numberOfDogs ? parseInt(row.numberOfDogs, 10) || null : null,
+            yardSize: row.yardSize || null,
+            serviceFrequency: row.serviceFrequency || null,
+            serviceDay: row.serviceDay || null,
+            leadSource: row.leadSource || null,
+            referralSource: row.referralSource || null,
+            status: row.status || "lead",
+            notes: row.notes || null,
+          } as any);
+
+          if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
+            await storage.createProperty({
+              companyId,
+              contactId: contact.id,
+              streetAddress: contact.streetAddress,
+              city: contact.city,
+              state: contact.state,
+              zipCode: contact.zipCode,
+              numberOfDogs: contact.numberOfDogs ?? 1,
+              yardSize: contact.yardSize ?? null,
+            });
+          }
+
+          imported.push(contact);
+        } catch (rowErr: any) {
+          errors.push(`Row ${i + 1}: ${rowErr.message}`);
+        }
+      }
+
+      res.json({ imported: imported.length, errors, addedLeadSources });
     } catch (err) { handleError(res, err); }
   });
 
