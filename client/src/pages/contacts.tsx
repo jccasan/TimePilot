@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Download, Upload, FileDown } from "lucide-react";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 const statusColors: Record<string, string> = {
@@ -124,6 +124,39 @@ export default function Contacts() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold" data-testid="text-contacts-heading">Contacts</h1>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => window.open("/api/contacts/export/csv", "_blank")} data-testid="button-export-csv">
+            <Download className="mr-1 h-4 w-4" />
+            Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".csv";
+            input.onchange = async (e) => {
+              const file = (e.target as HTMLInputElement).files?.[0];
+              if (!file) return;
+              try {
+                const text = await file.text();
+                const res = await apiRequest("POST", "/api/contacts/import/csv", { csv: text });
+                const result = await res.json();
+                queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+                toast({
+                  title: "Import complete",
+                  description: `${result.imported} contact${result.imported !== 1 ? "s" : ""} imported.${result.errors?.length ? ` ${result.errors.length} row(s) had issues.` : ""}`,
+                });
+              } catch (err: any) {
+                toast({ title: "Import failed", description: err.message, variant: "destructive" });
+              }
+            };
+            input.click();
+          }} data-testid="button-import-csv">
+            <Upload className="mr-1 h-4 w-4" />
+            Import
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => window.open("/api/contacts/sample-csv", "_blank")} data-testid="button-download-sample-csv">
+            <FileDown className="mr-1 h-4 w-4" />
+            Sample
+          </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-add-contact">
