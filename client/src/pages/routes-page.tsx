@@ -20,7 +20,7 @@ import {
 import {
   MapPin, Dog, GripVertical, Plus, Pencil, Trash2, Route as RouteIcon,
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
-  Clock, ShoppingCart
+  Clock, ShoppingCart, RotateCcw
 } from "lucide-react";
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, TouchSensor,
@@ -129,13 +129,14 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 }
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
-  onEdit, onDelete, onOptimize, onDispatch, isOptimizing, isDispatching }: {
+  onEdit, onDelete, onOptimize, onDispatch, onUnassignAll, isOptimizing, isDispatching, isUnassigning }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
   onOptimize: (routeId: string, stopCount: number) => void;
   onDispatch: (routeId: string) => void;
-  isOptimizing: boolean; isDispatching: boolean;
+  onUnassignAll: (routeId: string) => void;
+  isOptimizing: boolean; isDispatching: boolean; isUnassigning: boolean;
 }) {
   const tech = team.find(t => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
@@ -208,6 +209,20 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             Dispatch to Tech
           </Button>
         </div>
+
+        {stopCount > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full text-xs text-destructive"
+            onClick={() => onUnassignAll(route.id)}
+            disabled={isUnassigning}
+            data-testid={`button-unassign-all-${route.id}`}
+          >
+            {isUnassigning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RotateCcw className="h-3 w-3 mr-1" />}
+            Unassign All Stops
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="p-2 pt-0 flex-1">
         <DroppableZone id={`route-${route.id}`} isOver={isOverThis}>
@@ -420,6 +435,8 @@ export default function RoutesPage() {
   const [savingsResult, setSavingsResult] = useState<OptimizeResult | null>(null);
   const [showSavings, setShowSavings] = useState(false);
   const [showPurchase, setShowPurchase] = useState(false);
+  const [unassigningRouteId, setUnassigningRouteId] = useState<string | null>(null);
+  const [confirmUnassignAll, setConfirmUnassignAll] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -565,6 +582,23 @@ export default function RoutesPage() {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
+  const unassignAllMutation = useMutation({
+    mutationFn: async (routeId: string) => {
+      setUnassigningRouteId(routeId);
+      const res = await apiRequest("POST", `/api/routes/${routeId}/unassign-all`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setUnassigningRouteId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+      toast({ title: "Stops unassigned", description: `${data.unassignedCount} stop${data.unassignedCount === 1 ? "" : "s"} moved to unassigned pool.` });
+    },
+    onError: (err: Error) => {
+      setUnassigningRouteId(null);
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   const resolveDropTarget = useCallback((overId: string): string | null => {
     if (overId === UNASSIGNED_DROP) return UNASSIGNED_DROP;
     if (overId.startsWith("route-")) return overId;
@@ -698,8 +732,10 @@ export default function RoutesPage() {
                         }}
                         onOptimize={handleOptimizeClick}
                         onDispatch={(id) => dispatchMutation.mutate(id)}
+                        onUnassignAll={(id) => setConfirmUnassignAll(id)}
                         isOptimizing={optimizingRouteId === route.id}
                         isDispatching={dispatchingRouteId === route.id}
+                        isUnassigning={unassigningRouteId === route.id}
                       />
                     ))}
                   </div>
@@ -766,6 +802,29 @@ export default function RoutesPage() {
             <AlertDialogCancel data-testid="button-cancel-optimize">Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmOptimize} data-testid="button-confirm-optimize">
               Use {confirmOptimize && confirmOptimize.stopCount <= 30 ? "1 Credit" : "2 Credits"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!confirmUnassignAll} onOpenChange={(open) => { if (!open) setConfirmUnassignAll(null); }}>
+        <AlertDialogContent data-testid="dialog-confirm-unassign-all">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unassign All Stops</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to unassign all stops from this route? They will be moved back to the unassigned pool.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-unassign-all">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmUnassignAll) unassignAllMutation.mutate(confirmUnassignAll);
+                setConfirmUnassignAll(null);
+              }}
+              data-testid="button-confirm-unassign-all"
+            >
+              Unassign All
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

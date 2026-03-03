@@ -510,7 +510,7 @@ export async function registerRoutes(
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
       const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
 
-      const [todaysVisits, todaysVisitsList, failedPayments, activeUsers, overdueInvoices, activeContacts, activeServicePlans, monthRevenue] = await Promise.all([
+      const [todaysVisits, todaysVisitsList, failedPayments, activeUsers, overdueInvoices, activeContacts, activeServicePlans, monthRevenue, smsCountThisMonth, emailCountThisMonth] = await Promise.all([
         storage.getTodaysVisitsCount(companyId),
         storage.getTodaysVisits(companyId),
         storage.getFailedPaymentsCount(companyId),
@@ -519,6 +519,8 @@ export async function registerRoutes(
         storage.getActiveContactsCount(companyId),
         storage.getActiveServicePlansCount(companyId),
         storage.getRevenueForPeriod(companyId, monthStart, monthEnd),
+        storage.getSmsCountForPeriod(companyId, monthStart, monthEnd),
+        storage.getEmailCountForPeriod(companyId, monthStart, monthEnd),
       ]);
 
       const completedToday = todaysVisitsList.filter(v => v.status === "completed").length;
@@ -535,6 +537,8 @@ export async function registerRoutes(
         activeContacts,
         activeServicePlans,
         monthRevenue,
+        smsCountThisMonth,
+        emailCountThisMonth,
         subscriptionTier: tier,
         tierName: tierInfo?.name ?? "Unknown",
       });
@@ -1381,6 +1385,16 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/routes/:id/unassign-all", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const route = await storage.getRoute(req.params.id, companyId);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+      const count = await storage.unassignAllStops(route.id);
+      res.json({ success: true, unassignedCount: count });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/route-credits", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -1583,6 +1597,24 @@ export async function registerRoutes(
       const body = { ...req.body, companyId };
       if (!body.routeId || body.routeId === "") body.routeId = null;
       const parsed = insertServicePlanSchema.parse(body);
+
+      if (!parsed.routeId && parsed.dayOfWeek) {
+        const dayRoutes = await storage.getRoutes(companyId, parsed.dayOfWeek);
+        if (dayRoutes.length > 0) {
+          const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+          let bestRoute = dayRoutes[0];
+          let bestCount = Infinity;
+          for (const route of dayRoutes) {
+            const stopCount = allPlans.filter(sp => sp.routeId === route.id).length;
+            if (stopCount < bestCount) {
+              bestCount = stopCount;
+              bestRoute = route;
+            }
+          }
+          parsed.routeId = bestRoute.id;
+        }
+      }
+
       const plan = await storage.createServicePlan(parsed);
       res.status(201).json(plan);
     } catch (err) { handleError(res, err); }
@@ -1595,6 +1627,25 @@ export async function registerRoutes(
       if (!existing) return res.status(404).json({ error: "Service plan not found" });
       const body = { ...req.body };
       if (body.routeId === "" || body.routeId === undefined) body.routeId = null;
+
+      const dayChanged = body.dayOfWeek && body.dayOfWeek !== existing.dayOfWeek;
+      if (dayChanged && !body.routeId) {
+        const dayRoutes = await storage.getRoutes(companyId, body.dayOfWeek);
+        if (dayRoutes.length > 0) {
+          const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+          let bestRoute = dayRoutes[0];
+          let bestCount = Infinity;
+          for (const route of dayRoutes) {
+            const stopCount = allPlans.filter(sp => sp.routeId === route.id && sp.id !== req.params.id).length;
+            if (stopCount < bestCount) {
+              bestCount = stopCount;
+              bestRoute = route;
+            }
+          }
+          body.routeId = bestRoute.id;
+        }
+      }
+
       const plan = await storage.updateServicePlan(req.params.id, body);
       res.json(plan);
     } catch (err) { handleError(res, err); }

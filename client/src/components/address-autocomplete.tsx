@@ -101,8 +101,9 @@ export function AddressAutocomplete({
   function handleSelect(suggestion: MapboxSuggestion) {
     suppressFetchRef.current = true;
     const streetAddress = suggestion.name || "";
+    const fullAddress = suggestion.full_address || streetAddress;
 
-    onChange(streetAddress || suggestion.full_address);
+    onChange(fullAddress);
     setIsOpen(false);
     setSuggestions([]);
 

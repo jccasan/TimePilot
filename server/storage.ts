@@ -94,6 +94,9 @@ export interface IStorage {
   updateServicePlan(id: string, data: Partial<InsertServicePlan>): Promise<ServicePlan>;
   deleteServicePlan(id: string): Promise<void>;
 
+  // Unassign all stops from a route
+  unassignAllStops(routeId: string): Promise<number>;
+
   // Vacation Holds
   getVacationHolds(servicePlanId: string): Promise<VacationHold[]>;
   createVacationHold(data: InsertVacationHold): Promise<VacationHold>;
@@ -195,10 +198,12 @@ export interface IStorage {
   // SMS Messages
   createSmsMessage(data: InsertSmsMessage): Promise<SmsMessage>;
   getSmsMessages(companyId: string, startDate?: string, endDate?: string): Promise<SmsMessage[]>;
+  getSmsCountForPeriod(companyId: string, startDate: string, endDate: string): Promise<number>;
 
   // Email Logs
   createEmailLog(data: InsertEmailSent): Promise<EmailSent>;
   getEmailLogs(companyId: string, startDate?: string, endDate?: string): Promise<EmailSent[]>;
+  getEmailCountForPeriod(companyId: string, startDate: string, endDate: string): Promise<number>;
 
   // Account Daily Metrics
   upsertDailyMetrics(data: InsertAccountDailyMetric): Promise<AccountDailyMetric>;
@@ -436,6 +441,14 @@ export class DatabaseStorage implements IStorage {
     await db.delete(servicePlans).where(eq(servicePlans.id, id));
   }
 
+  async unassignAllStops(routeId: string): Promise<number> {
+    const result = await db.update(servicePlans)
+      .set({ routeId: null, stopOrder: 0, updatedAt: new Date() })
+      .where(and(eq(servicePlans.routeId, routeId), eq(servicePlans.isActive, true)))
+      .returning();
+    return result.length;
+  }
+
   // ================ Vacation Holds ================
   async getVacationHolds(servicePlanId: string): Promise<VacationHold[]> {
     return db.select().from(vacationHolds).where(eq(vacationHolds.servicePlanId, servicePlanId));
@@ -497,7 +510,7 @@ export class DatabaseStorage implements IStorage {
     const today = new Date().toISOString().split("T")[0];
     const [result] = await db.select({ count: count() }).from(invoices).where(and(
       eq(invoices.companyId, companyId),
-      inArray(invoices.status, ["sent", "pending"]),
+      inArray(invoices.status, ["pending"]),
       lt(invoices.dueDate, today)
     ));
     return result?.count ?? 0;
@@ -952,6 +965,15 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(smsMessages).where(and(...conditions)).orderBy(desc(smsMessages.createdAt));
   }
 
+  async getSmsCountForPeriod(companyId: string, startDate: string, endDate: string): Promise<number> {
+    const [result] = await db.select({ count: count() }).from(smsMessages).where(and(
+      eq(smsMessages.companyId, companyId),
+      gte(smsMessages.createdAt, new Date(startDate)),
+      lte(smsMessages.createdAt, new Date(endDate + "T23:59:59.999Z")),
+    ));
+    return result?.count ?? 0;
+  }
+
   // ================ Email Logs ================
   async createEmailLog(data: InsertEmailSent): Promise<EmailSent> {
     const [log] = await db.insert(emailsSent).values(data).returning();
@@ -963,6 +985,15 @@ export class DatabaseStorage implements IStorage {
     if (startDate) conditions.push(gte(emailsSent.createdAt, new Date(startDate)));
     if (endDate) conditions.push(lte(emailsSent.createdAt, new Date(endDate)));
     return db.select().from(emailsSent).where(and(...conditions)).orderBy(desc(emailsSent.createdAt));
+  }
+
+  async getEmailCountForPeriod(companyId: string, startDate: string, endDate: string): Promise<number> {
+    const [result] = await db.select({ count: count() }).from(emailsSent).where(and(
+      eq(emailsSent.companyId, companyId),
+      gte(emailsSent.createdAt, new Date(startDate)),
+      lte(emailsSent.createdAt, new Date(endDate + "T23:59:59.999Z")),
+    ));
+    return result?.count ?? 0;
   }
 
   // ================ Account Daily Metrics ================

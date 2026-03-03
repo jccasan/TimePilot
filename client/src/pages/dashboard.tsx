@@ -10,6 +10,7 @@ import {
   DollarSign, CalendarCheck, AlertTriangle, UserCheck,
   Plus, Eye, Users, ClipboardList, TrendingUp,
   FileText, Clock, CheckCircle2, Circle, ArrowRight,
+  MessageSquare, Mail,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 
@@ -28,6 +29,8 @@ type CompanyStats = {
   activeContacts: number;
   activeServicePlans: number;
   monthRevenue: number;
+  smsCountThisMonth: number;
+  emailCountThisMonth: number;
   subscriptionTier: string;
   tierName: string;
 };
@@ -182,7 +185,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
@@ -229,6 +232,40 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground mt-1">
                   of {tierInfo?.maxUsers ?? 1} allowed
                 </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Texts Sent</CardTitle>
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div data-testid="text-sms-count">
+                <div className="text-2xl font-bold">{stats?.smsCountThisMonth ?? 0}</div>
+                <p className="text-xs text-muted-foreground mt-1">this month</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Emails Sent</CardTitle>
+            <Mail className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div data-testid="text-email-count">
+                <div className="text-2xl font-bold">{stats?.emailCountThisMonth ?? 0}</div>
+                <p className="text-xs text-muted-foreground mt-1">this month</p>
               </div>
             )}
           </CardContent>
