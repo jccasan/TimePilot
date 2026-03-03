@@ -63,7 +63,7 @@ export interface IStorage {
   // Tags
   getTags(companyId: string): Promise<Tag[]>;
   createTag(data: InsertTag): Promise<Tag>;
-  deleteTag(id: string): Promise<void>;
+  deleteTag(id: string, companyId?: string): Promise<void>;
   addTagToContact(contactId: string, tagId: string): Promise<void>;
   removeTagFromContact(contactId: string, tagId: string): Promise<void>;
   getContactTags(contactId: string): Promise<Tag[]>;
@@ -71,7 +71,7 @@ export interface IStorage {
   // Lead Sources
   getLeadSources(companyId: string): Promise<LeadSource[]>;
   createLeadSource(data: InsertLeadSource): Promise<LeadSource>;
-  deleteLeadSource(id: string): Promise<void>;
+  deleteLeadSource(id: string, companyId?: string): Promise<void>;
 
   // Properties
   getProperty(id: string, companyId: string): Promise<Property | undefined>;
@@ -136,7 +136,7 @@ export interface IStorage {
   getAutomationRules(companyId: string): Promise<AutomationRule[]>;
   createAutomationRule(data: InsertAutomationRule): Promise<AutomationRule>;
   updateAutomationRule(id: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule>;
-  deleteAutomationRule(id: string): Promise<void>;
+  deleteAutomationRule(id: string, companyId?: string): Promise<void>;
   getRulesForTrigger(companyId: string, trigger: string): Promise<AutomationRule[]>;
   createAutomationEventLog(data: { companyId: string; ruleId?: string; trigger: string; payload?: any; result?: any }): Promise<void>;
 
@@ -145,13 +145,13 @@ export interface IStorage {
   getApiKeyByPrefix(prefix: string): Promise<ApiKey | undefined>;
   createApiKey(data: InsertApiKey): Promise<ApiKey>;
   updateApiKeyLastUsed(id: string): Promise<void>;
-  deleteApiKey(id: string): Promise<void>;
+  deleteApiKey(id: string, companyId?: string): Promise<void>;
 
   // Webhooks
   getWebhooks(companyId: string): Promise<Webhook[]>;
   createWebhook(data: InsertWebhook): Promise<Webhook>;
   updateWebhook(id: string, data: Partial<InsertWebhook>): Promise<Webhook>;
-  deleteWebhook(id: string): Promise<void>;
+  deleteWebhook(id: string, companyId?: string): Promise<void>;
   getWebhooksForEvent(companyId: string, event: string): Promise<Webhook[]>;
 
   // Attachments
@@ -326,8 +326,9 @@ export class DatabaseStorage implements IStorage {
     return tag;
   }
 
-  async deleteTag(id: string): Promise<void> {
-    await db.delete(tags).where(eq(tags.id, id));
+  async deleteTag(id: string, companyId?: string): Promise<void> {
+    const conditions = companyId ? and(eq(tags.id, id), eq(tags.companyId, companyId)) : eq(tags.id, id);
+    await db.delete(tags).where(conditions);
   }
 
   async addTagToContact(contactId: string, tagId: string): Promise<void> {
@@ -357,8 +358,9 @@ export class DatabaseStorage implements IStorage {
     return source;
   }
 
-  async deleteLeadSource(id: string): Promise<void> {
-    await db.delete(leadSources).where(eq(leadSources.id, id));
+  async deleteLeadSource(id: string, companyId?: string): Promise<void> {
+    const conditions = companyId ? and(eq(leadSources.id, id), eq(leadSources.companyId, companyId)) : eq(leadSources.id, id);
+    await db.delete(leadSources).where(conditions);
   }
 
   // ================ Properties ================
@@ -659,8 +661,9 @@ export class DatabaseStorage implements IStorage {
     return rule;
   }
 
-  async deleteAutomationRule(id: string): Promise<void> {
-    await db.delete(automationRules).where(eq(automationRules.id, id));
+  async deleteAutomationRule(id: string, companyId?: string): Promise<void> {
+    const conditions = companyId ? and(eq(automationRules.id, id), eq(automationRules.companyId, companyId)) : eq(automationRules.id, id);
+    await db.delete(automationRules).where(conditions);
   }
 
   async getRulesForTrigger(companyId: string, trigger: string): Promise<AutomationRule[]> {
@@ -694,8 +697,9 @@ export class DatabaseStorage implements IStorage {
     await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, id));
   }
 
-  async deleteApiKey(id: string): Promise<void> {
-    await db.delete(apiKeys).where(eq(apiKeys.id, id));
+  async deleteApiKey(id: string, companyId?: string): Promise<void> {
+    const conditions = companyId ? and(eq(apiKeys.id, id), eq(apiKeys.companyId, companyId)) : eq(apiKeys.id, id);
+    await db.delete(apiKeys).where(conditions);
   }
 
   // ================ Webhooks ================
@@ -713,8 +717,9 @@ export class DatabaseStorage implements IStorage {
     return wh;
   }
 
-  async deleteWebhook(id: string): Promise<void> {
-    await db.delete(webhooks).where(eq(webhooks.id, id));
+  async deleteWebhook(id: string, companyId?: string): Promise<void> {
+    const conditions = companyId ? and(eq(webhooks.id, id), eq(webhooks.companyId, companyId)) : eq(webhooks.id, id);
+    await db.delete(webhooks).where(conditions);
   }
 
   async getWebhooksForEvent(companyId: string, event: string): Promise<Webhook[]> {

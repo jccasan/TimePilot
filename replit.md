@@ -55,6 +55,15 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **User Roles**: Supports owner, admin, and technician roles with appropriate access control.
 - **Proof of Service**: Technicians can upload photos for completed visits via a mobile interface.
 
+## Security
+- **Security Headers**: Helmet middleware (HSTS, X-Content-Type-Options, X-Frame-Options, CSP in production)
+- **CORS**: Strict origin allowlist via `ALLOWED_ORIGINS` env var (no wildcard with credentials)
+- **Rate Limiting**: Global API (500/15min), auth endpoints (20/15min) via express-rate-limit
+- **Multi-Tenant Isolation**: All data access scoped by companyId; DELETE/PATCH operations verify tenant ownership
+- **Security Scripts**: `scripts/security_scan.sh` (deps, secrets, SAST), `scripts/security_fix.sh` (auto-patch)
+- **Documentation**: `SECURITY.md` for scan instructions, severity levels, secret rotation
+- **Reports**: `reports/` directory with scan output (dependency-audit.json, secrets-scan.txt, sast-results.json, security-summary.md)
+
 ## External Dependencies
 - **PostgreSQL**: Primary database.
 - **Custom Auth**: Email/password authentication with session cookies and Bearer token fallback.

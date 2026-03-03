@@ -1,0 +1,190 @@
+Replit Continuous Security Scanner Prompt
+
+You are a senior AppSec engineer and DevSecOps builder.
+
+Goal: Turn this repo into a continuously audited codebase that detects vulnerabilities, patches safe ones automatically, produces a clear report, and blocks high-risk regressions.
+
+
+---
+
+Step 0: Identify Stack
+
+Detect what languages and frameworks this repo uses (Node, Next.js, Python, FastAPI, Express, etc.) and what package managers exist (npm, yarn, pnpm, pip, poetry, etc.). Tailor the security setup only to what applies.
+
+
+---
+
+Step 1: Add a Security Toolchain (in-repo)
+
+Create the following files and wire them up.
+
+scripts/security_scan.sh
+
+Runs all applicable scanners and writes outputs to the reports directory.
+
+Requirements:
+
+Must be non-interactive
+
+Must be deterministic
+
+Must exit with a non-zero status if any High or Critical vulnerabilities are found
+
+
+scripts/security_fix.sh
+
+Performs safe automated fixes:
+
+Dependency patch upgrades
+
+Automated lint and formatting fixes
+
+
+Rules:
+
+Do not perform large refactors
+
+Re-run tests after applying fixes
+
+
+reports directory
+
+Store scanner outputs including:
+
+dependency-audit.json
+
+sast-results.json
+
+secrets-scan.txt
+
+security-summary.md
+
+
+
+---
+
+Step 2: Use Appropriate Security Scanners
+
+Implement scanners based on the detected stack.
+
+Dependency Vulnerability Scanning
+
+Node projects
+
+npm audit
+
+pnpm audit or yarn audit when applicable
+
+
+Python projects
+
+pip-audit
+
+safety if already used
+
+
+Static Analysis (SAST)
+
+Use semgrep with recommended web-application rules.
+
+If Python is present also run:
+
+bandit
+
+
+Secrets Detection
+
+Use gitleaks to detect leaked credentials.
+
+If gitleaks cannot be installed, implement a fallback scan for common secret patterns including:
+
+API keys
+
+private keys
+
+JWT secrets
+
+database passwords
+
+
+Container or Infrastructure Scanning (only if present)
+
+If containers exist:
+
+trivy
+
+
+If infrastructure as code exists:
+
+checkov
+
+
+
+---
+
+Step 3: Baseline and Noise Reduction
+
+Create configuration files to avoid scanning irrelevant paths.
+
+Exclude:
+
+dist
+
+build
+
+.next
+
+node_modules
+
+.venv
+
+generated artifacts
+
+
+Do NOT exclude:
+
+src
+
+api
+
+server code
+
+authentication logic
+
+database access layers
+
+configuration files
+
+
+
+---
+
+Step 4: Implement Security Hardening
+
+Apply these security best practices where applicable.
+
+Input validation on all API endpoints
+
+Parameterized database queries (no string concatenation)
+
+Output encoding to prevent XSS
+
+CSRF protection when cookie-based sessions exist
+
+Secure cookies with:
+
+HttpOnly
+
+Secure
+
+SameSite
+
+
+Rate limiting on:
+
+authentication endpoints
+
+public APIs
+
+
+Strict CORS configuration (avoid wildcard with

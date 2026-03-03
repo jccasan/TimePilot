@@ -1387,8 +1387,8 @@ export async function registerRoutes(
 
   app.delete("/api/tags/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      await getCompanyContext(req);
-      await storage.deleteTag(req.params.id);
+      const { companyId } = await getCompanyContext(req);
+      await storage.deleteTag(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -1417,17 +1417,21 @@ export async function registerRoutes(
 
   app.delete("/api/lead-sources/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      await getCompanyContext(req);
-      await storage.deleteLeadSource(req.params.id);
+      const { companyId } = await getCompanyContext(req);
+      await storage.deleteLeadSource(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
 
   app.post("/api/contacts/:id/tags", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      await getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
       const { tagId } = req.body;
       if (!tagId) return res.status(400).json({ error: "tagId is required" });
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const companyTags = await storage.getTags(companyId);
+      if (!companyTags.find(t => t.id === tagId)) return res.status(404).json({ error: "Tag not found" });
       await storage.addTagToContact(req.params.id, tagId);
       res.status(201).json({ success: true });
     } catch (err) { handleError(res, err); }
@@ -1435,7 +1439,9 @@ export async function registerRoutes(
 
   app.delete("/api/contacts/:id/tags/:tagId", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      await getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
       await storage.removeTagFromContact(req.params.id, req.params.tagId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
@@ -1443,7 +1449,9 @@ export async function registerRoutes(
 
   app.get("/api/contacts/:id/tags", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      await getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
       const contactTags = await storage.getContactTags(req.params.id);
       res.json(contactTags);
     } catch (err) { handleError(res, err); }
@@ -2284,7 +2292,9 @@ export async function registerRoutes(
 
   app.patch("/api/automation-rules/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      await getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
+      const existing = await storage.getAutomationRules(companyId);
+      if (!existing.find(r => r.id === req.params.id)) return res.status(404).json({ error: "Rule not found" });
       const rule = await storage.updateAutomationRule(req.params.id, req.body);
       res.json(rule);
     } catch (err) { handleError(res, err); }
@@ -2292,8 +2302,8 @@ export async function registerRoutes(
 
   app.delete("/api/automation-rules/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      await getCompanyContext(req);
-      await storage.deleteAutomationRule(req.params.id);
+      const { companyId } = await getCompanyContext(req);
+      await storage.deleteAutomationRule(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -2339,9 +2349,9 @@ export async function registerRoutes(
 
   app.delete("/api/api-keys/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { role } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      await storage.deleteApiKey(req.params.id);
+      await storage.deleteApiKey(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -2370,8 +2380,10 @@ export async function registerRoutes(
 
   app.patch("/api/webhooks/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { role } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
+      const existing = await storage.getWebhooks(companyId);
+      if (!existing.find(w => w.id === req.params.id)) return res.status(404).json({ error: "Webhook not found" });
       const webhook = await storage.updateWebhook(req.params.id, req.body);
       res.json(webhook);
     } catch (err) { handleError(res, err); }
@@ -2379,9 +2391,9 @@ export async function registerRoutes(
 
   app.delete("/api/webhooks/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { role } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      await storage.deleteWebhook(req.params.id);
+      await storage.deleteWebhook(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
