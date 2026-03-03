@@ -23,6 +23,7 @@ import {
   detachPaymentMethod,
 } from "./services/stripe";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics } from "./services/route-optimizer";
+import { geocodeAddress } from "./services/geocode";
 import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import {
@@ -92,6 +93,22 @@ function notify(companyId: string, type: string, title: string, message: string,
   storage.createNotification({ companyId, type: type as any, title, message, isRead: false, linkUrl: linkUrl || null }).catch(console.error);
 }
 
+async function createPropertyWithGeocode(data: {
+  companyId: string; contactId: string; streetAddress: string;
+  city?: string | null; state?: string | null; zipCode?: string | null;
+  numberOfDogs?: number | null; yardSize?: string | null;
+  latitude?: string | null; longitude?: string | null;
+}) {
+  if (!data.latitude && !data.longitude && data.streetAddress) {
+    const coords = await geocodeAddress(data.streetAddress, data.city, data.state, data.zipCode);
+    if (coords) {
+      data.latitude = coords.latitude;
+      data.longitude = coords.longitude;
+    }
+  }
+  return storage.createProperty(data as any);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -105,7 +122,7 @@ export async function registerRoutes(
       const q = req.query.q as string;
       if (!q || q.length < 3) return res.json([]);
 
-      const token = process.env.MAPBOX_SECRET_TOKEN || process.env.MAPBOX_PUBLIC_TOKEN;
+      const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
       if (!token) return res.json([]);
 
       const params = new URLSearchParams({
@@ -162,7 +179,7 @@ export async function registerRoutes(
       const q = req.query.q as string;
       if (!q) return res.json(null);
 
-      const token = process.env.MAPBOX_SECRET_TOKEN || process.env.MAPBOX_PUBLIC_TOKEN;
+      const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
       if (!token) return res.json(null);
 
       const params = new URLSearchParams({
@@ -1007,7 +1024,7 @@ export async function registerRoutes(
           } as any);
 
           if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
-            await storage.createProperty({
+            await createPropertyWithGeocode({
               companyId,
               contactId: contact.id,
               streetAddress: contact.streetAddress,
@@ -1105,7 +1122,7 @@ export async function registerRoutes(
           } as any);
 
           if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
-            await storage.createProperty({
+            await createPropertyWithGeocode({
               companyId,
               contactId: contact.id,
               streetAddress: contact.streetAddress,
@@ -1154,7 +1171,7 @@ export async function registerRoutes(
       const contact = await storage.createContact(parsed);
 
       if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
-        await storage.createProperty({
+        await createPropertyWithGeocode({
           companyId,
           contactId: contact.id,
           streetAddress: contact.streetAddress,
@@ -1184,7 +1201,7 @@ export async function registerRoutes(
       if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
         const existingProperties = await storage.getProperties(companyId, contact.id);
         if (existingProperties.length === 0) {
-          await storage.createProperty({
+          await createPropertyWithGeocode({
             companyId,
             contactId: contact.id,
             streetAddress: contact.streetAddress,
@@ -1318,6 +1335,13 @@ export async function registerRoutes(
     try {
       const { companyId } = await getCompanyContext(req);
       const parsed = insertPropertySchema.parse({ ...req.body, companyId });
+      if (!parsed.latitude && !parsed.longitude && parsed.streetAddress) {
+        const coords = await geocodeAddress(parsed.streetAddress, parsed.city, parsed.state, parsed.zipCode);
+        if (coords) {
+          (parsed as any).latitude = coords.latitude;
+          (parsed as any).longitude = coords.longitude;
+        }
+      }
       const property = await storage.createProperty(parsed);
       res.status(201).json(property);
     } catch (err) { handleError(res, err); }
@@ -1330,6 +1354,24 @@ export async function registerRoutes(
       if (!existing) return res.status(404).json({ error: "Property not found" });
       const property = await storage.updateProperty(req.params.id, req.body);
       res.json(property);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/properties/geocode-all", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const allProperties = await storage.getProperties(companyId);
+      const needsGeocode = allProperties.filter(p => p.streetAddress && (!p.latitude || !p.longitude));
+      let geocoded = 0;
+      for (const prop of needsGeocode) {
+        const coords = await geocodeAddress(prop.streetAddress!, prop.city, prop.state, prop.zipCode);
+        if (coords) {
+          await storage.updateProperty(prop.id, { latitude: coords.latitude, longitude: coords.longitude });
+          geocoded++;
+        }
+      }
+      res.json({ total: allProperties.length, needsGeocode: needsGeocode.length, geocoded });
     } catch (err) { handleError(res, err); }
   });
 
@@ -1446,7 +1488,22 @@ export async function registerRoutes(
       }
 
       const allProperties = await storage.getProperties(companyId);
-      const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+      let propertyMap = new Map(allProperties.map(p => [p.id, p]));
+
+      const needsGeocode = routePlans.filter(sp => {
+        const prop = propertyMap.get(sp.propertyId);
+        return prop && prop.streetAddress && (!prop.latitude || !prop.longitude);
+      });
+      if (needsGeocode.length > 0) {
+        for (const sp of needsGeocode) {
+          const prop = propertyMap.get(sp.propertyId)!;
+          const coords = await geocodeAddress(prop.streetAddress!, prop.city, prop.state, prop.zipCode);
+          if (coords) {
+            const updated = await storage.updateProperty(prop.id, { latitude: coords.latitude, longitude: coords.longitude });
+            propertyMap.set(prop.id, updated);
+          }
+        }
+      }
 
       const stops = routePlans
         .map(sp => {
@@ -1460,8 +1517,9 @@ export async function registerRoutes(
         })
         .filter((s): s is NonNullable<typeof s> => s !== null);
 
+      const ungeocoded = routePlans.length - stops.length;
       if (stops.length < 2) {
-        return res.json({ optimized: false, message: "Not enough geocoded properties to optimize", totalDistance: 0, stopCount: routePlans.length });
+        return res.json({ optimized: false, message: `${ungeocoded} of ${routePlans.length} stops could not be geocoded. Ensure addresses are complete (street, city, state, zip).`, totalDistance: 0, stopCount: routePlans.length });
       }
 
       let startPoint: { latitude: number; longitude: number } | undefined;

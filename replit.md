@@ -25,8 +25,8 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **Payment Processing**: Stripe for secure payment gateway integration, including customer management, setup intents, payment intents, and webhook handling.
 - **Invoice Template Engine**: Custom mustache-style HTML template engine for flexible and customizable invoice generation, supporting per-company theme overrides and company logo integration.
 - **Route Optimization**: Implements a nearest-neighbor TSP with 2-opt improvement algorithm, with Mapbox Directions API for real road-based distance and duration metrics. Falls back to haversine if Mapbox is unavailable.
-- **Geocoding**: Mapbox Geocoding API v6 for address autocomplete and forward geocoding. Public token exposed via /api/mapbox-token endpoint.
-- **Maps**: Mapbox SDK for routing, navigation, and geocoding (tokens stored as MAPBOX_PUBLIC_TOKEN and MAPBOX_SECRET_TOKEN secrets).
+- **Geocoding**: Mapbox Geocoding API v6 for address autocomplete and forward geocoding. Auto-geocodes properties on creation and before route optimization. Uses public token (secret token lacks geocoding permissions). Public token exposed via /api/mapbox-token endpoint. Backfill endpoint: POST /api/properties/geocode-all.
+- **Maps**: Mapbox SDK for routing, navigation, and geocoding (tokens stored as MAPBOX_PUBLIC_TOKEN and MAPBOX_SECRET_TOKEN secrets). Use MAPBOX_PUBLIC_TOKEN for geocoding API calls.
 
 ### Frontend
 - **Framework**: React with TypeScript
@@ -47,7 +47,7 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **Dynamic Lead Sources**: Per-company lead sources managed via `lead_sources` table. Defaults seeded on company setup. Dropdowns in contacts, contact-detail use API data. Unknown lead sources from CSV imports auto-added.
 - **CRM**: Manages contacts, properties, referral sources, and includes a tagging system and status pipeline.
 - **Scheduling**: Recurring service plans, visit management, and route assignments. Service plans auto-assign to the least-loaded route for their day of week when created without an explicit route.
-- **Route Builder**: Drag-and-drop route management with "Unassign All" bulk action, route optimization (TSP + 2-opt with credit system), and dispatch functionality.
+- **Route Builder**: Drag-and-drop route management with "Unassign All" bulk action, route optimization (TSP + 2-opt with credit system, auto-geocoding before optimization), and dispatch functionality.
 - **Invoicing**: Detailed invoicing with line items, tax, discounts, payment processing via Stripe, customizable templates with company logo, and invoice voiding capability.
 - **Communication**: Integrated email and SMS services with a centralized communication log.
 - **Automation**: Event-driven automation rules with logs.
