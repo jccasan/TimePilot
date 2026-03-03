@@ -86,7 +86,41 @@ function setupSession(app: express.Express) {
   }));
 }
 
+async function applyAdminCredentialMigration() {
+  try {
+    const crypto = await import("crypto");
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    
+    const check = await pool.query("SELECT id FROM users WHERE email = 'jeremy@doocrewva.com'");
+    if (check.rows.length > 0) {
+      const password = process.env.ADMIN_INITIAL_PASSWORD;
+      if (!password) {
+        console.log("[Migration] ADMIN_INITIAL_PASSWORD not set, skipping credential migration");
+        await pool.end();
+        return;
+      }
+      const salt = crypto.randomBytes(16).toString("hex");
+      const hash: string = await new Promise((resolve, reject) => {
+        crypto.scrypt(password, salt, 64, (err: Error | null, key: Buffer) => {
+          if (err) reject(err);
+          resolve(`${salt}:${key.toString("hex")}`);
+        });
+      });
+      await pool.query(
+        "UPDATE users SET email = 'jeremy@scoopilot.com', password_hash = $1, updated_at = NOW() WHERE email = 'jeremy@doocrewva.com'",
+        [hash]
+      );
+      console.log("[Migration] Admin credentials updated successfully");
+    }
+    await pool.end();
+  } catch (err) {
+    console.error("[Migration] Failed to apply admin credential migration:", err);
+  }
+}
+
 (async () => {
+  await applyAdminCredentialMigration();
   setupSession(app);
   await registerRoutes(httpServer, app);
 
