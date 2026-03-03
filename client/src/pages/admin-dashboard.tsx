@@ -1,17 +1,10 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Contact2, CalendarCheck, DollarSign, Search, ChevronRight, Plus } from "lucide-react";
+import { Building2, Users, Contact2, CalendarCheck, DollarSign, ChevronRight, BarChart3, ArrowRight } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
-import { useState, useMemo } from "react";
-import { adminFetchFn, adminRequest } from "@/lib/adminApi";
+import { adminFetchFn } from "@/lib/adminApi";
 
 const tierColors: Record<string, string> = {
   tier_1: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
@@ -22,47 +15,6 @@ const tierColors: Record<string, string> = {
 };
 
 export default function AdminDashboard() {
-  const [search, setSearch] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [companyName, setCompanyName] = useState("");
-  const [ownerEmail, setOwnerEmail] = useState("");
-  const [ownerFirstName, setOwnerFirstName] = useState("");
-  const [ownerLastName, setOwnerLastName] = useState("");
-  const [selectedTier, setSelectedTier] = useState("tier_1");
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      const res = await adminRequest("POST", "/api/admin/companies", {
-        companyName,
-        ownerEmail,
-        ownerFirstName,
-        ownerLastName,
-        subscriptionTier: selectedTier,
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to create tenant");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      toast({ title: "Tenant created", description: `${data.name} has been created. Login credentials were sent to ${data.ownerEmail}.` });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
-      setCreateOpen(false);
-      setCompanyName("");
-      setOwnerEmail("");
-      setOwnerFirstName("");
-      setOwnerLastName("");
-      setSelectedTier("tier_1");
-    },
-    onError: (error: Error) => {
-      toast({ title: "Failed to create tenant", description: error.message, variant: "destructive" });
-    },
-  });
-
   const { data: stats, isLoading: statsLoading } = useQuery<{
     totalCompanies: number;
     totalUsers: number;
@@ -74,22 +26,14 @@ export default function AdminDashboard() {
     queryFn: adminFetchFn("/api/admin/stats"),
   });
 
-  const { data: companies, isLoading: companiesLoading } = useQuery<any[]>({
+  const { data: companies } = useQuery<any[]>({
     queryKey: ["/api/admin/companies"],
     queryFn: adminFetchFn("/api/admin/companies"),
   });
 
-  const filtered = useMemo(() => {
-    if (!companies) return [];
-    if (!search.trim()) return companies;
-    const q = search.toLowerCase();
-    return companies.filter(
-      (c: any) =>
-        c.name?.toLowerCase().includes(q) ||
-        c.id?.toLowerCase().includes(q) ||
-        c.subscriptionTier?.toLowerCase().includes(q)
-    );
-  }, [companies, search]);
+  const recentTenants = (companies || [])
+    .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+    .slice(0, 5);
 
   const statCards = [
     { label: "Total Tenants", value: stats?.totalCompanies ?? 0, icon: Building2 },
@@ -100,10 +44,10 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto" data-testid="admin-dashboard">
+    <div className="p-6 space-y-8 max-w-7xl mx-auto" data-testid="admin-dashboard">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-admin-title">Platform Admin</h1>
-        <p className="text-muted-foreground text-sm mt-1">Manage all tenant accounts</p>
+        <h1 className="text-2xl font-bold" data-testid="text-admin-title">Platform Overview</h1>
+        <p className="text-muted-foreground text-sm mt-1">ScooPilot administration at a glance</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -122,54 +66,79 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      <div>
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <h2 className="text-lg font-semibold">Tenant Accounts</h2>
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search companies..."
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              data-testid="input-admin-search"
-            />
-          </div>
-          <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="button-add-tenant">
-            <Plus className="h-4 w-4 mr-1" />
-            Add Tenant
-          </Button>
-        </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <Link href="/admin/tenants">
+          <Card className="hover-elevate cursor-pointer h-full" data-testid="card-quick-tenants">
+            <CardContent className="pt-5 pb-4 px-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Building2 className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">Manage Tenants</p>
+                  <p className="text-sm text-muted-foreground">View, create, and manage tenant accounts</p>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/analytics">
+          <Card className="hover-elevate cursor-pointer h-full" data-testid="card-quick-analytics">
+            <CardContent className="pt-5 pb-4 px-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">Platform Analytics</p>
+                  <p className="text-sm text-muted-foreground">Revenue metrics, churn, and growth trends</p>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
 
-        {companiesLoading ? (
-          <div className="text-center py-8 text-muted-foreground">Loading accounts...</div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">No accounts found</div>
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Recent Tenants</h2>
+          <Link href="/admin/tenants" className="text-sm text-primary hover:underline" data-testid="link-view-all-tenants">
+            View all
+          </Link>
+        </div>
+        {recentTenants.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              <Building2 className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">No tenants yet</p>
+              <Link href="/admin/tenants" className="text-sm text-primary hover:underline mt-1 inline-block" data-testid="link-add-first-tenant">
+                Add your first tenant
+              </Link>
+            </CardContent>
+          </Card>
         ) : (
           <div className="space-y-2">
-            {filtered.map((c: any) => {
+            {recentTenants.map((c: any) => {
               const tierConfig = TIER_CONFIG[c.subscriptionTier as keyof typeof TIER_CONFIG];
               return (
                 <Link key={c.id} href={`/admin/companies/${c.id}`}>
-                  <Card className="hover-elevate cursor-pointer" data-testid={`card-company-${c.id}`}>
+                  <Card className="hover-elevate cursor-pointer" data-testid={`card-recent-${c.id}`}>
                     <CardContent className="py-3 px-4">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
                           <div className="min-w-0">
-                            <p className="font-medium truncate" data-testid={`text-company-name-${c.id}`}>{c.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{c.id}</p>
+                            <p className="font-medium truncate">{c.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{c.email || c.id}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 flex-wrap">
-                          <Badge className={tierColors[c.subscriptionTier] || ""} data-testid={`badge-tier-${c.id}`}>
+                          <Badge className={tierColors[c.subscriptionTier] || ""}>
                             {tierConfig?.name || c.subscriptionTier}
                           </Badge>
-                          <Badge variant="outline" data-testid={`badge-status-${c.id}`}>
-                            {c.subscriptionStatus}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">{c.userCount} users</span>
-                          <span className="text-xs text-muted-foreground">{c.contactCount} contacts</span>
+                          <Badge variant="outline">{c.subscriptionStatus}</Badge>
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         </div>
                       </div>
@@ -181,86 +150,6 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
-
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent data-testid="dialog-create-tenant">
-          <DialogHeader>
-            <DialogTitle>Create New Tenant</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="companyName">Company Name</Label>
-              <Input
-                id="companyName"
-                placeholder="e.g. Green Scoopers LLC"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                data-testid="input-company-name"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="ownerFirstName">Owner First Name</Label>
-                <Input
-                  id="ownerFirstName"
-                  placeholder="Jane"
-                  value={ownerFirstName}
-                  onChange={(e) => setOwnerFirstName(e.target.value)}
-                  data-testid="input-owner-first-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ownerLastName">Owner Last Name</Label>
-                <Input
-                  id="ownerLastName"
-                  placeholder="Doe"
-                  value={ownerLastName}
-                  onChange={(e) => setOwnerLastName(e.target.value)}
-                  data-testid="input-owner-last-name"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="ownerEmail">Owner Email</Label>
-              <Input
-                id="ownerEmail"
-                type="email"
-                placeholder="owner@example.com"
-                value={ownerEmail}
-                onChange={(e) => setOwnerEmail(e.target.value)}
-                data-testid="input-owner-email"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="tier">Subscription Tier</Label>
-              <Select value={selectedTier} onValueChange={setSelectedTier}>
-                <SelectTrigger data-testid="select-tier">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(TIER_CONFIG).map(([key, cfg]) => (
-                    <SelectItem key={key} value={key} data-testid={`select-item-${key}`}>
-                      {cfg.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)} data-testid="button-cancel-create">
-              Cancel
-            </Button>
-            <Button
-              onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending || !companyName || !ownerEmail || !ownerFirstName}
-              data-testid="button-submit-create-tenant"
-            >
-              {createMutation.isPending ? "Creating..." : "Create Tenant"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

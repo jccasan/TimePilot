@@ -35,6 +35,7 @@ import Communications from "@/pages/communications";
 import Reports from "@/pages/reports";
 import Analytics from "@/pages/analytics";
 import AdminDashboard from "@/pages/admin-dashboard";
+import AdminTenants from "@/pages/admin-tenants";
 import AdminCompanyDetail from "@/pages/admin-company-detail";
 import AdminAnalytics from "@/pages/admin-analytics";
 import AdminLogin from "@/pages/admin-login";
@@ -249,8 +250,27 @@ function TechnicianLayout() {
   );
 }
 
+function AdminSidebarLink({ href, icon: Icon, label, location }: { href: string; icon: any; label: string; location: string }) {
+  const isActive = location === href || (href !== "/admin" && location.startsWith(href));
+  return (
+    <WouterLink
+      href={href}
+      className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
+        isActive
+          ? "bg-primary/10 text-primary font-medium"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      }`}
+      data-testid={`link-admin-${label.toLowerCase().replace(/\s/g, "-")}`}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </WouterLink>
+  );
+}
+
 function AdminLayout() {
   const { isAuthenticated, isLoading, mustChangePassword, logout } = useAdminAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   if (isLoading) {
     return (
@@ -271,51 +291,74 @@ function AdminLayout() {
   const [location] = useLocation();
 
   return (
-    <div className="flex flex-col h-screen">
-      <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
-        <div className="flex items-center gap-1">
-          <WouterLink
-            href="/admin"
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors ${
-              location === "/admin" ? "bg-muted font-medium" : "text-muted-foreground"
-            }`}
-            data-testid="link-admin-overview"
-          >
-            <Home className="h-4 w-4" />
-            Overview
-          </WouterLink>
-          <WouterLink
-            href="/admin/analytics"
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors ${
-              location === "/admin/analytics" ? "bg-muted font-medium" : "text-muted-foreground"
-            }`}
-            data-testid="link-admin-analytics"
-          >
-            <BarChart3 className="h-4 w-4" />
-            Analytics
-          </WouterLink>
+    <div className="flex h-screen">
+      <aside className={`${sidebarOpen ? "w-56" : "w-0 overflow-hidden"} transition-all duration-200 border-r bg-background flex flex-col shrink-0`}>
+        <div className="p-4 border-b">
+          <div className="flex items-center gap-2">
+            <img src={logoSquare} alt="ScooPilot" className="h-7 w-7 rounded" />
+            <div>
+              <p className="font-semibold text-sm leading-tight">ScooPilot</p>
+              <p className="text-[10px] text-muted-foreground leading-tight">Administration</p>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <ThemeToggle />
+
+        <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">Platform</p>
+            <div className="space-y-1">
+              <AdminSidebarLink href="/admin" icon={Home} label="Overview" location={location} />
+              <AdminSidebarLink href="/admin/analytics" icon={BarChart3} label="Analytics" location={location} />
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">Management</p>
+            <div className="space-y-1">
+              <AdminSidebarLink href="/admin/tenants" icon={Building2} label="Tenants" location={location} />
+            </div>
+          </div>
+        </nav>
+
+        <div className="p-3 border-t">
           <Button
             variant="ghost"
-            size="icon"
+            size="sm"
+            className="w-full justify-start text-muted-foreground"
             onClick={() => logout()}
             data-testid="button-admin-logout"
           >
-            <LogOut />
+            <LogOut className="h-4 w-4 mr-2" />
+            Log Out
           </Button>
         </div>
-      </header>
-      <main className="flex-1 overflow-auto">
-        <Switch>
-          <Route path="/admin" component={AdminDashboard} />
-          <Route path="/admin/analytics" component={AdminAnalytics} />
-          <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
-          <Route path="/admin/login">{() => { window.location.href = "/admin"; return null; }}</Route>
-          <Route component={NotFound} />
-        </Switch>
-      </main>
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="flex items-center justify-between gap-2 px-4 py-2 border-b sticky top-0 z-50 bg-background">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            data-testid="button-admin-sidebar-toggle"
+            aria-label="Toggle sidebar"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+          </div>
+        </header>
+        <main className="flex-1 overflow-auto">
+          <Switch>
+            <Route path="/admin" component={AdminDashboard} />
+            <Route path="/admin/tenants" component={AdminTenants} />
+            <Route path="/admin/analytics" component={AdminAnalytics} />
+            <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
+            <Route path="/admin/login">{() => { window.location.href = "/admin"; return null; }}</Route>
+            <Route component={NotFound} />
+          </Switch>
+        </main>
+      </div>
     </div>
   );
 }

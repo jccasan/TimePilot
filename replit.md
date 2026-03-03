@@ -39,7 +39,7 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **Mobile View**: Dedicated mobile-optimized views for field technicians.
 - **Technician Layout**: Role-based UI for technicians showing only Routes (with scheduled/completed/cancelled status tracking per day) and Clients (read-only searchable list). Technicians with role="tech" are automatically routed to this simplified interface. Visit statuses persist in localStorage keyed by day+date.
 - **Client Portal**: Separate authentication (email + password) and UI for client self-service, allowing clients to view schedules, past visits, invoices, manage service pauses, and contact the business owner via email. Temporary passwords are emailed via SendGrid when portal access is granted.
-- **Admin Dashboard**: A platform-level administration interface for managing tenant accounts, subscriptions, and platform-wide statistics. Includes a "Create Tenant" feature (`POST /api/admin/companies`) that provisions a new company with an owner account, sends welcome email with temp credentials, and seeds default lead sources.
+- **Admin Dashboard**: A platform-level administration hub with sidebar navigation (Overview, Analytics, Tenants). Overview page shows platform stats and quick-action cards. Dedicated Tenants page for full tenant management with search, create dialog (`POST /api/admin/companies`), and tier badges. Analytics page for revenue metrics and growth trends. Provisions new companies with owner accounts, sends welcome email with temp credentials, and seeds default lead sources.
 - **Notifications System**: In-app notifications for various business events, with a bell icon and unread count in the UI.
 
 ### Key Features
