@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ClipboardList, Calendar, MapPin, FileText, ExternalLink, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,15 +17,27 @@ const features = [
 ];
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "change-password">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isRegister = mode === "register";
+
+  const { data: existingUser } = useQuery<{ mustChangePassword?: boolean } | null>({
+    queryKey: ["/api/auth/user"],
+  });
+
+  useEffect(() => {
+    if (existingUser?.mustChangePassword && mode !== "change-password") {
+      setMode("change-password");
+    }
+  }, [existingUser]);
 
   const loginMutation = useMutation({
     mutationFn: async () => {
@@ -45,10 +57,42 @@ export default function AuthPage() {
       if (data.sessionToken) {
         localStorage.setItem("sessionToken", data.sessionToken);
       }
+      if (data.mustChangePassword) {
+        setMode("change-password");
+        return;
+      }
       queryClient.setQueryData(["/api/auth/user"], data);
     },
     onError: (error: Error) => {
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("sessionToken");
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ newPassword }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to change password");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Password changed", description: "Your new password has been set." });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      window.location.href = "/";
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -109,7 +153,7 @@ export default function AuthPage() {
     }
   };
 
-  const isPending = loginMutation.isPending || registerMutation.isPending || forgotMutation.isPending;
+  const isPending = loginMutation.isPending || registerMutation.isPending || forgotMutation.isPending || changePasswordMutation.isPending;
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -123,7 +167,56 @@ export default function AuthPage() {
             Professional Pet Waste Removal Management
           </p>
 
-          {mode === "forgot" ? (
+          {mode === "change-password" ? (
+            <div className="space-y-4">
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-4 space-y-1">
+                <p className="font-medium">Set a new password</p>
+                <p className="text-sm text-muted-foreground">Your account requires a password change before you can continue.</p>
+              </div>
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (newPassword !== confirmPassword) {
+                  toast({ title: "Passwords don't match", variant: "destructive" });
+                  return;
+                }
+                if (newPassword.length < 8) {
+                  toast({ title: "Password must be at least 8 characters", variant: "destructive" });
+                  return;
+                }
+                changePasswordMutation.mutate();
+              }} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="newPassword">New Password</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    required
+                    minLength={8}
+                    data-testid="input-new-password"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm your new password"
+                    required
+                    minLength={8}
+                    data-testid="input-confirm-password"
+                  />
+                </div>
+                <Button type="submit" size="lg" className="w-full" disabled={isPending} data-testid="button-set-new-password">
+                  {isPending ? "Setting password..." : "Set New Password"}
+                </Button>
+              </form>
+            </div>
+          ) : mode === "forgot" ? (
             forgotSent ? (
               <div className="space-y-4">
                 <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-center space-y-2">

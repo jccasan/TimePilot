@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { registerUser, loginUser, getUserById, createPasswordResetToken, resetPasswordWithToken } from "./services/app-auth";
+import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
 import { sendEmail, generateInvoiceEmailHtml } from "./services/email";
 import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
@@ -43,23 +43,34 @@ import {
   insertServicePackageSchema,
 } from "@shared/schema";
 
+const CHANGE_PASSWORD_EXEMPT_PATHS = ["/api/auth/change-password", "/api/auth/user", "/api/auth/logout"];
+
 const isAuthenticated: RequestHandler = async (req, res, next) => {
-  if ((req.session as any)?.userId) {
-    return next();
-  }
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    const sessionRow = await db.execute(sql`SELECT sess FROM sessions WHERE sid = ${token} AND expire > NOW()`);
-    if (sessionRow.rows.length > 0) {
-      const sess = sessionRow.rows[0].sess as any;
-      if (sess?.userId) {
-        (req.session as any).userId = sess.userId;
-        return next();
+  let userId = (req.session as any)?.userId;
+  if (!userId) {
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      const sessionRow = await db.execute(sql`SELECT sess FROM sessions WHERE sid = ${token} AND expire > NOW()`);
+      if (sessionRow.rows.length > 0) {
+        const sess = sessionRow.rows[0].sess as any;
+        if (sess?.userId) {
+          userId = sess.userId;
+          (req.session as any).userId = userId;
+        }
       }
     }
   }
-  return res.status(401).json({ message: "Unauthorized" });
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  if (!CHANGE_PASSWORD_EXEMPT_PATHS.includes(req.path)) {
+    const user = await getUserById(userId);
+    if (user?.mustChangePassword) {
+      return res.status(403).json({ error: "Password change required", mustChangePassword: true });
+    }
+  }
+  return next();
 };
 
 async function getCompanyContext(req: Request) {
@@ -384,6 +395,20 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/auth/change-password", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any)?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { newPassword } = req.body;
+      if (!newPassword) return res.status(400).json({ error: "New password is required" });
+      const result = await changePassword(userId, newPassword);
+      if ("error" in result) {
+        return res.status(400).json({ error: result.error });
+      }
+      return res.json({ message: "Password changed successfully" });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Setup / Onboarding ================
 
   async function ensureCompanySetup(userId: string): Promise<{ companyId: string; alreadySetup: boolean }> {
@@ -444,18 +469,100 @@ export async function registerRoutes(
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
-      const { userId: targetUserId, targetRole } = req.body;
-      if (!targetUserId) return res.status(400).json({ error: "userId is required" });
+      const { email, firstName, lastName, role: targetRole } = req.body;
+      if (!email) return res.status(400).json({ error: "Email is required" });
+      if (!firstName) return res.status(400).json({ error: "First name is required" });
       const validRoles = ["admin", "tech"];
       if (!validRoles.includes(targetRole || "tech")) {
         return res.status(400).json({ error: "Invalid role" });
       }
-      const existingMembership = await storage.getCompanyUser(companyId, targetUserId);
-      if (existingMembership) {
-        return res.status(409).json({ error: "User is already a member" });
+
+      const company = await storage.getCompany(companyId);
+      const companyUsersList = await storage.getCompanyUsers(companyId);
+      const activeCount = companyUsersList.filter(cu => cu.isActive).length;
+      const tier = company?.subscriptionTier || "tier_1";
+      const tierConfig = (await import("@shared/schema")).TIER_CONFIG;
+      const maxUsers = tierConfig[tier as keyof typeof tierConfig]?.maxUsers || 1;
+      if (activeCount >= maxUsers) {
+        return res.status(400).json({ error: `Seat limit reached (${activeCount}/${maxUsers}). Upgrade your plan to add more team members.` });
       }
-      const cu = await storage.addUserToCompany(targetUserId, companyId, targetRole || "tech");
-      res.json(cu);
+
+      let existingUser = await getUserByEmail(email);
+      let tempPassword: string | null = null;
+
+      if (existingUser) {
+        const existingMembership = await storage.getCompanyUser(companyId, existingUser.id);
+        if (existingMembership && existingMembership.isActive) {
+          return res.status(409).json({ error: "This user is already a team member" });
+        }
+        if (existingMembership && !existingMembership.isActive) {
+          await storage.updateCompanyUser(existingMembership.id, { isActive: true, role: targetRole || "tech" });
+        } else {
+          await storage.addUserToCompany(existingUser.id, companyId, targetRole || "tech");
+        }
+      } else {
+        const crypto = await import("crypto");
+        tempPassword = crypto.randomBytes(6).toString("base64url");
+        existingUser = await createUserWithTempPassword(email, firstName, lastName || "", tempPassword);
+        await storage.addUserToCompany(existingUser.id, companyId, targetRole || "tech");
+      }
+
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host || "localhost:5000";
+      const appUrl = `${protocol}://${host}/auth`;
+      const companyName = company?.name || "your company";
+
+      if (tempPassword) {
+        await sendEmail({
+          to: email,
+          subject: `You've been invited to ${companyName} on ScooPilot`,
+          text: `Hi ${firstName},\n\nYou've been added as a ${targetRole || "tech"} on ${companyName}'s ScooPilot account.\n\nLog in at: ${appUrl}\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.\n\nFor the best experience on your phone, open the link above and install the app when prompted.`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">ScooPilot</h1>
+              </div>
+              <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                <h2 style="margin-top: 0;">Welcome to ${companyName}!</h2>
+                <p>Hi ${firstName},</p>
+                <p>You've been added as a <strong>${targetRole || "technician"}</strong> on ${companyName}'s ScooPilot account.</p>
+                <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 4px 0;"><strong>Email:</strong> ${email}</p>
+                  <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+                </div>
+                <div style="text-align: center; margin: 24px 0;">
+                  <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
+                </div>
+                <p style="color: #6b7280; font-size: 14px;">You'll be asked to set a new password when you first log in.</p>
+                <p style="color: #6b7280; font-size: 14px;">For the best experience on your phone, open the app and tap "Install" when prompted.</p>
+              </div>
+            </div>
+          `,
+        });
+      } else {
+        await sendEmail({
+          to: email,
+          subject: `You've been added to ${companyName} on ScooPilot`,
+          text: `Hi ${firstName},\n\nYou've been added as a ${targetRole || "tech"} on ${companyName}'s ScooPilot account. Log in with your existing credentials at: ${appUrl}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">ScooPilot</h1>
+              </div>
+              <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                <h2 style="margin-top: 0;">You've been added to ${companyName}</h2>
+                <p>Hi ${firstName},</p>
+                <p>You've been added as a <strong>${targetRole || "technician"}</strong>. Log in with your existing credentials.</p>
+                <div style="text-align: center; margin: 24px 0;">
+                  <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
+                </div>
+              </div>
+            </div>
+          `,
+        });
+      }
+
+      res.json({ success: true, userId: existingUser.id, email, role: targetRole || "tech" });
     } catch (err) { handleError(res, err); }
   });
 
@@ -506,6 +613,32 @@ export async function registerRoutes(
         })
       );
       res.json(teamMembers);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/company/team/:userId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role, userId: currentUserId } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const targetUserId = req.params.userId;
+      if (targetUserId === currentUserId) {
+        return res.status(400).json({ error: "You cannot remove yourself" });
+      }
+      const membership = await storage.getCompanyUser(companyId, targetUserId);
+      if (!membership) {
+        return res.status(404).json({ error: "Team member not found" });
+      }
+      if (membership.role === "owner") {
+        return res.status(400).json({ error: "Cannot remove the company owner" });
+      }
+      await storage.updateCompanyUser(membership.id, { isActive: false });
+      const routes = await storage.getRoutes(companyId);
+      for (const route of routes) {
+        if (route.technicianId === targetUserId) {
+          await storage.updateRoute(route.id, { technicianId: null });
+        }
+      }
+      res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
 

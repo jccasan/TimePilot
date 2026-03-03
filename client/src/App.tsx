@@ -369,6 +369,10 @@ function AppContent() {
     return <AuthPage />;
   }
 
+  if (user?.mustChangePassword) {
+    return <AuthPage />;
+  }
+
   if (user?.role === "tech") {
     return <TechnicianLayout />;
   }

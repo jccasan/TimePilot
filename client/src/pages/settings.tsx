@@ -116,11 +116,21 @@ export default function Settings() {
   const [isImporting, setIsImporting] = useState(false);
   const [newLeadSourceName, setNewLeadSourceName] = useState("");
   const [importStep, setImportStep] = useState<"idle" | "mapping" | "review">("idle");
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteFirstName, setInviteFirstName] = useState("");
+  const [inviteLastName, setInviteLastName] = useState("");
+  const [inviteRole, setInviteRole] = useState("tech");
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [rawCsvRows, setRawCsvRows] = useState<string[][]>([]);
   const [settingsColumnMapping, setSettingsColumnMapping] = useState<ColumnMapping[]>([]);
   const [settingsNewLeadSources, setSettingsNewLeadSources] = useState<string[]>([]);
   const [isValidating, setIsValidating] = useState(false);
+
+  const { data: currentUser } = useQuery<{ id: string; role?: string }>({
+    queryKey: ["/api/auth/user"],
+  });
 
   const { data: company, isLoading: loadingCompany } = useQuery<Company>({
     queryKey: ["/api/company"],
@@ -146,6 +156,40 @@ export default function Settings() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to add lead source.", variant: "destructive" });
+    },
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: async (data: { email: string; firstName: string; lastName: string; role: string }) => {
+      const res = await apiRequest("POST", "/api/company/invite", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/team"] });
+      setInviteDialogOpen(false);
+      setInviteEmail("");
+      setInviteFirstName("");
+      setInviteLastName("");
+      setInviteRole("tech");
+      toast({ title: "Team member invited", description: "An email with login credentials has been sent." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to invite", description: err.message || "Something went wrong", variant: "destructive" });
+    },
+  });
+
+  const removeMemberMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("DELETE", `/api/company/team/${userId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/team"] });
+      setRemovingMemberId(null);
+      toast({ title: "Team member removed" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to remove", description: err.message || "Something went wrong", variant: "destructive" });
     },
   });
 
@@ -405,6 +449,14 @@ export default function Settings() {
                     {team?.length || 0} / {tierInfo?.maxUsers || 1} seats used
                   </CardDescription>
                 </div>
+                <Button
+                  size="sm"
+                  onClick={() => setInviteDialogOpen(true)}
+                  data-testid="button-invite-team-member"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Invite Team Member
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -417,6 +469,7 @@ export default function Settings() {
                 <div className="space-y-3">
                   {team?.map((member) => {
                     const RoleIcon = roleIcons[member.role] || Wrench;
+                    const canRemove = member.id !== currentUser?.id && member.role !== "owner";
                     return (
                       <div
                         key={member.companyUserId}
@@ -442,6 +495,17 @@ export default function Settings() {
                           <RoleIcon className="h-3 w-3" />
                           {roleLabels[member.role] || member.role}
                         </Badge>
+                        {canRemove && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => setRemovingMemberId(member.id)}
+                            data-testid={`button-remove-member-${member.id}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     );
                   })}
@@ -807,6 +871,90 @@ export default function Settings() {
                 </Button>
               </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite Team Member</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">First Name</label>
+                <Input
+                  value={inviteFirstName}
+                  onChange={(e) => setInviteFirstName(e.target.value)}
+                  placeholder="First name"
+                  data-testid="input-invite-first-name"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Last Name</label>
+                <Input
+                  value={inviteLastName}
+                  onChange={(e) => setInviteLastName(e.target.value)}
+                  placeholder="Last name"
+                  data-testid="input-invite-last-name"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="email@example.com"
+                data-testid="input-invite-email"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Role</label>
+              <Select value={inviteRole} onValueChange={setInviteRole}>
+                <SelectTrigger data-testid="select-invite-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tech">Technician</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInviteDialogOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!inviteEmail || !inviteFirstName || inviteMutation.isPending}
+              onClick={() => inviteMutation.mutate({ email: inviteEmail, firstName: inviteFirstName, lastName: inviteLastName, role: inviteRole })}
+              data-testid="button-confirm-invite"
+            >
+              {inviteMutation.isPending ? "Sending..." : "Send Invite"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!removingMemberId} onOpenChange={(open) => !open && setRemovingMemberId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Team Member</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Are you sure you want to remove this team member? They will lose access to the company and be unassigned from any routes.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemovingMemberId(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={removeMemberMutation.isPending}
+              onClick={() => removingMemberId && removeMemberMutation.mutate(removingMemberId)}
+              data-testid="button-confirm-remove-member"
+            >
+              {removeMemberMutation.isPending ? "Removing..." : "Remove"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

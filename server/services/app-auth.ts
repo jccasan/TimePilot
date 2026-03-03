@@ -86,6 +86,32 @@ export async function createPasswordResetToken(email: string): Promise<{ token: 
   return { token };
 }
 
+export async function createUserWithTempPassword(email: string, firstName: string, lastName: string, tempPassword: string) {
+  const passwordHash = await hashPassword(tempPassword);
+  const [user] = await db.insert(users).values({
+    email: email.toLowerCase(),
+    passwordHash,
+    firstName: firstName || null,
+    lastName: lastName || null,
+    mustChangePassword: true,
+  }).returning();
+  return user;
+}
+
+export async function getUserByEmail(email: string) {
+  const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+  return user || null;
+}
+
+export async function changePassword(userId: string, newPassword: string): Promise<{ success: boolean } | { error: string }> {
+  if (!newPassword || newPassword.length < 8) return { error: "Password must be at least 8 characters" };
+  const passwordHash = await hashPassword(newPassword);
+  await db.update(users)
+    .set({ passwordHash, mustChangePassword: false, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+  return { success: true };
+}
+
 export async function resetPasswordWithToken(token: string, newPassword: string): Promise<{ success: boolean } | { error: string }> {
   if (!token || !newPassword) return { error: "Token and new password are required" };
   if (newPassword.length < 8) return { error: "Password must be at least 8 characters" };
