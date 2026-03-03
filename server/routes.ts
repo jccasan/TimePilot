@@ -337,7 +337,7 @@ export async function registerRoutes(
         const host = req.headers.host || "localhost:5000";
         const resetUrl = `${protocol}://${host}/reset-password?token=${result.token}`;
 
-        await sendEmail({
+        const emailResult = await sendEmail({
           to: email,
           subject: "Reset your ScooPilot password",
           text: `You requested a password reset. Click the link below to set a new password:\n\n${resetUrl}\n\nThis link expires in 1 hour. If you didn't request this, you can safely ignore this email.`,
@@ -358,6 +358,11 @@ export async function registerRoutes(
             </div>
           `,
         });
+        if (!emailResult.success) {
+          console.error("[Password Reset] Failed to send email:", emailResult.error);
+        } else {
+          console.log("[Password Reset] Email sent successfully to:", email);
+        }
       }
 
       return res.json({ message: "If an account exists with that email, a password reset link has been sent." });
