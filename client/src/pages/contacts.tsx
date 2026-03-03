@@ -35,7 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Download, Upload, FileDown } from "lucide-react";
+import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { DialogFooter } from "@/components/ui/dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 const statusColors: Record<string, string> = {
@@ -67,11 +68,23 @@ const contactFormSchema = z.object({
 
 type ContactFormValues = z.infer<typeof contactFormSchema>;
 
+type ValidationResult = {
+  totalRows: number;
+  validCount: number;
+  invalidCount: number;
+  issues: { row: number; field: string; message: string }[];
+  newLeadSources: string[];
+  headers: string[];
+};
+
 export default function Contacts() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [csvPreview, setCsvPreview] = useState<{ validation: ValidationResult; csvText: string } | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const queryParams = new URLSearchParams();
   if (statusFilter !== "all") queryParams.set("status", statusFilter);
@@ -80,6 +93,10 @@ export default function Contacts() {
 
   const { data: contacts, isLoading } = useQuery<Contact[]>({
     queryKey: ["/api/contacts" + (queryString ? `?${queryString}` : "")],
+  });
+
+  const { data: leadSources = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/lead-sources"],
   });
 
   const form = useForm<ContactFormValues>({
@@ -128,30 +145,29 @@ export default function Contacts() {
             <Download className="mr-1 h-4 w-4" />
             Export
           </Button>
-          <Button variant="outline" size="sm" onClick={() => {
+          <Button variant="outline" size="sm" disabled={isValidating} onClick={() => {
             const input = document.createElement("input");
             input.type = "file";
             input.accept = ".csv";
             input.onchange = async (e) => {
               const file = (e.target as HTMLInputElement).files?.[0];
               if (!file) return;
+              setIsValidating(true);
               try {
                 const text = await file.text();
-                const res = await apiRequest("POST", "/api/contacts/import/csv", { csv: text });
-                const result = await res.json();
-                queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-                toast({
-                  title: "Import complete",
-                  description: `${result.imported} contact${result.imported !== 1 ? "s" : ""} imported.${result.errors?.length ? ` ${result.errors.length} row(s) had issues.` : ""}`,
-                });
+                const res = await apiRequest("POST", "/api/contacts/validate-csv", { csv: text });
+                const validation = await res.json();
+                setCsvPreview({ validation, csvText: text });
               } catch (err: any) {
-                toast({ title: "Import failed", description: err.message, variant: "destructive" });
+                toast({ title: "Validation failed", description: err.message, variant: "destructive" });
+              } finally {
+                setIsValidating(false);
               }
             };
             input.click();
           }} data-testid="button-import-csv">
             <Upload className="mr-1 h-4 w-4" />
-            Import
+            {isValidating ? "Validating..." : "Import"}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => window.open("/api/contacts/sample-csv", "_blank")} data-testid="button-download-sample-csv">
             <FileDown className="mr-1 h-4 w-4" />
@@ -374,13 +390,9 @@ export default function Contacts() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="referral">Referral</SelectItem>
-                            <SelectItem value="facebook">Facebook</SelectItem>
-                            <SelectItem value="google">Google</SelectItem>
-                            <SelectItem value="bing">Bing</SelectItem>
-                            <SelectItem value="nextdoor">NextDoor</SelectItem>
-                            <SelectItem value="yard_sign">Yard Sign</SelectItem>
-                            <SelectItem value="local_advertising">Local Advertising</SelectItem>
+                            {leadSources.map((source) => (
+                              <SelectItem key={source.id} value={source.name}>{source.name}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -526,6 +538,95 @@ export default function Contacts() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={!!csvPreview} onOpenChange={(open) => { if (!open) setCsvPreview(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Import Preview</DialogTitle>
+          </DialogHeader>
+          {csvPreview && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <div>
+                    <p className="text-sm font-medium">{csvPreview.validation.validCount} valid</p>
+                    <p className="text-xs text-muted-foreground">rows ready to import</p>
+                  </div>
+                </div>
+                {csvPreview.validation.invalidCount > 0 && (
+                  <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    <div>
+                      <p className="text-sm font-medium">{csvPreview.validation.invalidCount} invalid</p>
+                      <p className="text-xs text-muted-foreground">rows will be skipped</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {csvPreview.validation.issues.length > 0 && (
+                <div className="border rounded-md p-3 space-y-1">
+                  <p className="text-sm font-medium text-destructive">Issues Found</p>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {csvPreview.validation.issues.map((issue, idx) => (
+                      <p key={idx} className="text-xs text-muted-foreground">
+                        Row {issue.row}: {issue.message}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {csvPreview.validation.newLeadSources.length > 0 && (
+                <div className="border rounded-md p-3 space-y-1 border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-400">New Lead Sources</p>
+                  <p className="text-xs text-muted-foreground">The following lead sources are not in your list and will be added automatically:</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {csvPreview.validation.newLeadSources.map((s) => (
+                      <Badge key={s} variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-300">{s}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setCsvPreview(null)} data-testid="button-cancel-import">
+              Cancel
+            </Button>
+            <Button
+              disabled={isImporting || (csvPreview?.validation.validCount === 0)}
+              onClick={async () => {
+                if (!csvPreview) return;
+                setIsImporting(true);
+                try {
+                  const res = await apiRequest("POST", "/api/contacts/import/csv", { csv: csvPreview.csvText });
+                  const result = await res.json();
+                  queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/lead-sources"] });
+                  let description = `${result.imported} contact${result.imported !== 1 ? "s" : ""} imported successfully.`;
+                  if (result.addedLeadSources?.length) {
+                    description += ` ${result.addedLeadSources.length} new lead source${result.addedLeadSources.length !== 1 ? "s" : ""} added: ${result.addedLeadSources.join(", ")}.`;
+                  }
+                  if (result.errors?.length) {
+                    description += ` ${result.errors.length} row(s) had issues.`;
+                  }
+                  toast({ title: "Import complete", description });
+                  setCsvPreview(null);
+                } catch (err: any) {
+                  toast({ title: "Import failed", description: err.message, variant: "destructive" });
+                } finally {
+                  setIsImporting(false);
+                }
+              }}
+              data-testid="button-confirm-import"
+            >
+              {isImporting ? "Importing..." : `Import ${csvPreview?.validation.validCount || 0} Contacts`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

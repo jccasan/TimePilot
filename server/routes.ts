@@ -378,6 +378,12 @@ export async function registerRoutes(
       subscriptionStatus: "active",
     });
     await storage.addUserToCompany(userId, company.id, "owner");
+
+    const defaultLeadSources = ["Referral", "Nextdoor", "Facebook", "Yelp", "Instagram", "Google Ad", "Organic Search", "Bing", "Yard Sign", "Local Advertising"];
+    for (const name of defaultLeadSources) {
+      await storage.createLeadSource({ companyId: company.id, name });
+    }
+
     return { companyId: company.id, alreadySetup: false };
   }
 
@@ -837,6 +843,72 @@ export async function registerRoutes(
     res.send(sampleRows.join("\n"));
   });
 
+  app.post("/api/contacts/validate-csv", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const csvText = typeof req.body === "string" ? req.body : req.body?.csv;
+      if (!csvText) return res.status(400).json({ error: "No CSV data provided" });
+
+      function parseCsvLine(line: string): string[] {
+        const result: string[] = [];
+        let current = "";
+        let inQuotes = false;
+        for (let j = 0; j < line.length; j++) {
+          const ch = line[j];
+          if (inQuotes) {
+            if (ch === '"' && line[j + 1] === '"') { current += '"'; j++; }
+            else if (ch === '"') { inQuotes = false; }
+            else { current += ch; }
+          } else {
+            if (ch === '"') { inQuotes = true; }
+            else if (ch === ',') { result.push(current.trim()); current = ""; }
+            else { current += ch; }
+          }
+        }
+        result.push(current.trim());
+        return result;
+      }
+
+      const lines = csvText.split(/\r?\n/).filter((l: string) => l.trim());
+      if (lines.length < 2) return res.status(400).json({ error: "CSV must have headers and at least one row" });
+
+      const headers = parseCsvLine(lines[0]).map((h: string) => h.replace(/"/g, "").trim());
+      const existingSources = await storage.getLeadSources(companyId);
+      const sourceNames = new Set(existingSources.map(s => s.name.toLowerCase()));
+
+      const rows: any[] = [];
+      const issues: { row: number; field: string; message: string }[] = [];
+      const newLeadSources: string[] = [];
+      const newLeadSourceSet = new Set<string>();
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseCsvLine(lines[i]);
+        const row: any = {};
+        headers.forEach((h: string, idx: number) => { row[h] = values[idx] || ""; });
+        row._row = i + 1;
+
+        if (!row.firstName) issues.push({ row: i + 1, field: "firstName", message: "Missing first name" });
+        if (!row.lastName) issues.push({ row: i + 1, field: "lastName", message: "Missing last name" });
+
+        if (row.leadSource && !sourceNames.has(row.leadSource.toLowerCase()) && !newLeadSourceSet.has(row.leadSource.toLowerCase())) {
+          newLeadSources.push(row.leadSource);
+          newLeadSourceSet.add(row.leadSource.toLowerCase());
+        }
+
+        if (row.numberOfDogs && isNaN(parseInt(row.numberOfDogs, 10))) {
+          issues.push({ row: i + 1, field: "numberOfDogs", message: `Invalid number: "${row.numberOfDogs}"` });
+        }
+
+        rows.push(row);
+      }
+
+      const validCount = rows.filter(r => r.firstName && r.lastName).length;
+      const invalidCount = rows.length - validCount;
+
+      res.json({ totalRows: rows.length, validCount, invalidCount, issues, newLeadSources, headers });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/contacts/import/csv", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -869,6 +941,10 @@ export async function registerRoutes(
       const headers = parseCsvLine(lines[0]).map((h: string) => h.replace(/"/g, "").trim());
       const imported: any[] = [];
       const errors: string[] = [];
+      const addedLeadSources: string[] = [];
+
+      const existingSources = await storage.getLeadSources(companyId);
+      const sourceNames = new Set(existingSources.map(s => s.name.toLowerCase()));
 
       for (let i = 1; i < lines.length; i++) {
         const values = parseCsvLine(lines[i]);
@@ -878,6 +954,12 @@ export async function registerRoutes(
         if (!row.firstName || !row.lastName) {
           errors.push(`Row ${i + 1}: missing firstName or lastName, skipped`);
           continue;
+        }
+
+        if (row.leadSource && !sourceNames.has(row.leadSource.toLowerCase())) {
+          await storage.createLeadSource({ companyId, name: row.leadSource });
+          sourceNames.add(row.leadSource.toLowerCase());
+          addedLeadSources.push(row.leadSource);
         }
 
         try {
@@ -921,7 +1003,7 @@ export async function registerRoutes(
         }
       }
 
-      res.status(201).json({ imported: imported.length, errors, contacts: imported });
+      res.status(201).json({ imported: imported.length, errors, addedLeadSources, contacts: imported });
     } catch (err) { handleError(res, err); }
   });
 
@@ -1032,6 +1114,36 @@ export async function registerRoutes(
     try {
       await getCompanyContext(req);
       await storage.deleteTag(req.params.id);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Lead Source Routes ================
+
+  app.get("/api/lead-sources", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const sources = await storage.getLeadSources(companyId);
+      res.json(sources);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/lead-sources", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { name } = req.body;
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ error: "Name is required" });
+      }
+      const source = await storage.createLeadSource({ companyId, name: name.trim() });
+      res.status(201).json(source);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/lead-sources/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      await getCompanyContext(req);
+      await storage.deleteLeadSource(req.params.id);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });

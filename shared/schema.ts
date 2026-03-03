@@ -119,6 +119,15 @@ export const contactTags = pgTable("contact_tags", {
   unique().on(table.contactId, table.tagId),
 ]);
 
+export const leadSources = pgTable("lead_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 100 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique().on(table.companyId, table.name),
+]);
+
 export const properties = pgTable("properties", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
@@ -482,6 +491,7 @@ export const insertCompanySchema = createInsertSchema(companies).omit({ id: true
 export const insertCompanyUserSchema = createInsertSchema(companyUsers).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertContactSchema = createInsertSchema(contacts).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertTagSchema = createInsertSchema(tags).omit({ id: true, createdAt: true });
+export const insertLeadSourceSchema = createInsertSchema(leadSources).omit({ id: true, createdAt: true });
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertRouteSchema = createInsertSchema(routes).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServicePlanSchema = createInsertSchema(servicePlans).omit({ id: true, createdAt: true, updatedAt: true });
@@ -502,6 +512,8 @@ export type Contact = typeof contacts.$inferSelect;
 export type InsertContact = z.infer<typeof insertContactSchema>;
 export type Tag = typeof tags.$inferSelect;
 export type InsertTag = z.infer<typeof insertTagSchema>;
+export type LeadSource = typeof leadSources.$inferSelect;
+export type InsertLeadSource = z.infer<typeof insertLeadSourceSchema>;
 export type Property = typeof properties.$inferSelect;
 export type InsertProperty = z.infer<typeof insertPropertySchema>;
 export type Route = typeof routes.$inferSelect;

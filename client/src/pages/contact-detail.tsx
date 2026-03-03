@@ -95,6 +95,10 @@ export default function ContactDetail() {
     queryKey: ["/api/tags"],
   });
 
+  const { data: leadSources = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/lead-sources"],
+  });
+
   const [editForm, setEditForm] = useState<Partial<Contact>>({});
 
   const updateMutation = useMutation({
@@ -359,13 +363,9 @@ export default function ContactDetail() {
                     <SelectValue placeholder="Lead Source" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="referral">Referral</SelectItem>
-                    <SelectItem value="facebook">Facebook</SelectItem>
-                    <SelectItem value="google">Google</SelectItem>
-                    <SelectItem value="bing">Bing</SelectItem>
-                    <SelectItem value="nextdoor">NextDoor</SelectItem>
-                    <SelectItem value="yard_sign">Yard Sign</SelectItem>
-                    <SelectItem value="local_advertising">Local Advertising</SelectItem>
+                    {leadSources.map((source) => (
+                      <SelectItem key={source.id} value={source.name}>{source.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Select

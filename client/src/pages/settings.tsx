@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { TIER_CONFIG } from "@shared/schema";
 import { useUpload } from "@/hooks/use-upload";
@@ -66,12 +67,24 @@ const roleLabels: Record<string, string> = {
   tech: "Technician",
 };
 
+type ValidationResult = {
+  totalRows: number;
+  validCount: number;
+  invalidCount: number;
+  issues: { row: number; field: string; message: string }[];
+  newLeadSources: string[];
+  headers: string[];
+};
+
 export default function Settings() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [newLeadSourceName, setNewLeadSourceName] = useState("");
+  const [csvPreview, setCsvPreview] = useState<{ validation: ValidationResult; csvText: string } | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
 
   const { data: company, isLoading: loadingCompany } = useQuery<Company>({
     queryKey: ["/api/company"],
@@ -79,6 +92,35 @@ export default function Settings() {
 
   const { data: team, isLoading: loadingTeam } = useQuery<TeamMember[]>({
     queryKey: ["/api/company/team"],
+  });
+
+  const { data: leadSources = [], isLoading: loadingLeadSources } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/lead-sources"],
+  });
+
+  const addLeadSourceMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/lead-sources", { name });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/lead-sources"] });
+      setNewLeadSourceName("");
+      toast({ title: "Lead source added" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to add lead source.", variant: "destructive" });
+    },
+  });
+
+  const deleteLeadSourceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/lead-sources/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/lead-sources"] });
+      toast({ title: "Lead source removed" });
+    },
   });
 
   const { uploadFile, isUploading } = useUpload({
@@ -420,20 +462,16 @@ export default function Settings() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    setIsImporting(true);
+                    setIsValidating(true);
                     try {
                       const text = await file.text();
-                      const res = await apiRequest("POST", "/api/contacts/import/csv", { csv: text });
-                      const result = await res.json();
-                      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-                      toast({
-                        title: "Import complete",
-                        description: `${result.imported} contact${result.imported !== 1 ? "s" : ""} imported successfully.${result.errors?.length ? ` ${result.errors.length} row(s) had issues.` : ""}`,
-                      });
+                      const res = await apiRequest("POST", "/api/contacts/validate-csv", { csv: text });
+                      const validation = await res.json();
+                      setCsvPreview({ validation, csvText: text });
                     } catch (err: any) {
-                      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+                      toast({ title: "Validation failed", description: err.message, variant: "destructive" });
                     } finally {
-                      setIsImporting(false);
+                      setIsValidating(false);
                       if (csvInputRef.current) csvInputRef.current.value = "";
                     }
                   }}
@@ -442,11 +480,11 @@ export default function Settings() {
                   variant="outline"
                   size="sm"
                   onClick={() => csvInputRef.current?.click()}
-                  disabled={isImporting}
+                  disabled={isValidating}
                   data-testid="button-import-csv"
                 >
                   <Upload className="mr-1 h-4 w-4" />
-                  {isImporting ? "Importing..." : "Import Contacts"}
+                  {isValidating ? "Validating..." : "Import Contacts"}
                 </Button>
               </div>
               <div className="border-t pt-3">
@@ -463,8 +501,159 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Info className="h-5 w-5" />
+                Lead Sources
+              </CardTitle>
+              <CardDescription>Manage the lead sources available in contact forms. These are used to track where your clients come from.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {loadingLeadSources ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {leadSources.map((source) => (
+                      <Badge key={source.id} variant="secondary" className="flex items-center gap-1 pr-1" data-testid={`badge-lead-source-${source.id}`}>
+                        {source.name}
+                        <button
+                          onClick={() => deleteLeadSourceMutation.mutate(source.id)}
+                          className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                          data-testid={`button-delete-lead-source-${source.id}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                    {leadSources.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No lead sources configured.</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newLeadSourceName}
+                      onChange={(e) => setNewLeadSourceName(e.target.value)}
+                      placeholder="Add a lead source..."
+                      className="flex-1"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newLeadSourceName.trim()) {
+                          e.preventDefault();
+                          addLeadSourceMutation.mutate(newLeadSourceName.trim());
+                        }
+                      }}
+                      data-testid="input-new-lead-source"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => newLeadSourceName.trim() && addLeadSourceMutation.mutate(newLeadSourceName.trim())}
+                      disabled={!newLeadSourceName.trim() || addLeadSourceMutation.isPending}
+                      data-testid="button-add-lead-source"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
+
+      <Dialog open={!!csvPreview} onOpenChange={(open) => { if (!open) setCsvPreview(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Import Preview</DialogTitle>
+          </DialogHeader>
+          {csvPreview && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <div>
+                    <p className="text-sm font-medium">{csvPreview.validation.validCount} valid</p>
+                    <p className="text-xs text-muted-foreground">rows ready to import</p>
+                  </div>
+                </div>
+                {csvPreview.validation.invalidCount > 0 && (
+                  <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    <div>
+                      <p className="text-sm font-medium">{csvPreview.validation.invalidCount} invalid</p>
+                      <p className="text-xs text-muted-foreground">rows will be skipped</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {csvPreview.validation.issues.length > 0 && (
+                <div className="border rounded-md p-3 space-y-1">
+                  <p className="text-sm font-medium text-destructive">Issues Found</p>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {csvPreview.validation.issues.map((issue, idx) => (
+                      <p key={idx} className="text-xs text-muted-foreground">
+                        Row {issue.row}: {issue.message}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {csvPreview.validation.newLeadSources.length > 0 && (
+                <div className="border rounded-md p-3 space-y-1 border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-400">New Lead Sources</p>
+                  <p className="text-xs text-muted-foreground">The following lead sources are not in your list and will be added automatically:</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {csvPreview.validation.newLeadSources.map((s) => (
+                      <Badge key={s} variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-300">{s}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setCsvPreview(null)} data-testid="button-cancel-import">
+              Cancel
+            </Button>
+            <Button
+              disabled={isImporting || (csvPreview?.validation.validCount === 0)}
+              onClick={async () => {
+                if (!csvPreview) return;
+                setIsImporting(true);
+                try {
+                  const res = await apiRequest("POST", "/api/contacts/import/csv", { csv: csvPreview.csvText });
+                  const result = await res.json();
+                  queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/lead-sources"] });
+                  let description = `${result.imported} contact${result.imported !== 1 ? "s" : ""} imported successfully.`;
+                  if (result.addedLeadSources?.length) {
+                    description += ` ${result.addedLeadSources.length} new lead source${result.addedLeadSources.length !== 1 ? "s" : ""} added: ${result.addedLeadSources.join(", ")}.`;
+                  }
+                  if (result.errors?.length) {
+                    description += ` ${result.errors.length} row(s) had issues.`;
+                  }
+                  toast({ title: "Import complete", description });
+                  setCsvPreview(null);
+                } catch (err: any) {
+                  toast({ title: "Import failed", description: err.message, variant: "destructive" });
+                } finally {
+                  setIsImporting(false);
+                }
+              }}
+              data-testid="button-confirm-import"
+            >
+              {isImporting ? "Importing..." : `Import ${csvPreview?.validation.validCount || 0} Contacts`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

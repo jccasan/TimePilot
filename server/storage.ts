@@ -1,7 +1,7 @@
 import { eq, and, desc, asc, sql, like, or, gte, lte, lt, inArray, count } from "drizzle-orm";
 import { db } from "./db";
 import {
-  companies, companyUsers, contacts, tags, contactTags,
+  companies, companyUsers, contacts, tags, contactTags, leadSources,
   properties, routes, servicePlans, vacationHolds,
   visits, invoices, invoiceLineItems, automationRules,
   automationEventLogs, apiKeys, webhooks, attachments,
@@ -12,6 +12,7 @@ import {
   type CompanyUser, type InsertCompanyUser,
   type Contact, type InsertContact,
   type Tag, type InsertTag,
+  type LeadSource, type InsertLeadSource,
   type Property, type InsertProperty,
   type Route, type InsertRoute,
   type ServicePlan, type InsertServicePlan,
@@ -66,6 +67,11 @@ export interface IStorage {
   addTagToContact(contactId: string, tagId: string): Promise<void>;
   removeTagFromContact(contactId: string, tagId: string): Promise<void>;
   getContactTags(contactId: string): Promise<Tag[]>;
+
+  // Lead Sources
+  getLeadSources(companyId: string): Promise<LeadSource[]>;
+  createLeadSource(data: InsertLeadSource): Promise<LeadSource>;
+  deleteLeadSource(id: string): Promise<void>;
 
   // Properties
   getProperty(id: string, companyId: string): Promise<Property | undefined>;
@@ -330,6 +336,24 @@ export class DatabaseStorage implements IStorage {
   async getContactTags(contactId: string): Promise<Tag[]> {
     const result = await db.select({ tag: tags }).from(contactTags).innerJoin(tags, eq(contactTags.tagId, tags.id)).where(eq(contactTags.contactId, contactId));
     return result.map(r => r.tag);
+  }
+
+  // ================ Lead Sources ================
+  async getLeadSources(companyId: string): Promise<LeadSource[]> {
+    return db.select().from(leadSources).where(eq(leadSources.companyId, companyId)).orderBy(leadSources.name);
+  }
+
+  async createLeadSource(data: InsertLeadSource): Promise<LeadSource> {
+    const [source] = await db.insert(leadSources).values(data).onConflictDoNothing().returning();
+    if (!source) {
+      const [existing] = await db.select().from(leadSources).where(and(eq(leadSources.companyId, data.companyId), eq(leadSources.name, data.name)));
+      return existing;
+    }
+    return source;
+  }
+
+  async deleteLeadSource(id: string): Promise<void> {
+    await db.delete(leadSources).where(eq(leadSources.id, id));
   }
 
   // ================ Properties ================
