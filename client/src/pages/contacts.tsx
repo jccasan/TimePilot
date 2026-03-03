@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Download, Upload } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 const statusColors: Record<string, string> = {
@@ -119,42 +119,11 @@ export default function Contacts() {
     },
   });
 
-  const handleExport = () => {
-    window.open("/api/contacts/export/csv", "_blank");
-  };
-
-  const handleImport = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".csv";
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const text = await file.text();
-      try {
-        await apiRequest("POST", "/api/contacts/import/csv", { csv: text });
-        queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-        toast({ title: "Import complete", description: "Contacts imported successfully." });
-      } catch (err: any) {
-        toast({ title: "Import failed", description: err.message, variant: "destructive" });
-      }
-    };
-    input.click();
-  };
-
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold" data-testid="text-contacts-heading">Contacts</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-csv">
-            <Download className="mr-1 h-4 w-4" />
-            Export
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleImport} data-testid="button-import-csv">
-            <Upload className="mr-1 h-4 w-4" />
-            Import
-          </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-add-contact">

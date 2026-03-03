@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { TIER_CONFIG } from "@shared/schema";
 import { useUpload } from "@/hooks/use-upload";
@@ -69,7 +69,9 @@ const roleLabels: Record<string, string> = {
 export default function Settings() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   const { data: company, isLoading: loadingCompany } = useQuery<Company>({
     queryKey: ["/api/company"],
@@ -388,6 +390,77 @@ export default function Settings() {
                   </Badge>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5" />
+                Data Import / Export
+              </CardTitle>
+              <CardDescription>Import or export your contacts as a CSV file. The CSV should include columns for name, address, and service details.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open("/api/contacts/export/csv", "_blank")}
+                  data-testid="button-export-csv"
+                >
+                  <Download className="mr-1 h-4 w-4" />
+                  Export Contacts
+                </Button>
+                <input
+                  ref={csvInputRef}
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setIsImporting(true);
+                    try {
+                      const text = await file.text();
+                      const res = await apiRequest("POST", "/api/contacts/import/csv", { csv: text });
+                      const result = await res.json();
+                      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+                      toast({
+                        title: "Import complete",
+                        description: `${result.imported} contact${result.imported !== 1 ? "s" : ""} imported successfully.${result.errors?.length ? ` ${result.errors.length} row(s) had issues.` : ""}`,
+                      });
+                    } catch (err: any) {
+                      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+                    } finally {
+                      setIsImporting(false);
+                      if (csvInputRef.current) csvInputRef.current.value = "";
+                    }
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => csvInputRef.current?.click()}
+                  disabled={isImporting}
+                  data-testid="button-import-csv"
+                >
+                  <Upload className="mr-1 h-4 w-4" />
+                  {isImporting ? "Importing..." : "Import Contacts"}
+                </Button>
+              </div>
+              <div className="border-t pt-3">
+                <p className="text-sm text-muted-foreground mb-2">Need a template? Download a sample CSV with the correct column headers and example data.</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => window.open("/api/contacts/sample-csv", "_blank")}
+                  data-testid="button-download-sample-csv"
+                >
+                  <FileDown className="mr-1 h-4 w-4" />
+                  Download Sample CSV
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

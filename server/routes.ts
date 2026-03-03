@@ -807,14 +807,15 @@ export async function registerRoutes(
 
   // ================ Contact Routes ================
 
+  const csvContactHeaders = ["firstName", "lastName", "email", "phone", "streetAddress", "address2", "city", "state", "zipCode", "numberOfDogs", "yardSize", "serviceFrequency", "serviceDay", "leadSource", "referralSource", "status", "notes"];
+
   app.get("/api/contacts/export/csv", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const contactsList = await storage.getContacts(companyId);
-      const headers = ["id", "firstName", "lastName", "email", "phone", "status", "notes"];
-      const csvRows = [headers.join(",")];
+      const csvRows = [csvContactHeaders.join(",")];
       for (const c of contactsList) {
-        csvRows.push(headers.map(h => {
+        csvRows.push(csvContactHeaders.map(h => {
           const val = (c as any)[h] ?? "";
           return `"${String(val).replace(/"/g, '""')}"`;
         }).join(","));
@@ -825,38 +826,102 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/contacts/sample-csv", isAuthenticated, async (_req: Request, res: Response) => {
+    const sampleRows = [
+      csvContactHeaders.join(","),
+      '"Jane","Doe","jane@example.com","555-123-4567","123 Main St","Apt 2","Springfield","IL","62701","2","medium","weekly","monday","website","John Smith","active","Backyard only"',
+      '"Bob","Smith","bob@example.com","555-987-6543","456 Oak Ave","","Denver","CO","80202","1","large","biweekly","thursday","referral","Jane Doe","lead",""',
+    ];
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=contacts-sample.csv");
+    res.send(sampleRows.join("\n"));
+  });
+
   app.post("/api/contacts/import/csv", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const csvText = typeof req.body === "string" ? req.body : req.body?.csv;
       if (!csvText) return res.status(400).json({ error: "No CSV data provided" });
 
-      const lines = csvText.split("\n").filter((l: string) => l.trim());
+      function parseCsvLine(line: string): string[] {
+        const result: string[] = [];
+        let current = "";
+        let inQuotes = false;
+        for (let j = 0; j < line.length; j++) {
+          const ch = line[j];
+          if (inQuotes) {
+            if (ch === '"' && line[j + 1] === '"') { current += '"'; j++; }
+            else if (ch === '"') { inQuotes = false; }
+            else { current += ch; }
+          } else {
+            if (ch === '"') { inQuotes = true; }
+            else if (ch === ',') { result.push(current.trim()); current = ""; }
+            else { current += ch; }
+          }
+        }
+        result.push(current.trim());
+        return result;
+      }
+
+      const lines = csvText.split(/\r?\n/).filter((l: string) => l.trim());
       if (lines.length < 2) return res.status(400).json({ error: "CSV must have headers and at least one row" });
 
-      const headers = lines[0].split(",").map((h: string) => h.trim().replace(/"/g, ""));
+      const headers = parseCsvLine(lines[0]).map((h: string) => h.replace(/"/g, "").trim());
       const imported: any[] = [];
+      const errors: string[] = [];
 
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(",").map((v: string) => v.trim().replace(/^"|"$/g, "").replace(/""/g, '"'));
+        const values = parseCsvLine(lines[i]);
         const row: any = {};
         headers.forEach((h: string, idx: number) => { row[h] = values[idx] || ""; });
 
-        if (!row.firstName || !row.lastName) continue;
+        if (!row.firstName || !row.lastName) {
+          errors.push(`Row ${i + 1}: missing firstName or lastName, skipped`);
+          continue;
+        }
 
-        const contact = await storage.createContact({
-          companyId,
-          firstName: row.firstName,
-          lastName: row.lastName,
-          email: row.email || null,
-          phone: row.phone || null,
-          status: row.status || "lead",
-          notes: row.notes || null,
-        } as any);
-        imported.push(contact);
+        try {
+          const contact = await storage.createContact({
+            companyId,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            email: row.email || null,
+            phone: row.phone || null,
+            streetAddress: row.streetAddress || null,
+            address2: row.address2 || null,
+            city: row.city || null,
+            state: row.state || null,
+            zipCode: row.zipCode || null,
+            numberOfDogs: row.numberOfDogs ? parseInt(row.numberOfDogs, 10) || null : null,
+            yardSize: row.yardSize || null,
+            serviceFrequency: row.serviceFrequency || null,
+            serviceDay: row.serviceDay || null,
+            leadSource: row.leadSource || null,
+            referralSource: row.referralSource || null,
+            status: row.status || "lead",
+            notes: row.notes || null,
+          } as any);
+
+          if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
+            await storage.createProperty({
+              companyId,
+              contactId: contact.id,
+              streetAddress: contact.streetAddress,
+              city: contact.city,
+              state: contact.state,
+              zipCode: contact.zipCode,
+              numberOfDogs: contact.numberOfDogs ?? 1,
+              yardSize: contact.yardSize ?? null,
+            });
+          }
+
+          imported.push(contact);
+        } catch (rowErr: any) {
+          errors.push(`Row ${i + 1}: ${rowErr.message}`);
+        }
       }
 
-      res.status(201).json({ imported: imported.length, contacts: imported });
+      res.status(201).json({ imported: imported.length, errors, contacts: imported });
     } catch (err) { handleError(res, err); }
   });
 
