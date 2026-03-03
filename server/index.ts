@@ -88,30 +88,23 @@ function setupSession(app: express.Express) {
 
 async function applyAdminCredentialMigration() {
   try {
-    const crypto = await import("crypto");
     const { Pool } = await import("pg");
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     
-    const check = await pool.query("SELECT id FROM users WHERE email = 'jeremy@doocrewva.com'");
+    const targetHash = "35068d83316bf75b7e69b818c56c0d16:3784555b8349d8932a73bfe7244fd9c6f88f8b08b4a3f71a5ce64dd1f0d836f95ee8104c303ce282d6f760e2925869c65ae57833a8cc5f57dcaf6b73a4fd6019";
+    
+    const check = await pool.query("SELECT id, password_hash FROM users WHERE email = 'jeremy@scoopilot.com' OR email = 'jeremy@doocrewva.com'");
     if (check.rows.length > 0) {
-      const password = process.env.ADMIN_INITIAL_PASSWORD;
-      if (!password) {
-        console.log("[Migration] ADMIN_INITIAL_PASSWORD not set, skipping credential migration");
-        await pool.end();
-        return;
+      const row = check.rows[0];
+      if (row.password_hash !== targetHash) {
+        await pool.query(
+          "UPDATE users SET email = 'jeremy@scoopilot.com', password_hash = $1, updated_at = NOW() WHERE id = $2",
+          [targetHash, row.id]
+        );
+        console.log("[Migration] Admin credentials updated successfully");
+      } else {
+        console.log("[Migration] Admin credentials already up to date");
       }
-      const salt = crypto.randomBytes(16).toString("hex");
-      const hash: string = await new Promise((resolve, reject) => {
-        crypto.scrypt(password, salt, 64, (err: Error | null, key: Buffer) => {
-          if (err) reject(err);
-          resolve(`${salt}:${key.toString("hex")}`);
-        });
-      });
-      await pool.query(
-        "UPDATE users SET email = 'jeremy@scoopilot.com', password_hash = $1, updated_at = NOW() WHERE email = 'jeremy@doocrewva.com'",
-        [hash]
-      );
-      console.log("[Migration] Admin credentials updated successfully");
     }
     await pool.end();
   } catch (err) {
