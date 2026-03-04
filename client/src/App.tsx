@@ -271,6 +271,7 @@ function AdminSidebarLink({ href, icon: Icon, label, location }: { href: string;
 function AdminLayout() {
   const { isAuthenticated, isLoading, mustChangePassword, logout } = useAdminAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [location] = useLocation();
 
   if (isLoading) {
     return (
@@ -287,8 +288,6 @@ function AdminLayout() {
   if (mustChangePassword) {
     return <AdminChangePassword />;
   }
-
-  const [location] = useLocation();
 
   return (
     <div className="flex h-screen">
