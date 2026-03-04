@@ -569,11 +569,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRevenueForPeriod(companyId: string, startDate: string, endDate: string): Promise<number> {
+    const endNextDay = new Date(endDate);
+    endNextDay.setDate(endNextDay.getDate() + 1);
     const [result] = await db.select({ total: sql<string>`COALESCE(SUM(${invoices.total}::numeric), 0)` }).from(invoices).where(and(
       eq(invoices.companyId, companyId),
       eq(invoices.status, "paid"),
       gte(invoices.createdAt, new Date(startDate)),
-      lte(invoices.createdAt, new Date(endDate)),
+      lt(invoices.createdAt, endNextDay),
     ));
     return parseFloat(result?.total ?? "0");
   }

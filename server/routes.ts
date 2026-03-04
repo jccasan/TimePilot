@@ -709,19 +709,132 @@ export async function registerRoutes(
   app.get("/api/reports/summary", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-
+      const period = (req.query.period as string) || "6m";
       const now = new Date();
-      const monthlyRevenue: { month: string; revenue: number }[] = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+
+      let lookbackMonths = 6;
+      let projectionMonths = 0;
+      let periodLabel = "Last 6 Months";
+
+      if (period === "3m") { lookbackMonths = 3; periodLabel = "Last 3 Months"; }
+      else if (period === "6m") { lookbackMonths = 6; periodLabel = "Last 6 Months"; }
+      else if (period === "9m") { lookbackMonths = 9; periodLabel = "Last 9 Months"; }
+      else if (period === "12m") { lookbackMonths = 12; periodLabel = "Last 12 Months"; }
+      else if (period === "q1") {
+        const yr = now.getFullYear();
+        lookbackMonths = 0; periodLabel = `Q1 ${yr}`;
+      } else if (period === "q2") {
+        const yr = now.getFullYear();
+        lookbackMonths = 0; periodLabel = `Q2 ${yr}`;
+      } else if (period === "q3") {
+        const yr = now.getFullYear();
+        lookbackMonths = 0; periodLabel = `Q3 ${yr}`;
+      } else if (period === "q4") {
+        const yr = now.getFullYear();
+        lookbackMonths = 0; periodLabel = `Q4 ${yr}`;
+      } else if (period === "annual") {
+        lookbackMonths = 0; periodLabel = `${now.getFullYear()} Annual`;
+      } else if (period === "proj3") { lookbackMonths = 3; projectionMonths = 3; periodLabel = "3-Month Projection"; }
+      else if (period === "proj6") { lookbackMonths = 6; projectionMonths = 6; periodLabel = "6-Month Projection"; }
+      else if (period === "proj12") { lookbackMonths = 12; projectionMonths = 12; periodLabel = "12-Month Projection"; }
+
+      let months: { year: number; month: number }[] = [];
+
+      if (period.startsWith("q")) {
+        const yr = now.getFullYear();
+        const qNum = parseInt(period.slice(1));
+        const startMonth = (qNum - 1) * 3;
+        for (let m = startMonth; m < startMonth + 3; m++) {
+          months.push({ year: yr, month: m });
+        }
+      } else if (period === "annual") {
+        for (let m = 0; m < 12; m++) {
+          months.push({ year: now.getFullYear(), month: m });
+        }
+      } else {
+        for (let i = lookbackMonths - 1; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          months.push({ year: d.getFullYear(), month: d.getMonth() });
+        }
+      }
+
+      const currentMonthIdx = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      const monthlyRevenue: { month: string; revenue: number; projected?: boolean }[] = [];
+      const revenueValues: number[] = [];
+
+      for (const m of months) {
+        const d = new Date(m.year, m.month, 1);
         const start = d.toISOString().split("T")[0];
         const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0];
-        const revenue = await storage.getRevenueForPeriod(companyId, start, end);
-        monthlyRevenue.push({
-          month: d.toLocaleString("default", { month: "short", year: "numeric" }),
-          revenue,
-        });
+        const isFuture = m.year > currentYear || (m.year === currentYear && m.month > currentMonthIdx);
+        const isCurrent = m.year === currentYear && m.month === currentMonthIdx;
+
+        if (isFuture) {
+          monthlyRevenue.push({
+            month: d.toLocaleString("default", { month: "short", year: "numeric" }),
+            revenue: 0,
+            projected: true,
+          });
+        } else {
+          const revenue = await storage.getRevenueForPeriod(companyId, start, end);
+          revenueValues.push(revenue);
+          monthlyRevenue.push({
+            month: d.toLocaleString("default", { month: "short", year: "numeric" }) + (isCurrent ? " (current)" : ""),
+            revenue,
+          });
+        }
       }
+
+      let projections: { month: string; revenue: number; projected: boolean }[] = [];
+      if (projectionMonths > 0) {
+        const activePlans = await storage.getServicePlans(companyId, { isActive: true });
+        let monthlyBookedEstimate = 0;
+        for (const plan of activePlans) {
+          const price = parseFloat(plan.pricePerVisit || "0");
+          if (plan.frequency === "weekly") monthlyBookedEstimate += price * 4.33;
+          else if (plan.frequency === "biweekly") monthlyBookedEstimate += price * 2.17;
+          else if (plan.frequency === "monthly") monthlyBookedEstimate += price;
+        }
+
+        const recentAvg = revenueValues.length > 0
+          ? revenueValues.slice(-3).reduce((a, b) => a + b, 0) / Math.min(revenueValues.length, 3)
+          : 0;
+        const projectedMonthly = Math.max(monthlyBookedEstimate, recentAvg);
+
+        for (let i = 1; i <= projectionMonths; i++) {
+          const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+          projections.push({
+            month: d.toLocaleString("default", { month: "short", year: "numeric" }),
+            revenue: Math.round(projectedMonthly * 100) / 100,
+            projected: true,
+          });
+        }
+      }
+
+      const bookedRevenue = await (async () => {
+        const thisStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+        const thisEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+        const pendingInvoices = await storage.getInvoices(companyId);
+        let booked = 0;
+        for (const inv of pendingInvoices) {
+          if (inv.status === "pending" || inv.status === "draft") {
+            const created = new Date(inv.createdAt!);
+            if (created >= new Date(thisStart) && created <= new Date(thisEnd + "T23:59:59")) {
+              booked += parseFloat(inv.total);
+            }
+          }
+        }
+        const activePlans = await storage.getServicePlans(companyId, { isActive: true });
+        for (const plan of activePlans) {
+          const price = parseFloat(plan.pricePerVisit || "0");
+          if (plan.frequency === "weekly") booked += price * 4.33;
+          else if (plan.frequency === "biweekly") booked += price * 2.17;
+          else if (plan.frequency === "monthly") booked += price;
+        }
+        return Math.round(booked * 100) / 100;
+      })();
 
       const allContacts = await storage.getContacts(companyId);
       const statusCounts: Record<string, number> = {};
@@ -747,7 +860,10 @@ export async function registerRoutes(
       const visitsSkipped = thisMonthVisits.filter(v => v.status === "skipped").length;
 
       res.json({
-        monthlyRevenue,
+        period,
+        periodLabel,
+        monthlyRevenue: [...monthlyRevenue, ...projections],
+        bookedRevenue,
         contactsByStatus: statusCounts,
         totalContacts: allContacts.length,
         invoicesByStatus: invoiceStatusCounts,
