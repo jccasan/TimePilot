@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
+import RoverChatbot from "@/components/rover-chatbot";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
@@ -430,6 +431,7 @@ function App() {
           <AppContent />
           <Toaster />
           <PwaInstallPrompt />
+          <RoverChatbot />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

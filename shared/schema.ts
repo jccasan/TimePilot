@@ -696,6 +696,28 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 
+export const roverTicketTypeEnum = pgEnum("rover_ticket_type", ["bug", "feature_request", "question"]);
+export const roverTicketStatusEnum = pgEnum("rover_ticket_status", ["open", "in_progress", "resolved", "closed"]);
+
+export const roverTickets = pgTable("rover_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  type: roverTicketTypeEnum("type").notNull(),
+  status: roverTicketStatusEnum("status").notNull().default("open"),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_rover_company").on(table.companyId),
+  index("idx_rover_type").on(table.type),
+]);
+
+export const insertRoverTicketSchema = createInsertSchema(roverTickets).omit({ id: true, createdAt: true, updatedAt: true });
+export type RoverTicket = typeof roverTickets.$inferSelect;
+export type InsertRoverTicket = z.infer<typeof insertRoverTicketSchema>;
+
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
 export const insertServicePricingSchema = createInsertSchema(servicePricing).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true, updatedAt: true });

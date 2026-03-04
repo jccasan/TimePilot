@@ -3990,6 +3990,102 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Rover Chatbot Routes ================
+  const ROVER_KNOWLEDGE_BASE: { keywords: string[]; answer: string }[] = [
+    { keywords: ["dashboard", "overview", "home", "main"], answer: "The Dashboard is your home screen showing key metrics like active clients, scheduled visits, revenue, and recent activity. It gives you a quick snapshot of your business operations." },
+    { keywords: ["contact", "client", "crm", "lead", "customer"], answer: "The Contacts section is your CRM hub. You can add and manage clients, track their status (lead, estimate, active, paused, cancelled), assign properties, add tags, and manage their service plans. Use the search bar to find contacts quickly." },
+    { keywords: ["property", "address", "yard", "dog", "location"], answer: "Properties are service locations tied to contacts. Each property can have details like address, gate code, yard size, number of dogs, and special instructions. Properties are geocoded automatically for route optimization." },
+    { keywords: ["route", "routing", "optimize", "optimization", "dispatch"], answer: "Routes let you organize daily service stops. Use the Route Builder to drag-and-drop visits, optimize the order using our route optimization algorithm, and dispatch routes to technicians. You can optimize routes using credits from your account." },
+    { keywords: ["schedule", "service plan", "recurring", "visit", "appointment"], answer: "Service Plans set up recurring schedules for your clients (weekly, biweekly, monthly, or one-time). Each plan auto-generates visits that appear on routes. Plans auto-assign to the least-loaded route for their day." },
+    { keywords: ["invoice", "billing", "payment", "charge", "stripe"], answer: "The Invoicing section lets you create and manage invoices with line items, tax, and discounts. Invoices can be sent to clients and paid via Stripe. You can also void invoices and track payment status." },
+    { keywords: ["technician", "tech", "field", "mobile", "crew"], answer: "Technicians use a simplified mobile view showing only their assigned routes and client info. They can mark visits as complete, add notes, and upload proof-of-service photos. Invite technicians from the Settings page." },
+    { keywords: ["portal", "client portal", "self-service"], answer: "The Client Portal gives your customers a self-service view where they can see their schedule, past visits, invoices, pause/resume service, and send messages to you. Enable portal access from a contact's detail page." },
+    { keywords: ["email", "sms", "text", "message", "communicate"], answer: "Communication tools let you send emails and SMS messages to clients. All communications are logged in the Messages tab. You can set up automation rules to send messages automatically on events like new leads or completed services." },
+    { keywords: ["automation", "rule", "trigger", "automatic"], answer: "Automation Rules let you automate actions based on events. For example, auto-send a welcome email when a new lead is created, or create a task when a service is completed. Set these up from the Automation section." },
+    { keywords: ["settings", "account", "profile", "company"], answer: "Settings lets you manage your company profile, team members, service pricing, notification preferences, API keys, and integrations. You can also change your password and manage your subscription here." },
+    { keywords: ["import", "csv", "upload", "bulk"], answer: "You can bulk-import contacts using CSV files. Go to Contacts, click Import, upload your CSV, map the columns, review the data, and import. Unknown lead sources from CSV files are automatically added." },
+    { keywords: ["tag", "label", "categorize", "group"], answer: "Tags help you organize and categorize contacts. Create custom tags with colors, then assign them to contacts for easy filtering and grouping." },
+    { keywords: ["notification", "alert", "bell"], answer: "The notification bell in the top bar shows real-time alerts for events like new leads, completed visits, overdue invoices, and portal messages. Click a notification to navigate to the relevant item." },
+    { keywords: ["api", "webhook", "integration", "key"], answer: "ScooPilot has a REST API with scoped API keys for external integrations. You can also set up webhooks to receive real-time notifications when events occur in your account. Manage these from Settings > API & Webhooks." },
+    { keywords: ["password", "login", "forgot", "reset", "change password"], answer: "To change your password, go to Settings and use the Change Password card. If you forgot your password, use the Forgot Password link on the login page to receive a reset email." },
+    { keywords: ["subscription", "plan", "tier", "pricing", "upgrade"], answer: "Your subscription tier determines your user limit and features. Plans range from Free Trial to Enterprise. Contact your admin or check Settings to manage your subscription." },
+    { keywords: ["map", "geocode", "mapbox", "directions"], answer: "ScooPilot uses maps for route visualization and optimization. Properties are automatically geocoded when created. The route optimizer uses real road distances to find the most efficient service order." },
+    { keywords: ["proof", "photo", "picture", "evidence"], answer: "Technicians can upload proof-of-service photos when completing visits. These photos are attached to the visit record and visible in the visit history for the client's property." },
+  ];
+
+  function findAnswer(question: string): string | null {
+    const q = question.toLowerCase();
+    let bestMatch: { answer: string; score: number } | null = null;
+    for (const entry of ROVER_KNOWLEDGE_BASE) {
+      const score = entry.keywords.filter(kw => q.includes(kw)).length;
+      if (score > 0 && (!bestMatch || score > bestMatch.score)) {
+        bestMatch = { answer: entry.answer, score };
+      }
+    }
+    return bestMatch?.answer || null;
+  }
+
+  app.post("/api/rover/ask", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { question } = req.body;
+      if (!question || typeof question !== "string" || question.trim().length < 2) {
+        return res.status(400).json({ error: "Please ask a question" });
+      }
+
+      const answer = findAnswer(question.trim());
+      if (answer) {
+        return res.json({ answer, matched: true });
+      }
+
+      res.json({
+        answer: "I'm not sure about that one. Would you like to submit a trouble ticket or feature request? I'll make sure the team sees it.",
+        matched: false,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/rover/ticket", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { userId, companyId } = await getCompanyContext(req);
+      const { type, subject, description } = req.body;
+      if (!type || !["bug", "feature_request", "question"].includes(type)) {
+        return res.status(400).json({ error: "Type must be bug, feature_request, or question" });
+      }
+      if (!subject || typeof subject !== "string" || subject.trim().length < 3) {
+        return res.status(400).json({ error: "Subject must be at least 3 characters" });
+      }
+      if (!description || typeof description !== "string" || description.trim().length < 10) {
+        return res.status(400).json({ error: "Description must be at least 10 characters" });
+      }
+
+      const { roverTickets } = await import("@shared/schema");
+      const [ticket] = await db.insert(roverTickets).values({
+        companyId,
+        userId,
+        type,
+        subject: subject.trim(),
+        description: description.trim(),
+      }).returning();
+
+      const typeLabel = type === "bug" ? "Trouble Ticket" : type === "feature_request" ? "Feature Request" : "Question";
+      notify(companyId, "general", `New ${typeLabel}`, `${typeLabel}: ${subject.trim()}`, undefined);
+
+      res.json({ ok: true, ticket });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/rover/tickets", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { roverTickets } = await import("@shared/schema");
+      const tickets = await db.select().from(roverTickets)
+        .where(eq(roverTickets.companyId, companyId))
+        .orderBy(sql`${roverTickets.createdAt} DESC`)
+        .limit(50);
+      res.json(tickets);
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Public Signup Routes (no auth required) ================
   const signupLimiter = (await import("express-rate-limit")).default({
     windowMs: 15 * 60 * 1000,
