@@ -3589,11 +3589,22 @@ export async function registerRoutes(
     try {
       const company = await storage.getCompany(req.params.id);
       if (!company) return res.status(404).json({ error: "Company not found" });
-      const users = await storage.getCompanyUsers(company.id);
+      const companyUserRecords = await storage.getCompanyUsers(company.id);
+      const usersWithDetails = await Promise.all(
+        companyUserRecords.map(async (cu) => {
+          const user = await getUserById(cu.userId);
+          return {
+            ...cu,
+            email: user?.email || "unknown",
+            firstName: user?.firstName || "",
+            lastName: user?.lastName || "",
+          };
+        })
+      );
       const contactList = await storage.getContacts(company.id);
       const invoiceList = await storage.getInvoices(company.id);
       const notes = await storage.getAdminNotes(company.id);
-      res.json({ ...company, users, contacts: contactList, invoices: invoiceList, notes });
+      res.json({ ...company, users: usersWithDetails, contacts: contactList, invoices: invoiceList, notes });
     } catch (err) { handleError(res, err); }
   });
 
@@ -3704,6 +3715,36 @@ export async function registerRoutes(
       if (!tier || !validTiers.includes(tier)) return res.status(400).json({ error: "Invalid tier" });
       const updated = await storage.updateCompanySubscription(req.params.id, tier);
       res.json(updated);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/companies/:id/users/:userId/reset-password", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id: companyId, userId } = req.params;
+      const { newPassword } = req.body;
+      const companyUsers = await storage.getCompanyUsers(companyId);
+      const cu = companyUsers.find((u) => u.userId === userId);
+      if (!cu) return res.status(404).json({ error: "User not found in this company" });
+      const user = await getUserById(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      const crypto = await import("crypto");
+      const password = newPassword && typeof newPassword === "string" && newPassword.length >= 8
+        ? newPassword
+        : crypto.randomBytes(6).toString("base64url");
+      const { users: usersTable } = await import("@shared/schema");
+      const salt = crypto.randomBytes(16).toString("hex");
+      const SCRYPT_KEYLEN = 64;
+      const hash = await new Promise<string>((resolve, reject) => {
+        crypto.scrypt(password, salt, SCRYPT_KEYLEN, (err, key) => {
+          if (err) reject(err);
+          else resolve(`${salt}:${key.toString("hex")}`);
+        });
+      });
+      await db.update(usersTable)
+        .set({ password: hash, mustChangePassword: true })
+        .where(eq(usersTable.id, userId));
+      console.log(`[Admin] Password reset for user ${user.email} (${userId}) by ${(req as any).adminUser?.email}`);
+      res.json({ ok: true, email: user.email, tempPassword: password });
     } catch (err) { handleError(res, err); }
   });
 

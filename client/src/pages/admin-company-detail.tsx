@@ -3,9 +3,12 @@ import { useParams, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
@@ -16,6 +19,12 @@ export default function AdminCompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const [noteText, setNoteText] = useState("");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<{ userId: string; email: string; name: string } | null>(null);
+  const [customPassword, setCustomPassword] = useState("");
+  const [useCustomPassword, setUseCustomPassword] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { data: company, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/companies", id],
@@ -54,6 +63,48 @@ export default function AdminCompanyDetail() {
     },
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ userId, newPassword }: { userId: string; newPassword?: string }) => {
+      const res = await adminRequest("POST", `/api/admin/companies/${id}/users/${userId}/reset-password`, {
+        newPassword: newPassword || undefined,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to reset password");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setGeneratedPassword(data.tempPassword);
+      toast({ title: "Password updated", description: `New password set for ${data.email}. They will be prompted to change it on next login.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to reset password", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleResetPassword = () => {
+    if (!resetTarget) return;
+    resetPasswordMutation.mutate({
+      userId: resetTarget.userId,
+      newPassword: useCustomPassword && customPassword.length >= 8 ? customPassword : undefined,
+    });
+  };
+
+  const handleCloseResetDialog = () => {
+    setResetOpen(false);
+    setResetTarget(null);
+    setCustomPassword("");
+    setUseCustomPassword(false);
+    setGeneratedPassword(null);
+    setShowPassword(false);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied to clipboard" });
+  };
+
   if (isLoading) {
     return <div className="p-6 text-center text-muted-foreground">Loading...</div>;
   }
@@ -61,8 +112,6 @@ export default function AdminCompanyDetail() {
   if (!company) {
     return <div className="p-6 text-center text-muted-foreground">Company not found</div>;
   }
-
-  const tierConfig = TIER_CONFIG[company.subscriptionTier as keyof typeof TIER_CONFIG];
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto" data-testid="admin-company-detail">
@@ -100,7 +149,7 @@ export default function AdminCompanyDetail() {
                   <SelectContent>
                     {Object.entries(TIER_CONFIG).map(([key, config]) => (
                       <SelectItem key={key} value={key}>
-                        {config.name} (${config.price}/mo)
+                        {config.name} {config.price > 0 ? `($${config.price}/mo)` : "(Free)"}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -140,9 +189,29 @@ export default function AdminCompanyDetail() {
             {company.users?.length > 0 ? (
               <div className="space-y-2">
                 {company.users.map((u: any) => (
-                  <div key={u.id} className="flex items-center justify-between gap-2 py-1">
-                    <span className="text-sm truncate">{u.userId}</span>
-                    <Badge variant="outline">{u.role}</Badge>
+                  <div key={u.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-b-0" data-testid={`row-user-${u.userId}`}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate" data-testid={`text-user-name-${u.userId}`}>
+                        {u.firstName || u.lastName ? `${u.firstName} ${u.lastName}`.trim() : "Unnamed"}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate" data-testid={`text-user-email-${u.userId}`}>{u.email}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="outline">{u.role}</Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Set/Reset Password"
+                        onClick={() => {
+                          setResetTarget({ userId: u.userId, email: u.email, name: `${u.firstName} ${u.lastName}`.trim() || u.email });
+                          setResetOpen(true);
+                        }}
+                        data-testid={`button-reset-password-${u.userId}`}
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -258,6 +327,79 @@ export default function AdminCompanyDetail() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={resetOpen} onOpenChange={(open) => { if (!open) handleCloseResetDialog(); else setResetOpen(open); }}>
+        <DialogContent data-testid="dialog-reset-password">
+          <DialogHeader>
+            <DialogTitle>Set Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for <strong>{resetTarget?.name}</strong> ({resetTarget?.email}). They will be required to change it on their next login.
+            </DialogDescription>
+          </DialogHeader>
+
+          {generatedPassword ? (
+            <div className="space-y-3 py-2">
+              <p className="text-sm font-medium">New password has been set:</p>
+              <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+                <code className="flex-1 text-sm font-mono" data-testid="text-generated-password">
+                  {showPassword ? generatedPassword : "••••••••••"}
+                </code>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowPassword(!showPassword)} data-testid="button-toggle-password-visibility">
+                  {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyToClipboard(generatedPassword)} data-testid="button-copy-password">
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Share this password with the user. They will be asked to create a new one when they log in.</p>
+              <DialogFooter>
+                <Button onClick={handleCloseResetDialog} data-testid="button-close-reset-dialog">Done</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="useCustomPassword"
+                  checked={useCustomPassword}
+                  onChange={(e) => setUseCustomPassword(e.target.checked)}
+                  className="rounded"
+                  data-testid="checkbox-custom-password"
+                />
+                <Label htmlFor="useCustomPassword" className="text-sm cursor-pointer">Set a specific password</Label>
+              </div>
+              {useCustomPassword && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="customPassword">Password (min 8 characters)</Label>
+                  <Input
+                    id="customPassword"
+                    type="text"
+                    value={customPassword}
+                    onChange={(e) => setCustomPassword(e.target.value)}
+                    placeholder="Enter password..."
+                    minLength={8}
+                    data-testid="input-custom-password"
+                  />
+                </div>
+              )}
+              {!useCustomPassword && (
+                <p className="text-sm text-muted-foreground">A secure random password will be generated automatically.</p>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={handleCloseResetDialog} data-testid="button-cancel-reset">Cancel</Button>
+                <Button
+                  onClick={handleResetPassword}
+                  disabled={resetPasswordMutation.isPending || (useCustomPassword && customPassword.length < 8)}
+                  data-testid="button-confirm-reset-password"
+                >
+                  {resetPasswordMutation.isPending ? "Setting..." : "Set Password"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
