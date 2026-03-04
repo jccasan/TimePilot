@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
@@ -25,6 +25,12 @@ export default function AdminCompanyDetail() {
   const [useCustomPassword, setUseCustomPassword] = useState(false);
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [companyForm, setCompanyForm] = useState({ name: "", email: "", phone: "", address: "" });
+
+  const [editUserOpen, setEditUserOpen] = useState(false);
+  const [editUserTarget, setEditUserTarget] = useState<{ userId: string; firstName: string; lastName: string; email: string; role: string } | null>(null);
 
   const { data: company, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/companies", id],
@@ -83,6 +89,80 @@ export default function AdminCompanyDetail() {
     },
   });
 
+  const sendResetEmailMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await adminRequest("POST", `/api/admin/companies/${id}/users/${userId}/send-reset-email`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to send reset email");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Password reset email sent", description: `Reset link sent to ${data.email}` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to send email", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const sendCredentialsMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await adminRequest("POST", `/api/admin/companies/${id}/users/${userId}/send-credentials`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to send credentials");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Credentials sent", description: `Login credentials emailed to ${data.email}` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to send credentials", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateCompanyMutation = useMutation({
+    mutationFn: async (updates: Record<string, string>) => {
+      const res = await adminRequest("PATCH", `/api/admin/companies/${id}`, updates);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update company");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setEditingCompany(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] });
+      toast({ title: "Company updated" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update company", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, updates }: { userId: string; updates: Record<string, string> }) => {
+      const res = await adminRequest("PATCH", `/api/admin/companies/${id}/users/${userId}`, updates);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update user");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setEditUserOpen(false);
+      setEditUserTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies", id] });
+      toast({ title: "User updated" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update user", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleResetPassword = () => {
     if (!resetTarget) return;
     resetPasswordMutation.mutate({
@@ -103,6 +183,56 @@ export default function AdminCompanyDetail() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: "Copied to clipboard" });
+  };
+
+  const startEditingCompany = () => {
+    setCompanyForm({
+      name: company?.name || "",
+      email: company?.email || "",
+      phone: company?.phone || "",
+      address: company?.address || "",
+    });
+    setEditingCompany(true);
+  };
+
+  const handleSaveCompany = () => {
+    const updates: Record<string, string> = {};
+    if (companyForm.name !== (company?.name || "")) updates.name = companyForm.name;
+    if (companyForm.email !== (company?.email || "")) updates.email = companyForm.email;
+    if (companyForm.phone !== (company?.phone || "")) updates.phone = companyForm.phone;
+    if (companyForm.address !== (company?.address || "")) updates.address = companyForm.address;
+    if (Object.keys(updates).length === 0) {
+      setEditingCompany(false);
+      return;
+    }
+    updateCompanyMutation.mutate(updates);
+  };
+
+  const openEditUser = (u: any) => {
+    setEditUserTarget({
+      userId: u.userId,
+      firstName: u.firstName || "",
+      lastName: u.lastName || "",
+      email: u.email || "",
+      role: u.role || "owner",
+    });
+    setEditUserOpen(true);
+  };
+
+  const handleSaveUser = () => {
+    if (!editUserTarget) return;
+    const original = company?.users?.find((u: any) => u.userId === editUserTarget.userId);
+    const updates: Record<string, string> = {};
+    if (editUserTarget.firstName !== (original?.firstName || "")) updates.firstName = editUserTarget.firstName;
+    if (editUserTarget.lastName !== (original?.lastName || "")) updates.lastName = editUserTarget.lastName;
+    if (editUserTarget.email !== (original?.email || "")) updates.email = editUserTarget.email;
+    if (editUserTarget.role !== (original?.role || "")) updates.role = editUserTarget.role;
+    if (Object.keys(updates).length === 0) {
+      setEditUserOpen(false);
+      setEditUserTarget(null);
+      return;
+    }
+    updateUserMutation.mutate({ userId: editUserTarget.userId, updates });
   };
 
   if (isLoading) {
@@ -130,51 +260,92 @@ export default function AdminCompanyDetail() {
       <div className="grid md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Building2 className="h-4 w-4" /> Account Info
+            <CardTitle className="text-base flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Building2 className="h-4 w-4" /> Account Info
+              </span>
+              {!editingCompany ? (
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={startEditingCompany} data-testid="button-edit-company">
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSaveCompany} disabled={updateCompanyMutation.isPending} data-testid="button-save-company">
+                    <Check className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingCompany(false)} data-testid="button-cancel-edit-company">
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="text-sm text-muted-foreground">Subscription</span>
-              <div className="flex items-center gap-2">
-                <Select
-                  value={company.subscriptionTier}
-                  onValueChange={(v) => tierMutation.mutate(v)}
-                  disabled={tierMutation.isPending}
-                >
-                  <SelectTrigger className="w-40" data-testid="select-tier">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(TIER_CONFIG).map(([key, config]) => (
-                      <SelectItem key={key} value={key}>
-                        {config.name} {config.price > 0 ? `($${config.price}/mo)` : "(Free)"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-muted-foreground">Status</span>
-              <Badge variant="outline" data-testid="badge-subscription-status">{company.subscriptionStatus}</Badge>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-muted-foreground">Created</span>
-              <span className="text-sm">{new Date(company.createdAt).toLocaleDateString()}</span>
-            </div>
-            {company.phone && (
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-muted-foreground">Phone</span>
-                <span className="text-sm">{company.phone}</span>
-              </div>
-            )}
-            {company.email && (
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-muted-foreground">Email</span>
-                <span className="text-sm">{company.email}</span>
-              </div>
+            {editingCompany ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Company Name</Label>
+                  <Input value={companyForm.name} onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })} data-testid="input-company-name" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Email</Label>
+                  <Input value={companyForm.email} onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })} data-testid="input-company-email" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Phone</Label>
+                  <Input value={companyForm.phone} onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })} data-testid="input-company-phone" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Address</Label>
+                  <Input value={companyForm.address} onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })} data-testid="input-company-address" />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-sm text-muted-foreground">Subscription</span>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={company.subscriptionTier}
+                      onValueChange={(v) => tierMutation.mutate(v)}
+                      disabled={tierMutation.isPending}
+                    >
+                      <SelectTrigger className="w-40" data-testid="select-tier">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(TIER_CONFIG).map(([key, config]) => (
+                          <SelectItem key={key} value={key}>
+                            {config.name} {config.price > 0 ? `($${config.price}/mo)` : "(Free)"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">Status</span>
+                  <Badge variant="outline" data-testid="badge-subscription-status">{company.subscriptionStatus}</Badge>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">Created</span>
+                  <span className="text-sm">{new Date(company.createdAt).toLocaleDateString()}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">Phone</span>
+                  <span className="text-sm">{company.phone || "-"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">Email</span>
+                  <span className="text-sm">{company.email || "-"}</span>
+                </div>
+                {company.address && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-muted-foreground">Address</span>
+                    <span className="text-sm text-right max-w-[200px]">{company.address}</span>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -196,8 +367,18 @@ export default function AdminCompanyDetail() {
                       </p>
                       <p className="text-xs text-muted-foreground truncate" data-testid={`text-user-email-${u.userId}`}>{u.email}</p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                       <Badge variant="outline">{u.role}</Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Edit user"
+                        onClick={() => openEditUser(u)}
+                        data-testid={`button-edit-user-${u.userId}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -210,6 +391,28 @@ export default function AdminCompanyDetail() {
                         data-testid={`button-reset-password-${u.userId}`}
                       >
                         <KeyRound className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Send password reset email"
+                        onClick={() => sendResetEmailMutation.mutate(u.userId)}
+                        disabled={sendResetEmailMutation.isPending}
+                        data-testid={`button-send-reset-${u.userId}`}
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Send login credentials"
+                        onClick={() => sendCredentialsMutation.mutate(u.userId)}
+                        disabled={sendCredentialsMutation.isPending}
+                        data-testid={`button-send-credentials-${u.userId}`}
+                      >
+                        <Send className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
@@ -394,6 +597,65 @@ export default function AdminCompanyDetail() {
                   data-testid="button-confirm-reset-password"
                 >
                   {resetPasswordMutation.isPending ? "Setting..." : "Set Password"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editUserOpen} onOpenChange={(open) => { if (!open) { setEditUserOpen(false); setEditUserTarget(null); } else setEditUserOpen(open); }}>
+        <DialogContent data-testid="dialog-edit-user">
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update details for this user.
+            </DialogDescription>
+          </DialogHeader>
+          {editUserTarget && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label>First Name</Label>
+                <Input
+                  value={editUserTarget.firstName}
+                  onChange={(e) => setEditUserTarget({ ...editUserTarget, firstName: e.target.value })}
+                  data-testid="input-edit-user-firstname"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Last Name</Label>
+                <Input
+                  value={editUserTarget.lastName}
+                  onChange={(e) => setEditUserTarget({ ...editUserTarget, lastName: e.target.value })}
+                  data-testid="input-edit-user-lastname"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={editUserTarget.email}
+                  onChange={(e) => setEditUserTarget({ ...editUserTarget, email: e.target.value })}
+                  data-testid="input-edit-user-email"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Role</Label>
+                <Select value={editUserTarget.role} onValueChange={(v) => setEditUserTarget({ ...editUserTarget, role: v })}>
+                  <SelectTrigger data-testid="select-edit-user-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="owner">Owner</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="tech">Technician</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setEditUserOpen(false); setEditUserTarget(null); }} data-testid="button-cancel-edit-user">Cancel</Button>
+                <Button onClick={handleSaveUser} disabled={updateUserMutation.isPending} data-testid="button-save-user">
+                  {updateUserMutation.isPending ? "Saving..." : "Save"}
                 </Button>
               </DialogFooter>
             </div>

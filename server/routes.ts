@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
@@ -3745,6 +3745,188 @@ export async function registerRoutes(
         .where(eq(usersTable.id, userId));
       console.log(`[Admin] Password reset for user ${user.email} (${userId}) by ${(req as any).adminUser?.email}`);
       res.json({ ok: true, email: user.email, tempPassword: password });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/companies/:id/users/:userId/send-reset-email", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id: companyId, userId } = req.params;
+      const companyUsers = await storage.getCompanyUsers(companyId);
+      const cu = companyUsers.find((u) => u.userId === userId);
+      if (!cu) return res.status(404).json({ error: "User not found in this company" });
+      const user = await getUserById(userId);
+      if (!user || !user.email) return res.status(404).json({ error: "User not found" });
+
+      const result = await createPasswordResetToken(user.email);
+      if ("error" in result) return res.status(400).json({ error: result.error });
+
+      const host = req.headers.host || "localhost:5000";
+      const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+      const resetUrl = `${isLocalhost ? "http" : "https"}://${host}/reset-password?token=${result.token}`;
+
+      const emailResult = await sendEmail({
+        to: user.email,
+        subject: "Reset your ScooPilot password",
+        text: `Hi ${user.firstName || "there"},\n\nA password reset was requested for your account. Click the link below to set a new password:\n\n${resetUrl}\n\nThis link expires in 1 hour.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+              <h1 style="color: white; margin: 0;">ScooPilot</h1>
+            </div>
+            <div style="padding: 20px; border: 1px solid #e5e7eb;">
+              <h2 style="margin-top: 0;">Password Reset</h2>
+              <p>Hi ${user.firstName || "there"},</p>
+              <p>A password reset was requested for your account. Click the button below to set a new password:</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${resetUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
+              </div>
+              <p style="color: #6b7280; font-size: 14px;">This link expires in 1 hour.</p>
+            </div>
+          </div>
+        `,
+      });
+
+      if (!emailResult.success) {
+        return res.status(500).json({ error: "Failed to send email: " + emailResult.error });
+      }
+
+      console.log(`[Admin] Password reset email sent to ${user.email} by ${(req as any).adminUser?.email}`);
+      res.json({ ok: true, email: user.email });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/companies/:id/users/:userId/send-credentials", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id: companyId, userId } = req.params;
+      const companyUsers = await storage.getCompanyUsers(companyId);
+      const cu = companyUsers.find((u) => u.userId === userId);
+      if (!cu) return res.status(404).json({ error: "User not found in this company" });
+      const user = await getUserById(userId);
+      if (!user || !user.email) return res.status(404).json({ error: "User not found" });
+
+      const crypto = await import("crypto");
+      const tempPassword = crypto.randomBytes(6).toString("base64url");
+      const { users: usersTable } = await import("@shared/schema");
+      const salt = crypto.randomBytes(16).toString("hex");
+      const hash = await new Promise<string>((resolve, reject) => {
+        crypto.scrypt(tempPassword, salt, 64, (err, key) => {
+          if (err) reject(err);
+          else resolve(`${salt}:${key.toString("hex")}`);
+        });
+      });
+
+      const host = req.headers.host || "localhost:5000";
+      const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+      const appUrl = `${isLocalhost ? "http" : "https"}://${host}`;
+
+      const emailResult = await sendEmail({
+        to: user.email,
+        subject: "Your ScooPilot login credentials",
+        text: `Hi ${user.firstName || "there"},\n\nHere are your ScooPilot login credentials:\n\nLogin: ${appUrl}\nEmail: ${user.email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+              <h1 style="color: white; margin: 0;">ScooPilot</h1>
+            </div>
+            <div style="padding: 20px; border: 1px solid #e5e7eb;">
+              <h2 style="margin-top: 0;">Your Login Credentials</h2>
+              <p>Hi ${user.firstName || "there"},</p>
+              <p>Here are your login credentials for ScooPilot:</p>
+              <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 4px 0;"><strong>Email:</strong> ${user.email}</p>
+                <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+              </div>
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
+              </div>
+              <p style="color: #6b7280; font-size: 14px;">You'll be asked to set a new password when you first log in.</p>
+            </div>
+          </div>
+        `,
+      });
+
+      if (!emailResult.success) {
+        return res.status(500).json({ error: "Failed to send credentials email. Password was not changed." });
+      }
+
+      await db.update(usersTable)
+        .set({ passwordHash: hash, mustChangePassword: true })
+        .where(eq(usersTable.id, userId));
+
+      console.log(`[Admin] Credentials sent to ${user.email} by ${(req as any).adminUser?.email}`);
+      res.json({ ok: true, email: user.email });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/admin/companies/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const companyId = req.params.id;
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const { name, email, phone, address } = req.body;
+      const updates: Record<string, any> = {};
+      if (name !== undefined) {
+        if (typeof name !== "string" || name.trim().length < 2) return res.status(400).json({ error: "Company name must be at least 2 characters" });
+        updates.name = name.trim();
+      }
+      if (email !== undefined) {
+        if (email && typeof email === "string" && email.trim()) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email.trim())) return res.status(400).json({ error: "Invalid email address" });
+          updates.email = email.trim();
+        } else {
+          updates.email = null;
+        }
+      }
+      if (phone !== undefined) updates.phone = phone?.trim() || null;
+      if (address !== undefined) updates.address = address?.trim() || null;
+
+      if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No fields to update" });
+
+      const { companies: companiesTable } = await import("@shared/schema");
+      await db.update(companiesTable).set(updates).where(eq(companiesTable.id, companyId));
+
+      console.log(`[Admin] Company ${companyId} updated by ${(req as any).adminUser?.email}: ${JSON.stringify(updates)}`);
+      res.json({ ok: true, ...updates });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/admin/companies/:id/users/:userId", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id: companyId, userId } = req.params;
+      const companyUsers = await storage.getCompanyUsers(companyId);
+      const cu = companyUsers.find((u) => u.userId === userId);
+      if (!cu) return res.status(404).json({ error: "User not found in this company" });
+
+      const { firstName, lastName, email, role } = req.body;
+      const userUpdates: Record<string, any> = {};
+      if (firstName !== undefined) userUpdates.firstName = firstName?.trim() || null;
+      if (lastName !== undefined) userUpdates.lastName = lastName?.trim() || null;
+      if (email !== undefined) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) return res.status(400).json({ error: "Invalid email address" });
+        const existing = await getUserByEmail(email.toLowerCase());
+        if (existing && existing.id !== userId) return res.status(409).json({ error: "Email already in use by another account" });
+        userUpdates.email = email.toLowerCase().trim();
+      }
+
+      if (Object.keys(userUpdates).length > 0) {
+        const { users: usersTable } = await import("@shared/schema");
+        await db.update(usersTable).set(userUpdates).where(eq(usersTable.id, userId));
+      }
+
+      if (role !== undefined) {
+        const validRoles = ["owner", "admin", "tech"];
+        if (!validRoles.includes(role)) return res.status(400).json({ error: "Invalid role" });
+        const { companyUsers: companyUsersTable } = await import("@shared/schema");
+        await db.update(companyUsersTable)
+          .set({ role })
+          .where(and(eq(companyUsersTable.userId, userId), eq(companyUsersTable.companyId, companyId)));
+      }
+
+      console.log(`[Admin] User ${userId} in company ${companyId} updated by ${(req as any).adminUser?.email}`);
+      res.json({ ok: true });
     } catch (err) { handleError(res, err); }
   });
 
