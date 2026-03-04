@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -122,6 +122,9 @@ export default function Settings() {
   const [inviteLastName, setInviteLastName] = useState("");
   const [inviteRole, setInviteRole] = useState("tech");
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [rawCsvRows, setRawCsvRows] = useState<string[][]>([]);
   const [settingsColumnMapping, setSettingsColumnMapping] = useState<ColumnMapping[]>([]);
@@ -190,6 +193,26 @@ export default function Settings() {
     },
     onError: (err: any) => {
       toast({ title: "Failed to remove", description: err.message || "Something went wrong", variant: "destructive" });
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/auth/change-password", { newPassword });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to change password");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      toast({ title: "Password updated", description: "Your password has been changed successfully." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -538,6 +561,67 @@ export default function Settings() {
                   </Badge>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="h-5 w-5" />
+                Change Password
+              </CardTitle>
+              <CardDescription>Update your login password</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newPassword.length < 8) {
+                    toast({ title: "Error", description: "Password must be at least 8 characters", variant: "destructive" });
+                    return;
+                  }
+                  if (newPassword !== confirmNewPassword) {
+                    toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
+                    return;
+                  }
+                  changePasswordMutation.mutate();
+                }}
+                className="space-y-4"
+              >
+                <div className="space-y-1.5">
+                  <label htmlFor="newPassword" className="text-sm font-medium">New Password</label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    minLength={8}
+                    required
+                    data-testid="input-new-password"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="confirmNewPassword" className="text-sm font-medium">Confirm New Password</label>
+                  <Input
+                    id="confirmNewPassword"
+                    type="password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    placeholder="Confirm your new password"
+                    minLength={8}
+                    required
+                    data-testid="input-confirm-new-password"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={changePasswordMutation.isPending || !newPassword || !confirmNewPassword}
+                  data-testid="button-change-password"
+                >
+                  {changePasswordMutation.isPending ? "Updating..." : "Update Password"}
+                </Button>
+              </form>
             </CardContent>
           </Card>
 
