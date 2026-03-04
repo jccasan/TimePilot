@@ -97,6 +97,11 @@ function handleError(res: Response, err: any) {
   if (err && typeof err === "object" && "status" in err) {
     return res.status(err.status).json({ error: err.message });
   }
+  if (err?.name === "ZodError" || err?.constructor?.name === "ZodError") {
+    const issues = err.issues || err.errors || [];
+    const message = issues.map((i: any) => `${i.path?.join(".")}: ${i.message}`).join("; ");
+    return res.status(400).json({ error: message || "Validation error" });
+  }
   console.error(err);
   return res.status(500).json({ error: "Internal server error" });
 }
@@ -788,6 +793,7 @@ export async function registerRoutes(
       }
 
       let projections: { month: string; revenue: number; projected: boolean }[] = [];
+      let projectedMonthlyValue: number | null = null;
       if (projectionMonths > 0) {
         const activePlans = await storage.getServicePlans(companyId, { isActive: true });
         let monthlyBookedEstimate = 0;
@@ -802,6 +808,7 @@ export async function registerRoutes(
           ? revenueValues.slice(-3).reduce((a, b) => a + b, 0) / Math.min(revenueValues.length, 3)
           : 0;
         const projectedMonthly = Math.max(monthlyBookedEstimate, recentAvg);
+        projectedMonthlyValue = Math.round(projectedMonthly * 100) / 100;
 
         for (let i = 1; i <= projectionMonths; i++) {
           const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
@@ -863,6 +870,7 @@ export async function registerRoutes(
         period,
         periodLabel,
         monthlyRevenue: [...monthlyRevenue, ...projections],
+        projectedMonthly: projectedMonthlyValue,
         bookedRevenue,
         contactsByStatus: statusCounts,
         totalContacts: allContacts.length,
@@ -1409,7 +1417,7 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const filters: { status?: string; search?: string } = {};
       if (req.query.status) filters.status = req.query.status as string;
-      if (req.query.search) filters.search = req.query.search as string;
+      if (req.query.search) filters.search = (req.query.search as string).replace(/\0/g, "");
       const contactsList = await storage.getContacts(companyId, filters);
       res.json(contactsList);
     } catch (err) { handleError(res, err); }
@@ -1456,6 +1464,10 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getContact(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Contact not found" });
+      const validStatuses = ["lead", "prospect", "active", "inactive", "cancelled"];
+      if (req.body.status && !validStatuses.includes(req.body.status)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+      }
       const contact = await storage.updateContact(req.params.id, req.body);
 
       if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {

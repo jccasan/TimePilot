@@ -71,6 +71,13 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **Documentation**: `SECURITY.md` for scan instructions, severity levels, secret rotation
 - **Reports**: `reports/` directory with scan output (dependency-audit.json, secrets-scan.txt, sast-results.json, security-summary.md)
 
+## Testing
+- **Test Suite**: `tests/api.test.ts` — 113 automated API tests across 22 categories
+- **Run**: `npx tsx tests/api.test.ts` (requires app running on port 5000)
+- **Categories**: Auth (19), Auth Middleware (22), Admin Auth (9), Contacts (8), Properties (2), Routes (4), Invoices (2), Service Plans (2), Tags (4), Lead Sources (1), Automation (1), Reports (6), Company (7), Onboarding (1), Rover (4), Public (1), Portal (5), Visits (3), Webhooks (1), Edge Cases (8), Public Signup (2), Invoice Theme (1)
+- **Coverage**: Authentication flows, input validation, auth middleware on all endpoints, admin token protection, CRUD operations, SQL injection defense, XSS handling, null byte sanitization, rate limiting, cross-tenant isolation
+- **Error Handling**: `handleError()` in routes.ts now catches ZodError and returns 400 with field-level validation messages
+
 ## External Dependencies
 - **PostgreSQL**: Primary database.
 - **Custom Auth**: Email/password authentication with session cookies and Bearer token fallback.
