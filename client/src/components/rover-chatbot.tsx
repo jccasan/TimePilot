@@ -8,6 +8,7 @@ import { MessageCircle, X, Send, Bug, Lightbulb, ArrowLeft } from "lucide-react"
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import roverImage from "@assets/ChatGPT_Image_Mar_4,_2026,_12_09_01_PM_1772644163091.png";
 
 type ChatMessage = {
   id: string;
@@ -26,6 +27,7 @@ export default function RoverChatbot() {
   const [view, setView] = useState<View>("chat");
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -44,6 +46,15 @@ export default function RoverChatbot() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (user) {
+      const key = `rover_intro_seen_${user.id}`;
+      if (!localStorage.getItem(key)) {
+        setShowIntro(true);
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -54,6 +65,17 @@ export default function RoverChatbot() {
   }, [open, view]);
 
   if (!user) return null;
+
+  const dismissIntro = () => {
+    const key = `rover_intro_seen_${user.id}`;
+    localStorage.setItem(key, "true");
+    setShowIntro(false);
+  };
+
+  const dismissAndOpen = () => {
+    dismissIntro();
+    setOpen(true);
+  };
 
   const addMessage = (role: "user" | "rover", text: string, actions?: ("ticket" | "feature")[]) => {
     setMessages((prev) => [
@@ -116,7 +138,56 @@ export default function RoverChatbot() {
 
   return (
     <>
-      {!open && (
+      {showIntro && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm" data-testid="rover-intro-overlay">
+          <div className="bg-background rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-300" data-testid="rover-intro-modal">
+            <div className="relative">
+              <img
+                src={roverImage}
+                alt="Rover - Your ScooPilot Assistant"
+                className="w-full h-56 object-cover object-top"
+                data-testid="img-rover-intro"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              <h2 className="absolute bottom-3 left-4 text-white text-xl font-bold tracking-tight">
+                Meet Rover
+              </h2>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-sm text-foreground leading-relaxed">
+                Rover is your built-in ScooPilot assistant. Need help navigating the app, understanding a feature, or running into an issue? Rover is here for you.
+              </p>
+              <ul className="text-sm text-muted-foreground space-y-1.5">
+                <li className="flex items-start gap-2">
+                  <MessageCircle className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                  <span>Ask questions about any feature</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Bug className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                  <span>Submit trouble tickets for bugs</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Lightbulb className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                  <span>Request new features</span>
+                </li>
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                Look for the green button in the bottom-right corner anytime.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" className="flex-1" onClick={dismissIntro} data-testid="button-rover-intro-dismiss">
+                  Got it
+                </Button>
+                <Button className="flex-1" onClick={dismissAndOpen} data-testid="button-rover-intro-open">
+                  Say hi to Rover
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!open && !showIntro && (
         <button
           onClick={() => setOpen(true)}
           className="fixed bottom-5 right-5 z-[100] flex items-center justify-center w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105"
@@ -136,6 +207,7 @@ export default function RoverChatbot() {
                   <ArrowLeft className="h-4 w-4" />
                 </button>
               )}
+              <img src={roverImage} alt="Rover" className="w-6 h-6 rounded-full object-cover" />
               <span className="font-semibold text-sm">Rover</span>
               <span className="text-xs opacity-80">ScooPilot Assistant</span>
             </div>
