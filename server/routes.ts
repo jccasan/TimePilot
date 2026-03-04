@@ -3862,9 +3862,9 @@ export async function registerRoutes(
         expiresAt,
       });
 
-      const protocol = req.headers["x-forwarded-proto"] || "https";
       const host = req.headers.host || "localhost:5000";
-      const verifyUrl = `${protocol}://${host}/api/public/verify-email?token=${token}`;
+      const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+      const verifyUrl = `${isLocalhost ? "http" : "https"}://${host}/api/public/verify-email?token=${token}`;
 
       try {
         await sendEmail({
@@ -3956,9 +3956,9 @@ export async function registerRoutes(
       await seedDefaultLeadSources(company.id);
       await storage.seedDefaultPricing(company.id);
 
-      const protocol = req.headers["x-forwarded-proto"] || "https";
       const host = req.headers.host || "localhost:5000";
-      const appUrl = `${protocol}://${host}`;
+      const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+      const appUrl = `${isLocalhost ? "http" : "https"}://${host}`;
 
       try {
         await sendEmail({
