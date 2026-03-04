@@ -55,6 +55,12 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **User Roles**: Supports owner, admin, and technician roles with appropriate access control.
 - **Proof of Service**: Technicians can upload photos for completed visits via a mobile interface.
 
+### Public Signup Flow
+- **Endpoint**: `POST /api/public/signup` — public, rate-limited (5/15min), CORS open for any origin
+- **Flow**: Base 44 website submits `{ email, firstName, lastName, companyName }` → app sends verification email with 24h token → user clicks link → `GET /api/public/verify-email?token=...` provisions user account (mustChangePassword=true), company (trialing), seeds defaults, sends welcome email with temp credentials → shows server-rendered HTML result page
+- **Schema**: `email_verification_tokens` table stores pending signups until verified
+- **Security**: Token is SHA-256 hashed before storage; verification runs in a DB transaction; duplicate signups are rejected
+
 ## Security
 - **Security Headers**: Helmet middleware (HSTS, X-Content-Type-Options, X-Frame-Options, CSP in production)
 - **CORS**: Strict origin allowlist via `ALLOWED_ORIGINS` env var (no wildcard with credentials)

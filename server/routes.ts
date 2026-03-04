@@ -3742,6 +3742,231 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Public Signup Routes (no auth required) ================
+  const signupLimiter = (await import("express-rate-limit")).default({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many signup attempts, please try again later" },
+  });
+
+  app.post("/api/public/signup", signupLimiter, async (req: Request, res: Response) => {
+    try {
+      const { email, firstName, lastName, companyName } = req.body;
+      if (!email || !firstName || !companyName) {
+        return res.status(400).json({ error: "Email, first name, and company name are required" });
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: "Invalid email address" });
+      }
+      if (typeof companyName !== "string" || companyName.trim().length < 2) {
+        return res.status(400).json({ error: "Company name must be at least 2 characters" });
+      }
+
+      const existingUser = await getUserByEmail(email.toLowerCase());
+      if (existingUser) {
+        return res.status(409).json({ error: "An account with this email already exists" });
+      }
+
+      const { emailVerificationTokens } = await import("@shared/models/auth");
+      const { eq, and, gt } = await import("drizzle-orm");
+      const pending = await db.select().from(emailVerificationTokens).where(
+        and(
+          eq(emailVerificationTokens.email, email.toLowerCase()),
+          eq(emailVerificationTokens.used, false),
+          gt(emailVerificationTokens.expiresAt, new Date())
+        )
+      );
+      if (pending.length > 0) {
+        return res.json({ success: true, message: "A verification email was already sent. Please check your inbox." });
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await db.insert(emailVerificationTokens).values({
+        email: email.toLowerCase(),
+        firstName: firstName.trim(),
+        lastName: lastName?.trim() || null,
+        companyName: companyName.trim(),
+        tokenHash,
+        expiresAt,
+      });
+
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host || "localhost:5000";
+      const verifyUrl = `${protocol}://${host}/api/public/verify-email?token=${token}`;
+
+      try {
+        await sendEmail({
+          to: email,
+          subject: "Verify your email to start your ScooPilot free trial",
+          text: `Hi ${firstName},\n\nThanks for signing up for ScooPilot! Please verify your email to activate your free trial:\n\n${verifyUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't sign up for ScooPilot, you can safely ignore this email.`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">ScooPilot</h1>
+              </div>
+              <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                <h2 style="margin-top: 0;">Verify Your Email</h2>
+                <p>Hi ${firstName},</p>
+                <p>Thanks for signing up for ScooPilot! Click the button below to verify your email and activate your free trial.</p>
+                <div style="text-align: center; margin: 24px 0;">
+                  <a href="${verifyUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Verify Email</a>
+                </div>
+                <p style="color: #6b7280; font-size: 14px;">This link expires in 24 hours. If you didn't sign up for ScooPilot, you can safely ignore this email.</p>
+              </div>
+            </div>
+          `,
+        });
+      } catch (emailErr) {
+        console.error("[Signup] Failed to send verification email:", emailErr);
+        return res.status(500).json({ error: "Failed to send verification email. Please try again." });
+      }
+
+      res.json({ success: true, message: "Verification email sent. Please check your inbox." });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/public/verify-email", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.query;
+      if (!token || typeof token !== "string") {
+        return res.send(verificationResultPage(false, "Missing verification token."));
+      }
+
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const { emailVerificationTokens } = await import("@shared/models/auth");
+      const { eq, and, gt } = await import("drizzle-orm");
+
+      const [record] = await db.select().from(emailVerificationTokens).where(
+        and(
+          eq(emailVerificationTokens.tokenHash, tokenHash),
+          eq(emailVerificationTokens.used, false),
+          gt(emailVerificationTokens.expiresAt, new Date())
+        )
+      );
+
+      if (!record) {
+        return res.send(verificationResultPage(false, "This verification link is invalid or has expired. Please sign up again."));
+      }
+
+      const existingUser = await getUserByEmail(record.email);
+      if (existingUser) {
+        await db.update(emailVerificationTokens)
+          .set({ used: true })
+          .where(eq(emailVerificationTokens.id, record.id));
+        return res.send(verificationResultPage(false, "An account with this email already exists. Please log in instead."));
+      }
+
+      const tempPassword = crypto.randomBytes(6).toString("base64url");
+
+      const { user, company } = await db.transaction(async (tx) => {
+        const txUser = await createUserWithTempPassword(record.email, record.firstName, record.lastName || "", tempPassword);
+
+        const [txCompany] = await tx.insert((await import("@shared/schema")).companies).values({
+          name: record.companyName,
+          email: record.email,
+          subscriptionTier: "tier_1",
+          subscriptionStatus: "trialing",
+        }).returning();
+
+        await tx.insert((await import("@shared/schema")).companyUsers).values({
+          userId: txUser.id,
+          companyId: txCompany.id,
+          role: "owner",
+        });
+
+        await tx.update(emailVerificationTokens)
+          .set({ used: true })
+          .where(eq(emailVerificationTokens.id, record.id));
+
+        return { user: txUser, company: txCompany };
+      });
+
+      await seedDefaultLeadSources(company.id);
+      await storage.seedDefaultPricing(company.id);
+
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host || "localhost:5000";
+      const appUrl = `${protocol}://${host}`;
+
+      try {
+        await sendEmail({
+          to: record.email,
+          subject: "Welcome to ScooPilot - Your login credentials",
+          text: `Hi ${record.firstName},\n\nYour ScooPilot free trial is active!\n\nCompany: ${record.companyName}\nLogin: ${appUrl}\nEmail: ${record.email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">ScooPilot</h1>
+              </div>
+              <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                <h2 style="margin-top: 0;">Your Free Trial is Active!</h2>
+                <p>Hi ${record.firstName},</p>
+                <p>Your ScooPilot account <strong>"${record.companyName}"</strong> is ready to go.</p>
+                <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 4px 0;"><strong>Email:</strong> ${record.email}</p>
+                  <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+                </div>
+                <div style="text-align: center; margin: 24px 0;">
+                  <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
+                </div>
+                <p style="color: #6b7280; font-size: 14px;">You'll be asked to set a new password when you first log in.</p>
+              </div>
+            </div>
+          `,
+        });
+      } catch (emailErr) {
+        console.error("[Signup] Failed to send welcome email:", emailErr);
+      }
+
+      res.send(verificationResultPage(true, null, appUrl));
+    } catch (err) {
+      console.error("[Signup] Verification error:", err);
+      res.send(verificationResultPage(false, "Something went wrong. Please try again or contact support."));
+    }
+  });
+
+  function verificationResultPage(success: boolean, errorMessage?: string | null, loginUrl?: string): string {
+    const title = success ? "Email Verified!" : "Verification Failed";
+    const body = success
+      ? `<h2 style="color: #2d8a5e; margin-top: 0;">Your account has been created!</h2>
+         <p>Your free trial is now active. We've sent your login credentials to your email.</p>
+         <div style="text-align: center; margin: 24px 0;">
+           <a href="${loginUrl || "/"}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Go to Login</a>
+         </div>
+         <p style="color: #6b7280; font-size: 14px;">Check your email for your temporary password. You'll set a new one on first login.</p>`
+      : `<h2 style="color: #dc2626; margin-top: 0;">Verification Failed</h2>
+         <p>${errorMessage || "This link is invalid or has expired."}</p>
+         <p style="color: #6b7280; font-size: 14px; margin-top: 16px;">Please try signing up again or contact support if you need help.</p>`;
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title} - ScooPilot</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f9fafb; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.07); max-width: 480px; width: 90%; overflow: hidden; }
+    .header { background-color: #2d8a5e; padding: 20px; text-align: center; }
+    .header h1 { color: white; margin: 0; font-size: 24px; }
+    .content { padding: 24px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header"><h1>ScooPilot</h1></div>
+    <div class="content">${body}</div>
+  </div>
+</body>
+</html>`;
+  }
+
   const { registerAdminAnalyticsRoutes } = await import("./admin-analytics");
   registerAdminAnalyticsRoutes(app, isAdmin);
 
