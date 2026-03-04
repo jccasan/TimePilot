@@ -5,7 +5,8 @@ import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql, eq, and } from "drizzle-orm";
+import { sql, eq, and, lt, isNotNull } from "drizzle-orm";
+import { users, companyUsers, companies } from "@shared/schema";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
@@ -277,6 +278,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: result.error });
       }
       (req.session as any).userId = result.user.id;
+      await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, result.user.id)).execute();
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => (err ? reject(err) : resolve()));
       });
@@ -3573,6 +3575,36 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/admin/inactive-users", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const now = new Date();
+      const thresholds = [3, 5, 7, 14];
+      const result: Record<string, any[]> = {};
+      for (const days of thresholds) {
+        const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+        const rows = await db
+          .select({
+            userId: users.id,
+            email: users.email,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            lastLoginAt: users.lastLoginAt,
+            companyId: companyUsers.companyId,
+            companyName: companies.name,
+            role: companyUsers.role,
+          })
+          .from(users)
+          .innerJoin(companyUsers, eq(companyUsers.userId, users.id))
+          .innerJoin(companies, eq(companies.id, companyUsers.companyId))
+          .where(
+            sql`(${users.lastLoginAt} IS NULL OR ${users.lastLoginAt} < ${cutoff})`
+          );
+        result[`${days}d`] = rows;
+      }
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/admin/companies", isAdmin, async (_req: Request, res: Response) => {
     try {
       const allCompanies = await storage.getAllCompanies();
@@ -3598,6 +3630,7 @@ export async function registerRoutes(
             email: user?.email || "unknown",
             firstName: user?.firstName || "",
             lastName: user?.lastName || "",
+            lastLoginAt: user?.lastLoginAt || null,
           };
         })
       );

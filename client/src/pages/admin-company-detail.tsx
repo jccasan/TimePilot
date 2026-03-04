@@ -366,6 +366,11 @@ export default function AdminCompanyDetail() {
                         {u.firstName || u.lastName ? `${u.firstName} ${u.lastName}`.trim() : "Unnamed"}
                       </p>
                       <p className="text-xs text-muted-foreground truncate" data-testid={`text-user-email-${u.userId}`}>{u.email}</p>
+                      <p className="text-xs text-muted-foreground" data-testid={`text-user-last-login-${u.userId}`}>
+                        {u.lastLoginAt
+                          ? `Last login: ${new Date(u.lastLoginAt).toLocaleDateString()} ${new Date(u.lastLoginAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                          : "Never logged in"}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <Badge variant="outline">{u.role}</Badge>

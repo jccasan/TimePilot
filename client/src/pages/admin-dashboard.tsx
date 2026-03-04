@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, Contact2, CalendarCheck, DollarSign, ChevronRight, BarChart3, ArrowRight } from "lucide-react";
+import { Building2, Users, Contact2, CalendarCheck, DollarSign, ChevronRight, BarChart3, ArrowRight, AlertTriangle } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { adminFetchFn } from "@/lib/adminApi";
 
@@ -29,6 +29,11 @@ export default function AdminDashboard() {
   const { data: companies } = useQuery<any[]>({
     queryKey: ["/api/admin/companies"],
     queryFn: adminFetchFn("/api/admin/companies"),
+  });
+
+  const { data: inactiveUsers } = useQuery<Record<string, any[]>>({
+    queryKey: ["/api/admin/inactive-users"],
+    queryFn: adminFetchFn("/api/admin/inactive-users"),
   });
 
   const recentTenants = (companies || [])
@@ -100,6 +105,56 @@ export default function AdminDashboard() {
           </Card>
         </Link>
       </div>
+
+      {inactiveUsers && (Object.values(inactiveUsers).some((arr) => arr.length > 0)) && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" data-testid="card-inactive-users-alert">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              Inactive Users
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { key: "3d", label: "3+ days", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
+                { key: "5d", label: "5+ days", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
+                { key: "7d", label: "7+ days", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
+                { key: "14d", label: "14+ days", color: "bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-200" },
+              ].map((tier) => {
+                const count = inactiveUsers[tier.key]?.length || 0;
+                return (
+                  <div key={tier.key} className="flex items-center justify-between p-3 rounded-lg border bg-background" data-testid={`stat-inactive-${tier.key}`}>
+                    <div>
+                      <p className="text-xs text-muted-foreground">No login</p>
+                      <p className="text-sm font-medium">{tier.label}</p>
+                    </div>
+                    <Badge className={tier.color}>{count}</Badge>
+                  </div>
+                );
+              })}
+            </div>
+            {(() => {
+              const worst = inactiveUsers["14d"] || [];
+              if (worst.length === 0) return null;
+              return (
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">14+ day inactive users:</p>
+                  {worst.slice(0, 5).map((u: any) => (
+                    <Link key={u.userId} href={`/admin/companies/${u.companyId}`}>
+                      <div className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-muted cursor-pointer" data-testid={`row-inactive-${u.userId}`}>
+                        <span className="truncate">{u.firstName} {u.lastName} ({u.email})</span>
+                        <span className="text-muted-foreground shrink-0 ml-2">{u.companyName} - {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Never"}</span>
+                      </div>
+                    </Link>
+                  ))}
+                  {worst.length > 5 && <p className="text-xs text-muted-foreground">+{worst.length - 5} more</p>}
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-3">

@@ -574,6 +574,67 @@ const TABS = [
   { key: "economics", label: "Unit Economics", icon: Calculator },
 ] as const;
 
+function InactiveUsersAlert() {
+  const { data: inactiveUsers } = useQuery<Record<string, any[]>>({
+    queryKey: ["/api/admin/inactive-users"],
+    queryFn: adminFetchFn("/api/admin/inactive-users"),
+  });
+
+  if (!inactiveUsers || !Object.values(inactiveUsers).some((arr) => arr.length > 0)) return null;
+
+  const tiers = [
+    { key: "3d", label: "3+ days", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
+    { key: "5d", label: "5+ days", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
+    { key: "7d", label: "7+ days", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
+    { key: "14d", label: "14+ days", color: "bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-200" },
+  ];
+
+  return (
+    <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" data-testid="card-analytics-inactive-users">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          Inactive Users
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {tiers.map((tier) => {
+            const count = inactiveUsers[tier.key]?.length || 0;
+            return (
+              <div key={tier.key} className="flex items-center justify-between p-3 rounded-lg border bg-background" data-testid={`stat-analytics-inactive-${tier.key}`}>
+                <div>
+                  <p className="text-xs text-muted-foreground">No login</p>
+                  <p className="text-sm font-medium">{tier.label}</p>
+                </div>
+                <Badge className={tier.color}>{count}</Badge>
+              </div>
+            );
+          })}
+        </div>
+        {(() => {
+          const worst = inactiveUsers["14d"] || [];
+          if (worst.length === 0) return null;
+          return (
+            <div className="mt-3 space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">14+ day inactive users:</p>
+              {worst.slice(0, 5).map((u: any) => (
+                <Link key={u.userId} href={`/admin/companies/${u.companyId}`}>
+                  <div className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-muted cursor-pointer" data-testid={`row-analytics-inactive-${u.userId}`}>
+                    <span className="truncate">{u.firstName} {u.lastName} ({u.email})</span>
+                    <span className="text-muted-foreground shrink-0 ml-2">{u.companyName} - {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Never"}</span>
+                  </div>
+                </Link>
+              ))}
+              {worst.length > 5 && <p className="text-xs text-muted-foreground">+{worst.length - 5} more</p>}
+            </div>
+          );
+        })()}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminAnalytics() {
   const [activeTab, setActiveTab] = useState<string>("executive");
 
@@ -583,6 +644,8 @@ export default function AdminAnalytics() {
         <h1 className="text-2xl font-bold" data-testid="text-analytics-title">Analytics</h1>
         <p className="text-muted-foreground text-sm mt-1">Platform performance and business metrics</p>
       </div>
+
+      <InactiveUsersAlert />
 
       <div className="flex gap-1 overflow-x-auto border-b pb-px">
         {TABS.map((tab) => (
