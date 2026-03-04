@@ -125,7 +125,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  registerObjectStorageRoutes(app);
+  registerObjectStorageRoutes(app, isAuthenticated);
 
   // ================ Geocode Proxy (Mapbox) ================
 
