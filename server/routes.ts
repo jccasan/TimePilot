@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
@@ -3610,7 +3610,7 @@ export async function registerRoutes(
       if (!emailRegex.test(ownerEmail)) {
         return res.status(400).json({ error: "Invalid email address" });
       }
-      const validTiers = ["tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
+      const validTiers = ["free_trial", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
       const tier = validTiers.includes(subscriptionTier) ? subscriptionTier : "tier_1";
 
       let user = await getUserByEmail(ownerEmail);
@@ -3634,7 +3634,7 @@ export async function registerRoutes(
         name: companyName.trim(),
         email: ownerEmail,
         subscriptionTier: tier,
-        subscriptionStatus: "active",
+        subscriptionStatus: tier === "free_trial" ? "trialing" : "active",
       });
       await storage.addUserToCompany(user.id, company.id, "owner");
 
@@ -3700,10 +3700,35 @@ export async function registerRoutes(
   app.patch("/api/admin/companies/:id/subscription", isAdmin, async (req: Request, res: Response) => {
     try {
       const { tier } = req.body;
-      const validTiers = ["tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
+      const validTiers = ["free_trial", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
       if (!tier || !validTiers.includes(tier)) return res.status(400).json({ error: "Invalid tier" });
       const updated = await storage.updateCompanySubscription(req.params.id, tier);
       res.json(updated);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/admin/companies/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const companyId = req.params.id;
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const companyUsersList = await storage.getCompanyUsers(companyId);
+      const { companies: companiesTable, users: usersTable, companyUsers: companyUsersTable } = await import("@shared/schema");
+
+      await db.transaction(async (tx) => {
+        await tx.delete(companiesTable).where(eq(companiesTable.id, companyId));
+        for (const cu of companyUsersList) {
+          const [remaining] = await tx.select({ count: sql<number>`count(*)` })
+            .from(companyUsersTable)
+            .where(eq(companyUsersTable.userId, cu.userId));
+          if (!remaining || Number(remaining.count) === 0) {
+            await tx.delete(usersTable).where(eq(usersTable.id, cu.userId));
+          }
+        }
+      });
+
+      console.log(`[Admin] Tenant "${company.name}" (${companyId}) deleted by ${(req as any).adminUser?.email}`);
+      res.json({ ok: true, deletedCompany: company.name });
     } catch (err) { handleError(res, err); }
   });
 
@@ -3870,7 +3895,7 @@ export async function registerRoutes(
         const [txCompany] = await tx.insert((await import("@shared/schema")).companies).values({
           name: record.companyName,
           email: record.email,
-          subscriptionTier: "tier_1",
+          subscriptionTier: "free_trial",
           subscriptionStatus: "trialing",
         }).returning();
 

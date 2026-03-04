@@ -17,11 +17,12 @@ export const chargeTimingEnum = pgEnum("charge_timing", ["day_before", "weekly_b
 export const invoiceTimingEnum = pgEnum("invoice_timing", ["before_service", "after_service"]);
 export const invoiceFrequencyEnum = pgEnum("invoice_frequency", ["per_service", "per_week", "per_month"]);
 export const discountTypeEnum = pgEnum("discount_type", ["percent", "amount"]);
-export const subscriptionTierEnum = pgEnum("subscription_tier", ["tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"]);
+export const subscriptionTierEnum = pgEnum("subscription_tier", ["free_trial", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "past_due", "cancelled", "trialing"]);
 export const automationTriggerEnum = pgEnum("automation_trigger", ["lead_created", "service_completed", "payment_failed", "invoice_created"]);
 
 export const TIER_CONFIG = {
+  free_trial: { name: "Free Trial (14 days)", maxUsers: 1, price: 0 },
   tier_1: { name: "Solo", maxUsers: 1, price: 49.99 },
   tier_1_3: { name: "Starter", maxUsers: 3, price: 99.99 },
   tier_3_5: { name: "Growing", maxUsers: 5, price: 199.99 },

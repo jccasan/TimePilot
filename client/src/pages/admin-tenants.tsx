@@ -5,15 +5,16 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Search, ChevronRight, Plus } from "lucide-react";
+import { Building2, Search, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState, useMemo } from "react";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 
 const tierColors: Record<string, string> = {
+  free_trial: "bg-emerald-100 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-200",
   tier_1: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   tier_1_3: "bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200",
   tier_3_5: "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200",
@@ -24,11 +25,13 @@ const tierColors: Record<string, string> = {
 export default function AdminTenants() {
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerFirstName, setOwnerFirstName] = useState("");
   const [ownerLastName, setOwnerLastName] = useState("");
-  const [selectedTier, setSelectedTier] = useState("tier_1");
+  const [selectedTier, setSelectedTier] = useState("free_trial");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -56,10 +59,31 @@ export default function AdminTenants() {
       setOwnerEmail("");
       setOwnerFirstName("");
       setOwnerLastName("");
-      setSelectedTier("tier_1");
+      setSelectedTier("free_trial");
     },
     onError: (error: Error) => {
       toast({ title: "Failed to create tenant", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (companyId: string) => {
+      const res = await adminRequest("DELETE", `/api/admin/companies/${companyId}`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete tenant");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Tenant removed", description: `${data.deletedCompany} has been permanently deleted.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to delete tenant", description: error.message, variant: "destructive" });
     },
   });
 
@@ -115,32 +139,46 @@ export default function AdminTenants() {
           {filtered.map((c: any) => {
             const tierConfig = TIER_CONFIG[c.subscriptionTier as keyof typeof TIER_CONFIG];
             return (
-              <Link key={c.id} href={`/admin/companies/${c.id}`}>
-                <Card className="hover-elevate cursor-pointer" data-testid={`card-company-${c.id}`}>
-                  <CardContent className="py-3 px-4">
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
-                        <div className="min-w-0">
-                          <p className="font-medium truncate" data-testid={`text-company-name-${c.id}`}>{c.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{c.id}</p>
-                        </div>
+              <Card key={c.id} className="hover-elevate" data-testid={`card-company-${c.id}`}>
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <Link href={`/admin/companies/${c.id}`} className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer">
+                      <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-medium truncate" data-testid={`text-company-name-${c.id}`}>{c.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{c.id}</p>
                       </div>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <Badge className={tierColors[c.subscriptionTier] || ""} data-testid={`badge-tier-${c.id}`}>
-                          {tierConfig?.name || c.subscriptionTier}
-                        </Badge>
-                        <Badge variant="outline" data-testid={`badge-status-${c.id}`}>
-                          {c.subscriptionStatus}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">{c.userCount} users</span>
-                        <span className="text-xs text-muted-foreground">{c.contactCount} contacts</span>
+                    </Link>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <Badge className={tierColors[c.subscriptionTier] || ""} data-testid={`badge-tier-${c.id}`}>
+                        {tierConfig?.name || c.subscriptionTier}
+                      </Badge>
+                      <Badge variant="outline" data-testid={`badge-status-${c.id}`}>
+                        {c.subscriptionStatus}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{c.userCount} users</span>
+                      <span className="text-xs text-muted-foreground">{c.contactCount} contacts</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDeleteTarget({ id: c.id, name: c.name });
+                          setDeleteOpen(true);
+                        }}
+                        data-testid={`button-delete-company-${c.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Link href={`/admin/companies/${c.id}`}>
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
+                      </Link>
                     </div>
-                  </CardContent>
-                </Card>
-              </Link>
+                  </div>
+                </CardContent>
+              </Card>
             );
           })}
         </div>
@@ -204,7 +242,7 @@ export default function AdminTenants() {
                 <SelectContent>
                   {Object.entries(TIER_CONFIG).map(([key, cfg]) => (
                     <SelectItem key={key} value={key} data-testid={`select-item-${key}`}>
-                      {cfg.name}
+                      {cfg.name} {cfg.price > 0 ? `- $${cfg.price}/mo` : "- Free"}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -221,6 +259,30 @@ export default function AdminTenants() {
               data-testid="button-submit-create-tenant"
             >
               {createMutation.isPending ? "Creating..." : "Create Tenant"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); if (!open) setDeleteTarget(null); }}>
+        <DialogContent data-testid="dialog-delete-tenant">
+          <DialogHeader>
+            <DialogTitle>Remove Tenant</DialogTitle>
+            <DialogDescription>
+              This will permanently delete <strong>{deleteTarget?.name}</strong> and all of its data including contacts, service plans, invoices, and user accounts that belong only to this company. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeleteOpen(false); setDeleteTarget(null); }} data-testid="button-cancel-delete">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              disabled={deleteMutation.isPending}
+              data-testid="button-confirm-delete-tenant"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
             </Button>
           </DialogFooter>
         </DialogContent>
