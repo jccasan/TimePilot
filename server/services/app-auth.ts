@@ -52,9 +52,18 @@ export async function loginUser(email: string, password: string) {
   if (!email || !password) return { error: "Email and password are required" };
 
   const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
-  if (!user || !user.passwordHash) return { error: "Invalid email or password" };
+  if (!user) {
+    console.log(`[Login Debug] No user found for email: ${email.toLowerCase()}`);
+    return { error: "Invalid email or password" };
+  }
+  if (!user.passwordHash) {
+    console.log(`[Login Debug] User ${user.id} has no password hash`);
+    return { error: "Invalid email or password" };
+  }
 
+  console.log(`[Login Debug] User ${user.id} found, hash length: ${user.passwordHash.length}, salt: ${user.passwordHash.split(":")[0].substring(0, 8)}...`);
   const valid = await verifyPassword(password, user.passwordHash);
+  console.log(`[Login Debug] Password verification result: ${valid}`);
   if (!valid) return { error: "Invalid email or password" };
 
   return { user };
