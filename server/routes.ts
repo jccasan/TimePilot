@@ -3741,7 +3741,7 @@ export async function registerRoutes(
         });
       });
       await db.update(usersTable)
-        .set({ password: hash, mustChangePassword: true })
+        .set({ passwordHash: hash, mustChangePassword: true })
         .where(eq(usersTable.id, userId));
       console.log(`[Admin] Password reset for user ${user.email} (${userId}) by ${(req as any).adminUser?.email}`);
       res.json({ ok: true, email: user.email, tempPassword: password });
