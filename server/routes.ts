@@ -48,6 +48,7 @@ const CHANGE_PASSWORD_EXEMPT_PATHS = ["/api/auth/change-password", "/api/auth/us
 
 const isAuthenticated: RequestHandler = async (req, res, next) => {
   let userId = (req.session as any)?.userId;
+  let authMethod = userId ? "session-cookie" : "none";
   if (!userId) {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
@@ -58,11 +59,17 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
         if (sess?.userId) {
           userId = sess.userId;
           (req.session as any).userId = userId;
+          authMethod = "bearer-token";
         }
+      } else {
+        authMethod = "bearer-token-invalid";
       }
     }
   }
   if (!userId) {
+    const hasCookie = !!req.headers.cookie?.includes("connect.sid");
+    const hasBearer = !!req.headers.authorization;
+    console.log(`[auth] 401 on ${req.method} ${req.path} | cookie=${hasCookie} bearer=${hasBearer} method=${authMethod} ua=${(req.headers["user-agent"] || "").substring(0, 80)}`);
     return res.status(401).json({ message: "Unauthorized" });
   }
   if (!CHANGE_PASSWORD_EXEMPT_PATHS.includes(req.path)) {
@@ -315,6 +322,7 @@ export async function registerRoutes(
         console.error("Setup during login failed:", err);
       }
 
+      console.log(`[auth] login success | user=${result.user.id} sid=${req.sessionID.substring(0, 8)}... ua=${(req.headers["user-agent"] || "").substring(0, 80)}`);
       return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
     } catch (err) { handleError(res, err); }
   });

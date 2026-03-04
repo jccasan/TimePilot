@@ -16,6 +16,15 @@ async function fetchUser(): Promise<SafeUser | null> {
   });
 
   if (response.status === 401) {
+    if (token) {
+      localStorage.removeItem("sessionToken");
+      const retryResponse = await fetch("/api/auth/user", {
+        credentials: "include",
+      });
+      if (retryResponse.ok) {
+        return retryResponse.json();
+      }
+    }
     return null;
   }
 

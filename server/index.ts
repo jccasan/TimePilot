@@ -143,6 +143,7 @@ function setupSession(app: express.Express) {
   });
 
   app.set("trust proxy", 1);
+  const isProduction = process.env.NODE_ENV === "production";
   app.use(session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
@@ -152,7 +153,8 @@ function setupSession(app: express.Express) {
       httpOnly: true,
       secure: true,
       maxAge: sessionTtl,
-      sameSite: "none",
+      sameSite: isProduction ? "lax" : "none" as any,
+      path: "/",
     },
   }));
 }

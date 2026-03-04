@@ -58,8 +58,11 @@ export const getQueryFn: <T>(options: {
       headers: getAuthHeaders(),
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      localStorage.removeItem("sessionToken");
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
     }
 
     await throwIfResNotOk(res);

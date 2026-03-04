@@ -39,6 +39,12 @@ export default function AuthPage() {
     }
   }, [existingUser]);
 
+  useEffect(() => {
+    if (mode === "login" || mode === "register") {
+      localStorage.removeItem("sessionToken");
+    }
+  }, [mode]);
+
   const loginMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/auth/login", {
