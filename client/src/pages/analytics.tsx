@@ -50,7 +50,10 @@ const leadSourceLabels: Record<string, string> = {
   unknown: "Not Set",
 };
 
-const CHART_COLORS = ["#22c55e", "#3b82f6", "#eab308", "#f97316", "#ef4444", "#8b5cf6", "#06b6d4"];
+const CHART_COLORS = [
+  "hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))", "hsl(var(--chart-5))", "#8b5cf6", "#06b6d4",
+];
 
 function fmt(n: number): string {
   if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
@@ -85,7 +88,7 @@ function KpiCard({ title, value, subtitle, icon: Icon, trend, trendLabel }: {
               <Icon className="h-4 w-4 text-primary" />
             </div>
             {trend !== undefined && (
-              <div className={`flex items-center gap-0.5 text-xs font-medium ${trend > 0 ? "text-green-600" : trend < 0 ? "text-red-600" : "text-muted-foreground"}`}>
+              <div className={`flex items-center gap-0.5 text-xs font-medium ${trend > 0 ? "text-green-600 dark:text-green-400" : trend < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
                 {trend > 0 ? <TrendingUp className="h-3 w-3" /> : trend < 0 ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
                 <span>{trend > 0 ? "+" : ""}{trend}%</span>
               </div>
@@ -192,15 +195,15 @@ export default function Analytics() {
               <AreaChart data={data.monthlyRevenue}>
                 <defs>
                   <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                    <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} className="text-muted-foreground" />
-                <YAxis tickFormatter={fmt} tick={{ fontSize: 11 }} className="text-muted-foreground" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
+                <YAxis tickFormatter={fmt} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
                 <Tooltip content={<ChartTooltipContent prefix="$" />} />
-                <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#22c55e" fill="url(#revenueGrad)" strokeWidth={2} />
+                <Area type="monotone" dataKey="revenue" name="Revenue" stroke="hsl(var(--chart-1))" fill="url(#revenueGrad)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
@@ -217,14 +220,14 @@ export default function Analytics() {
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={data.customerAcquisition}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} className="text-muted-foreground" />
-                <YAxis yAxisId="left" tick={{ fontSize: 11 }} className="text-muted-foreground" />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} className="text-muted-foreground" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
+                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
                 <Tooltip content={<ChartTooltipContent />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar yAxisId="left" dataKey="newClients" name="New Clients" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="total" name="Total Clients" stroke="#22c55e" strokeWidth={2} dot={false} />
+                <Bar yAxisId="left" dataKey="newClients" name="New Clients" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="total" name="Total Clients" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -241,15 +244,15 @@ export default function Analytics() {
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={data.routePerformance}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="day" tick={{ fontSize: 11 }} className="text-muted-foreground" tickFormatter={(v) => v.slice(0, 3)} />
-                <YAxis tick={{ fontSize: 11 }} className="text-muted-foreground" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" tickFormatter={(v) => v.slice(0, 3)} />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
                 <Tooltip content={<ChartTooltipContent />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="completed" name="Completed" fill="#22c55e" stackId="a" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="scheduled" name="Scheduled" fill="#3b82f6" stackId="a" />
-                <Bar dataKey="skipped" name="Skipped" fill="#f97316" stackId="a" />
-                <Bar dataKey="cancelled" name="Cancelled" fill="#ef4444" stackId="a" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="completed" name="Completed" fill="hsl(var(--chart-1))" stackId="a" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="scheduled" name="Scheduled" fill="hsl(var(--chart-2))" stackId="a" />
+                <Bar dataKey="skipped" name="Skipped" fill="hsl(var(--chart-3))" stackId="a" />
+                <Bar dataKey="cancelled" name="Cancelled" fill="hsl(var(--chart-5))" stackId="a" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -266,15 +269,15 @@ export default function Analytics() {
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={data.weeklyVisits}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="week" tick={{ fontSize: 11 }} className="text-muted-foreground" />
-                <YAxis yAxisId="left" tick={{ fontSize: 11 }} className="text-muted-foreground" />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} domain={[0, 100]} unit="%" className="text-muted-foreground" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis dataKey="week" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
+                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} domain={[0, 100]} unit="%" stroke="hsl(var(--border))" />
                 <Tooltip content={<ChartTooltipContent />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar yAxisId="left" dataKey="total" name="Total Visits" fill="#3b82f6" radius={[4, 4, 0, 0]} opacity={0.3} />
-                <Bar yAxisId="left" dataKey="completed" name="Completed" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="completionRate" name="Completion %" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
+                <Bar yAxisId="left" dataKey="total" name="Total Visits" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} opacity={0.3} />
+                <Bar yAxisId="left" dataKey="completed" name="Completed" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="completionRate" name="Completion %" stroke="hsl(var(--chart-4))" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -337,20 +340,20 @@ export default function Analytics() {
           <CardContent>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={data.leadSourceDistribution} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis type="number" tick={{ fontSize: 11 }} className="text-muted-foreground" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis type="number" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
                 <YAxis
                   type="category"
                   dataKey="source"
-                  tick={{ fontSize: 11 }}
-                  className="text-muted-foreground"
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  stroke="hsl(var(--border))"
                   width={80}
                   tickFormatter={(v) => leadSourceLabels[v] || v}
                 />
                 <Tooltip
                   formatter={(value: number, name: string, props: any) => [value, leadSourceLabels[props.payload.source] || props.payload.source]}
                 />
-                <Bar dataKey="count" name="Clients" fill="#3b82f6" radius={[0, 4, 4, 0]}>
+                <Bar dataKey="count" name="Clients" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]}>
                   {data.leadSourceDistribution.map((_, idx) => (
                     <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
                   ))}
@@ -371,11 +374,11 @@ export default function Analytics() {
           <CardContent>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={data.serviceDayDistribution}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="day" tick={{ fontSize: 11 }} className="text-muted-foreground" />
-                <YAxis tick={{ fontSize: 11 }} className="text-muted-foreground" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
                 <Tooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="count" name="Clients" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" name="Clients" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

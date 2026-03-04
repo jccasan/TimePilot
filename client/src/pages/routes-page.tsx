@@ -20,8 +20,9 @@ import {
 import {
   MapPin, Dog, GripVertical, Plus, Pencil, Trash2, Route as RouteIcon,
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
-  Clock, ShoppingCart, RotateCcw
+  Clock, ShoppingCart, RotateCcw, Map, List
 } from "lucide-react";
+import RouteMapView, { type RouteStop } from "@/components/route-map-view";
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, TouchSensor,
   useSensor, useSensors, useDroppable, useDraggable,
@@ -437,6 +438,7 @@ export default function RoutesPage() {
   const [showPurchase, setShowPurchase] = useState(false);
   const [unassigningRouteId, setUnassigningRouteId] = useState<string | null>(null);
   const [confirmUnassignAll, setConfirmUnassignAll] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -487,6 +489,28 @@ export default function RoutesPage() {
     if (!activeDragId) return null;
     return servicePlans.find(sp => sp.id === activeDragId) || null;
   }, [activeDragId, servicePlans]);
+
+  const mapStops = useMemo((): RouteStop[] => {
+    const allDayStops: RouteStop[] = [];
+    for (const route of routesForDay) {
+      const routeStops = (stopsByRoute[route.id] || [])
+        .sort((a, b) => a.stopOrder - b.stopOrder);
+      routeStops.forEach((sp, idx) => {
+        const property = properties.find(p => p.id === sp.propertyId);
+        const contact = contacts.find(c => c.id === sp.contactId);
+        if (property?.latitude && property?.longitude) {
+          allDayStops.push({
+            stopNumber: idx + 1,
+            contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
+            streetAddress: property.streetAddress || "",
+            latitude: Number(property.latitude),
+            longitude: Number(property.longitude),
+          });
+        }
+      });
+    }
+    return allDayStops;
+  }, [routesForDay, stopsByRoute, properties, contacts]);
 
   const dayStopCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -659,6 +683,15 @@ export default function RoutesPage() {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewMode(viewMode === "list" ? "map" : "list")}
+              data-testid="button-toggle-view"
+            >
+              {viewMode === "list" ? <Map className="h-4 w-4 mr-1" /> : <List className="h-4 w-4 mr-1" />}
+              {viewMode === "list" ? "Map" : "List"}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setShowPurchase(true)} data-testid="button-buy-credits">
               <ShoppingCart className="h-4 w-4 mr-1" /> Buy Credits
             </Button>
@@ -688,6 +721,13 @@ export default function RoutesPage() {
       {isLoading ? (
         <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-60 w-full" />)}
+        </div>
+      ) : viewMode === "map" ? (
+        <div className="flex-1 overflow-hidden" data-testid="route-map-view-wrapper">
+          <RouteMapView
+            stops={mapStops}
+            routeName={`${DAY_LABELS[selectedDay]} Routes`}
+          />
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter}

@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, Route } from "@shared/schema";
+import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, Route, ActivityLog } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,7 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn } from "lucide-react";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 const statusColors: Record<string, string> = {
@@ -595,6 +595,8 @@ export default function ContactDetail() {
           </Button>
         </CardContent>
       </Card>
+
+      <ActivitySection contactId={id!} />
     </div>
   );
 }
@@ -1238,6 +1240,115 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
             )}
           </DialogContent>
         </Dialog>
+      </CardContent>
+    </Card>
+  );
+}
+
+const activityActionIcons: Record<string, typeof Plus> = {
+  created: Plus,
+  updated: Edit2,
+  status_changed: ArrowRight,
+  visit_completed: CheckCircle,
+  visit_scheduled: Calendar,
+  invoice_created: FileText,
+  invoice_paid: DollarSign,
+  email_sent: Mail,
+  sms_sent: MessageSquare,
+  note_added: StickyNote,
+  portal_login: LogIn,
+};
+
+const activityActionLabels: Record<string, string> = {
+  created: "Contact Created",
+  updated: "Contact Updated",
+  status_changed: "Status Changed",
+  visit_completed: "Visit Completed",
+  visit_scheduled: "Visit Scheduled",
+  invoice_created: "Invoice Created",
+  invoice_paid: "Invoice Paid",
+  email_sent: "Email Sent",
+  sms_sent: "SMS Sent",
+  note_added: "Note Added",
+  portal_login: "Portal Login",
+};
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHr / 24);
+
+  if (diffSec < 60) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  return date.toLocaleDateString();
+}
+
+function ActivitySection({ contactId }: { contactId: string }) {
+  const { data: activityLogs, isLoading } = useQuery<ActivityLog[]>({
+    queryKey: ["/api/contacts", contactId, "activity"],
+  });
+
+  return (
+    <Card data-testid="section-activity">
+      <CardHeader>
+        <CardTitle className="text-lg">Activity</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : activityLogs && activityLogs.length > 0 ? (
+          <div className="space-y-0" data-testid="activity-timeline">
+            {activityLogs.map((log, index) => {
+              const Icon = activityActionIcons[log.action] || Plus;
+              const label = activityActionLabels[log.action] || log.action;
+              const details = log.details as Record<string, any> | null;
+              const description = details?.description || details?.message || "";
+
+              return (
+                <div
+                  key={log.id}
+                  className="flex gap-3 relative"
+                  data-testid={`activity-entry-${log.id}`}
+                >
+                  <div className="flex flex-col items-center">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full border bg-muted shrink-0">
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    {index < activityLogs.length - 1 && (
+                      <div className="w-px flex-1 bg-border min-h-[16px]" />
+                    )}
+                  </div>
+                  <div className="pb-4 pt-1 min-w-0">
+                    <p className="text-sm font-medium" data-testid={`activity-action-${log.id}`}>
+                      {label}
+                    </p>
+                    {description && (
+                      <p className="text-xs text-muted-foreground" data-testid={`activity-details-${log.id}`}>
+                        {description}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground" data-testid={`activity-time-${log.id}`}>
+                      {formatRelativeTime(log.createdAt as unknown as string)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground" data-testid="text-no-activity">No activity recorded yet.</p>
+        )}
       </CardContent>
     </Card>
   );

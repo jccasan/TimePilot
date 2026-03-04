@@ -18,6 +18,10 @@ import {
   Clock,
   Mail,
   Send,
+  Sparkles,
+  Home,
+  Dog,
+  Save,
 } from "lucide-react";
 
 interface PortalProfile {
@@ -27,6 +31,18 @@ interface PortalProfile {
   email: string;
   phone: string;
   companyName: string;
+  numberOfDogs?: number;
+}
+
+interface PortalProperty {
+  id: string;
+  streetAddress: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  gateCode: string | null;
+  specialInstructions: string | null;
+  numberOfDogs: number | null;
 }
 
 interface ScheduleData {
@@ -133,6 +149,14 @@ export default function PortalClient() {
   const [contactSubject, setContactSubject] = useState("");
   const [contactMessage, setContactMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [cleanupDate, setCleanupDate] = useState("");
+  const [cleanupNotes, setCleanupNotes] = useState("");
+  const [cleanupPending, setCleanupPending] = useState(false);
+  const [properties, setProperties] = useState<PortalProperty[]>([]);
+  const [propertyEdits, setPropertyEdits] = useState<Record<string, { gateCode: string; specialInstructions: string }>>({});
+  const [savingProperties, setSavingProperties] = useState(false);
+  const [numberOfDogs, setNumberOfDogs] = useState<number>(0);
+  const [savingDogs, setSavingDogs] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -142,16 +166,26 @@ export default function PortalClient() {
 
     const loadData = async () => {
       try {
-        const [profileData, scheduleData, invoicesData, pastVisitsData] = await Promise.all([
+        const [profileData, scheduleData, invoicesData, pastVisitsData, propertiesData] = await Promise.all([
           portalFetch("/api/portal/me"),
           portalFetch("/api/portal/schedule"),
           portalFetch("/api/portal/invoices"),
           portalFetch("/api/portal/visits/history").catch(() => []),
+          portalFetch("/api/portal/properties").catch(() => []),
         ]);
         setProfile(profileData);
         setSchedule(scheduleData);
         setInvoices(invoicesData);
         setPastVisits(pastVisitsData);
+        setProperties(propertiesData);
+        if (profileData.numberOfDogs != null) {
+          setNumberOfDogs(profileData.numberOfDogs);
+        }
+        const edits: Record<string, { gateCode: string; specialInstructions: string }> = {};
+        for (const p of propertiesData) {
+          edits[p.id] = { gateCode: p.gateCode || "", specialInstructions: p.specialInstructions || "" };
+        }
+        setPropertyEdits(edits);
       } catch (err: any) {
         if (err.message !== "Not authenticated" && err.message !== "Session expired") {
           toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -229,6 +263,63 @@ export default function PortalClient() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setSendingMessage(false);
+    }
+  };
+
+  const handleRequestCleanup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cleanupDate) {
+      toast({ title: "Required", description: "Please select a preferred date.", variant: "destructive" });
+      return;
+    }
+    setCleanupPending(true);
+    try {
+      await portalFetch("/api/portal/request-cleanup", {
+        method: "POST",
+        body: JSON.stringify({ preferredDate: cleanupDate, notes: cleanupNotes }),
+      });
+      toast({ title: "Request submitted", description: "Your one-time cleanup request has been sent." });
+      setCleanupDate("");
+      setCleanupNotes("");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setCleanupPending(false);
+    }
+  };
+
+  const handleSaveProperties = async () => {
+    setSavingProperties(true);
+    try {
+      const propertyUpdates = Object.entries(propertyEdits).map(([id, vals]) => ({
+        id,
+        gateCode: vals.gateCode,
+        specialInstructions: vals.specialInstructions,
+      }));
+      await portalFetch("/api/portal/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ properties: propertyUpdates }),
+      });
+      toast({ title: "Saved", description: "Property details have been updated." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingProperties(false);
+    }
+  };
+
+  const handleSaveDogs = async () => {
+    setSavingDogs(true);
+    try {
+      await portalFetch("/api/portal/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ numberOfDogs }),
+      });
+      toast({ title: "Saved", description: "Pet count has been updated." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingDogs(false);
     }
   };
 
@@ -408,6 +499,133 @@ export default function PortalClient() {
             )}
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Sparkles className="h-5 w-5" /> Request One-Time Cleanup
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleRequestCleanup} className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="cleanup-date">Preferred Date</Label>
+                <Input
+                  id="cleanup-date"
+                  type="date"
+                  value={cleanupDate}
+                  onChange={(e) => setCleanupDate(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                  data-testid="input-cleanup-date"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="cleanup-notes">Notes (optional)</Label>
+                <Textarea
+                  id="cleanup-notes"
+                  value={cleanupNotes}
+                  onChange={(e) => setCleanupNotes(e.target.value)}
+                  placeholder="Any special requests or details..."
+                  rows={3}
+                  data-testid="input-cleanup-notes"
+                />
+              </div>
+              <Button type="submit" disabled={cleanupPending} data-testid="button-submit-cleanup">
+                <Send className="mr-1 h-4 w-4" />
+                {cleanupPending ? "Submitting..." : "Submit Request"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Dog className="h-5 w-5" /> Pet Count
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="number-of-dogs">Number of Dogs</Label>
+                <Input
+                  id="number-of-dogs"
+                  type="number"
+                  min={0}
+                  value={numberOfDogs}
+                  onChange={(e) => setNumberOfDogs(parseInt(e.target.value) || 0)}
+                  className="w-24"
+                  data-testid="input-number-of-dogs"
+                />
+              </div>
+              <Button onClick={handleSaveDogs} disabled={savingDogs} data-testid="button-save-dogs">
+                <Save className="mr-1 h-4 w-4" />
+                {savingDogs ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {properties.length > 0 && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Home className="h-5 w-5" /> My Properties
+              </CardTitle>
+              <Button
+                size="sm"
+                onClick={handleSaveProperties}
+                disabled={savingProperties}
+                data-testid="button-save-properties"
+              >
+                <Save className="mr-1 h-4 w-4" />
+                {savingProperties ? "Saving..." : "Save Changes"}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {properties.map((prop) => (
+                <div key={prop.id} className="border rounded-md p-3 space-y-3" data-testid={`card-property-${prop.id}`}>
+                  <p className="font-medium text-sm" data-testid={`text-property-address-${prop.id}`}>
+                    {prop.streetAddress}, {prop.city}, {prop.state} {prop.zipCode}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor={`gate-code-${prop.id}`}>Gate Code</Label>
+                      <Input
+                        id={`gate-code-${prop.id}`}
+                        value={propertyEdits[prop.id]?.gateCode || ""}
+                        onChange={(e) =>
+                          setPropertyEdits((prev) => ({
+                            ...prev,
+                            [prop.id]: { ...prev[prop.id], gateCode: e.target.value },
+                          }))
+                        }
+                        placeholder="Enter gate code"
+                        data-testid={`input-gate-code-${prop.id}`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`special-instructions-${prop.id}`}>Special Instructions</Label>
+                      <Textarea
+                        id={`special-instructions-${prop.id}`}
+                        value={propertyEdits[prop.id]?.specialInstructions || ""}
+                        onChange={(e) =>
+                          setPropertyEdits((prev) => ({
+                            ...prev,
+                            [prop.id]: { ...prev[prop.id], specialInstructions: e.target.value },
+                          }))
+                        }
+                        placeholder="Any special instructions..."
+                        rows={2}
+                        data-testid={`input-special-instructions-${prop.id}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

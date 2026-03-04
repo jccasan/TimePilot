@@ -17,6 +17,7 @@ type TodayVisit = {
   completedAt: string | null;
   technicianNotes: string | null;
   proofOfServicePhoto: string | null;
+  proofOfServicePhotoBefore: string | null;
   property?: {
     streetAddress: string;
     city: string;
@@ -38,13 +39,18 @@ const visitStatusColors: Record<string, string> = {
   cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
+type PhotoUploadType = "before" | "after";
+
 export default function TechMobile() {
   const { toast } = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [uploadingVisitId, setUploadingVisitId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingType, setUploadingType] = useState<PhotoUploadType | null>(null);
+  const beforeFileInputRef = useRef<HTMLInputElement>(null);
+  const afterFileInputRef = useRef<HTMLInputElement>(null);
   const pendingVisitIdRef = useRef<string | null>(null);
+  const pendingUploadTypeRef = useRef<PhotoUploadType | null>(null);
 
   const { data: visits, isLoading } = useQuery<TodayVisit[]>({
     queryKey: ["/api/visits/today"],
@@ -77,19 +83,26 @@ export default function TechMobile() {
     },
   });
 
-  const handlePhotoClick = (visitId: string) => {
+  const handlePhotoClick = (visitId: string, type: PhotoUploadType) => {
     pendingVisitIdRef.current = visitId;
-    fileInputRef.current?.click();
+    pendingUploadTypeRef.current = type;
+    if (type === "before") {
+      beforeFileInputRef.current?.click();
+    } else {
+      afterFileInputRef.current?.click();
+    }
   };
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const visitId = pendingVisitIdRef.current;
-    if (!file || !visitId) return;
+    const photoType = pendingUploadTypeRef.current;
+    if (!file || !visitId || !photoType) return;
 
     e.target.value = "";
 
     setUploadingVisitId(visitId);
+    setUploadingType(photoType);
 
     try {
       const token = localStorage.getItem("sessionToken");
@@ -117,17 +130,21 @@ export default function TechMobile() {
 
       if (!uploadRes.ok) throw new Error("Failed to upload photo");
 
+      const patchField = photoType === "before" ? "proofOfServicePhotoBefore" : "proofOfServicePhoto";
       await apiRequest("PATCH", `/api/visits/${visitId}`, {
-        proofOfServicePhoto: objectPath,
+        [patchField]: objectPath,
       });
 
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
-      toast({ title: "Photo uploaded", description: "Proof of service photo saved." });
+      const label = photoType === "before" ? "Before" : "After";
+      toast({ title: `${label} photo uploaded`, description: "Photo saved successfully." });
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
       setUploadingVisitId(null);
+      setUploadingType(null);
       pendingVisitIdRef.current = null;
+      pendingUploadTypeRef.current = null;
     }
   };
 
@@ -139,10 +156,19 @@ export default function TechMobile() {
         type="file"
         accept="image/*"
         capture="environment"
-        ref={fileInputRef}
+        ref={beforeFileInputRef}
         className="hidden"
         onChange={handleFileSelected}
-        data-testid="input-photo-file"
+        data-testid="input-photo-file-before"
+      />
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        ref={afterFileInputRef}
+        className="hidden"
+        onChange={handleFileSelected}
+        data-testid="input-photo-file-after"
       />
 
       {isLoading ? (
@@ -155,7 +181,11 @@ export default function TechMobile() {
         <div className="space-y-4">
           {visits.map((visit) => {
             const isExpanded = expandedId === visit.id;
-            const isUploading = uploadingVisitId === visit.id;
+            const isUploadingBefore = uploadingVisitId === visit.id && uploadingType === "before";
+            const isUploadingAfter = uploadingVisitId === visit.id && uploadingType === "after";
+            const hasBefore = !!visit.proofOfServicePhotoBefore;
+            const hasAfter = !!visit.proofOfServicePhoto;
+            const canUpload = visit.status === "scheduled" || visit.status === "in_progress";
             return (
               <Card key={visit.id} data-testid={`card-visit-${visit.id}`}>
                 <CardHeader
@@ -172,8 +202,8 @@ export default function TechMobile() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {visit.proofOfServicePhoto && (
-                        <ImageIcon className="h-4 w-4 text-green-600" />
+                      {(hasBefore || hasAfter) && (
+                        <ImageIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
                       )}
                       <Badge variant="secondary" className={visitStatusColors[visit.status] || ""} data-testid={`badge-visit-status-${visit.id}`}>
                         {visit.status.replace("_", " ")}
@@ -197,15 +227,33 @@ export default function TechMobile() {
                       </div>
                     )}
 
-                    {visit.proofOfServicePhoto && (
-                      <div>
+                    {(hasBefore || hasAfter) && (
+                      <div data-testid={`photos-container-${visit.id}`}>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Proof of Service</p>
-                        <img
-                          src={visit.proofOfServicePhoto}
-                          alt="Proof of service"
-                          className="rounded-md max-h-48 object-cover"
-                          data-testid={`img-proof-${visit.id}`}
-                        />
+                        <div className={`grid gap-2 ${hasBefore && hasAfter ? "grid-cols-2" : "grid-cols-1"}`}>
+                          {hasBefore && (
+                            <div data-testid={`photo-before-container-${visit.id}`}>
+                              <p className="text-xs font-medium text-center mb-1" data-testid={`text-label-before-${visit.id}`}>Before</p>
+                              <img
+                                src={visit.proofOfServicePhotoBefore!}
+                                alt="Before service"
+                                className="rounded-md max-h-48 w-full object-cover"
+                                data-testid={`img-proof-before-${visit.id}`}
+                              />
+                            </div>
+                          )}
+                          {hasAfter && (
+                            <div data-testid={`photo-after-container-${visit.id}`}>
+                              <p className="text-xs font-medium text-center mb-1" data-testid={`text-label-after-${visit.id}`}>After</p>
+                              <img
+                                src={visit.proofOfServicePhoto!}
+                                alt="After service"
+                                className="rounded-md max-h-48 w-full object-cover"
+                                data-testid={`img-proof-after-${visit.id}`}
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -242,14 +290,25 @@ export default function TechMobile() {
                           <CheckCircle className="mr-1 h-4 w-4" /> Complete
                         </Button>
                       )}
+                      {canUpload && (
+                        <Button
+                          variant="outline"
+                          onClick={() => handlePhotoClick(visit.id, "before")}
+                          disabled={isUploadingBefore}
+                          data-testid={`button-photo-before-${visit.id}`}
+                        >
+                          {isUploadingBefore ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
+                          Before Photo
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
-                        size="icon"
-                        onClick={() => handlePhotoClick(visit.id)}
-                        disabled={isUploading}
-                        data-testid={`button-photo-${visit.id}`}
+                        onClick={() => handlePhotoClick(visit.id, "after")}
+                        disabled={isUploadingAfter}
+                        data-testid={`button-photo-after-${visit.id}`}
                       >
-                        {isUploading ? <Loader2 className="animate-spin" /> : <Camera />}
+                        {isUploadingAfter ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
+                        After Photo
                       </Button>
                     </div>
                   </CardContent>

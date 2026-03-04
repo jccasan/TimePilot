@@ -5,8 +5,8 @@ import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql, eq, and, lt, isNotNull } from "drizzle-orm";
-import { users, companyUsers, companies } from "@shared/schema";
+import { sql, eq, and, lt, isNotNull, like, or } from "drizzle-orm";
+import { users, companyUsers, companies, contacts, properties, invoices, routes } from "@shared/schema";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
@@ -106,8 +106,26 @@ function handleError(res: Response, err: any) {
   return res.status(500).json({ error: "Internal server error" });
 }
 
+function auditLog(companyId: string, userId: string, entityType: string, entityId: string, action: string, changes?: any, ipAddress?: string) {
+  storage.createAuditEntry({ companyId, userId, entityType, entityId, action, changes: changes || {}, ipAddress: ipAddress || null }).catch(console.error);
+}
+
 function notify(companyId: string, type: string, title: string, message: string, linkUrl?: string) {
   storage.createNotification({ companyId, type: type as any, title, message, isRead: false, linkUrl: linkUrl || null }).catch(console.error);
+
+  const eventMap: Record<string, string> = {
+    invoice_paid: "invoice.paid",
+    invoice_overdue: "invoice.created",
+    visit_completed: "visit.completed",
+    new_lead: "contact.created",
+    payment_failed: "payment.failed",
+  };
+  const webhookEvent = eventMap[type];
+  if (webhookEvent) {
+    import("./services/webhook-dispatcher").then(({ dispatchWebhooksForEvent }) => {
+      dispatchWebhooksForEvent(companyId, webhookEvent, { type, title, message, linkUrl }).catch(console.error);
+    });
+  }
 }
 
 async function createPropertyWithGeocode(data: {
@@ -590,9 +608,17 @@ export async function registerRoutes(
 
   app.patch("/api/company", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId, role } = await getCompanyContext(req);
+      const { companyId, role, userId } = await getCompanyContext(req);
       requireRole(role);
-      const company = await storage.updateCompany(companyId, req.body);
+      const existing = await storage.getCompany(companyId);
+      const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
+        "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout"];
+      const updates: any = {};
+      for (const key of allowed) {
+        if (req.body[key] !== undefined) updates[key] = req.body[key];
+      }
+      const company = await storage.updateCompany(companyId, updates);
+      auditLog(companyId, userId, "company", companyId, "update", { old: existing, new: company }, req.ip);
       res.json(company);
     } catch (err) { handleError(res, err); }
   });
@@ -1461,14 +1487,15 @@ export async function registerRoutes(
 
   app.patch("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, userId } = await getCompanyContext(req);
       const existing = await storage.getContact(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Contact not found" });
-      const validStatuses = ["lead", "prospect", "active", "inactive", "cancelled"];
+      const validStatuses = ["lead", "estimate", "active", "paused", "cancelled"];
       if (req.body.status && !validStatuses.includes(req.body.status)) {
         return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
       }
       const contact = await storage.updateContact(req.params.id, req.body);
+      auditLog(companyId, userId, "contact", req.params.id, "update", { old: existing, new: contact }, req.ip);
 
       if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
         const existingProperties = await storage.getProperties(companyId, contact.id);
@@ -1492,11 +1519,50 @@ export async function registerRoutes(
 
   app.delete("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, userId } = await getCompanyContext(req);
       const existing = await storage.getContact(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Contact not found" });
       await storage.deleteContact(req.params.id);
+      auditLog(companyId, userId, "contact", req.params.id, "delete", { deleted: existing }, req.ip);
       res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/contacts/bulk-update", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { ids, status, tagId } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array is required" });
+      let updated = 0;
+      for (const id of ids) {
+        const existing = await storage.getContact(id, companyId);
+        if (!existing) continue;
+        if (status) {
+          await storage.updateContact(id, { status });
+          updated++;
+        }
+        if (tagId) {
+          await storage.addTagToContact(id, tagId);
+          updated++;
+        }
+      }
+      res.json({ success: true, updated });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/contacts/bulk-delete", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array is required" });
+      let deleted = 0;
+      for (const id of ids) {
+        const existing = await storage.getContact(id, companyId);
+        if (!existing) continue;
+        await storage.deleteContact(id);
+        deleted++;
+      }
+      res.json({ success: true, deleted });
     } catch (err) { handleError(res, err); }
   });
 
@@ -1578,6 +1644,18 @@ export async function registerRoutes(
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       await storage.removeTagFromContact(req.params.id, req.params.tagId);
       res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/contacts/:id/activity", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const logs = await storage.getActivityLogs(companyId, req.params.id, limit, offset);
+      res.json(logs);
     } catch (err) { handleError(res, err); }
   });
 
@@ -1692,7 +1770,14 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getRoute(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Route not found" });
-      const route = await storage.updateRoute(req.params.id, req.body);
+      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+      if (req.body.dayOfWeek && !validDays.includes(req.body.dayOfWeek)) {
+        return res.status(400).json({ error: `Invalid dayOfWeek. Must be one of: ${validDays.join(", ")}` });
+      }
+      const allowed = ["name", "dayOfWeek", "technicianId", "color"];
+      const updates: any = {};
+      for (const key of allowed) { if (req.body[key] !== undefined) updates[key] = req.body[key]; }
+      const route = await storage.updateRoute(req.params.id, updates);
       res.json(route);
     } catch (err) { handleError(res, err); }
   });
@@ -1963,6 +2048,14 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getServicePlan(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Service plan not found" });
+      const validFrequencies = ["weekly", "biweekly", "monthly", "onetime"];
+      if (req.body.frequency && !validFrequencies.includes(req.body.frequency)) {
+        return res.status(400).json({ error: `Invalid frequency. Must be one of: ${validFrequencies.join(", ")}` });
+      }
+      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+      if (req.body.dayOfWeek && !validDays.includes(req.body.dayOfWeek)) {
+        return res.status(400).json({ error: `Invalid dayOfWeek. Must be one of: ${validDays.join(", ")}` });
+      }
       const body = { ...req.body };
       if (body.routeId === "" || body.routeId === undefined) body.routeId = null;
 
@@ -2083,7 +2176,15 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getVisit(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Visit not found" });
-      const visit = await storage.updateVisit(req.params.id, req.body);
+      const validVisitStatuses = ["scheduled", "in_progress", "completed", "skipped", "cancelled"];
+      if (req.body.status && !validVisitStatuses.includes(req.body.status)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${validVisitStatuses.join(", ")}` });
+      }
+      const allowed = ["status", "scheduledDate", "routeId", "startedAt", "completedAt", "completedBy",
+        "proofOfServicePhoto", "proofOfServicePhotoBefore", "technicianNotes"];
+      const updates: any = {};
+      for (const key of allowed) { if (req.body[key] !== undefined) updates[key] = req.body[key]; }
+      const visit = await storage.updateVisit(req.params.id, updates);
 
       if (req.body.status === "completed" && existing.status !== "completed") {
         try {
@@ -2512,6 +2613,16 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/webhooks/deliveries", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const limit = parseInt(req.query.limit as string) || 100;
+      const deliveries = await storage.getWebhookDeliveriesForCompany(companyId, limit);
+      res.json(deliveries);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.patch("/api/webhooks/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
@@ -2529,6 +2640,18 @@ export async function registerRoutes(
       requireRole(role);
       await storage.deleteWebhook(req.params.id, companyId);
       res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/webhooks/:id/deliveries", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const existing = await storage.getWebhooks(companyId);
+      if (!existing.find(w => w.id === req.params.id)) return res.status(404).json({ error: "Webhook not found" });
+      const limit = parseInt(req.query.limit as string) || 50;
+      const deliveries = await storage.getWebhookDeliveries(req.params.id, limit);
+      res.json(deliveries);
     } catch (err) { handleError(res, err); }
   });
 
@@ -3397,6 +3520,60 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/portal/properties", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const properties = await storage.getProperties(companyId, contactId);
+      res.json(properties);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/portal/profile", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const updates: any = {};
+      if (req.body.numberOfDogs !== undefined) updates.numberOfDogs = Number(req.body.numberOfDogs);
+      if (Object.keys(updates).length > 0) {
+        await storage.updateContact(contactId, updates);
+      }
+      if (req.body.properties && Array.isArray(req.body.properties)) {
+        for (const prop of req.body.properties) {
+          if (prop.id) {
+            const existing = await storage.getProperty(prop.id, companyId);
+            if (existing) {
+              const propUpdates: any = {};
+              if (prop.gateCode !== undefined) propUpdates.gateCode = prop.gateCode;
+              if (prop.specialInstructions !== undefined) propUpdates.specialInstructions = prop.specialInstructions;
+              if (Object.keys(propUpdates).length > 0) {
+                await storage.updateProperty(prop.id, propUpdates);
+              }
+            }
+          }
+        }
+      }
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/portal/request-cleanup", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const { preferredDate, notes } = req.body;
+      await storage.createNotification({
+        companyId,
+        type: "cleanup_request",
+        title: "One-Time Cleanup Request",
+        message: `${contact.firstName} ${contact.lastName} requested a cleanup${preferredDate ? ` on ${preferredDate}` : ""}${notes ? `: ${notes}` : ""}`,
+        data: { contactId, preferredDate, notes },
+      });
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
   // Admin route: generate portal invite link
   app.post("/api/contacts/:id/portal-access", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -3601,6 +3778,68 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Time Entries ================
+
+  app.get("/api/time-entries/active", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { userId } = await getCompanyContext(req);
+      const entry = await storage.getActiveTimeEntry(userId);
+      res.json(entry || null);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/time-entries/clock-in", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { userId, companyId } = await getCompanyContext(req);
+      const existing = await storage.getActiveTimeEntry(userId);
+      if (existing) {
+        return res.status(400).json({ error: "Already clocked in" });
+      }
+      const entry = await storage.createTimeEntry({
+        companyId,
+        userId,
+        routeId: req.body.routeId || null,
+        clockIn: new Date(),
+      });
+      res.json(entry);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/time-entries/clock-out", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { userId } = await getCompanyContext(req);
+      const active = await storage.getActiveTimeEntry(userId);
+      if (!active) {
+        return res.status(400).json({ error: "Not clocked in" });
+      }
+      const clockOut = new Date();
+      const durationMinutes = Math.round((clockOut.getTime() - new Date(active.clockIn).getTime()) / 60000);
+      const entry = await storage.updateTimeEntry(active.id, {
+        clockOut,
+        durationMinutes,
+      });
+      res.json(entry);
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Global Search ================
+
+  app.get("/api/search", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const q = String(req.query.q || "").trim();
+      if (!q || q.length < 2) return res.json({ contacts: [], properties: [], invoices: [], routes: [] });
+      const searchTerm = `%${q.toLowerCase()}%`;
+      const [contacts, properties, invoices, routes] = await Promise.all([
+        storage.searchContacts(companyId, searchTerm),
+        storage.searchProperties(companyId, searchTerm),
+        storage.searchInvoices(companyId, searchTerm),
+        storage.searchRoutes(companyId, searchTerm),
+      ]);
+      res.json({ contacts, properties, invoices, routes });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Notifications ================
 
   app.get("/api/notifications", isAuthenticated, async (req: Request, res: Response) => {
@@ -3634,6 +3873,20 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       await storage.markAllNotificationsRead(companyId);
       res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Audit Trail ================
+  app.get("/api/audit-trail", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { entityType, startDate, endDate } = req.query as { entityType?: string; startDate?: string; endDate?: string };
+      const filters: { entityType?: string; startDate?: string; endDate?: string } = {};
+      if (entityType) filters.entityType = entityType;
+      if (startDate) filters.startDate = startDate;
+      if (endDate) filters.endDate = endDate;
+      const entries = await storage.getAuditTrail(companyId, filters);
+      res.json(entries);
     } catch (err) { handleError(res, err); }
   });
 
@@ -4151,6 +4404,30 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/admin/debug/run-reminders", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { runReminders } = await import("./jobs/reminders");
+      await runReminders();
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/debug/run-auto-visits", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { runAutoVisits } = await import("./jobs/auto-visits");
+      const result = await runAutoVisits();
+      res.json({ ok: true, ...result });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/debug/run-auto-invoice", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { runAutoInvoice } = await import("./jobs/auto-invoice");
+      const result = await runAutoInvoice();
+      res.json({ ok: true, ...result });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Rover Chatbot Routes ================
   const ROVER_KNOWLEDGE_BASE: { keywords: string[]; answer: string }[] = [
     { keywords: ["dashboard", "overview", "home", "main"], answer: "The Dashboard is your home screen showing key metrics like active clients, scheduled visits, revenue, and recent activity. It gives you a quick snapshot of your business operations." },
@@ -4478,6 +4755,25 @@ export async function registerRoutes(
   import("./jobs/nightly-rollup").then(({ runNightlyRollup }) => {
     setTimeout(() => runNightlyRollup().catch(console.error), 30000);
     setInterval(() => runNightlyRollup().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
+  import("./jobs/reminders").then(({ runReminders }) => {
+    setTimeout(() => runReminders().catch(console.error), 60000);
+    setInterval(() => runReminders().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
+  import("./jobs/auto-invoice").then(({ runAutoInvoice }) => {
+    setTimeout(() => runAutoInvoice().catch(console.error), 60000);
+    setInterval(() => runAutoInvoice().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
+  import("./jobs/auto-visits").then(({ runAutoVisits }) => {
+    setTimeout(() => runAutoVisits().catch(console.error), 90000);
+    setInterval(() => runAutoVisits().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
+  import("./services/webhook-dispatcher").then(({ startWebhookRetryJob }) => {
+    startWebhookRetryJob();
   });
 
   return httpServer;

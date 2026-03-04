@@ -558,7 +558,7 @@ export default function Invoices() {
                     {discountAmount > 0 && (
                       <div className="flex flex-wrap justify-between gap-1 text-sm">
                         <span className="text-muted-foreground">Discount:</span>
-                        <span className="text-red-600" data-testid="text-calc-discount">-${discountAmount.toFixed(2)}</span>
+                        <span className="text-red-600 dark:text-red-400" data-testid="text-calc-discount">-${discountAmount.toFixed(2)}</span>
                       </div>
                     )}
                     {taxAmount > 0 && (
@@ -1085,7 +1085,7 @@ export default function Invoices() {
                       <span className="text-muted-foreground">
                         Discount ({selectedInvoice.discountType === "percent" ? `${selectedInvoice.discountValue}%` : `$${Number(selectedInvoice.discountValue).toFixed(2)}`}):
                       </span>
-                      <span className="text-red-600">-${Number(selectedInvoice.discountAmount).toFixed(2)}</span>
+                      <span className="text-red-600 dark:text-red-400">-${Number(selectedInvoice.discountAmount).toFixed(2)}</span>
                     </div>
                   )}
                   {Number(selectedInvoice.tax) > 0 && (

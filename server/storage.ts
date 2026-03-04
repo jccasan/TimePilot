@@ -4,10 +4,10 @@ import {
   companies, companyUsers, contacts, tags, contactTags, leadSources,
   properties, routes, servicePlans, vacationHolds,
   visits, invoices, invoiceLineItems, automationRules,
-  automationEventLogs, apiKeys, webhooks, attachments,
+  automationEventLogs, apiKeys, webhooks, webhookDeliveries, attachments,
   servicePricing, servicePackages, messages, portalSessions, adminNotes,
   smsMessages, emailsSent, accountDailyMetrics, saasCostsMonthly, costConfig,
-  notifications,
+  notifications, timeEntries, activityLog, auditTrail,
   type Company, type InsertCompany,
   type CompanyUser, type InsertCompanyUser,
   type Contact, type InsertContact,
@@ -35,6 +35,10 @@ import {
   type AccountDailyMetric, type InsertAccountDailyMetric,
   type SaasCostMonthly, type InsertSaasCostMonthly,
   type CostConfigItem, type InsertCostConfig,
+  type TimeEntry, type InsertTimeEntry,
+  type ActivityLog, type InsertActivityLog,
+  type WebhookDelivery, type InsertWebhookDelivery,
+  type AuditTrail, type InsertAuditTrail,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -225,6 +229,37 @@ export interface IStorage {
   createNotification(data: InsertNotification): Promise<Notification>;
   markNotificationRead(id: string, companyId: string): Promise<Notification>;
   markAllNotificationsRead(companyId: string): Promise<void>;
+
+  // Time Entries
+  createTimeEntry(data: InsertTimeEntry): Promise<TimeEntry>;
+  updateTimeEntry(id: string, data: Partial<InsertTimeEntry>): Promise<TimeEntry>;
+  getTimeEntries(companyId: string, filters?: { userId?: string; startDate?: string; endDate?: string }): Promise<TimeEntry[]>;
+  getActiveTimeEntry(userId: string): Promise<TimeEntry | undefined>;
+
+  // Activity Log
+  createActivityLog(data: InsertActivityLog): Promise<ActivityLog>;
+  getActivityLogs(companyId: string, contactId: string, limit?: number, offset?: number): Promise<ActivityLog[]>;
+
+  // Webhook Deliveries
+  createWebhookDelivery(data: InsertWebhookDelivery): Promise<WebhookDelivery>;
+  updateWebhookDelivery(id: string, data: Partial<InsertWebhookDelivery>): Promise<WebhookDelivery>;
+  getPendingWebhookDeliveries(): Promise<WebhookDelivery[]>;
+  getWebhookDeliveries(webhookId: string, limit?: number): Promise<WebhookDelivery[]>;
+  getWebhookDeliveriesForCompany(companyId: string, limit?: number): Promise<WebhookDelivery[]>;
+
+  // Audit Trail
+  createAuditEntry(data: InsertAuditTrail): Promise<AuditTrail>;
+  getAuditTrail(companyId: string, filters?: { entityType?: string; startDate?: string; endDate?: string }, limit?: number, offset?: number): Promise<AuditTrail[]>;
+
+  // Bulk operations
+  bulkUpdateContacts(ids: string[], companyId: string, data: Partial<any>): Promise<number>;
+  bulkDeleteContacts(ids: string[], companyId: string): Promise<number>;
+
+  // Search
+  searchContacts(companyId: string, term: string): Promise<any[]>;
+  searchProperties(companyId: string, term: string): Promise<any[]>;
+  searchInvoices(companyId: string, term: string): Promise<any[]>;
+  searchRoutes(companyId: string, term: string): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1117,6 +1152,155 @@ export class DatabaseStorage implements IStorage {
     await db.update(notifications)
       .set({ isRead: true })
       .where(and(eq(notifications.companyId, companyId), eq(notifications.isRead, false)));
+  }
+
+  // ================ Time Entries ================
+  async createTimeEntry(data: InsertTimeEntry): Promise<TimeEntry> {
+    const [entry] = await db.insert(timeEntries).values(data).returning();
+    return entry;
+  }
+
+  async updateTimeEntry(id: string, data: Partial<InsertTimeEntry>): Promise<TimeEntry> {
+    const [entry] = await db.update(timeEntries).set(data).where(eq(timeEntries.id, id)).returning();
+    return entry;
+  }
+
+  async getTimeEntries(companyId: string, filters?: { userId?: string; startDate?: string; endDate?: string }): Promise<TimeEntry[]> {
+    const conditions = [eq(timeEntries.companyId, companyId)];
+    if (filters?.userId) conditions.push(eq(timeEntries.userId, filters.userId));
+    if (filters?.startDate) conditions.push(gte(timeEntries.clockIn, new Date(filters.startDate)));
+    if (filters?.endDate) conditions.push(lte(timeEntries.clockIn, new Date(filters.endDate + "T23:59:59")));
+    return db.select().from(timeEntries).where(and(...conditions)).orderBy(desc(timeEntries.clockIn));
+  }
+
+  async getActiveTimeEntry(userId: string): Promise<TimeEntry | undefined> {
+    const [entry] = await db.select().from(timeEntries)
+      .where(and(eq(timeEntries.userId, userId), sql`${timeEntries.clockOut} IS NULL`))
+      .orderBy(desc(timeEntries.clockIn)).limit(1);
+    return entry;
+  }
+
+  // ================ Activity Log ================
+  async createActivityLog(data: InsertActivityLog): Promise<ActivityLog> {
+    const [entry] = await db.insert(activityLog).values(data).returning();
+    return entry;
+  }
+
+  async getActivityLogs(companyId: string, contactId: string, limit = 50, offset = 0): Promise<ActivityLog[]> {
+    return db.select().from(activityLog)
+      .where(and(eq(activityLog.companyId, companyId), eq(activityLog.contactId, contactId)))
+      .orderBy(desc(activityLog.createdAt))
+      .limit(limit).offset(offset);
+  }
+
+  // ================ Webhook Deliveries ================
+  async createWebhookDelivery(data: InsertWebhookDelivery): Promise<WebhookDelivery> {
+    const [delivery] = await db.insert(webhookDeliveries).values(data).returning();
+    return delivery;
+  }
+
+  async updateWebhookDelivery(id: string, data: Partial<InsertWebhookDelivery>): Promise<WebhookDelivery> {
+    const [delivery] = await db.update(webhookDeliveries).set(data).where(eq(webhookDeliveries.id, id)).returning();
+    return delivery;
+  }
+
+  async getPendingWebhookDeliveries(): Promise<WebhookDelivery[]> {
+    return db.select().from(webhookDeliveries)
+      .where(and(
+        eq(webhookDeliveries.status, "pending"),
+        or(
+          sql`${webhookDeliveries.nextRetry} IS NULL`,
+          lte(webhookDeliveries.nextRetry, new Date())
+        )
+      ))
+      .orderBy(asc(webhookDeliveries.createdAt))
+      .limit(100);
+  }
+
+  async getWebhookDeliveries(webhookId: string, limit = 50): Promise<WebhookDelivery[]> {
+    return db.select().from(webhookDeliveries)
+      .where(eq(webhookDeliveries.webhookId, webhookId))
+      .orderBy(desc(webhookDeliveries.createdAt))
+      .limit(limit);
+  }
+
+  async getWebhookDeliveriesForCompany(companyId: string, limit = 100): Promise<WebhookDelivery[]> {
+    const companyWebhooks = await db.select({ id: webhooks.id }).from(webhooks).where(eq(webhooks.companyId, companyId));
+    if (companyWebhooks.length === 0) return [];
+    const webhookIds = companyWebhooks.map(w => w.id);
+    return db.select().from(webhookDeliveries)
+      .where(inArray(webhookDeliveries.webhookId, webhookIds))
+      .orderBy(desc(webhookDeliveries.createdAt))
+      .limit(limit);
+  }
+
+  // ================ Audit Trail ================
+  async createAuditEntry(data: InsertAuditTrail): Promise<AuditTrail> {
+    const [entry] = await db.insert(auditTrail).values(data).returning();
+    return entry;
+  }
+
+  async getAuditTrail(companyId: string, filters?: { entityType?: string; startDate?: string; endDate?: string }, limit = 100, offset = 0): Promise<AuditTrail[]> {
+    const conditions = [eq(auditTrail.companyId, companyId)];
+    if (filters?.entityType) conditions.push(eq(auditTrail.entityType, filters.entityType));
+    if (filters?.startDate) conditions.push(gte(auditTrail.createdAt, new Date(filters.startDate)));
+    if (filters?.endDate) conditions.push(lte(auditTrail.createdAt, new Date(filters.endDate + "T23:59:59")));
+    return db.select().from(auditTrail).where(and(...conditions)).orderBy(desc(auditTrail.createdAt)).limit(limit).offset(offset);
+  }
+
+  // ================ Bulk Operations ================
+  async bulkUpdateContacts(ids: string[], companyId: string, data: Partial<any>): Promise<number> {
+    const result = await db.update(contacts)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(inArray(contacts.id, ids), eq(contacts.companyId, companyId)));
+    return ids.length;
+  }
+
+  async bulkDeleteContacts(ids: string[], companyId: string): Promise<number> {
+    await db.delete(contacts)
+      .where(and(inArray(contacts.id, ids), eq(contacts.companyId, companyId)));
+    return ids.length;
+  }
+
+  async searchContacts(companyId: string, term: string): Promise<any[]> {
+    return db.select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email, phone: contacts.phone, status: contacts.status })
+      .from(contacts)
+      .where(and(eq(contacts.companyId, companyId), or(
+        sql`lower(${contacts.firstName}) like ${term}`,
+        sql`lower(${contacts.lastName}) like ${term}`,
+        sql`lower(${contacts.email}) like ${term}`,
+        sql`${contacts.phone} like ${term}`
+      )))
+      .limit(10);
+  }
+
+  async searchProperties(companyId: string, term: string): Promise<any[]> {
+    return db.select({ id: properties.id, streetAddress: properties.streetAddress, city: properties.city, contactId: properties.contactId })
+      .from(properties)
+      .where(and(eq(properties.companyId, companyId), or(
+        sql`lower(${properties.streetAddress}) like ${term}`,
+        sql`lower(${properties.city}) like ${term}`
+      )))
+      .limit(10);
+  }
+
+  async searchInvoices(companyId: string, term: string): Promise<any[]> {
+    return db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, status: invoices.status, total: invoices.total, contactId: invoices.contactId })
+      .from(invoices)
+      .where(and(eq(invoices.companyId, companyId), or(
+        sql`lower(${invoices.invoiceNumber}) like ${term}`,
+        sql`cast(${invoices.total} as text) like ${term}`
+      )))
+      .limit(10);
+  }
+
+  async searchRoutes(companyId: string, term: string): Promise<any[]> {
+    return db.select({ id: routes.id, name: routes.name, dayOfWeek: routes.dayOfWeek })
+      .from(routes)
+      .where(and(eq(routes.companyId, companyId),
+        sql`lower(${routes.name}) like ${term}`
+      ))
+      .limit(10);
   }
 }
 

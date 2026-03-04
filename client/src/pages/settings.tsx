@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -22,6 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useUpload } from "@/hooks/use-upload";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
@@ -50,6 +54,8 @@ type Company = {
   logoUrl: string | null;
   subscriptionTier: string;
   subscriptionStatus: string;
+  autoVisitsEnabled: boolean;
+  remindersEnabled: boolean;
 };
 
 type TeamMember = {
@@ -107,6 +113,185 @@ const CONTACT_FIELDS = [
   { key: "status", label: "Status" },
   { key: "notes", label: "Notes" },
 ];
+
+type AuditEntry = {
+  id: string;
+  companyId: string;
+  userId: string | null;
+  entityType: string;
+  entityId: string;
+  action: string;
+  changes: { old?: Record<string, any>; new?: Record<string, any> } | null;
+  ipAddress: string | null;
+  createdAt: string;
+};
+
+const ENTITY_TYPES = [
+  { value: "contact", label: "Contact" },
+  { value: "invoice", label: "Invoice" },
+  { value: "route", label: "Route" },
+  { value: "service_plan", label: "Service Plan" },
+  { value: "company", label: "Company" },
+];
+
+function AuditLogSection() {
+  const [entityTypeFilter, setEntityTypeFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const queryParams = new URLSearchParams();
+  if (entityTypeFilter) queryParams.set("entityType", entityTypeFilter);
+  if (startDate) queryParams.set("startDate", startDate);
+  if (endDate) queryParams.set("endDate", endDate);
+  const queryString = queryParams.toString();
+
+  const auditUrl = queryString ? `/api/audit-trail?${queryString}` : "/api/audit-trail";
+  const { data: auditEntries = [], isLoading: loadingAudit } = useQuery<AuditEntry[]>({
+    queryKey: [auditUrl],
+  });
+
+  const toggleRow = (id: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <Card data-testid="card-audit-log">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Shield className="h-5 w-5" />
+          Audit Log
+        </CardTitle>
+        <CardDescription>Track all changes made to your company data</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-3 mb-4">
+          <Select value={entityTypeFilter} onValueChange={(val) => setEntityTypeFilter(val === "all" ? "" : val)}>
+            <SelectTrigger className="w-[180px]" data-testid="select-audit-entity-type">
+              <SelectValue placeholder="All Entity Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Entity Types</SelectItem>
+              {ENTITY_TYPES.map((et) => (
+                <SelectItem key={et.value} value={et.value}>{et.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="w-[160px]"
+            data-testid="input-audit-start-date"
+          />
+          <Input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="w-[160px]"
+            data-testid="input-audit-end-date"
+          />
+          {(entityTypeFilter || startDate || endDate) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setEntityTypeFilter(""); setStartDate(""); setEndDate(""); }}
+              data-testid="button-clear-audit-filters"
+            >
+              Clear Filters
+            </Button>
+          )}
+        </div>
+
+        {loadingAudit ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : auditEntries.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6" data-testid="text-audit-empty">
+            No audit log entries found.
+          </p>
+        ) : (
+          <Table data-testid="table-audit-log">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Entity Type</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Entity ID</TableHead>
+                <TableHead>Changes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {auditEntries.map((entry) => (
+                <TableRow key={entry.id} data-testid={`row-audit-${entry.id}`}>
+                  <TableCell className="whitespace-nowrap text-sm" data-testid={`text-audit-date-${entry.id}`}>
+                    {new Date(entry.createdAt).toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-sm" data-testid={`text-audit-user-${entry.id}`}>
+                    {entry.userId || "System"}
+                  </TableCell>
+                  <TableCell data-testid={`text-audit-entity-type-${entry.id}`}>
+                    <Badge variant="secondary" className="capitalize">{entry.entityType.replace(/_/g, " ")}</Badge>
+                  </TableCell>
+                  <TableCell data-testid={`text-audit-action-${entry.id}`}>
+                    <Badge
+                      variant={entry.action === "delete" ? "destructive" : entry.action === "create" ? "default" : "secondary"}
+                      className="capitalize"
+                    >
+                      {entry.action}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm font-mono truncate max-w-[120px]" data-testid={`text-audit-entity-id-${entry.id}`}>
+                    {entry.entityId}
+                  </TableCell>
+                  <TableCell>
+                    {entry.changes ? (
+                      <Collapsible open={expandedRows.has(entry.id)} onOpenChange={() => toggleRow(entry.id)}>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" data-testid={`button-toggle-changes-${entry.id}`}>
+                            <ChevronDown className={`h-4 w-4 transition-transform ${expandedRows.has(entry.id) ? "rotate-180" : ""}`} />
+                            View
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-2 space-y-1 text-xs" data-testid={`content-audit-changes-${entry.id}`}>
+                            {entry.changes.old && Object.keys(entry.changes.old).length > 0 && (
+                              <div>
+                                <span className="font-medium text-muted-foreground">Old:</span>
+                                <pre className="bg-muted/50 rounded p-2 mt-0.5 overflow-x-auto">{JSON.stringify(entry.changes.old, null, 2)}</pre>
+                              </div>
+                            )}
+                            {entry.changes.new && Object.keys(entry.changes.new).length > 0 && (
+                              <div>
+                                <span className="font-medium text-muted-foreground">New:</span>
+                                <pre className="bg-muted/50 rounded p-2 mt-0.5 overflow-x-auto">{JSON.stringify(entry.changes.new, null, 2)}</pre>
+                              </div>
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Settings() {
   const { toast } = useToast();
@@ -223,6 +408,20 @@ export default function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/lead-sources"] });
       toast({ title: "Lead source removed" });
+    },
+  });
+
+  const toggleAutoVisitsMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await apiRequest("PATCH", "/api/company", { autoVisitsEnabled: enabled });
+      return res.json();
+    },
+    onSuccess: (_, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: enabled ? "Auto visit generation enabled" : "Auto visit generation disabled" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update setting.", variant: "destructive" });
     },
   });
 
@@ -455,6 +654,57 @@ export default function Settings() {
                   </form>
                 </Form>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5" />
+                Automated Reminders
+              </CardTitle>
+              <CardDescription>Send service and invoice reminders to your clients automatically</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">Enable Automated Reminders</p>
+                    <p className="text-xs text-muted-foreground">
+                      When enabled, clients receive reminders for upcoming services and due/overdue invoices daily
+                    </p>
+                  </div>
+                  <Switch
+                    checked={company?.remindersEnabled ?? false}
+                    onCheckedChange={(checked) => {
+                      apiRequest("PATCH", "/api/company", { remindersEnabled: checked })
+                        .then(() => {
+                          queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+                          toast({
+                            title: checked ? "Reminders enabled" : "Reminders disabled",
+                            description: checked
+                              ? "Your clients will receive automated reminders."
+                              : "Automated reminders have been turned off.",
+                          });
+                        })
+                        .catch(() => {
+                          toast({ title: "Error", description: "Failed to update reminder settings.", variant: "destructive" });
+                        });
+                    }}
+                    data-testid="switch-reminders-enabled"
+                  />
+                </div>
+                <div className="text-xs text-muted-foreground space-y-1 border-t pt-3">
+                  <p>Reminder types:</p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    <li>Service reminders: Sent the day before scheduled visits</li>
+                    <li>Invoice reminders: Sent for invoices due within 3 days or overdue</li>
+                  </ul>
+                  <p className="mt-2">
+                    Individual clients can set their preferred channel (email, SMS, or both) from their contact profile.
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -699,6 +949,32 @@ export default function Settings() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
+                <CalendarClock className="h-5 w-5" />
+                Auto Visit Generation
+              </CardTitle>
+              <CardDescription>Automatically generate visits for the next 7 days based on active service plans. Runs daily.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Enable auto visit generation</p>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, visits will be created automatically each day for the upcoming week based on your service plans.
+                  </p>
+                </div>
+                <Switch
+                  checked={company?.autoVisitsEnabled ?? false}
+                  onCheckedChange={(checked) => toggleAutoVisitsMutation.mutate(checked)}
+                  disabled={toggleAutoVisitsMutation.isPending}
+                  data-testid="switch-auto-visits"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
                 <Info className="h-5 w-5" />
                 Lead Sources
               </CardTitle>
@@ -760,6 +1036,8 @@ export default function Settings() {
         </div>
       </div>
 
+      {currentUser?.role === "owner" && <AuditLogSection />}
+
       <Dialog open={importStep !== "idle"} onOpenChange={(open) => { if (!open) { setImportStep("idle"); setImportRows([]); setRawCsvRows([]); setSettingsColumnMapping([]); setSettingsNewLeadSources([]); } }}>
         <DialogContent className="max-w-[95vw] w-[900px] max-h-[90vh] flex flex-col">
           <DialogHeader>
@@ -801,7 +1079,7 @@ export default function Settings() {
                       </SelectContent>
                     </Select>
                     {col.mappedField ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
                     ) : (
                       <AlertTriangle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     )}

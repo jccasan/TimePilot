@@ -38,7 +38,7 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **PWA Support**: Progressive Web App with manifest, service worker, offline fallback page, and install prompt for mobile/tablet users. Icons in client/public/icons/, manifest at client/public/manifest.json, service worker at client/public/sw.js.
 - **Mobile View**: Dedicated mobile-optimized views for field technicians.
 - **Technician Layout**: Role-based UI for technicians showing only Routes (with scheduled/completed/cancelled status tracking per day) and Clients (read-only searchable list). Technicians with role="tech" are automatically routed to this simplified interface. Visit statuses persist in localStorage keyed by day+date.
-- **Client Portal**: Separate authentication (email + password) and UI for client self-service, allowing clients to view schedules, past visits, invoices, manage service pauses, and contact the business owner via email. Temporary passwords are emailed via SendGrid when portal access is granted.
+- **Client Portal**: Separate authentication (email + password) and UI for client self-service, allowing clients to view schedules, past visits, invoices, manage service pauses, request one-time cleanups, edit pet count and property gate codes/access notes, and contact the business owner via email. Temporary passwords are emailed via SendGrid when portal access is granted. Portal endpoints: GET /api/portal/properties, PATCH /api/portal/profile, POST /api/portal/request-cleanup.
 - **Admin Dashboard**: A platform-level administration hub with sidebar navigation (Overview, Analytics, Tenants). Overview page shows platform stats and quick-action cards. Dedicated Tenants page for full tenant management with search, create dialog (`POST /api/admin/companies`), and tier badges. Analytics page for revenue metrics and growth trends. Provisions new companies with owner accounts, sends welcome email with temp credentials, and seeds default lead sources. Company detail page supports inline editing of company info (name, email, phone, address), user editing (name, email, role via dialog), sending password reset emails, and sending fresh login credentials to tenant users.
 - **Notifications System**: In-app notifications for various business events, with a bell icon and unread count in the UI.
 - **Rover Chatbot**: In-app assistant named "Rover" (floating widget, bottom-right). Answers questions about app functionality via keyword-matched knowledge base. Can submit trouble tickets (bugs) and feature requests to the `rover_tickets` table. Only visible to authenticated users. API: POST /api/rover/ask, POST /api/rover/ticket, GET /api/rover/tickets.
@@ -54,7 +54,17 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **Automation**: Event-driven automation rules with logs.
 - **API & Webhooks**: Comprehensive REST API with scoped API keys and webhooks for external integrations, particularly with AI agents.
 - **User Roles**: Supports owner, admin, and technician roles with appropriate access control.
-- **Proof of Service**: Technicians can upload photos for completed visits via a mobile interface.
+- **Proof of Service**: Technicians can upload before and after photos for visits via a mobile interface.
+- **Technician Time Tracking**: Clock in/out button on mobile view with elapsed time display. API: POST /api/time-entries/clock-in, POST /api/time-entries/clock-out, GET /api/time-entries/active.
+- **Bulk Contact Actions**: Multi-select contacts with bulk status change, tag assignment, and delete operations.
+- **Activity Log**: Per-contact chronological timeline of all interactions (created, updated, status_changed, visits, invoices, emails, SMS, notes, portal logins). API: GET /api/contacts/:id/activity.
+- **Global Search**: Sidebar search bar (Cmd/Ctrl+K shortcut) searching across contacts, properties, invoices, and routes. API: GET /api/search?q=...
+- **Dashboard Customization**: Widget show/hide and reorder with persistent layout via company settings. 10 configurable widgets.
+- **Route Map View**: Mapbox GL JS map with numbered markers and connecting lines. Toggle between list and map views on route builder.
+- **Dark Mode**: Fully polished dark mode support across all pages and charts.
+- **Webhook Delivery with Retry**: HMAC-signed webhook delivery with exponential backoff retry (up to 5 attempts). Delivery log UI on webhooks page.
+- **Audit Trail**: Tracks all critical data changes (contacts, invoices, routes, company settings) with before/after snapshots. Owner-only UI in Settings.
+- **Automated Jobs**: Auto-invoicing (server/jobs/auto-invoice.ts), reminders (server/jobs/reminders.ts), auto-visit generation (server/jobs/auto-visits.ts), webhook retry (server/services/webhook-dispatcher.ts).
 
 ### Public Signup Flow
 - **Endpoint**: `POST /api/public/signup` — public, rate-limited (5/15min), CORS open for any origin
@@ -72,7 +82,7 @@ Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes
 - **Reports**: `reports/` directory with scan output (dependency-audit.json, secrets-scan.txt, sast-results.json, security-summary.md)
 
 ## Testing
-- **Test Suite**: `tests/api.test.ts` — 113 automated API tests across 22 categories
+- **Test Suite**: `tests/api.test.ts` — 114 automated API tests across 22 categories
 - **Run**: `npx tsx tests/api.test.ts` (requires app running on port 5000)
 - **Categories**: Auth (19), Auth Middleware (22), Admin Auth (9), Contacts (8), Properties (2), Routes (4), Invoices (2), Service Plans (2), Tags (4), Lead Sources (1), Automation (1), Reports (6), Company (7), Onboarding (1), Rover (4), Public (1), Portal (5), Visits (3), Webhooks (1), Edge Cases (8), Public Signup (2), Invoice Theme (1)
 - **Coverage**: Authentication flows, input validation, auth middleware on all endpoints, admin token protection, CRUD operations, SQL injection defense, XSS handling, null byte sanitization, rate limiting, cross-tenant isolation

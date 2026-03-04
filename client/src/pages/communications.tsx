@@ -76,8 +76,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function DirectionIcon({ direction }: { direction: string }) {
-  if (direction === "outbound") return <ArrowUpRight className="h-4 w-4 text-blue-500" />;
-  return <ArrowDownLeft className="h-4 w-4 text-green-500" />;
+  if (direction === "outbound") return <ArrowUpRight className="h-4 w-4 text-blue-500 dark:text-blue-400" />;
+  return <ArrowDownLeft className="h-4 w-4 text-green-500 dark:text-green-400" />;
 }
 
 export default function Communications() {

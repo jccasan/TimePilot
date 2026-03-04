@@ -30,6 +30,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { GlobalSearch } from "@/components/global-search";
 
 const menuSections = [
   {
@@ -91,6 +92,9 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
+        <div className="px-3 py-2">
+          <GlobalSearch />
+        </div>
         {menuSections.map((section) => (
           <SidebarGroup key={section.label}>
             <SidebarGroupLabel>{section.label}</SidebarGroupLabel>

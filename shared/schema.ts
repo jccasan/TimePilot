@@ -48,6 +48,9 @@ export const companies = pgTable("companies", {
   invoiceTheme: text("invoice_theme"),
   mrrCents: integer("mrr_cents").notNull().default(0),
   routeCredits: integer("route_credits").notNull().default(10),
+  remindersEnabled: boolean("reminders_enabled").notNull().default(false),
+  autoVisitsEnabled: boolean("auto_visits_enabled").notNull().default(false),
+  dashboardLayout: jsonb("dashboard_layout").$type<string[]>(),
   canceledAt: timestamp("canceled_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
   churnNotes: text("churn_notes"),
@@ -94,6 +97,8 @@ export const contacts = pgTable("contacts", {
   invoiceFrequency: invoiceFrequencyEnum("invoice_frequency").default("per_service"),
   referralSource: varchar("referral_source", { length: 255 }),
   portalPasswordHash: varchar("portal_password_hash", { length: 255 }),
+  autoPayEnabled: boolean("auto_pay_enabled").notNull().default(false),
+  reminderPreferences: jsonb("reminder_preferences").$type<{ email: boolean; sms: boolean }>().default({ email: true, sms: false }),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -204,6 +209,7 @@ export const visits = pgTable("visits", {
   completedAt: timestamp("completed_at"),
   completedBy: varchar("completed_by").references(() => users.id),
   proofOfServicePhoto: text("proof_of_service_photo"),
+  proofOfServicePhotoBefore: text("proof_of_service_photo_before"),
   technicianNotes: text("technician_notes"),
   invoiceId: varchar("invoice_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -729,3 +735,93 @@ export type Attachment = typeof attachments.$inferSelect;
 export type InsertAttachment = z.infer<typeof insertAttachmentSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+export const timeEntries = pgTable("time_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  visitId: varchar("visit_id").references(() => visits.id, { onDelete: "set null" }),
+  routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),
+  clockIn: timestamp("clock_in").notNull(),
+  clockOut: timestamp("clock_out"),
+  durationMinutes: integer("duration_minutes"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_te_company").on(table.companyId),
+  index("idx_te_user").on(table.userId),
+  index("idx_te_clockin").on(table.clockIn),
+]);
+
+export const insertTimeEntrySchema = createInsertSchema(timeEntries).omit({ id: true, createdAt: true });
+export type TimeEntry = typeof timeEntries.$inferSelect;
+export type InsertTimeEntry = z.infer<typeof insertTimeEntrySchema>;
+
+export const activityActionEnum = pgEnum("activity_action", [
+  "created", "updated", "status_changed", "visit_completed", "visit_scheduled",
+  "invoice_created", "invoice_paid", "email_sent", "sms_sent", "note_added", "portal_login"
+]);
+
+export const activityLog = pgTable("activity_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").references(() => contacts.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  action: activityActionEnum("action").notNull(),
+  details: jsonb("details").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_al_company").on(table.companyId),
+  index("idx_al_contact").on(table.contactId),
+  index("idx_al_created").on(table.createdAt),
+]);
+
+export const insertActivityLogSchema = createInsertSchema(activityLog).omit({ id: true, createdAt: true });
+export type ActivityLog = typeof activityLog.$inferSelect;
+export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
+
+export const webhookDeliveryStatusEnum = pgEnum("webhook_delivery_status", ["pending", "success", "failed"]);
+
+export const webhookDeliveries = pgTable("webhook_deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  webhookId: varchar("webhook_id").notNull().references(() => webhooks.id, { onDelete: "cascade" }),
+  event: varchar("event", { length: 100 }).notNull(),
+  payload: jsonb("payload").$type<Record<string, any>>().notNull(),
+  status: webhookDeliveryStatusEnum("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  lastAttempt: timestamp("last_attempt"),
+  nextRetry: timestamp("next_retry"),
+  responseCode: integer("response_code"),
+  responseBody: text("response_body"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_wd_webhook").on(table.webhookId),
+  index("idx_wd_status").on(table.status),
+  index("idx_wd_next_retry").on(table.nextRetry),
+]);
+
+export const insertWebhookDeliverySchema = createInsertSchema(webhookDeliveries).omit({ id: true, createdAt: true });
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type InsertWebhookDelivery = z.infer<typeof insertWebhookDeliverySchema>;
+
+export const auditActionEnum = pgEnum("audit_action", ["create", "update", "delete", "void"]);
+
+export const auditTrail = pgTable("audit_trail", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  entityType: varchar("entity_type", { length: 50 }).notNull(),
+  entityId: varchar("entity_id", { length: 255 }).notNull(),
+  action: auditActionEnum("action").notNull(),
+  changes: jsonb("changes").$type<{ old?: Record<string, any>; new?: Record<string, any> }>(),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_audit_company").on(table.companyId),
+  index("idx_audit_entity").on(table.entityType, table.entityId),
+  index("idx_audit_created").on(table.createdAt),
+]);
+
+export const insertAuditTrailSchema = createInsertSchema(auditTrail).omit({ id: true, createdAt: true });
+export type AuditTrail = typeof auditTrail.$inferSelect;
+export type InsertAuditTrail = z.infer<typeof insertAuditTrailSchema>;

@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Contact } from "@shared/schema";
+import type { Contact, Tag } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -35,7 +36,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Trash2, Tags, RefreshCw } from "lucide-react";
 import { DialogFooter } from "@/components/ui/dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
@@ -116,6 +124,8 @@ export default function Contacts() {
   const [newLeadSources, setNewLeadSources] = useState<string[]>([]);
   const [isValidating, setIsValidating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const queryParams = new URLSearchParams();
   if (statusFilter !== "all") queryParams.set("status", statusFilter);
@@ -129,6 +139,58 @@ export default function Contacts() {
   const { data: leadSources = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["/api/lead-sources"],
   });
+
+  const { data: tagsList = [] } = useQuery<Tag[]>({
+    queryKey: ["/api/tags"],
+  });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async (data: { ids: string[]; status?: string; tagId?: string }) => {
+      await apiRequest("POST", "/api/contacts/bulk-update", data);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      setSelectedIds(new Set());
+      const action = variables.status ? `Status changed to ${variables.status}` : "Tag added";
+      toast({ title: "Bulk update complete", description: `${action} for ${variables.ids.length} contact(s).` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Bulk update failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await apiRequest("POST", "/api/contacts/bulk-delete", { ids });
+    },
+    onSuccess: (_, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      setSelectedIds(new Set());
+      setDeleteConfirmOpen(false);
+      toast({ title: "Contacts deleted", description: `${ids.length} contact(s) deleted successfully.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (!contacts) return;
+    if (selectedIds.size === contacts.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(contacts.map(c => c.id)));
+    }
+  };
 
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(contactFormSchema),
@@ -538,33 +600,54 @@ export default function Contacts() {
         </div>
       ) : contacts && contacts.length > 0 ? (
         <div className="space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <Checkbox
+              checked={selectedIds.size === contacts.length && contacts.length > 0}
+              onCheckedChange={toggleSelectAll}
+              data-testid="checkbox-select-all"
+              aria-label="Select all contacts"
+            />
+            <span className="text-sm text-muted-foreground">
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Select all"}
+            </span>
+          </div>
           {contacts.map((contact) => (
-            <Link key={contact.id} href={`/contacts/${contact.id}`}>
-              <Card className="hover-elevate cursor-pointer" data-testid={`card-contact-${contact.id}`}>
-                <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
-                  <div>
-                    <p className="font-medium" data-testid={`text-contact-name-${contact.id}`}>
-                      {contact.firstName} {contact.lastName}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {contact.email || "No email"} {contact.phone ? ` | ${contact.phone}` : ""}
-                    </p>
-                    {contact.streetAddress && (
-                      <p className="text-sm text-muted-foreground" data-testid={`text-contact-address-${contact.id}`}>
-                        {contact.streetAddress}{contact.address2 ? `, ${contact.address2}` : ""}{contact.city ? `, ${contact.city}` : ""}{contact.state ? `, ${contact.state}` : ""} {contact.zipCode || ""}
+            <div key={contact.id} className="flex items-stretch gap-2">
+              <div className="flex items-center px-1">
+                <Checkbox
+                  checked={selectedIds.has(contact.id)}
+                  onCheckedChange={() => toggleSelect(contact.id)}
+                  data-testid={`checkbox-contact-${contact.id}`}
+                  aria-label={`Select ${contact.firstName} ${contact.lastName}`}
+                />
+              </div>
+              <Link href={`/contacts/${contact.id}`} className="flex-1 min-w-0">
+                <Card className="hover-elevate cursor-pointer" data-testid={`card-contact-${contact.id}`}>
+                  <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
+                    <div>
+                      <p className="font-medium" data-testid={`text-contact-name-${contact.id}`}>
+                        {contact.firstName} {contact.lastName}
                       </p>
-                    )}
-                  </div>
-                  <Badge
-                    variant="secondary"
-                    className={statusColors[contact.status] || ""}
-                    data-testid={`badge-status-${contact.id}`}
-                  >
-                    {contact.status}
-                  </Badge>
-                </CardContent>
-              </Card>
-            </Link>
+                      <p className="text-sm text-muted-foreground">
+                        {contact.email || "No email"} {contact.phone ? ` | ${contact.phone}` : ""}
+                      </p>
+                      {contact.streetAddress && (
+                        <p className="text-sm text-muted-foreground" data-testid={`text-contact-address-${contact.id}`}>
+                          {contact.streetAddress}{contact.address2 ? `, ${contact.address2}` : ""}{contact.city ? `, ${contact.city}` : ""}{contact.state ? `, ${contact.state}` : ""} {contact.zipCode || ""}
+                        </p>
+                      )}
+                    </div>
+                    <Badge
+                      variant="secondary"
+                      className={statusColors[contact.status] || ""}
+                      data-testid={`badge-status-${contact.id}`}
+                    >
+                      {contact.status}
+                    </Badge>
+                  </CardContent>
+                </Card>
+              </Link>
+            </div>
           ))}
         </div>
       ) : (
@@ -574,6 +657,110 @@ export default function Contacts() {
           </CardContent>
         </Card>
       )}
+
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" data-testid="bulk-action-bar">
+          <Card className="shadow-lg">
+            <CardContent className="flex flex-wrap items-center gap-2 p-3">
+              <span className="text-sm font-medium mr-1" data-testid="text-bulk-selected-count">
+                {selectedIds.size} selected
+              </span>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={bulkUpdateMutation.isPending} data-testid="button-bulk-change-status">
+                    <RefreshCw className="mr-1 h-4 w-4" />
+                    Change Status
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent data-testid="dropdown-bulk-status">
+                  {["lead", "estimate", "active", "paused", "cancelled"].map((s) => (
+                    <DropdownMenuItem
+                      key={s}
+                      onClick={() => bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), status: s })}
+                      data-testid={`menu-item-status-${s}`}
+                    >
+                      <Badge variant="secondary" className={`${statusColors[s]} mr-2`}>{s}</Badge>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={bulkUpdateMutation.isPending} data-testid="button-bulk-add-tag">
+                    <Tags className="mr-1 h-4 w-4" />
+                    Add Tag
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent data-testid="dropdown-bulk-tags">
+                  {tagsList.length === 0 ? (
+                    <DropdownMenuItem disabled>No tags available</DropdownMenuItem>
+                  ) : (
+                    tagsList.map((tag) => (
+                      <DropdownMenuItem
+                        key={tag.id}
+                        onClick={() => bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), tagId: tag.id })}
+                        data-testid={`menu-item-tag-${tag.id}`}
+                      >
+                        <span
+                          className="inline-block w-3 h-3 rounded-full mr-2 flex-shrink-0"
+                          style={{ backgroundColor: tag.color || "#3b82f6" }}
+                        />
+                        {tag.name}
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={bulkDeleteMutation.isPending}
+                data-testid="button-bulk-delete"
+              >
+                <Trash2 className="mr-1 h-4 w-4" />
+                Delete Selected
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedIds(new Set())}
+                data-testid="button-bulk-clear-selection"
+              >
+                Clear
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle data-testid="text-delete-confirm-title">Delete {selectedIds.size} Contact(s)?</DialogTitle>
+            <DialogDescription data-testid="text-delete-confirm-description">
+              This action cannot be undone. All selected contacts and their associated data will be permanently removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)} data-testid="button-cancel-bulk-delete">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+              disabled={bulkDeleteMutation.isPending}
+              data-testid="button-confirm-bulk-delete"
+            >
+              {bulkDeleteMutation.isPending ? "Deleting..." : `Delete ${selectedIds.size} Contact(s)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={importStep !== "idle"} onOpenChange={(open) => { if (!open) { setImportStep("idle"); setImportRows([]); setRawCsvRows([]); setRawCsvHeaders([]); setColumnMapping([]); setNewLeadSources([]); } }}>
         <DialogContent className="max-w-[95vw] w-[900px] max-h-[90vh] flex flex-col">
@@ -616,7 +803,7 @@ export default function Contacts() {
                       </SelectContent>
                     </Select>
                     {col.mappedField ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
                     ) : (
                       <AlertTriangle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     )}
