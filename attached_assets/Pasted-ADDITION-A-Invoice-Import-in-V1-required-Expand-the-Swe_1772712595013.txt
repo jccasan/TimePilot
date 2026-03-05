@@ -1,0 +1,92 @@
+ADDITION A: Invoice Import in V1 (required)
+Expand the Sweep&Go migration to include historical invoices and payments.
+
+Scope:
+- Import invoices + invoice line items + invoice dates (issued/due/paid) + status (Paid/Partially Paid/Unpaid/Void) + invoice number + notes + tax/discount breakdown if present.
+- Import payment history as INTERNAL ledger entries (do NOT attempt to recreate Stripe charges/payment intents). Mark imported payments as `source="imported"` and show “Imported (non-Stripe)” in UI.
+- Support partial payments and compute current balance accurately.
+- If Sweep&Go export includes customer balance only (no invoices), support a “Starting Balance” import record that becomes a ledger entry.
+
+Data Model:
+- Add tables:
+  - `imported_invoices` (or reuse existing invoices table with `source="imported"` and `external_source/external_id`)
+  - `invoice_payments` table for internal ledger entries (amountCents, paidAt, method, reference, source, external_id)
+  - `invoice_adjustments` optional minimal table for credits/discount adjustments if needed
+- Add `external_source`, `external_id`, and `import_run_id` fields on invoices and payments for idempotency and reconciliation.
+- Ensure tenantId is indexed everywhere.
+
+Validation:
+- Ensure invoice totals reconcile:
+  - sum(line items) + tax - discounts == invoice total (within rounding tolerance)
+- If mismatch, block row and require user correction in the review UI.
+- Prevent duplicate invoice numbers per tenant unless user explicitly chooses “allow duplicates (suffix)”.
+
+UI:
+- Migration preview must include an “Invoices” tab:
+  - counts by status
+  - sample invoices
+  - totals imported
+  - errors list
+- Post-migration report includes invoices imported and any skipped with reasons.
+
+API:
+- Add:
+  - POST /api/migrations/sweepandgo/parse-invoices
+  - POST /api/migrations/sweepandgo/run-invoices
+  - GET /api/migrations/:id/invoices-report
+- All imports must be idempotent (re-running should not duplicate).
+
+Important:
+- Imported invoices must NOT attempt to auto-charge through Stripe.
+- Imported paid invoices should appear as Paid and contribute to historical revenue analytics.
+- Imported unpaid invoices can optionally be left as “historical unpaid” and excluded from auto-reminders unless user toggles “include imported invoices in reminders”.
+
+------------------------------------------------
+
+ADDITION B: AI-Assisted Column Mapping + Editable Import Review (required)
+Add AI-based schema mapping for any CSV import (route import + Sweep&Go migration).
+
+Goal:
+- Automatically map arbitrary CSV headers to Scoopilot schema fields and propose transformations (split full name, normalize phone, parse dates/currency, infer frequency).
+- Provide a user review screen to confirm/edit mappings and fix row-level errors before apply.
+
+Implementation requirements:
+- Create an “Import Mapping Engine” module that:
+  1) Takes CSV headers + N sample rows (N=25) and returns:
+     - field mappings: {csvColumn -> internalField}
+     - transformations: {internalField: transformType + params}
+     - confidence score per mapping (0-1)
+     - warnings for ambiguous mappings
+  2) Uses a deterministic fallback mapping (known aliases) if AI is disabled or fails.
+- Add a tenant setting feature flag: `aiImportMappingEnabled` default ON for Owner/Admin.
+
+AI guardrails:
+- AI output must be structured JSON and validated against a strict schema.
+- Never apply mappings automatically without user confirmation.
+- If confidence < 0.75 for any required field mapping, force user to choose manually.
+- For sensitive fields (money, dates, status), require explicit confirmation if confidence < 0.9.
+
+UI (must build):
+- Import wizard step: “Review & Map Fields”
+  - Left: list of required/optional Scoopilot fields
+  - Right: dropdown to select CSV column
+  - Show AI suggestion + confidence + “why” (short)
+  - Allow user to add transformations (split name, trim, parse currency, date format)
+- Next step: “Review Rows”
+  - Show a grid with first 50 rows
+  - Highlight invalid cells with inline edit
+  - Provide “fix all” actions (e.g., normalize phone, apply trim)
+  - Allow skipping rows or correcting before apply
+
+Auditing:
+- Save the final mapping config and transformations on `import_runs` for repeatability.
+- Store AI suggestions and user overrides for later improvement.
+
+API:
+- POST /api/imports/ai-map (headers + sample rows -> mapping JSON)
+- POST /api/imports/preview (apply mapping to full file -> preview + validation errors)
+- POST /api/imports/apply (apply confirmed mapping -> writes)
+
+Cost control:
+- Limit AI mapping to header + sample rows only.
+- Cache mappings per file hash to avoid repeated AI calls.
