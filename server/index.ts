@@ -164,15 +164,16 @@ async function applyAdminCredentialMigration() {
     const { Pool } = await import("pg");
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     
-    const targetHash = "ae85423c9671dcc83ee6df6e5c977a80:4932ba8e056e7ea3b9f1e5da2fc645293480292a5ee88839826653b7a20cccef9d256b4728fd7102fee55c52aed13389f702fbf1bcf91d3f0591ae27ac05e170";
+    const targetHash = "50d83da102429ca2f8823c15410c4a25:b19fdd81a626bbc1e207d973ceed5158b8c5df6162af4a07333eb141bf731e9ffbd382d00afa917635eac86a000f45e2e0a4e35102c69bd3cf0a88a2cb1ff88a";
+    const targetEmail = "jeremy@doocrewva.com";
     
     const check = await pool.query("SELECT id, password_hash FROM users WHERE email = 'jeremy@scoopilot.com' OR email = 'jeremy@doocrewva.com'");
     if (check.rows.length > 0) {
       const row = check.rows[0];
       if (row.password_hash !== targetHash) {
         await pool.query(
-          "UPDATE users SET email = 'jeremy@scoopilot.com', password_hash = $1, updated_at = NOW() WHERE id = $2",
-          [targetHash, row.id]
+          "UPDATE users SET email = $1, password_hash = $2, updated_at = NOW() WHERE id = $3",
+          [targetEmail, targetHash, row.id]
         );
         console.log("[Migration] Tenant credentials updated successfully");
       } else {
@@ -180,13 +181,13 @@ async function applyAdminCredentialMigration() {
       }
     }
 
-    const adminCheck = await pool.query("SELECT id, password_hash FROM admin_users WHERE email = 'jeremy@scoopilot.com'");
+    const adminCheck = await pool.query("SELECT id, password_hash FROM admin_users WHERE email = 'jeremy@scoopilot.com' OR email = 'jeremy@doocrewva.com'");
     if (adminCheck.rows.length > 0) {
       const adminRow = adminCheck.rows[0];
       if (adminRow.password_hash !== targetHash) {
         await pool.query(
-          "UPDATE admin_users SET password_hash = $1 WHERE id = $2",
-          [targetHash, adminRow.id]
+          "UPDATE admin_users SET email = $1, password_hash = $2 WHERE id = $3",
+          [targetEmail, targetHash, adminRow.id]
         );
         console.log("[Migration] Platform admin credentials updated successfully");
       } else {
