@@ -18,6 +18,7 @@ import {
   Settings,
   TrendingUp,
   Building2,
+  ArrowRightLeft,
 } from "lucide-react";
 import {
   Sidebar,
@@ -67,6 +68,7 @@ const menuSections = [
       { title: "API Keys", url: "/api-keys", icon: Key },
       { title: "Webhooks", url: "/webhooks", icon: Webhook },
       { title: "Client Portal", url: "/portal", icon: ExternalLink },
+      { title: "Data Migration", url: "/migration", icon: ArrowRightLeft },
     ],
   },
 ];

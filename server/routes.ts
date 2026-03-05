@@ -4436,6 +4436,411 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Import / Migration Routes ================
+  const { parseSweepAndGoInvoices } = await import("./services/sweepandgo-parser");
+  const { aiMapColumns, getDeterministicMapping, hashFileContent, CONTACT_FIELDS, INVOICE_FIELDS, ROUTE_FIELDS } = await import("./services/ai-mapper");
+  const { applyTransformations, parseCSV: parseCSVUtil } = await import("./services/import-transforms");
+
+  app.post("/api/migrations/sweepandgo/parse-invoices", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getCompanyContext(req);
+      const { csvText } = req.body;
+      if (!csvText || typeof csvText !== "string") return res.status(400).json({ error: "csvText is required" });
+
+      const result = parseSweepAndGoInvoices(csvText);
+
+      const sampleInvoices = result.invoices.slice(0, 10).map(inv => ({
+        invoiceNumber: inv.invoiceNumber,
+        contactName: inv.contactName,
+        contactEmail: inv.contactEmail,
+        status: inv.status,
+        total: inv.total,
+        lineItemCount: inv.lineItems.length,
+        paymentCount: inv.payments.length,
+      }));
+
+      res.json({
+        summary: result.summary,
+        sampleInvoices,
+        errors: result.errors,
+        warnings: result.warnings,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/migrations/sweepandgo/run-invoices", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getCompanyContext(req);
+      const { csvText, allowDuplicates, includeInReminders } = req.body;
+      if (!csvText) return res.status(400).json({ error: "csvText is required" });
+
+      const fileHash = hashFileContent(csvText);
+      const importRun = await storage.createImportRun({
+        companyId,
+        type: "sweepandgo_invoices",
+        status: "processing",
+        fileName: "sweepandgo-invoices.csv",
+        fileHash,
+        totalRows: 0,
+        importedRows: 0,
+        skippedRows: 0,
+      });
+
+      const parseResult = parseSweepAndGoInvoices(csvText);
+
+      if (parseResult.errors.length > 0 && !req.body.forceImport) {
+        await storage.updateImportRun(importRun.id, {
+          status: "failed",
+          errors: parseResult.errors,
+          totalRows: parseResult.invoices.length,
+          completedAt: new Date(),
+        });
+        return res.status(400).json({
+          importRunId: importRun.id,
+          errors: parseResult.errors,
+          message: "Validation errors found. Send forceImport: true to skip invalid rows.",
+        });
+      }
+
+      let imported = 0;
+      let skipped = 0;
+      const importErrors: any[] = [];
+
+      const allContacts = await storage.getContacts(companyId);
+
+      for (const inv of parseResult.invoices) {
+        try {
+          const existing = await storage.getInvoiceByExternalId(companyId, "sweepandgo", inv.externalId);
+          if (existing) {
+            if (!allowDuplicates) {
+              skipped++;
+              continue;
+            }
+          }
+
+          let contactId: string | null = null;
+          if (inv.contactEmail) {
+            const match = allContacts.find(c => c.email?.toLowerCase() === inv.contactEmail?.toLowerCase());
+            if (match) contactId = match.id;
+          }
+          if (!contactId && inv.contactName) {
+            const nameParts = inv.contactName.split(/\s+/);
+            if (nameParts.length >= 2) {
+              const match = allContacts.find(c =>
+                c.firstName.toLowerCase() === nameParts[0].toLowerCase() &&
+                c.lastName.toLowerCase() === nameParts.slice(1).join(" ").toLowerCase()
+              );
+              if (match) contactId = match.id;
+            }
+          }
+
+          if (!contactId) {
+            importErrors.push({ invoiceNumber: inv.invoiceNumber, message: "Could not match to existing contact" });
+            skipped++;
+            continue;
+          }
+
+          let invoiceNum = inv.invoiceNumber;
+          if (existing && allowDuplicates) {
+            invoiceNum = `${inv.invoiceNumber}-imp-${Date.now()}`;
+          }
+
+          const invoice = await storage.createInvoice({
+            companyId,
+            contactId,
+            invoiceNumber: invoiceNum,
+            dueDate: inv.dueDate,
+            subtotal: String(inv.subtotal),
+            taxRate: String(inv.taxRate),
+            tax: String(inv.tax),
+            discountAmount: String(inv.discountAmount),
+            total: String(inv.total),
+            status: inv.status as any,
+            source: "imported",
+            externalSource: "sweepandgo",
+            externalId: inv.externalId,
+            importRunId: importRun.id,
+            issuedDate: inv.issuedDate || null,
+            notes: inv.notes || null,
+            excludeFromReminders: !includeInReminders,
+            paidAt: inv.status === "paid" && inv.payments.length > 0 ? new Date(inv.payments[0].paidAt) : null,
+          });
+
+          for (const li of inv.lineItems) {
+            await storage.createInvoiceLineItem({
+              invoiceId: invoice.id,
+              description: li.description,
+              quantity: li.quantity,
+              unitPrice: String(li.unitPrice),
+              total: String(li.total),
+            });
+          }
+
+          for (let pIdx = 0; pIdx < inv.payments.length; pIdx++) {
+            const payment = inv.payments[pIdx];
+            const paymentExtId = `sweepandgo-payment-${inv.externalId}-${pIdx}`;
+            const existing = await storage.getInvoicePaymentByExternalId(companyId, paymentExtId);
+            if (existing) continue;
+            await storage.createInvoicePayment({
+              companyId,
+              invoiceId: invoice.id,
+              amountCents: payment.amountCents,
+              paidAt: new Date(payment.paidAt),
+              method: "imported" as any,
+              reference: payment.reference || null,
+              source: "imported" as any,
+              externalId: paymentExtId,
+              importRunId: importRun.id,
+            });
+          }
+
+          imported++;
+        } catch (invErr: any) {
+          importErrors.push({ invoiceNumber: inv.invoiceNumber, message: invErr.message });
+          skipped++;
+        }
+      }
+
+      await storage.updateImportRun(importRun.id, {
+        status: "completed",
+        totalRows: parseResult.invoices.length,
+        importedRows: imported,
+        skippedRows: skipped,
+        errors: importErrors.length > 0 ? importErrors : null,
+        completedAt: new Date(),
+      });
+
+      res.json({
+        importRunId: importRun.id,
+        imported,
+        skipped,
+        total: parseResult.invoices.length,
+        errors: importErrors,
+        summary: parseResult.summary,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/migrations/:id/invoices-report", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getCompanyContext(req);
+      const importRun = await storage.getImportRun(req.params.id, companyId);
+      if (!importRun) return res.status(404).json({ error: "Import run not found" });
+      res.json(importRun);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/invoices/:id/payments", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getCompanyContext(req);
+      const invoice = await storage.getInvoice(req.params.id, companyId);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+      const payments = await storage.getInvoicePayments(req.params.id);
+      res.json(payments);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/imports/ai-map", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getCompanyContext(req);
+      const { headers, sampleRows, targetSchema } = req.body;
+
+      if (!headers || !Array.isArray(headers)) return res.status(400).json({ error: "headers array is required" });
+      if (!sampleRows || !Array.isArray(sampleRows)) return res.status(400).json({ error: "sampleRows array is required" });
+
+      const company = await storage.getCompany(companyId);
+      const targetFields = targetSchema === "invoices" ? INVOICE_FIELDS
+        : targetSchema === "routes" ? ROUTE_FIELDS
+        : CONTACT_FIELDS;
+
+      if (company?.aiImportMappingEnabled) {
+        const result = await aiMapColumns(headers, sampleRows.slice(0, 25), targetSchema || "contacts", targetFields);
+        res.json(result);
+      } else {
+        const result = getDeterministicMapping(headers, targetFields);
+        res.json(result);
+      }
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/imports/preview", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { targetSchema } = req.body;
+      let headers: string[];
+      let rows: string[][];
+      let mappings: any[];
+      let transformations: any[];
+
+      if (req.body.csvText) {
+        const parsed = parseCSVUtil(req.body.csvText);
+        headers = parsed.headers;
+        rows = parsed.rows;
+        mappings = req.body.mappingConfig?.mappings || [];
+        transformations = req.body.mappingConfig?.transformations || [];
+      } else if (req.body.headers && req.body.rows) {
+        headers = req.body.headers;
+        rows = req.body.rows;
+        mappings = req.body.mappings || req.body.mappingConfig?.mappings || [];
+        transformations = req.body.transformations || req.body.mappingConfig?.transformations || [];
+      } else {
+        return res.status(400).json({ error: "Either csvText or headers+rows are required" });
+      }
+
+      const requiredFields = targetSchema === "invoices"
+        ? ["invoiceNumber"]
+        : targetSchema === "routes"
+        ? ["routeName"]
+        : ["firstName"];
+
+      const transformed = applyTransformations(rows, headers, mappings, transformations, requiredFields);
+
+      const preview = transformed.slice(0, 50);
+      const validCount = transformed.filter(r => r.isValid).length;
+      const invalidCount = transformed.filter(r => !r.isValid).length;
+      const allErrors = transformed.flatMap(r => r.errors);
+
+      res.json({
+        totalRows: rows.length,
+        validCount,
+        invalidCount,
+        rows: preview,
+        preview,
+        errors: allErrors.slice(0, 100),
+        headers,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/imports/apply", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getCompanyContext(req);
+      const { targetSchema } = req.body;
+      let headers: string[];
+      let rows: string[][];
+      let mappings: any[];
+      let transformations: any[];
+      let fileHash: string;
+
+      if (req.body.csvText) {
+        const parsed = parseCSVUtil(req.body.csvText);
+        headers = parsed.headers;
+        rows = parsed.rows;
+        mappings = req.body.mappingConfig?.mappings || [];
+        transformations = req.body.mappingConfig?.transformations || [];
+        fileHash = hashFileContent(req.body.csvText);
+      } else if (req.body.headers && req.body.rows) {
+        headers = req.body.headers;
+        rows = req.body.rows;
+        mappings = req.body.mappings || req.body.mappingConfig?.mappings || [];
+        transformations = req.body.transformations || req.body.mappingConfig?.transformations || [];
+        fileHash = hashFileContent(JSON.stringify({ headers, rows }));
+      } else {
+        return res.status(400).json({ error: "Either csvText or headers+rows are required" });
+      }
+
+      const importType = targetSchema === "invoices" ? "sweepandgo_invoices"
+        : targetSchema === "routes" ? "csv_routes"
+        : "csv_contacts";
+
+      const mappingConfig = { mappings, transformations };
+      const importRun = await storage.createImportRun({
+        companyId,
+        type: importType as any,
+        status: "processing",
+        fileName: req.body.fileName || "import.csv",
+        fileHash,
+        totalRows: rows.length,
+        mappingConfig,
+        aiSuggestions: req.body.aiSuggestions || null,
+        userOverrides: req.body.userOverrides || null,
+      });
+
+      const skipSet = new Set(req.body.skipRowIndices || req.body.skippedRows || []);
+      const editedCells = req.body.editedCells || {};
+      for (const [key, value] of Object.entries(editedCells)) {
+        const [rowIdx, colIdx] = key.split("-").map(Number);
+        if (rows[rowIdx] && colIdx < (rows[rowIdx]?.length ?? 0)) {
+          rows[rowIdx][colIdx] = String(value);
+        }
+      }
+      const requiredFields = targetSchema === "invoices" ? ["invoiceNumber"]
+        : targetSchema === "routes" ? ["routeName"]
+        : ["firstName"];
+
+      const transformed = applyTransformations(rows, headers, mappings, transformations, requiredFields);
+
+      let imported = 0;
+      let skipped = 0;
+      const importErrors: any[] = [];
+
+      for (const row of transformed) {
+        if (skipSet.has(row.rowIndex)) { skipped++; continue; }
+        if (!row.isValid) { skipped++; importErrors.push(...row.errors); continue; }
+
+        try {
+          if (targetSchema === "contacts" || !targetSchema) {
+            const contactData: any = {
+              companyId,
+              firstName: row.transformed.firstName || "Unknown",
+              lastName: row.transformed.lastName || "",
+              email: row.transformed.email || null,
+              phone: row.transformed.phone || null,
+              streetAddress: row.transformed.streetAddress || null,
+              address2: row.transformed.address2 || null,
+              city: row.transformed.city || null,
+              state: row.transformed.state || null,
+              zipCode: row.transformed.zipCode || null,
+              numberOfDogs: row.transformed.numberOfDogs ? parseInt(row.transformed.numberOfDogs) : null,
+              yardSize: row.transformed.yardSize || null,
+              serviceFrequency: row.transformed.serviceFrequency || null,
+              leadSource: row.transformed.leadSource || null,
+              status: row.transformed.status || "lead",
+              notes: row.transformed.notes || null,
+            };
+            await storage.createContact(contactData);
+            imported++;
+          }
+        } catch (err: any) {
+          importErrors.push({ row: row.rowIndex, message: err.message });
+          skipped++;
+        }
+      }
+
+      await storage.updateImportRun(importRun.id, {
+        status: "completed",
+        importedRows: imported,
+        skippedRows: skipped,
+        errors: importErrors.length > 0 ? importErrors : null,
+        completedAt: new Date(),
+      });
+
+      res.json({
+        importRunId: importRun.id,
+        imported,
+        skipped,
+        total: rows.length,
+        errors: importErrors,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/imports", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getCompanyContext(req);
+      const runs = await storage.getImportRuns(companyId);
+      res.json(runs);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/imports/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getCompanyContext(req);
+      const run = await storage.getImportRun(req.params.id, companyId);
+      if (!run) return res.status(404).json({ error: "Import run not found" });
+      res.json(run);
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Rover Chatbot Routes ================
   const ROVER_KNOWLEDGE_BASE: { keywords: string[]; answer: string }[] = [
     { keywords: ["dashboard", "overview", "home", "main"], answer: "The Dashboard is your home screen showing key metrics like active clients, scheduled visits, revenue, and recent activity. It gives you a quick snapshot of your business operations." },

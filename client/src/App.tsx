@@ -42,6 +42,7 @@ import AdminAnalytics from "@/pages/admin-analytics";
 import AdminLogin from "@/pages/admin-login";
 import AdminChangePassword from "@/pages/admin-change-password";
 import Settings from "@/pages/settings";
+import MigrationPage from "@/pages/migration-page";
 import ResetPassword from "@/pages/reset-password";
 import { NotificationBell } from "@/components/notification-bell";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
@@ -76,6 +77,7 @@ function Router() {
       <Route path="/analytics" component={Analytics} />
       <Route path="/portal" component={Portal} />
       <Route path="/settings" component={Settings} />
+      <Route path="/migration" component={MigrationPage} />
       <Route component={NotFound} />
     </Switch>
   );

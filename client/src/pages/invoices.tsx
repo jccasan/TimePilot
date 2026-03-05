@@ -2,12 +2,20 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Invoice, Contact, ServicePricingItem } from "@shared/schema";
+import type { Invoice, Contact, ServicePricingItem, InvoicePayment } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import {
@@ -46,6 +54,111 @@ interface LineItem {
 
 interface InvoiceWithLineItems extends Invoice {
   lineItems?: any[];
+}
+
+function formatPaymentDate(dateStr: string | Date): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function formatCents(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
+function PaymentHistorySection({ invoiceId, invoiceTotal }: { invoiceId: string; invoiceTotal: number }) {
+  const { data: payments, isLoading } = useQuery<InvoicePayment[]>({
+    queryKey: ["/api/invoices", invoiceId, "payments"],
+    enabled: !!invoiceId,
+  });
+
+  const totalPaidCents = useMemo(
+    () => (payments || []).reduce((sum, p) => sum + p.amountCents, 0),
+    [payments]
+  );
+
+  const invoiceTotalCents = Math.round(invoiceTotal * 100);
+  const balanceRemainingCents = invoiceTotalCents - totalPaidCents;
+
+  if (isLoading) {
+    return (
+      <div data-testid="payment-history-loading" className="space-y-2">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-20 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <Card data-testid="payment-history-section">
+      <CardHeader className="p-3 pb-2">
+        <CardTitle className="text-sm font-medium">Payment History</CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 pt-0">
+        {!payments || payments.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-3" data-testid="text-no-payments">
+            No payments recorded
+          </p>
+        ) : (
+          <>
+            <Table data-testid="table-payments">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Date</TableHead>
+                  <TableHead className="text-xs text-right">Amount</TableHead>
+                  <TableHead className="text-xs">Method</TableHead>
+                  <TableHead className="text-xs">Source</TableHead>
+                  <TableHead className="text-xs">Reference</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payments.map((payment) => (
+                  <TableRow key={payment.id} data-testid={`row-payment-${payment.id}`}>
+                    <TableCell className="text-xs py-2" data-testid={`text-payment-date-${payment.id}`}>
+                      {formatPaymentDate(payment.paidAt)}
+                    </TableCell>
+                    <TableCell className="text-xs py-2 text-right" data-testid={`text-payment-amount-${payment.id}`}>
+                      ${formatCents(payment.amountCents)}
+                    </TableCell>
+                    <TableCell className="text-xs py-2" data-testid={`text-payment-method-${payment.id}`}>
+                      {payment.method}
+                    </TableCell>
+                    <TableCell className="text-xs py-2" data-testid={`text-payment-source-${payment.id}`}>
+                      {payment.source === "imported" ? (
+                        <Badge variant="secondary" data-testid={`badge-imported-payment-${payment.id}`}>
+                          Imported (non-Stripe)
+                        </Badge>
+                      ) : (
+                        payment.source
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs py-2" data-testid={`text-payment-reference-${payment.id}`}>
+                      {payment.reference || "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            {balanceRemainingCents > 0 && (
+              <div className="flex flex-wrap justify-between gap-1 mt-3 pt-2 border-t text-sm" data-testid="payment-balance-remaining">
+                <span className="text-muted-foreground">Balance Remaining:</span>
+                <span className="font-semibold text-orange-600 dark:text-orange-400">
+                  ${formatCents(balanceRemainingCents)}
+                </span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-between gap-1 mt-1 text-sm" data-testid="payment-total-paid">
+              <span className="text-muted-foreground">Total Paid:</span>
+              <span className="font-semibold text-green-600 dark:text-green-400">
+                ${formatCents(totalPaidCents)}
+              </span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function Invoices() {
@@ -1031,9 +1144,14 @@ export default function Invoices() {
       </Dialog>
 
       <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Invoice {selectedInvoice?.invoiceNumber}</DialogTitle>
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              Invoice {selectedInvoice?.invoiceNumber}
+              {selectedInvoice?.source === "imported" && (
+                <Badge variant="secondary" data-testid="badge-imported-invoice">Imported</Badge>
+              )}
+            </DialogTitle>
             <DialogDescription>Invoice details and line items</DialogDescription>
           </DialogHeader>
           {selectedInvoice && (
@@ -1100,6 +1218,11 @@ export default function Invoices() {
                   </div>
                 </CardContent>
               </Card>
+
+              <PaymentHistorySection
+                invoiceId={selectedInvoice.id}
+                invoiceTotal={Number(selectedInvoice.total)}
+              />
 
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => {

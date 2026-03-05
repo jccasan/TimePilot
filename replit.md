@@ -1,7 +1,7 @@
 # Scoopilot - Pet Waste Removal SaaS
 
 ## Overview
-Scoopilot is a production-ready vertical SaaS application designed for pet waste removal businesses. It offers a comprehensive suite of tools including a multi-tenant architecture with role-based access, a CRM for managing contacts and properties, recurring service scheduling with route assignments, a mobile interface for field technicians, invoicing capabilities, a client portal, event-driven automation rules, and a REST API with webhooks for AI agent integrations. The project aims to provide a complete operational solution for pet waste removal companies, enhancing efficiency and customer management.
+Scoopilot is a production-ready vertical SaaS application for pet waste removal businesses. It provides a comprehensive operational solution, including a multi-tenant architecture with role-based access, CRM, recurring service scheduling with route assignments, a mobile interface for field technicians, invoicing, a client portal, event-driven automation, and a REST API with webhooks for AI agent integrations. The project aims to enhance efficiency and customer management for pet waste removal companies.
 
 ## User Preferences
 - Green/earth tone color palette for pet waste business branding
@@ -12,86 +12,62 @@ Scoopilot is a production-ready vertical SaaS application designed for pet waste
 ## System Architecture
 
 ### Core Design Principles
-Scoopilot is built as a full-stack, multi-tenant SaaS application. It emphasizes role-based access control, event-driven automation, and a modular design to support various business operations. The application is designed to be scalable and extensible, with clear separation of concerns between frontend and backend.
+Scoopilot is a full-stack, multi-tenant SaaS application emphasizing role-based access control, event-driven automation, and modular design for scalability and extensibility. It maintains a clear separation of concerns between frontend and backend.
 
 ### Backend
 - **Framework**: Express.js with TypeScript
 - **Database**: PostgreSQL (Neon-backed)
-- **ORM**: Drizzle ORM with drizzle-zod for validation
-- **Authentication**: Custom email/password auth with session cookies + Bearer token fallback (tokens stored in localStorage for iframe compatibility). Password recovery via SendGrid email with secure reset tokens.
-- **Storage**: Object Storage for file uploads (e.g., proof-of-service photos)
-- **Email Service**: SendGrid for transactional and marketing emails
-- **SMS Service**: Twilio for inbound and outbound text messaging
-- **Payment Processing**: Stripe for secure payment gateway integration, including customer management, setup intents, payment intents, and webhook handling.
-- **Invoice Template Engine**: Custom mustache-style HTML template engine for flexible and customizable invoice generation, supporting per-company theme overrides and company logo integration.
-- **Route Optimization**: Implements a nearest-neighbor TSP with 2-opt improvement algorithm, with Mapbox Directions API for real road-based distance and duration metrics. Falls back to haversine if Mapbox is unavailable.
-- **Geocoding**: Mapbox Geocoding API v6 for address autocomplete and forward geocoding. Auto-geocodes properties on creation and before route optimization. Uses public token (secret token lacks geocoding permissions). Public token exposed via /api/mapbox-token endpoint. Backfill endpoint: POST /api/properties/geocode-all.
-- **Maps**: Mapbox SDK for routing, navigation, and geocoding (tokens stored as MAPBOX_PUBLIC_TOKEN and MAPBOX_SECRET_TOKEN secrets). Use MAPBOX_PUBLIC_TOKEN for geocoding API calls.
+- **ORM**: Drizzle ORM with drizzle-zod
+- **Authentication**: Custom email/password with session cookies + Bearer token fallback. Password recovery via SendGrid.
+- **Invoice Template Engine**: Custom mustache-style HTML template engine supporting per-company themes and logos.
+- **Route Optimization**: Nearest-neighbor TSP with 2-opt improvement, utilizing Mapbox Directions API for real road-based metrics and falling back to haversine.
+- **Geocoding**: Mapbox Geocoding API v6 for address autocomplete and forward geocoding.
+- **API & Webhooks**: Comprehensive REST API with scoped API keys and HMAC-signed webhook delivery with retry for external integrations.
+- **Security**: Helmet middleware, strict CORS, rate limiting, multi-tenant data isolation, and security scripts.
 
 ### Frontend
 - **Framework**: React with TypeScript
 - **Routing**: Wouter
 - **State Management**: TanStack Query v5
-- **UI Components**: Shadcn/ui with Tailwind CSS for a consistent and modern look.
+- **UI Components**: Shadcn/ui with Tailwind CSS
 - **Theme**: Green/earth tone palette (primary: hsl(152 60% 36%))
-- **Forms**: react-hook-form with zodResolver for robust form handling and validation.
-- **PWA Support**: Progressive Web App with manifest, service worker, offline fallback page, and install prompt for mobile/tablet users. Icons in client/public/icons/, manifest at client/public/manifest.json, service worker at client/public/sw.js.
-- **Mobile View**: Dedicated mobile-optimized views for field technicians.
-- **Technician Layout**: Role-based UI for technicians showing only Routes (with scheduled/completed/cancelled status tracking per day) and Clients (read-only searchable list). Technicians with role="tech" are automatically routed to this simplified interface. Visit statuses persist in localStorage keyed by day+date.
-- **Client Portal**: Separate authentication (email + password) and UI for client self-service, allowing clients to view schedules, past visits, invoices, manage service pauses, request one-time cleanups, edit pet count and property gate codes/access notes, and contact the business owner via email. Temporary passwords are emailed via SendGrid when portal access is granted. Portal endpoints: GET /api/portal/properties, PATCH /api/portal/profile, POST /api/portal/request-cleanup.
-- **Admin Dashboard**: A platform-level administration hub with sidebar navigation (Overview, Analytics, Tenants). Overview page shows platform stats and quick-action cards. Dedicated Tenants page for full tenant management with search, create dialog (`POST /api/admin/companies`), and tier badges. Analytics page for revenue metrics and growth trends. Provisions new companies with owner accounts, sends welcome email with temp credentials, and seeds default lead sources. Company detail page supports inline editing of company info (name, email, phone, address), user editing (name, email, role via dialog), sending password reset emails, and sending fresh login credentials to tenant users.
-- **Notifications System**: In-app notifications for various business events, with a bell icon and unread count in the UI.
-- **Rover Chatbot**: In-app assistant named "Rover" (floating widget, bottom-right). Answers questions about app functionality via keyword-matched knowledge base. Can submit trouble tickets (bugs) and feature requests to the `rover_tickets` table. Only visible to authenticated users. API: POST /api/rover/ask, POST /api/rover/ticket, GET /api/rover/tickets.
+- **Forms**: react-hook-form with zodResolver
+- **PWA Support**: Progressive Web App with manifest, service worker, and offline fallback.
+- **Mobile View**: Dedicated mobile-optimized views for field technicians with role-based UI.
+- **Client Portal**: Separate authentication and UI for self-service, allowing clients to manage services and view information.
+- **Admin Dashboard**: Platform-level administration for tenant management, analytics, and company provisioning.
+- **Notifications System**: In-app notifications for business events.
+- **Rover Chatbot**: In-app AI assistant for app functionality questions and trouble ticket submission.
+- **Dark Mode**: Full dark mode support.
 
 ### Key Features
-- **CSV Import**: One-click import flow with automatic column mapping (fuzzy header matching), editable preview table for row-level review/editing/removal, and new lead source auto-detection. Two-step dialog: Map Columns → Review & Edit. Uses POST /api/contacts/validate-csv for parsing + POST /api/contacts/import/json for final import.
-- **Dynamic Lead Sources**: Per-company lead sources managed via `lead_sources` table. Defaults seeded on company setup. Dropdowns in contacts, contact-detail use API data. Unknown lead sources from CSV imports auto-added.
-- **CRM**: Manages contacts, properties, referral sources, and includes a tagging system and status pipeline.
-- **Scheduling**: Recurring service plans, visit management, and route assignments. Service plans auto-assign to the least-loaded route for their day of week when created without an explicit route.
-- **Route Builder**: Drag-and-drop route management with "Unassign All" bulk action, route optimization (TSP + 2-opt with credit system, auto-geocoding before optimization), and dispatch functionality.
-- **Invoicing**: Detailed invoicing with line items, tax, discounts, payment processing via Stripe, customizable templates with company logo, and invoice voiding capability.
-- **Communication**: Integrated email and SMS services with a centralized communication log.
-- **Automation**: Event-driven automation rules with logs.
-- **API & Webhooks**: Comprehensive REST API with scoped API keys and webhooks for external integrations, particularly with AI agents.
-- **User Roles**: Supports owner, admin, and technician roles with appropriate access control.
-- **Proof of Service**: Technicians can upload before and after photos for visits via a mobile interface.
-- **Technician Time Tracking**: Clock in/out button on mobile view with elapsed time display. API: POST /api/time-entries/clock-in, POST /api/time-entries/clock-out, GET /api/time-entries/active.
-- **Bulk Contact Actions**: Multi-select contacts with bulk status change, tag assignment, and delete operations.
-- **Activity Log**: Per-contact chronological timeline of all interactions (created, updated, status_changed, visits, invoices, emails, SMS, notes, portal logins). API: GET /api/contacts/:id/activity.
-- **Global Search**: Sidebar search bar (Cmd/Ctrl+K shortcut) searching across contacts, properties, invoices, and routes. API: GET /api/search?q=...
-- **Dashboard Customization**: Widget show/hide and reorder with persistent layout via company settings. 10 configurable widgets.
-- **Route Map View**: Mapbox GL JS map with numbered markers and connecting lines. Toggle between list and map views on route builder.
-- **Dark Mode**: Fully polished dark mode support across all pages and charts.
-- **Webhook Delivery with Retry**: HMAC-signed webhook delivery with exponential backoff retry (up to 5 attempts). Delivery log UI on webhooks page.
-- **Audit Trail**: Tracks all critical data changes (contacts, invoices, routes, company settings) with before/after snapshots. Owner-only UI in Settings.
-- **Automated Jobs**: Auto-invoicing (server/jobs/auto-invoice.ts), reminders (server/jobs/reminders.ts), auto-visit generation (server/jobs/auto-visits.ts), webhook retry (server/services/webhook-dispatcher.ts).
-
-### Public Signup Flow
-- **Endpoint**: `POST /api/public/signup` — public, rate-limited (5/15min), CORS open for any origin
-- **Flow**: Base 44 website submits `{ email, firstName, lastName, companyName }` → app sends verification email with 24h token → user clicks link → `GET /api/public/verify-email?token=...` provisions user account (mustChangePassword=true), company (trialing), seeds defaults, sends welcome email with temp credentials → shows server-rendered HTML result page
-- **Schema**: `email_verification_tokens` table stores pending signups until verified
-- **Security**: Token is SHA-256 hashed before storage; verification runs in a DB transaction; duplicate signups are rejected
-
-## Security
-- **Security Headers**: Helmet middleware (HSTS, X-Content-Type-Options, X-Frame-Options, CSP in production)
-- **CORS**: Strict origin allowlist via `ALLOWED_ORIGINS` env var (no wildcard with credentials)
-- **Rate Limiting**: Global API (500/15min), auth endpoints (20/15min) via express-rate-limit
-- **Multi-Tenant Isolation**: All data access scoped by companyId; DELETE/PATCH operations verify tenant ownership
-- **Security Scripts**: `scripts/security_scan.sh` (deps, secrets, SAST), `scripts/security_fix.sh` (auto-patch)
-- **Documentation**: `SECURITY.md` for scan instructions, severity levels, secret rotation
-- **Reports**: `reports/` directory with scan output (dependency-audit.json, secrets-scan.txt, sast-results.json, security-summary.md)
-
-## Testing
-- **Test Suite**: `tests/api.test.ts` — 114 automated API tests across 22 categories
-- **Run**: `npx tsx tests/api.test.ts` (requires app running on port 5000)
-- **Categories**: Auth (19), Auth Middleware (22), Admin Auth (9), Contacts (8), Properties (2), Routes (4), Invoices (2), Service Plans (2), Tags (4), Lead Sources (1), Automation (1), Reports (6), Company (7), Onboarding (1), Rover (4), Public (1), Portal (5), Visits (3), Webhooks (1), Edge Cases (8), Public Signup (2), Invoice Theme (1)
-- **Coverage**: Authentication flows, input validation, auth middleware on all endpoints, admin token protection, CRUD operations, SQL injection defense, XSS handling, null byte sanitization, rate limiting, cross-tenant isolation
-- **Error Handling**: `handleError()` in routes.ts now catches ZodError and returns 400 with field-level validation messages
+- **CSV Import**: One-click import with automatic column mapping, editable preview, and lead source auto-detection.
+- **AI-Assisted Import Wizard**: Multi-step wizard with AI-powered column mapping (OpenAI), confidence scores, and transformation support.
+- **Sweep&Go Migration**: Invoice import from Sweep&Go CSV exports with payment ledger reconciliation.
+- **Invoice Payment Ledger**: Internal payment tracking for imported, manual, and Stripe payments, supporting partial payments.
+- **CRM**: Manages contacts, properties, referral sources, tagging, and status pipelines.
+- **Scheduling**: Recurring service plans, visit management, and route assignments.
+- **Route Builder**: Drag-and-drop route management, optimization, and dispatch.
+- **Invoicing**: Detailed invoicing with line items, tax, discounts, Stripe payment processing, and customizable templates.
+- **Communication**: Integrated email and SMS with a centralized log.
+- **Automation**: Event-driven automation rules.
+- **User Roles**: Owner, admin, and technician roles with access control.
+- **Proof of Service**: Technicians can upload photos via mobile.
+- **Technician Time Tracking**: Clock in/out functionality.
+- **Bulk Contact Actions**: Multi-select actions for contacts.
+- **Activity Log**: Chronological timeline of interactions per contact.
+- **Global Search**: Search across contacts, properties, invoices, and routes.
+- **Dashboard Customization**: Configurable widgets with persistent layout.
+- **Route Map View**: Mapbox GL JS map for route visualization.
+- **Audit Trail**: Tracks critical data changes with before/after snapshots.
+- **Automated Jobs**: Auto-invoicing, reminders, auto-visit generation, and webhook retry.
+- **Public Signup Flow**: Rate-limited public endpoint for new company signups with email verification.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.
-- **Custom Auth**: Email/password authentication with session cookies and Bearer token fallback.
-- **Object Storage**: For storing file uploads such as proof-of-service photos.
-- **SendGrid**: Email sending service for notifications and invoices.
-- **Twilio**: SMS messaging service for customer communications.
-- **Stripe**: Payment gateway for processing invoices and managing customer payment methods.
+- **Object Storage**: For file uploads (e.g., proof-of-service photos).
+- **SendGrid**: Email sending service.
+- **Twilio**: SMS messaging service.
+- **Stripe**: Payment gateway for processing payments and managing customer data.
+- **Mapbox**: Directions API, Geocoding API, and GL JS for mapping and routing functionalities.
+- **OpenAI**: Used for AI-assisted import wizard functionalities via Replit AI Integrations.

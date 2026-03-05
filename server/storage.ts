@@ -8,6 +8,7 @@ import {
   servicePricing, servicePackages, messages, portalSessions, adminNotes,
   smsMessages, emailsSent, accountDailyMetrics, saasCostsMonthly, costConfig,
   notifications, timeEntries, activityLog, auditTrail,
+  importRuns, invoicePayments,
   type Company, type InsertCompany,
   type CompanyUser, type InsertCompanyUser,
   type Contact, type InsertContact,
@@ -39,6 +40,8 @@ import {
   type ActivityLog, type InsertActivityLog,
   type WebhookDelivery, type InsertWebhookDelivery,
   type AuditTrail, type InsertAuditTrail,
+  type ImportRun, type InsertImportRun,
+  type InvoicePayment, type InsertInvoicePayment,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -260,6 +263,20 @@ export interface IStorage {
   searchProperties(companyId: string, term: string): Promise<any[]>;
   searchInvoices(companyId: string, term: string): Promise<any[]>;
   searchRoutes(companyId: string, term: string): Promise<any[]>;
+
+  // Import Runs
+  createImportRun(data: InsertImportRun): Promise<ImportRun>;
+  getImportRun(id: string, companyId: string): Promise<ImportRun | undefined>;
+  updateImportRun(id: string, data: Partial<InsertImportRun> & { completedAt?: Date }): Promise<ImportRun>;
+  getImportRuns(companyId: string): Promise<ImportRun[]>;
+  getImportRunByHash(companyId: string, fileHash: string): Promise<ImportRun | undefined>;
+
+  // Invoice Payments
+  createInvoicePayment(data: InsertInvoicePayment): Promise<InvoicePayment>;
+  getInvoicePayments(invoiceId: string): Promise<InvoicePayment[]>;
+  getInvoicePaymentsByCompany(companyId: string, filters?: { source?: string }): Promise<InvoicePayment[]>;
+  getInvoicePaymentByExternalId(companyId: string, externalId: string): Promise<InvoicePayment | undefined>;
+  getInvoiceByExternalId(companyId: string, externalSource: string, externalId: string): Promise<Invoice | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1301,6 +1318,66 @@ export class DatabaseStorage implements IStorage {
         sql`lower(${routes.name}) like ${term}`
       ))
       .limit(10);
+  }
+
+  // ================ Import Runs ================
+  async createImportRun(data: InsertImportRun): Promise<ImportRun> {
+    const [run] = await db.insert(importRuns).values(data).returning();
+    return run;
+  }
+
+  async getImportRun(id: string, companyId: string): Promise<ImportRun | undefined> {
+    const [run] = await db.select().from(importRuns).where(and(eq(importRuns.id, id), eq(importRuns.companyId, companyId)));
+    return run;
+  }
+
+  async updateImportRun(id: string, data: Partial<InsertImportRun> & { completedAt?: Date }): Promise<ImportRun> {
+    const [run] = await db.update(importRuns).set(data).where(eq(importRuns.id, id)).returning();
+    return run;
+  }
+
+  async getImportRuns(companyId: string): Promise<ImportRun[]> {
+    return db.select().from(importRuns).where(eq(importRuns.companyId, companyId)).orderBy(desc(importRuns.createdAt));
+  }
+
+  async getImportRunByHash(companyId: string, fileHash: string): Promise<ImportRun | undefined> {
+    const [run] = await db.select().from(importRuns).where(and(eq(importRuns.companyId, companyId), eq(importRuns.fileHash, fileHash)));
+    return run;
+  }
+
+  // ================ Invoice Payments ================
+  async createInvoicePayment(data: InsertInvoicePayment): Promise<InvoicePayment> {
+    const [payment] = await db.insert(invoicePayments).values(data).returning();
+    return payment;
+  }
+
+  async getInvoicePayments(invoiceId: string): Promise<InvoicePayment[]> {
+    return db.select().from(invoicePayments).where(eq(invoicePayments.invoiceId, invoiceId)).orderBy(desc(invoicePayments.paidAt));
+  }
+
+  async getInvoicePaymentsByCompany(companyId: string, filters?: { source?: string }): Promise<InvoicePayment[]> {
+    const conditions = [eq(invoicePayments.companyId, companyId)];
+    if (filters?.source) {
+      conditions.push(eq(invoicePayments.source, filters.source as any));
+    }
+    return db.select().from(invoicePayments).where(and(...conditions)).orderBy(desc(invoicePayments.paidAt));
+  }
+
+  async getInvoicePaymentByExternalId(companyId: string, externalId: string): Promise<InvoicePayment | undefined> {
+    const [payment] = await db.select().from(invoicePayments).where(and(
+      eq(invoicePayments.companyId, companyId),
+      eq(invoicePayments.externalId, externalId)
+    ));
+    return payment;
+  }
+
+  async getInvoiceByExternalId(companyId: string, externalSource: string, externalId: string): Promise<Invoice | undefined> {
+    const [inv] = await db.select().from(invoices).where(and(
+      eq(invoices.companyId, companyId),
+      eq(invoices.externalSource, externalSource),
+      eq(invoices.externalId, externalId)
+    ));
+    return inv;
   }
 }
 

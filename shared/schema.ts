@@ -51,6 +51,7 @@ export const companies = pgTable("companies", {
   remindersEnabled: boolean("reminders_enabled").notNull().default(false),
   autoVisitsEnabled: boolean("auto_visits_enabled").notNull().default(false),
   dashboardLayout: jsonb("dashboard_layout").$type<string[]>(),
+  aiImportMappingEnabled: boolean("ai_import_mapping_enabled").notNull().default(true),
   canceledAt: timestamp("canceled_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
   churnNotes: text("churn_notes"),
@@ -240,12 +241,20 @@ export const invoices = pgTable("invoices", {
   stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
   paymentAttempts: integer("payment_attempts").notNull().default(0),
   lastPaymentAttempt: timestamp("last_payment_attempt"),
+  source: varchar("source", { length: 50 }).default("manual"),
+  externalSource: varchar("external_source", { length: 100 }),
+  externalId: varchar("external_id", { length: 255 }),
+  importRunId: varchar("import_run_id"),
+  issuedDate: date("issued_date"),
+  notes: text("notes"),
+  excludeFromReminders: boolean("exclude_from_reminders").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_invoices_company").on(table.companyId),
   index("idx_invoices_contact").on(table.contactId),
   index("idx_invoices_status").on(table.status),
+  index("idx_invoices_source").on(table.source),
   unique().on(table.companyId, table.invoiceNumber),
 ]);
 
@@ -825,3 +834,69 @@ export const auditTrail = pgTable("audit_trail", {
 export const insertAuditTrailSchema = createInsertSchema(auditTrail).omit({ id: true, createdAt: true });
 export type AuditTrail = typeof auditTrail.$inferSelect;
 export type InsertAuditTrail = z.infer<typeof insertAuditTrailSchema>;
+
+export const importRunStatusEnum = pgEnum("import_run_status", ["pending", "processing", "completed", "failed"]);
+export const importRunTypeEnum = pgEnum("import_run_type", [
+  "sweepandgo_contacts", "sweepandgo_invoices", "csv_contacts", "csv_routes"
+]);
+
+export const importRuns = pgTable("import_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  type: importRunTypeEnum("type").notNull(),
+  status: importRunStatusEnum("status").notNull().default("pending"),
+  fileName: varchar("file_name", { length: 500 }),
+  fileHash: varchar("file_hash", { length: 128 }),
+  totalRows: integer("total_rows").notNull().default(0),
+  importedRows: integer("imported_rows").notNull().default(0),
+  skippedRows: integer("skipped_rows").notNull().default(0),
+  errors: jsonb("errors").$type<Array<{ row: number; field?: string; message: string }>>(),
+  mappingConfig: jsonb("mapping_config").$type<Record<string, any>>(),
+  aiSuggestions: jsonb("ai_suggestions").$type<Record<string, any>>(),
+  userOverrides: jsonb("user_overrides").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("idx_ir_company").on(table.companyId),
+  index("idx_ir_status").on(table.status),
+  index("idx_ir_file_hash").on(table.fileHash),
+]);
+
+export const insertImportRunSchema = createInsertSchema(importRuns).omit({ id: true, createdAt: true, completedAt: true });
+export type ImportRun = typeof importRuns.$inferSelect;
+export type InsertImportRun = z.infer<typeof insertImportRunSchema>;
+
+export const paymentMethodEnum = pgEnum("payment_method", ["cash", "check", "card", "ach", "other", "imported"]);
+export const paymentSourceEnum = pgEnum("payment_source", ["stripe", "manual", "imported"]);
+
+export const invoicePayments = pgTable("invoice_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  amountCents: integer("amount_cents").notNull(),
+  paidAt: timestamp("paid_at").notNull(),
+  method: paymentMethodEnum("method").notNull().default("other"),
+  reference: text("reference"),
+  source: paymentSourceEnum("source").notNull().default("manual"),
+  externalId: varchar("external_id", { length: 255 }),
+  importRunId: varchar("import_run_id").references(() => importRuns.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ip_company").on(table.companyId),
+  index("idx_ip_invoice").on(table.invoiceId),
+  index("idx_ip_source").on(table.source),
+]);
+
+export const insertInvoicePaymentSchema = createInsertSchema(invoicePayments).omit({ id: true, createdAt: true });
+export type InvoicePayment = typeof invoicePayments.$inferSelect;
+export type InsertInvoicePayment = z.infer<typeof insertInvoicePaymentSchema>;
+
+export const invoicePaymentRelations = relations(invoicePayments, ({ one }) => ({
+  company: one(companies, { fields: [invoicePayments.companyId], references: [companies.id] }),
+  invoice: one(invoices, { fields: [invoicePayments.invoiceId], references: [invoices.id] }),
+  importRun: one(importRuns, { fields: [invoicePayments.importRunId], references: [importRuns.id] }),
+}));
+
+export const importRunRelations = relations(importRuns, ({ one }) => ({
+  company: one(companies, { fields: [importRuns.companyId], references: [companies.id] }),
+}));
