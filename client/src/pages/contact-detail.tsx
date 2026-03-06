@@ -568,6 +568,7 @@ export default function ContactDetail() {
                       className="rounded-none border-0 border-t sm:border-t-0 sm:border-l h-[120px]"
                       size="600x300"
                       zoom={19}
+                      clickToNavigate={false}
                     />
                   </div>
                   <div className="p-3 space-y-2">
@@ -577,62 +578,63 @@ export default function ContactDetail() {
                         <p className="text-sm text-muted-foreground">{prop.city}, {prop.state} {prop.zipCode}</p>
                         {prop.gateCode && <p className="text-sm text-muted-foreground">Gate: {prop.gateCode}</p>}
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {propLat != null && propLng != null && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-primary"
-                            onClick={() => setMeasurePropertyId(measurePropertyId === prop.id ? null : prop.id)}
-                            data-testid={`button-measure-yard-${prop.id}`}
-                          >
-                            <Ruler className="h-4 w-4" />
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0" data-testid={`button-delete-property-${prop.id}`}>
+                            <Trash2 className="h-4 w-4" />
                           </Button>
-                        )}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0" data-testid={`button-delete-property-${prop.id}`}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Property</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to delete {prop.streetAddress}? This action cannot be undone. Any service plans linked to this property will also be affected.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => deletePropertyMutation.mutate(prop.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                data-testid={`button-confirm-delete-property-${prop.id}`}
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Property</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete {prop.streetAddress}? This action cannot be undone. Any service plans linked to this property will also be affected.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deletePropertyMutation.mutate(prop.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              data-testid={`button-confirm-delete-property-${prop.id}`}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
-                    {(prop.measuredYardSqft || prop.lotSize) && (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {prop.measuredYardSqft && yardCat && (
-                          <>
-                            <Badge className={`text-xs ${yardCat.color}`} data-testid={`badge-yard-category-${prop.id}`}>
-                              {yardCat.label}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground" data-testid={`text-yard-area-${prop.id}`}>
-                              {formatArea(prop.measuredYardSqft)}
-                            </span>
-                          </>
-                        )}
-                        {prop.lotSize && (
-                          <span className="text-sm text-muted-foreground">Lot: {prop.lotSize}</span>
-                        )}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {prop.measuredYardSqft && yardCat ? (
+                        <>
+                          <Badge className={`text-xs ${yardCat.color}`} data-testid={`badge-yard-category-${prop.id}`}>
+                            {yardCat.label}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground" data-testid={`text-yard-area-${prop.id}`}>
+                            {formatArea(prop.measuredYardSqft)}
+                          </span>
+                        </>
+                      ) : null}
+                      {prop.lotSize && (
+                        <span className="text-sm text-muted-foreground">Lot: {prop.lotSize}</span>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => {
+                          if (propLat == null || propLng == null) {
+                            toast({ title: "Geocoding required", description: "This property needs coordinates before measuring. Use Geocode All on the properties page.", variant: "destructive" });
+                            return;
+                          }
+                          setMeasurePropertyId(measurePropertyId === prop.id ? null : prop.id);
+                        }}
+                        data-testid={`button-measure-yard-${prop.id}`}
+                      >
+                        <Ruler className="h-3.5 w-3.5" />
+                        {measurePropertyId === prop.id ? "Hide Measure Tool" : prop.measuredYardSqft ? "Re-measure Yard" : "Measure Yard"}
+                      </Button>
+                    </div>
                   </div>
                   {measurePropertyId === prop.id && propLat != null && propLng != null && (
                     <div className="border-t p-3">
