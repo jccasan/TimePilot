@@ -33,6 +33,7 @@ app.use(helmet({
   } : false,
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" },
+  frameguard: process.env.NODE_ENV === "production" ? { action: "sameorigin" } : false,
 }));
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
