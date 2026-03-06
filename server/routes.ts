@@ -253,7 +253,7 @@ export async function registerRoutes(
     res.json({ token });
   });
 
-  app.get("/api/streetview", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/streetview", async (req: Request, res: Response) => {
     try {
       const apiKey = process.env.GOOGLE_MAPS_API_KEY;
       if (!apiKey) return res.status(503).json({ error: "Street View not configured" });
