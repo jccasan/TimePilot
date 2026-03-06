@@ -3171,6 +3171,131 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/profitability/route-map", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { calculateAllCustomerProfitability } = await import("./services/profitability-calculator");
+      const allProfitability = await calculateAllCustomerProfitability(companyId);
+      const routes = await storage.getRoutes(companyId);
+      const plans = await storage.getServicePlans(companyId, { isActive: true });
+      const properties = await storage.getProperties(companyId);
+      const contacts = await storage.getContacts(companyId);
+
+      const propertyMap = new Map(properties.map(p => [p.id, p]));
+      const contactMap = new Map(contacts.map(c => [c.id, c]));
+
+      const plansByRoute = new Map<string, typeof plans>();
+      for (const plan of plans) {
+        if (!plan.routeId) continue;
+        if (!plansByRoute.has(plan.routeId)) plansByRoute.set(plan.routeId, []);
+        plansByRoute.get(plan.routeId)!.push(plan);
+      }
+
+      const profByContact = new Map<string, typeof allProfitability[0]>();
+      for (const cp of allProfitability) {
+        profByContact.set(cp.contactId, cp);
+      }
+
+      type MapStop = {
+        propertyId: string;
+        contactId: string;
+        contactName: string;
+        propertyAddress: string;
+        latitude: number;
+        longitude: number;
+        frequency: string;
+        dogCount: number;
+        yardSize: string;
+        revenuePerVisitCents: number;
+        costPerVisitCents: number;
+        profitPerVisitCents: number;
+        profitMarginPct: number;
+        status: "profitable" | "marginal" | "unprofitable";
+        stopOrder: number;
+      };
+
+      type MapRoute = {
+        routeId: string;
+        routeName: string;
+        dayOfWeek: string;
+        color: string;
+        totalStops: number;
+        totalRevenueCents: number;
+        totalCostCents: number;
+        totalProfitCents: number;
+        avgMarginPct: number;
+        status: "profitable" | "marginal" | "unprofitable";
+        stops: MapStop[];
+      };
+
+      const result: MapRoute[] = [];
+
+      for (const route of routes) {
+        const routePlans = plansByRoute.get(route.id) || [];
+        const stops: MapStop[] = [];
+        let totalRev = 0, totalCost = 0, totalProfit = 0;
+
+        for (const plan of routePlans) {
+          const prop = propertyMap.get(plan.propertyId);
+          if (!prop || !prop.latitude || !prop.longitude) continue;
+          const contact = contactMap.get(plan.contactId);
+          const custProf = profByContact.get(plan.contactId);
+          const propProf = custProf?.properties.find(p => p.servicePlanId === plan.id);
+
+          const rev = propProf?.revenuePerVisitCents ?? 0;
+          const cost = propProf?.costPerVisitCents ?? 0;
+          const profit = propProf?.profitPerVisitCents ?? 0;
+          const margin = rev > 0 ? (profit / rev) * 100 : 0;
+          const status: "profitable" | "marginal" | "unprofitable" = margin > 15 ? "profitable" : margin >= 0 ? "marginal" : "unprofitable";
+
+          totalRev += rev;
+          totalCost += cost;
+          totalProfit += profit;
+
+          stops.push({
+            propertyId: prop.id,
+            contactId: plan.contactId,
+            contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
+            propertyAddress: prop.streetAddress || "Unknown",
+            latitude: Number(prop.latitude),
+            longitude: Number(prop.longitude),
+            frequency: plan.frequency,
+            dogCount: prop.numberOfDogs ?? 1,
+            yardSize: prop.yardSize || "standard",
+            revenuePerVisitCents: rev,
+            costPerVisitCents: cost,
+            profitPerVisitCents: profit,
+            profitMarginPct: Math.round(margin * 10) / 10,
+            status,
+            stopOrder: plan.stopOrder ?? 0,
+          });
+        }
+
+        if (stops.length === 0) continue;
+
+        stops.sort((a, b) => a.stopOrder - b.stopOrder);
+        const avgMargin = totalRev > 0 ? Math.round((totalProfit / totalRev) * 10000) / 100 : 0;
+        const routeStatus: "profitable" | "marginal" | "unprofitable" = avgMargin > 15 ? "profitable" : avgMargin >= 0 ? "marginal" : "unprofitable";
+
+        result.push({
+          routeId: route.id,
+          routeName: route.name,
+          dayOfWeek: route.dayOfWeek,
+          color: route.color || "#3b82f6",
+          totalStops: stops.length,
+          totalRevenueCents: totalRev,
+          totalCostCents: totalCost,
+          totalProfitCents: totalProfit,
+          avgMarginPct: avgMargin,
+          status: routeStatus,
+          stops,
+        });
+      }
+
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/profitability/recalculate", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);

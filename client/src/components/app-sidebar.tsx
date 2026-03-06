@@ -20,6 +20,7 @@ import {
   TrendingUp,
   Building2,
   ArrowRightLeft,
+  Map,
 } from "lucide-react";
 import {
   Sidebar,
@@ -58,6 +59,7 @@ const menuSections = [
     items: [
       { title: "Price Calculator", url: "/pricing-calculator", icon: Calculator },
       { title: "Customer Profitability", url: "/profitability", icon: TrendingUp },
+      { title: "Route Profit Maps", url: "/route-profit-maps", icon: Map },
     ],
   },
   {
