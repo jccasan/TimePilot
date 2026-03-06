@@ -150,6 +150,19 @@ export default function ContactDetail() {
     },
   });
 
+  const deletePropertyMutation = useMutation({
+    mutationFn: async (propertyId: string) => {
+      await apiRequest("DELETE", `/api/properties/${propertyId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      toast({ title: "Property deleted", description: "Property removed successfully." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const addTagMutation = useMutation({
     mutationFn: async (tagId: string) => {
       await apiRequest("POST", `/api/contacts/${id}/tags`, { tagId });
@@ -517,10 +530,37 @@ export default function ContactDetail() {
                     className="rounded-none border-0 border-b h-[180px]"
                     size="600x300"
                   />
-                  <div className="p-3">
-                    <p className="font-medium">{prop.streetAddress}</p>
-                    <p className="text-sm text-muted-foreground">{prop.city}, {prop.state} {prop.zipCode}</p>
-                    {prop.gateCode && <p className="text-sm text-muted-foreground">Gate: {prop.gateCode}</p>}
+                  <div className="p-3 flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{prop.streetAddress}</p>
+                      <p className="text-sm text-muted-foreground">{prop.city}, {prop.state} {prop.zipCode}</p>
+                      {prop.gateCode && <p className="text-sm text-muted-foreground">Gate: {prop.gateCode}</p>}
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0" data-testid={`button-delete-property-${prop.id}`}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Property</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete {prop.streetAddress}? This action cannot be undone. Any service plans linked to this property will also be affected.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => deletePropertyMutation.mutate(prop.id)}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            data-testid={`button-confirm-delete-property-${prop.id}`}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
               ))}
