@@ -47,11 +47,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp } from "lucide-react";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
 import { YardMeasureTool, getYardCategory, formatArea } from "@/components/yard-measure-tool";
+import { PriceCalculatorCard } from "@/components/price-calculator-card";
 
 const statusColors: Record<string, string> = {
   lead: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -68,6 +69,7 @@ const propertyFormSchema = z.object({
   zipCode: z.string().min(1, "Zip code is required"),
   numberOfDogs: z.coerce.number().min(0).optional(),
   yardSize: z.string().optional(),
+  yardDifficulty: z.enum(["flat", "moderate", "difficult"]).optional(),
   gateCode: z.string().optional(),
   lotSize: z.string().optional(),
   latitude: z.string().optional(),
@@ -90,6 +92,11 @@ export default function ContactDetail() {
 
   const { data: properties } = useQuery<Property[]>({
     queryKey: ["/api/properties" + `?contactId=${id}`],
+    enabled: !!id,
+  });
+
+  const { data: servicePlansForPricing } = useQuery<ServicePlan[]>({
+    queryKey: ["/api/service-plans" + `?contactId=${id}`],
     enabled: !!id,
   });
 
@@ -139,6 +146,7 @@ export default function ContactDetail() {
       zipCode: "",
       numberOfDogs: 1,
       yardSize: "",
+      yardDifficulty: "flat" as const,
       gateCode: "",
       lotSize: "",
       specialInstructions: "",
@@ -530,6 +538,20 @@ export default function ContactDetail() {
                   <FormField control={propertyForm.control} name="numberOfDogs" render={({ field }) => (
                     <FormItem><FormLabel>Number of Dogs</FormLabel><FormControl><Input type="number" {...field} data-testid="input-dogs" /></FormControl><FormMessage /></FormItem>
                   )} />
+                  <FormField control={propertyForm.control} name="yardDifficulty" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Yard Difficulty</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || "flat"}>
+                        <FormControl><SelectTrigger data-testid="select-yard-difficulty"><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="flat">Flat</SelectItem>
+                          <SelectItem value="moderate">Moderate</SelectItem>
+                          <SelectItem value="difficult">Difficult</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
                   <FormField control={propertyForm.control} name="gateCode" render={({ field }) => (
                     <FormItem><FormLabel>Gate Code</FormLabel><FormControl><Input {...field} data-testid="input-gate-code" /></FormControl><FormMessage /></FormItem>
                   )} />
@@ -622,6 +644,11 @@ export default function ContactDetail() {
                       {prop.lotSize && (
                         <span className="text-sm text-muted-foreground">Lot: {prop.lotSize}</span>
                       )}
+                      {prop.yardDifficulty && prop.yardDifficulty !== "flat" && (
+                        <Badge variant="outline" className="text-xs" data-testid={`badge-yard-difficulty-${prop.id}`}>
+                          {prop.yardDifficulty === "moderate" ? "Moderate Terrain" : "Difficult Terrain"}
+                        </Badge>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -653,6 +680,12 @@ export default function ContactDetail() {
                       />
                     </div>
                   )}
+                  <div className="border-t">
+                    <PriceCalculatorCard
+                      property={prop}
+                      servicePlans={servicePlansForPricing?.filter((sp) => sp.propertyId === prop.id)}
+                    />
+                  </div>
                 </div>
                 );
               })}
@@ -1048,6 +1081,198 @@ const frequencyLabelsMap: Record<string, string> = {
   onetime: "One-time",
 };
 
+interface PriceCalcResult {
+  minimumPriceCents: number;
+  recommendedPriceCents: number;
+  premiumPriceCents: number;
+  breakdown: {
+    serviceMinutes: number;
+    travelMinutes: number;
+    adjustedTravelMinutes: number;
+    densityMultiplier: number;
+    laborCostCents: number;
+    travelCostCents: number;
+    adjustedTravelCostCents: number;
+    equipmentCostCents: number;
+    overheadPerVisitCents: number;
+  };
+  derived: {
+    jobMinutes: number;
+    profitAtRecommendedCents: number;
+    profitPerHourAtRecommendedCents: number;
+    clusterDiscountAppliedPct: number;
+    marketAnchorClamped: boolean;
+    isEstimated: boolean;
+  };
+  profitWarning?: {
+    message: string;
+    lossPerVisitCents: number;
+    profitPerVisitCents: number;
+    profitPerHourCents: number;
+  };
+}
+
+function useInlinePriceCalc(
+  propertyId: string | undefined,
+  frequency: string | undefined,
+  pricePerVisit: string | undefined,
+  properties: Property[]
+) {
+  const [calcResult, setCalcResult] = useState<PriceCalcResult | null>(null);
+  const [calcLoading, setCalcLoading] = useState(false);
+  const [debouncedPrice, setDebouncedPrice] = useState(pricePerVisit);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedPrice(pricePerVisit), 400);
+    return () => clearTimeout(timer);
+  }, [pricePerVisit]);
+
+  const selectedProperty = useMemo(() => {
+    if (!propertyId) return null;
+    return properties.find((p) => p.id === propertyId) || null;
+  }, [propertyId, properties]);
+
+  useEffect(() => {
+    if (!selectedProperty || !frequency) {
+      setCalcResult(null);
+      return;
+    }
+
+    let yardSizeAcres = 0.1;
+    if (selectedProperty.measuredYardSqft) {
+      yardSizeAcres = selectedProperty.measuredYardSqft / 43560;
+    } else if (selectedProperty.yardSize) {
+      const label = selectedProperty.yardSize.toLowerCase();
+      if (label.includes("small") || label.includes("xs")) yardSizeAcres = 0.05;
+      else if (label.includes("medium") || label.includes("standard")) yardSizeAcres = 0.1;
+      else if (label.includes("large") && !label.includes("extra")) yardSizeAcres = 0.2;
+      else if (label.includes("extra") || label.includes("xl")) yardSizeAcres = 0.35;
+      else {
+        const numMatch = selectedProperty.yardSize.match(/[\d.]+/);
+        if (numMatch) yardSizeAcres = parseFloat(numMatch[0]);
+      }
+    }
+
+    const currentPriceCents = debouncedPrice ? Math.round(parseFloat(debouncedPrice) * 100) : undefined;
+
+    const body = {
+      yardSizeAcres,
+      dogCount: selectedProperty.numberOfDogs || 1,
+      serviceFrequency: frequency,
+      yardDifficulty: selectedProperty.yardDifficulty || "flat",
+      distanceFromNearestStopMiles: 1,
+      currentPriceCents,
+    };
+
+    setCalcLoading(true);
+    const token = localStorage.getItem("sessionToken");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    fetch("/api/pricing/calculate", {
+      method: "POST",
+      credentials: "include",
+      headers,
+      body: JSON.stringify(body),
+    })
+      .then((r) => {
+        if (r.ok) return r.json();
+        return null;
+      })
+      .then((data) => {
+        if (data) setCalcResult(data);
+        else setCalcResult(null);
+      })
+      .catch(() => setCalcResult(null))
+      .finally(() => setCalcLoading(false));
+  }, [selectedProperty, frequency, debouncedPrice]);
+
+  return { calcResult, calcLoading, selectedProperty };
+}
+
+function InlinePriceSuggestion({
+  calcResult,
+  calcLoading,
+  pricePerVisit,
+  onUsePrice,
+}: {
+  calcResult: PriceCalcResult | null;
+  calcLoading: boolean;
+  pricePerVisit: string;
+  onUsePrice: (price: string) => void;
+}) {
+  if (calcLoading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1" data-testid="text-calc-loading">
+        <Calculator className="h-3.5 w-3.5 animate-spin" />
+        Calculating suggested price...
+      </div>
+    );
+  }
+
+  if (!calcResult) return null;
+
+  const recommendedDollars = (calcResult.recommendedPriceCents / 100).toFixed(2);
+  const minimumDollars = (calcResult.minimumPriceCents / 100).toFixed(2);
+  const premiumDollars = (calcResult.premiumPriceCents / 100).toFixed(2);
+  const enteredCents = pricePerVisit ? Math.round(parseFloat(pricePerVisit) * 100) : 0;
+  const isBelowMinimum = enteredCents > 0 && enteredCents < calcResult.minimumPriceCents;
+
+  return (
+    <div className="space-y-2 mt-2" data-testid="section-price-suggestions">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 text-xs">
+          <Calculator className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-muted-foreground">Suggested:</span>
+        </div>
+        <Badge
+          variant="outline"
+          className="text-xs cursor-pointer"
+          onClick={() => onUsePrice(minimumDollars)}
+          data-testid="badge-price-minimum"
+        >
+          Min ${minimumDollars}
+        </Badge>
+        <Badge
+          variant="default"
+          className="text-xs cursor-pointer"
+          onClick={() => onUsePrice(recommendedDollars)}
+          data-testid="badge-price-recommended"
+        >
+          <TrendingUp className="h-3 w-3 mr-1" />
+          ${recommendedDollars}
+        </Badge>
+        <Badge
+          variant="outline"
+          className="text-xs cursor-pointer"
+          onClick={() => onUsePrice(premiumDollars)}
+          data-testid="badge-price-premium"
+        >
+          Premium ${premiumDollars}
+        </Badge>
+      </div>
+
+      {isBelowMinimum && (
+        <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/20 p-2" data-testid="alert-profit-warning">
+          <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <p className="font-medium text-destructive">Below cost</p>
+            <p className="text-muted-foreground">
+              Entered price ${pricePerVisit} is below the estimated minimum cost of ${minimumDollars}/visit. You may lose ${((calcResult.minimumPriceCents - enteredCents) / 100).toFixed(2)} per visit.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {calcResult.profitWarning && enteredCents > 0 && !isBelowMinimum && (
+        <p className="text-xs text-muted-foreground" data-testid="text-profit-info">
+          {calcResult.profitWarning.message} (${(calcResult.profitWarning.profitPerHourCents / 100).toFixed(2)}/hr)
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ServicePlansCard({ contactId, contact, properties }: { contactId: string; contact: Contact; properties: Property[] }) {
   const { toast } = useToast();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -1176,7 +1401,30 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     }
   };
 
-  const renderPlanForm = (form: ReturnType<typeof useForm<ServicePlanFormValues>>, onSubmit: (v: ServicePlanFormValues) => void, isPending: boolean, submitLabel: string, isEdit?: boolean) => (
+  const createPropertyId = createForm.watch("propertyId");
+  const createFrequency = createForm.watch("frequency");
+  const createPrice = createForm.watch("pricePerVisit");
+
+  const editPropertyId = editForm.watch("propertyId");
+  const editFrequency = editForm.watch("frequency");
+  const editPrice = editForm.watch("pricePerVisit");
+
+  const { calcResult: createCalcResult, calcLoading: createCalcLoading } = useInlinePriceCalc(
+    createPropertyId, createFrequency, createPrice, properties
+  );
+  const { calcResult: editCalcResult, calcLoading: editCalcLoading } = useInlinePriceCalc(
+    editPropertyId, editFrequency, editPrice, properties
+  );
+
+  const renderPlanForm = (
+    form: ReturnType<typeof useForm<ServicePlanFormValues>>,
+    onSubmit: (v: ServicePlanFormValues) => void,
+    isPending: boolean,
+    submitLabel: string,
+    isEdit?: boolean,
+    calcResult?: PriceCalcResult | null,
+    calcLoading?: boolean
+  ) => (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField control={form.control} name="propertyId" render={({ field }) => (
@@ -1241,6 +1489,12 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
           <FormItem>
             <FormLabel>Price Per Visit ($)</FormLabel>
             <FormControl><Input type="number" step="0.01" {...field} data-testid="input-plan-price" /></FormControl>
+            <InlinePriceSuggestion
+              calcResult={calcResult || null}
+              calcLoading={calcLoading || false}
+              pricePerVisit={field.value || ""}
+              onUsePrice={(price) => form.setValue("pricePerVisit", price)}
+            />
             <FormMessage />
           </FormItem>
         )} />
@@ -1305,7 +1559,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
             <DialogHeader>
               <DialogTitle>Create Service Plan</DialogTitle>
             </DialogHeader>
-            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Service Plan")}
+            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Service Plan", false, createCalcResult, createCalcLoading)}
           </DialogContent>
         </Dialog>
       </CardHeader>
@@ -1378,7 +1632,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               (v) => updateMutation.mutate({ id: editingPlan.id, data: v }),
               updateMutation.isPending,
               "Save Changes",
-              true
+              true,
+              editCalcResult,
+              editCalcLoading
             )}
           </DialogContent>
         </Dialog>

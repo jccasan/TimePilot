@@ -21,6 +21,81 @@ export const subscriptionTierEnum = pgEnum("subscription_tier", ["free_trial", "
 export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "past_due", "cancelled", "trialing"]);
 export const automationTriggerEnum = pgEnum("automation_trigger", ["lead_created", "service_completed", "payment_failed", "invoice_created"]);
 
+export const yardDifficultyEnum = pgEnum("yard_difficulty", ["flat", "moderate", "difficult"]);
+export const priceRecommendationSourceEnum = pgEnum("price_recommendation_source", ["manual", "auto", "ai_optimizer"]);
+
+export interface PricingConfig {
+  techHourlyWageCents: number;
+  burdenMultiplier: number;
+  averageGasPriceCentsPerGallon: number;
+  vehicleMPG: number | null;
+  vehicleCostPerMileCents: number;
+  baseTimePerTenthAcreMinutes: number;
+  extraDogMinutesAfterFirst: number;
+  driveSpeedAverageMph: number;
+  minimumServiceMinutesFloor: number;
+  weeklyMultiplier: number;
+  biweeklyMultiplier: number;
+  monthlyMultiplier: number;
+  oneTimeMultiplier: number;
+  difficultyFlat: number;
+  difficultyModerate: number;
+  difficultyDifficult: number;
+  advertisingCents: number;
+  payrollProviderCents: number;
+  benefitsCents: number;
+  insuranceCents: number;
+  softwareCents: number;
+  otherOverheadCents: number;
+  disinfectantCents: number;
+  deodorizerCents: number;
+  bagsCents: number;
+  localMarketAverageWeeklyPriceCents: number | null;
+  marketAnchorTolerancePct: number;
+  targetProfitMarginPct: number;
+  premiumMarginPct: number;
+  pricingMode: "aggressive" | "standard" | "premium";
+  clusterDiscountPct: number;
+  clusterDiscountPct2: number;
+  estimatedMonthlyStops: number;
+}
+
+export const DEFAULT_PRICING_CONFIG: PricingConfig = {
+  techHourlyWageCents: 1500,
+  burdenMultiplier: 1.4,
+  averageGasPriceCentsPerGallon: 350,
+  vehicleMPG: null,
+  vehicleCostPerMileCents: 65,
+  baseTimePerTenthAcreMinutes: 10,
+  extraDogMinutesAfterFirst: 2,
+  driveSpeedAverageMph: 30,
+  minimumServiceMinutesFloor: 8,
+  weeklyMultiplier: 1.0,
+  biweeklyMultiplier: 1.3,
+  monthlyMultiplier: 1.8,
+  oneTimeMultiplier: 1.0,
+  difficultyFlat: 1.0,
+  difficultyModerate: 1.2,
+  difficultyDifficult: 1.5,
+  advertisingCents: 0,
+  payrollProviderCents: 0,
+  benefitsCents: 0,
+  insuranceCents: 0,
+  softwareCents: 0,
+  otherOverheadCents: 0,
+  disinfectantCents: 25,
+  deodorizerCents: 15,
+  bagsCents: 10,
+  localMarketAverageWeeklyPriceCents: null,
+  marketAnchorTolerancePct: 35,
+  targetProfitMarginPct: 30,
+  premiumMarginPct: 40,
+  pricingMode: "standard",
+  clusterDiscountPct: 10,
+  clusterDiscountPct2: 15,
+  estimatedMonthlyStops: 100,
+};
+
 export const TIER_CONFIG = {
   free_trial: { name: "Free Trial (14 days)", maxUsers: 1, price: 0 },
   tier_1: { name: "Solo", maxUsers: 1, price: 49.99 },
@@ -52,6 +127,7 @@ export const companies = pgTable("companies", {
   autoVisitsEnabled: boolean("auto_visits_enabled").notNull().default(false),
   dashboardLayout: jsonb("dashboard_layout").$type<string[]>(),
   aiImportMappingEnabled: boolean("ai_import_mapping_enabled").notNull().default(true),
+  pricingConfig: jsonb("pricing_config").$type<PricingConfig>(),
   canceledAt: timestamp("canceled_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
   churnNotes: text("churn_notes"),
@@ -152,6 +228,7 @@ export const properties = pgTable("properties", {
   lotSize: varchar("lot_size", { length: 50 }),
   yardPolygon: jsonb("yard_polygon"),
   measuredYardSqft: integer("measured_yard_sqft"),
+  yardDifficulty: yardDifficultyEnum("yard_difficulty").default("flat"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -902,4 +979,41 @@ export const invoicePaymentRelations = relations(invoicePayments, ({ one }) => (
 
 export const importRunRelations = relations(importRuns, ({ one }) => ({
   company: one(companies, { fields: [importRuns.companyId], references: [companies.id] }),
+}));
+
+export const priceRecommendations = pgTable("price_recommendations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  propertyId: varchar("property_id").references(() => properties.id, { onDelete: "set null" }),
+  serviceFrequency: varchar("service_frequency", { length: 50 }).notNull(),
+  yardSizeAcres: decimal("yard_size_acres", { precision: 10, scale: 4 }),
+  dogCount: integer("dog_count").notNull().default(1),
+  yardDifficulty: yardDifficultyEnum("yard_difficulty_calc").default("flat"),
+  routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),
+  minimumPriceCents: integer("minimum_price_cents").notNull(),
+  recommendedPriceCents: integer("recommended_price_cents").notNull(),
+  premiumPriceCents: integer("premium_price_cents").notNull(),
+  jobMinutes: decimal("job_minutes", { precision: 10, scale: 2 }),
+  serviceMinutes: decimal("service_minutes", { precision: 10, scale: 2 }),
+  travelMinutes: decimal("travel_minutes", { precision: 10, scale: 2 }),
+  densityMultiplier: decimal("density_multiplier", { precision: 5, scale: 3 }),
+  breakdownJson: jsonb("breakdown_json").$type<Record<string, any>>(),
+  inputsJson: jsonb("inputs_json").$type<Record<string, any>>(),
+  calculatedAt: timestamp("calculated_at").defaultNow().notNull(),
+  calculationVersion: varchar("calculation_version", { length: 20 }).notNull().default("1.0"),
+  createdByUserId: varchar("created_by_user_id"),
+  source: priceRecommendationSourceEnum("source").notNull().default("manual"),
+}, (table) => [
+  index("idx_pricerec_company_property").on(table.companyId, table.propertyId),
+  index("idx_pricerec_company_calcdate").on(table.companyId, table.calculatedAt),
+]);
+
+export const insertPriceRecommendationSchema = createInsertSchema(priceRecommendations).omit({ id: true, calculatedAt: true });
+export type PriceRecommendation = typeof priceRecommendations.$inferSelect;
+export type InsertPriceRecommendation = z.infer<typeof insertPriceRecommendationSchema>;
+
+export const priceRecommendationRelations = relations(priceRecommendations, ({ one }) => ({
+  company: one(companies, { fields: [priceRecommendations.companyId], references: [companies.id] }),
+  property: one(properties, { fields: [priceRecommendations.propertyId], references: [properties.id] }),
+  route: one(routes, { fields: [priceRecommendations.routeId], references: [routes.id] }),
 }));

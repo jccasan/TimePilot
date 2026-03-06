@@ -9,6 +9,7 @@ import {
   FileText,
   CreditCard,
   DollarSign,
+  Calculator,
   Zap,
   Key,
   Webhook,
@@ -56,6 +57,7 @@ const menuSections = [
     label: "Billing",
     items: [
       { title: "Pricing", url: "/pricing", icon: DollarSign },
+      { title: "Price Calculator", url: "/pricing-calculator", icon: Calculator },
       { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Scoopilot Subscription", url: "/billing", icon: CreditCard },
     ],

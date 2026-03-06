@@ -42,6 +42,9 @@ import {
   type AuditTrail, type InsertAuditTrail,
   type ImportRun, type InsertImportRun,
   type InvoicePayment, type InsertInvoicePayment,
+  type PriceRecommendation, type InsertPriceRecommendation,
+  type PricingConfig,
+  priceRecommendations,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -277,6 +280,11 @@ export interface IStorage {
   getInvoicePaymentsByCompany(companyId: string, filters?: { source?: string }): Promise<InvoicePayment[]>;
   getInvoicePaymentByExternalId(companyId: string, externalId: string): Promise<InvoicePayment | undefined>;
   getInvoiceByExternalId(companyId: string, externalSource: string, externalId: string): Promise<Invoice | undefined>;
+
+  // Price Recommendations
+  createPriceRecommendation(data: InsertPriceRecommendation): Promise<PriceRecommendation>;
+  getPriceRecommendations(companyId: string, propertyId?: string): Promise<PriceRecommendation[]>;
+  getLatestPriceRecommendation(companyId: string, propertyId: string): Promise<PriceRecommendation | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1378,6 +1386,31 @@ export class DatabaseStorage implements IStorage {
       eq(invoices.externalId, externalId)
     ));
     return inv;
+  }
+
+  // ================ Price Recommendations ================
+  async createPriceRecommendation(data: InsertPriceRecommendation): Promise<PriceRecommendation> {
+    const [rec] = await db.insert(priceRecommendations).values(data).returning();
+    return rec;
+  }
+
+  async getPriceRecommendations(companyId: string, propertyId?: string): Promise<PriceRecommendation[]> {
+    const conditions = [eq(priceRecommendations.companyId, companyId)];
+    if (propertyId) {
+      conditions.push(eq(priceRecommendations.propertyId, propertyId));
+    }
+    return db.select().from(priceRecommendations).where(and(...conditions)).orderBy(desc(priceRecommendations.calculatedAt));
+  }
+
+  async getLatestPriceRecommendation(companyId: string, propertyId: string): Promise<PriceRecommendation | undefined> {
+    const [rec] = await db.select().from(priceRecommendations)
+      .where(and(
+        eq(priceRecommendations.companyId, companyId),
+        eq(priceRecommendations.propertyId, propertyId)
+      ))
+      .orderBy(desc(priceRecommendations.calculatedAt))
+      .limit(1);
+    return rec;
   }
 }
 

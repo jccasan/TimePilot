@@ -42,6 +42,7 @@ import AdminAnalytics from "@/pages/admin-analytics";
 import AdminLogin from "@/pages/admin-login";
 import AdminChangePassword from "@/pages/admin-change-password";
 import Settings from "@/pages/settings";
+import PricingCalculator from "@/pages/pricing-calculator";
 import MigrationPage from "@/pages/migration-page";
 import ResetPassword from "@/pages/reset-password";
 import { NotificationBell } from "@/components/notification-bell";
@@ -72,6 +73,7 @@ function Router() {
       <Route path="/api-keys" component={ApiKeysPage} />
       <Route path="/webhooks" component={WebhooksPage} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/pricing-calculator" component={PricingCalculator} />
       <Route path="/communications" component={Communications} />
       <Route path="/reports" component={Reports} />
       <Route path="/analytics" component={Analytics} />

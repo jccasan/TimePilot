@@ -6,7 +6,9 @@ import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, isNotNull, like, or } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig } from "@shared/schema";
+import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
+import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
@@ -2901,6 +2903,189 @@ export async function registerRoutes(
 
       const newPackages = await storage.getServicePackages(companyId);
       res.json({ success: true, packagesCreated: newPackages.length, packages: newPackages });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Pricing Calculator ================
+
+  app.get("/api/pricing-config", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const config = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
+      res.json(config);
+    } catch (err) { handleError(res, err); }
+  });
+
+  const pricingConfigSchema = z.object({
+    techHourlyWageCents: z.number().min(0).optional(),
+    burdenMultiplier: z.number().min(1).max(5).optional(),
+    averageGasPriceCentsPerGallon: z.number().min(0).optional(),
+    vehicleMPG: z.number().min(0).nullable().optional(),
+    vehicleCostPerMileCents: z.number().min(0).optional(),
+    baseTimePerTenthAcreMinutes: z.number().min(1).max(120).optional(),
+    extraDogMinutesAfterFirst: z.number().min(0).max(60).optional(),
+    driveSpeedAverageMph: z.number().min(5).max(80).optional(),
+    minimumServiceMinutesFloor: z.number().min(1).max(120).optional(),
+    weeklyMultiplier: z.number().min(0.1).max(5).optional(),
+    biweeklyMultiplier: z.number().min(0.1).max(5).optional(),
+    monthlyMultiplier: z.number().min(0.1).max(5).optional(),
+    oneTimeMultiplier: z.number().min(0.1).max(5).optional(),
+    difficultyFlat: z.number().min(0.5).max(3).optional(),
+    difficultyModerate: z.number().min(0.5).max(3).optional(),
+    difficultyDifficult: z.number().min(0.5).max(3).optional(),
+    advertisingCents: z.number().min(0).optional(),
+    payrollProviderCents: z.number().min(0).optional(),
+    benefitsCents: z.number().min(0).optional(),
+    insuranceCents: z.number().min(0).optional(),
+    softwareCents: z.number().min(0).optional(),
+    otherOverheadCents: z.number().min(0).optional(),
+    disinfectantCents: z.number().min(0).optional(),
+    deodorizerCents: z.number().min(0).optional(),
+    bagsCents: z.number().min(0).optional(),
+    localMarketAverageWeeklyPriceCents: z.number().min(0).nullable().optional(),
+    marketAnchorTolerancePct: z.number().min(0).max(100).optional(),
+    targetProfitMarginPct: z.number().min(0).max(90).optional(),
+    premiumMarginPct: z.number().min(0).max(90).optional(),
+    pricingMode: z.enum(["aggressive", "standard", "premium"]).optional(),
+    clusterDiscountPct: z.number().min(0).max(50).optional(),
+    clusterDiscountPct2: z.number().min(0).max(50).optional(),
+    estimatedMonthlyStops: z.number().min(1).optional(),
+  });
+
+  const calcInputSchema = z.object({
+    yardSizeAcres: z.number().min(0.001).max(100).optional(),
+    yardSizeSqft: z.number().min(0).optional(),
+    yardSizeLabel: z.string().optional(),
+    dogCount: z.number().int().min(1).max(50).default(1),
+    serviceFrequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
+    yardDifficulty: z.enum(["flat", "moderate", "difficult"]).default("flat"),
+    distanceFromNearestStopMiles: z.number().min(0).max(100).default(1),
+    routeStopsPerMile: z.number().min(0).optional(),
+    currentPriceCents: z.number().min(0).optional(),
+    propertyId: z.string().optional(),
+    pricingModeOverride: z.enum(["aggressive", "standard", "premium"]).optional(),
+    routeId: z.string().optional(),
+  });
+
+  app.put("/api/pricing-config", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const config = pricingConfigSchema.parse(req.body);
+      const merged = { ...DEFAULT_PRICING_CONFIG, ...config };
+      await storage.updateCompany(companyId, { pricingConfig: merged } as any);
+      res.json(merged);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/pricing/calculate", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const body = calcInputSchema.parse(req.body);
+
+      let acres = body.yardSizeAcres;
+      if (!acres && body.yardSizeSqft) acres = sqftToAcres(body.yardSizeSqft);
+      if (!acres && body.yardSizeLabel) acres = yardSizeLabelToAcres(body.yardSizeLabel);
+      if (!acres && body.propertyId) {
+        const prop = await storage.getProperty(body.propertyId, companyId);
+        if (prop) {
+          acres = prop.measuredYardSqft ? sqftToAcres(prop.measuredYardSqft) : yardSizeLabelToAcres(prop.yardSize);
+        }
+      }
+      if (!acres) acres = 0.1;
+
+      let tenantConfig = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
+      if (body.pricingModeOverride) {
+        tenantConfig.pricingMode = body.pricingModeOverride;
+      }
+
+      const inputs: PriceCalculatorInputs = {
+        yardSizeAcres: acres,
+        dogCount: body.dogCount,
+        serviceFrequency: body.serviceFrequency,
+        yardDifficulty: body.yardDifficulty,
+        distanceFromNearestStopMiles: body.distanceFromNearestStopMiles,
+        routeStopsPerMile: body.routeStopsPerMile,
+        currentPriceCents: body.currentPriceCents,
+      };
+
+      const result = calculatePrice(inputs, tenantConfig);
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/pricing/calculate-and-save", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const body = calcInputSchema.parse(req.body);
+
+      let acres = body.yardSizeAcres;
+      if (!acres && body.yardSizeSqft) acres = sqftToAcres(body.yardSizeSqft);
+      if (!acres && body.yardSizeLabel) acres = yardSizeLabelToAcres(body.yardSizeLabel);
+      if (!acres && body.propertyId) {
+        const prop = await storage.getProperty(body.propertyId, companyId);
+        if (prop) {
+          acres = prop.measuredYardSqft ? sqftToAcres(prop.measuredYardSqft) : yardSizeLabelToAcres(prop.yardSize);
+        }
+      }
+      if (!acres) acres = 0.1;
+
+      let tenantConfig = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
+      if (body.pricingModeOverride) {
+        tenantConfig.pricingMode = body.pricingModeOverride;
+      }
+
+      const inputs: PriceCalculatorInputs = {
+        yardSizeAcres: acres,
+        dogCount: body.dogCount,
+        serviceFrequency: body.serviceFrequency,
+        yardDifficulty: body.yardDifficulty,
+        distanceFromNearestStopMiles: body.distanceFromNearestStopMiles,
+        routeStopsPerMile: body.routeStopsPerMile,
+        currentPriceCents: body.currentPriceCents,
+      };
+
+      const result = calculatePrice(inputs, tenantConfig);
+
+      const rec = await storage.createPriceRecommendation({
+        companyId,
+        propertyId: body.propertyId || null,
+        serviceFrequency: body.serviceFrequency,
+        yardSizeAcres: String(acres),
+        dogCount: body.dogCount,
+        yardDifficulty: body.yardDifficulty,
+        routeId: body.routeId || null,
+        minimumPriceCents: result.minimumPriceCents,
+        recommendedPriceCents: result.recommendedPriceCents,
+        premiumPriceCents: result.premiumPriceCents,
+        jobMinutes: String(result.derived.jobMinutes),
+        serviceMinutes: String(result.breakdown.serviceMinutes),
+        travelMinutes: String(result.breakdown.travelMinutes),
+        densityMultiplier: String(result.breakdown.densityMultiplier),
+        breakdownJson: result.breakdown as any,
+        inputsJson: result.inputsUsed as any,
+        calculationVersion: "1.0",
+        createdByUserId: userId,
+        source: "manual",
+      });
+
+      res.json({ ...result, recommendationId: rec.id });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/pricing/recommendations/:propertyId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const recs = await storage.getPriceRecommendations(companyId, req.params.propertyId);
+      res.json(recs);
     } catch (err) { handleError(res, err); }
   });
 
