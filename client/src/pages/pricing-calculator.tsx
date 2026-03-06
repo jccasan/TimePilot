@@ -36,6 +36,12 @@ import {
 } from "@/components/ui/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Calculator,
   Save,
   AlertTriangle,
@@ -51,13 +57,25 @@ import {
   Shield,
   Crown,
   SlidersHorizontal,
+  HelpCircle,
 } from "lucide-react";
 
+function centsToDollars(cents: number | null | undefined): string {
+  if (cents === null || cents === undefined) return "";
+  return (cents / 100).toFixed(2);
+}
+
+function dollarsToCents(dollars: number | string): number {
+  const val = typeof dollars === "string" ? parseFloat(dollars) : dollars;
+  if (isNaN(val)) return 0;
+  return Math.round(val * 100);
+}
+
 const pricingConfigSchema = z.object({
-  techHourlyWageCents: z.coerce.number().min(0),
+  techHourlyWageDollars: z.coerce.number().min(0),
   burdenMultiplier: z.coerce.number().min(1),
-  averageGasPriceCentsPerGallon: z.coerce.number().min(0),
-  vehicleCostPerMileCents: z.coerce.number().min(0),
+  averageGasPricePerGallon: z.coerce.number().min(0),
+  vehicleCostPerMile: z.coerce.number().min(0),
   baseTimePerTenthAcreMinutes: z.coerce.number().min(1),
   extraDogMinutesAfterFirst: z.coerce.number().min(0),
   driveSpeedAverageMph: z.coerce.number().min(1),
@@ -69,16 +87,16 @@ const pricingConfigSchema = z.object({
   difficultyFlat: z.coerce.number().min(0.1),
   difficultyModerate: z.coerce.number().min(0.1),
   difficultyDifficult: z.coerce.number().min(0.1),
-  advertisingCents: z.coerce.number().min(0),
-  payrollProviderCents: z.coerce.number().min(0),
-  benefitsCents: z.coerce.number().min(0),
-  insuranceCents: z.coerce.number().min(0),
-  softwareCents: z.coerce.number().min(0),
-  otherOverheadCents: z.coerce.number().min(0),
-  disinfectantCents: z.coerce.number().min(0),
-  deodorizerCents: z.coerce.number().min(0),
-  bagsCents: z.coerce.number().min(0),
-  localMarketAverageWeeklyPriceCents: z.coerce.number().nullable(),
+  advertisingDollars: z.coerce.number().min(0),
+  payrollProviderDollars: z.coerce.number().min(0),
+  benefitsDollars: z.coerce.number().min(0),
+  insuranceDollars: z.coerce.number().min(0),
+  softwareDollars: z.coerce.number().min(0),
+  otherOverheadDollars: z.coerce.number().min(0),
+  disinfectantDollars: z.coerce.number().min(0),
+  deodorizerDollars: z.coerce.number().min(0),
+  bagsDollars: z.coerce.number().min(0),
+  localMarketAverageWeeklyDollars: z.coerce.number().nullable(),
   marketAnchorTolerancePct: z.coerce.number().min(0).max(100),
   targetProfitMarginPct: z.coerce.number().min(0).max(100),
   premiumMarginPct: z.coerce.number().min(0).max(100),
@@ -88,13 +106,88 @@ const pricingConfigSchema = z.object({
   estimatedMonthlyStops: z.coerce.number().min(1),
 });
 
+function configToFormValues(config: PricingConfig) {
+  return {
+    techHourlyWageDollars: config.techHourlyWageCents / 100,
+    burdenMultiplier: config.burdenMultiplier,
+    averageGasPricePerGallon: config.averageGasPriceCentsPerGallon / 100,
+    vehicleCostPerMile: config.vehicleCostPerMileCents / 100,
+    baseTimePerTenthAcreMinutes: config.baseTimePerTenthAcreMinutes,
+    extraDogMinutesAfterFirst: config.extraDogMinutesAfterFirst,
+    driveSpeedAverageMph: config.driveSpeedAverageMph,
+    minimumServiceMinutesFloor: config.minimumServiceMinutesFloor,
+    weeklyMultiplier: config.weeklyMultiplier,
+    biweeklyMultiplier: config.biweeklyMultiplier,
+    monthlyMultiplier: config.monthlyMultiplier,
+    oneTimeMultiplier: config.oneTimeMultiplier,
+    difficultyFlat: config.difficultyFlat,
+    difficultyModerate: config.difficultyModerate,
+    difficultyDifficult: config.difficultyDifficult,
+    advertisingDollars: config.advertisingCents / 100,
+    payrollProviderDollars: config.payrollProviderCents / 100,
+    benefitsDollars: config.benefitsCents / 100,
+    insuranceDollars: config.insuranceCents / 100,
+    softwareDollars: config.softwareCents / 100,
+    otherOverheadDollars: config.otherOverheadCents / 100,
+    disinfectantDollars: config.disinfectantCents / 100,
+    deodorizerDollars: config.deodorizerCents / 100,
+    bagsDollars: config.bagsCents / 100,
+    localMarketAverageWeeklyDollars: config.localMarketAverageWeeklyPriceCents ? config.localMarketAverageWeeklyPriceCents / 100 : null,
+    marketAnchorTolerancePct: config.marketAnchorTolerancePct,
+    targetProfitMarginPct: config.targetProfitMarginPct,
+    premiumMarginPct: config.premiumMarginPct,
+    pricingMode: config.pricingMode,
+    clusterDiscountPct: config.clusterDiscountPct,
+    clusterDiscountPct2: config.clusterDiscountPct2,
+    estimatedMonthlyStops: config.estimatedMonthlyStops,
+  };
+}
+
+function formValuesToConfig(values: z.infer<typeof pricingConfigSchema>): PricingConfig {
+  return {
+    techHourlyWageCents: dollarsToCents(values.techHourlyWageDollars),
+    burdenMultiplier: values.burdenMultiplier,
+    averageGasPriceCentsPerGallon: dollarsToCents(values.averageGasPricePerGallon),
+    vehicleCostPerMileCents: dollarsToCents(values.vehicleCostPerMile),
+    vehicleMPG: null,
+    baseTimePerTenthAcreMinutes: values.baseTimePerTenthAcreMinutes,
+    extraDogMinutesAfterFirst: values.extraDogMinutesAfterFirst,
+    driveSpeedAverageMph: values.driveSpeedAverageMph,
+    minimumServiceMinutesFloor: values.minimumServiceMinutesFloor,
+    weeklyMultiplier: values.weeklyMultiplier,
+    biweeklyMultiplier: values.biweeklyMultiplier,
+    monthlyMultiplier: values.monthlyMultiplier,
+    oneTimeMultiplier: values.oneTimeMultiplier,
+    difficultyFlat: values.difficultyFlat,
+    difficultyModerate: values.difficultyModerate,
+    difficultyDifficult: values.difficultyDifficult,
+    advertisingCents: dollarsToCents(values.advertisingDollars),
+    payrollProviderCents: dollarsToCents(values.payrollProviderDollars),
+    benefitsCents: dollarsToCents(values.benefitsDollars),
+    insuranceCents: dollarsToCents(values.insuranceDollars),
+    softwareCents: dollarsToCents(values.softwareDollars),
+    otherOverheadCents: dollarsToCents(values.otherOverheadDollars),
+    disinfectantCents: dollarsToCents(values.disinfectantDollars),
+    deodorizerCents: dollarsToCents(values.deodorizerDollars),
+    bagsCents: dollarsToCents(values.bagsDollars),
+    localMarketAverageWeeklyPriceCents: values.localMarketAverageWeeklyDollars ? dollarsToCents(values.localMarketAverageWeeklyDollars) : null,
+    marketAnchorTolerancePct: values.marketAnchorTolerancePct,
+    targetProfitMarginPct: values.targetProfitMarginPct,
+    premiumMarginPct: values.premiumMarginPct,
+    pricingMode: values.pricingMode,
+    clusterDiscountPct: values.clusterDiscountPct,
+    clusterDiscountPct2: values.clusterDiscountPct2,
+    estimatedMonthlyStops: values.estimatedMonthlyStops,
+  };
+}
+
 const calculatorInputSchema = z.object({
   yardSizeAcres: z.coerce.number().min(0.01),
   dogCount: z.coerce.number().min(1).int(),
   serviceFrequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]),
   yardDifficulty: z.enum(["flat", "moderate", "difficult"]),
   distanceFromNearestStopMiles: z.coerce.number().min(0),
-  currentPriceCents: z.coerce.number().min(0).optional(),
+  currentPriceDollars: z.coerce.number().min(0).optional(),
 });
 
 type CalculatorInputValues = z.infer<typeof calculatorInputSchema>;
@@ -131,7 +224,7 @@ interface CalculatorResult {
   inputsUsed: any;
 }
 
-function formatCents(cents: number): string {
+function formatDollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
@@ -139,17 +232,42 @@ function formatMinutes(mins: number): string {
   return `${mins.toFixed(1)} min`;
 }
 
+function InfoTip({ text }: { text: string }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground inline-block ml-1 cursor-help shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs text-sm">
+          <p>{text}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function LabelWithInfo({ label, info }: { label: string; info: string }) {
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      {label}
+      <InfoTip text={info} />
+    </span>
+  );
+}
+
 function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSaved: () => void }) {
   const { toast } = useToast();
 
   const form = useForm({
     resolver: zodResolver(pricingConfigSchema),
-    defaultValues: config,
+    defaultValues: configToFormValues(config),
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (data: PricingConfig) => {
-      await apiRequest("PUT", "/api/pricing-config", data);
+    mutationFn: async (data: z.infer<typeof pricingConfigSchema>) => {
+      const apiConfig = formValuesToConfig(data);
+      await apiRequest("PUT", "/api/pricing-config", apiConfig);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
@@ -177,43 +295,46 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit((v) => saveMutation.mutate(v as PricingConfig))} className="space-y-6">
+      <form onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-lg font-semibold" data-testid="text-settings-heading">Tenant Pricing Settings</h3>
+          <h3 className="text-lg font-semibold" data-testid="text-settings-heading">Pricing Settings</h3>
           <Button type="submit" disabled={saveMutation.isPending} data-testid="button-save-settings">
             <Save className="mr-1 h-4 w-4" />
             {saveMutation.isPending ? "Saving..." : "Save Settings"}
           </Button>
         </div>
 
-        <div className="flex flex-wrap gap-2" data-testid="pricing-mode-toggle">
-          <Button
-            type="button"
-            variant={form.watch("pricingMode") === "aggressive" ? "default" : "outline"}
-            onClick={() => handleModePreset("aggressive")}
-            data-testid="button-mode-aggressive"
-          >
-            <Zap className="mr-1 h-4 w-4" />
-            Aggressive Growth (20%)
-          </Button>
-          <Button
-            type="button"
-            variant={form.watch("pricingMode") === "standard" ? "default" : "outline"}
-            onClick={() => handleModePreset("standard")}
-            data-testid="button-mode-standard"
-          >
-            <Shield className="mr-1 h-4 w-4" />
-            Standard (30%)
-          </Button>
-          <Button
-            type="button"
-            variant={form.watch("pricingMode") === "premium" ? "default" : "outline"}
-            onClick={() => handleModePreset("premium")}
-            data-testid="button-mode-premium"
-          >
-            <Crown className="mr-1 h-4 w-4" />
-            Premium (40%)
-          </Button>
+        <div>
+          <p className="text-sm text-muted-foreground mb-2">Choose a pricing strategy. This sets the profit margin used when calculating recommended prices.</p>
+          <div className="flex flex-wrap gap-2" data-testid="pricing-mode-toggle">
+            <Button
+              type="button"
+              variant={form.watch("pricingMode") === "aggressive" ? "default" : "outline"}
+              onClick={() => handleModePreset("aggressive")}
+              data-testid="button-mode-aggressive"
+            >
+              <Zap className="mr-1 h-4 w-4" />
+              Aggressive Growth (20%)
+            </Button>
+            <Button
+              type="button"
+              variant={form.watch("pricingMode") === "standard" ? "default" : "outline"}
+              onClick={() => handleModePreset("standard")}
+              data-testid="button-mode-standard"
+            >
+              <Shield className="mr-1 h-4 w-4" />
+              Standard (30%)
+            </Button>
+            <Button
+              type="button"
+              variant={form.watch("pricingMode") === "premium" ? "default" : "outline"}
+              onClick={() => handleModePreset("premium")}
+              data-testid="button-mode-premium"
+            >
+              <Crown className="mr-1 h-4 w-4" />
+              Premium (40%)
+            </Button>
+          </div>
         </div>
 
         <Accordion type="multiple" defaultValue={["labor", "travel", "frequency", "difficulty", "overhead", "equipment", "profit"]}>
@@ -226,16 +347,20 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
             </AccordionTrigger>
             <AccordionContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <FormField control={form.control} name="techHourlyWageCents" render={({ field }) => (
+                <FormField control={form.control} name="techHourlyWageDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tech Hourly Wage (cents)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-tech-wage" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Tech Hourly Wage ($)" info="The hourly pay rate for your technicians before taxes and benefits. For example, if you pay $15/hr, enter 15.00." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-tech-wage" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="burdenMultiplier" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Burden Multiplier</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Burden Multiplier" info="The true cost of an employee is more than their wage. This multiplier accounts for payroll taxes, workers comp, and other employer costs. A typical value is 1.3-1.5. For example, 1.4 means an employee actually costs 40% more than their hourly wage." />
+                    </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-burden-multiplier" /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -253,23 +378,29 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
             </AccordionTrigger>
             <AccordionContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <FormField control={form.control} name="averageGasPriceCentsPerGallon" render={({ field }) => (
+                <FormField control={form.control} name="averageGasPricePerGallon" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Gas Price (cents/gallon)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-gas-price" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Gas Price ($/gallon)" info="The average price you pay for gas. Used to estimate fuel costs per mile if you don't set a flat vehicle cost per mile." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-gas-price" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="vehicleCostPerMileCents" render={({ field }) => (
+                <FormField control={form.control} name="vehicleCostPerMile" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Vehicle Cost (cents/mile)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-vehicle-cost" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Vehicle Cost ($/mile)" info="The total cost to operate your vehicle per mile, including gas, maintenance, insurance, and depreciation. The IRS standard rate is around $0.67/mile. If set, this is used instead of calculating from gas price." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-vehicle-cost" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="driveSpeedAverageMph" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Average Drive Speed (mph)</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Avg Drive Speed (mph)" info="The average speed you drive between stops, including neighborhood streets and stopping. Usually 20-35 mph for residential service areas." />
+                    </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-drive-speed" /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -289,49 +420,63 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <FormField control={form.control} name="baseTimePerTenthAcreMinutes" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Base Time per 1/10 Acre (min)</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Minutes per 1/10 Acre" info="How many minutes it takes to service one-tenth of an acre of yard. This is the building block for estimating service time. A typical value is 8-12 minutes." />
+                    </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-base-time" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="extraDogMinutesAfterFirst" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Extra Dog Minutes (after 1st)</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Extra Minutes per Additional Dog" info="Each additional dog beyond the first adds more waste to clean up. This is the extra time (in minutes) added for each dog after the first one." />
+                    </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-extra-dog-min" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="minimumServiceMinutesFloor" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Minimum Service Minutes</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Minimum Service Time (min)" info="The shortest a visit can be, even for a tiny yard. This ensures you don't undercharge for very small properties where you still spend time getting in and out." />
+                    </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-min-service-min" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="weeklyMultiplier" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Weekly Multiplier</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Weekly Multiplier" info="Adjusts the estimated service time for weekly visits. Weekly cleanups are faster because there's less buildup. Usually 1.0 (no adjustment)." />
+                    </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-weekly-mult" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="biweeklyMultiplier" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Bi-Weekly Multiplier</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Bi-Weekly Multiplier" info="Adjusts service time for every-other-week visits. More waste accumulates, so each visit takes longer. A typical value is 1.2-1.4." />
+                    </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-biweekly-mult" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="monthlyMultiplier" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Monthly Multiplier</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Monthly Multiplier" info="Adjusts service time for monthly visits. A full month of buildup means significantly more work per visit. A typical value is 1.6-2.0." />
+                    </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-monthly-mult" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="oneTimeMultiplier" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>One-Time Multiplier</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="One-Time Multiplier" info="Adjusts service time for one-time cleanups. These are often initial cleanups with heavy buildup. Set higher if first-time jobs are usually worse." />
+                    </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-onetime-mult" /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -348,24 +493,31 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
               </div>
             </AccordionTrigger>
             <AccordionContent>
+              <p className="text-sm text-muted-foreground mb-3">These multipliers adjust service time based on how hard the yard is to work in. A value of 1.0 means no change, 1.5 means 50% more time.</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                 <FormField control={form.control} name="difficultyFlat" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Flat</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Flat Yard" info="Standard flat yard with easy access. This is the baseline, usually set to 1.0." />
+                    </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-diff-flat" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="difficultyModerate" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Moderate</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Moderate Yard" info="Some hills, obstacles, or harder-to-reach areas that slow you down. Typically 1.1-1.3." />
+                    </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-diff-moderate" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="difficultyDifficult" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Difficult</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Difficult Yard" info="Steep hills, heavy landscaping, multiple fenced areas, or other challenges that significantly increase service time. Typically 1.4-1.6." />
+                    </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-diff-difficult" /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -382,52 +534,67 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
               </div>
             </AccordionTrigger>
             <AccordionContent>
+              <p className="text-sm text-muted-foreground mb-3">Enter your monthly business expenses. These get spread across all your stops so each job covers its fair share of your fixed costs.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <FormField control={form.control} name="advertisingCents" render={({ field }) => (
+                <FormField control={form.control} name="advertisingDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Advertising (cents/mo)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-advertising" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Advertising ($/mo)" info="Monthly spend on ads, flyers, online marketing, yard signs, etc." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-advertising" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="payrollProviderCents" render={({ field }) => (
+                <FormField control={form.control} name="payrollProviderDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Payroll Provider (cents/mo)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-payroll" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Payroll Provider ($/mo)" info="Monthly cost for payroll processing services like Gusto, ADP, or QuickBooks Payroll." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-payroll" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="benefitsCents" render={({ field }) => (
+                <FormField control={form.control} name="benefitsDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Benefits (cents/mo)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-benefits" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Benefits ($/mo)" info="Monthly cost of employee benefits like health insurance, PTO, or retirement contributions." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-benefits" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="insuranceCents" render={({ field }) => (
+                <FormField control={form.control} name="insuranceDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Insurance (cents/mo)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-insurance" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Insurance ($/mo)" info="Monthly business insurance costs, including general liability and any vehicle/equipment coverage." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-insurance" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="softwareCents" render={({ field }) => (
+                <FormField control={form.control} name="softwareDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Software (cents/mo)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-software" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Software ($/mo)" info="Monthly software subscriptions like this app, accounting software, CRM tools, etc." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-software" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="otherOverheadCents" render={({ field }) => (
+                <FormField control={form.control} name="otherOverheadDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Other Overhead (cents/mo)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-other-overhead" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Other Overhead ($/mo)" info="Any other monthly fixed costs not covered above, like phone bills, storage rental, uniforms, etc." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-other-overhead" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="estimatedMonthlyStops" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Estimated Monthly Stops</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Estimated Monthly Stops" info="How many total service stops you do in a typical month across all customers. Overhead costs get divided by this number to figure out how much each stop needs to cover." />
+                    </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-monthly-stops" /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -440,29 +607,36 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
             <AccordionTrigger data-testid="accordion-equipment">
               <div className="flex items-center gap-2">
                 <Wrench className="h-4 w-4" />
-                Equipment Per Visit
+                Supplies Per Visit
               </div>
             </AccordionTrigger>
             <AccordionContent>
+              <p className="text-sm text-muted-foreground mb-3">The cost of consumable supplies you use on each visit.</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                <FormField control={form.control} name="disinfectantCents" render={({ field }) => (
+                <FormField control={form.control} name="disinfectantDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Disinfectant (cents)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-disinfectant" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Disinfectant ($)" info="Cost of disinfectant spray or solution used per visit to sanitize the yard." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-disinfectant" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="deodorizerCents" render={({ field }) => (
+                <FormField control={form.control} name="deodorizerDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Deodorizer (cents)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-deodorizer" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Deodorizer ($)" info="Cost of deodorizer applied per visit to reduce yard odor." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-deodorizer" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="bagsCents" render={({ field }) => (
+                <FormField control={form.control} name="bagsDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Bags (cents)</FormLabel>
-                    <FormControl><Input type="number" {...field} data-testid="input-bags" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Bags ($)" info="Cost of waste bags used per visit." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-bags" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -481,42 +655,54 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <FormField control={form.control} name="targetProfitMarginPct" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Target Profit Margin (%)</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Target Profit Margin (%)" info="The percentage of each dollar collected that you want to keep as profit. 30% means for every $100 you charge, $30 is profit after covering all costs." />
+                    </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-target-margin" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="premiumMarginPct" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Premium Margin (%)</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Premium Margin (%)" info="A higher profit margin used for the 'Premium' price tier. This gives you a ceiling price for customers willing to pay more for premium service." />
+                    </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-premium-margin" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="localMarketAverageWeeklyPriceCents" render={({ field }) => (
+                <FormField control={form.control} name="localMarketAverageWeeklyDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Local Market Avg Weekly (cents)</FormLabel>
-                    <FormControl><Input type="number" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value === "" ? null : Number(e.target.value))} data-testid="input-market-avg" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Local Market Avg Weekly ($)" info="What competitors in your area typically charge per week. If set, the calculator will keep recommendations within a reasonable range of this number so you stay competitive. Leave blank to skip this check." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value === "" ? null : Number(e.target.value))} data-testid="input-market-avg" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="marketAnchorTolerancePct" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Market Anchor Tolerance (%)</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Market Tolerance (%)" info="How far above or below the local market average your recommended price is allowed to go. For example, 35% means your price can be up to 35% higher or lower than the market average." />
+                    </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-market-tolerance" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="clusterDiscountPct" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cluster Discount (%)</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Cluster Discount (%)" info="A discount applied when a customer is very close to another stop on the route (within about 250 feet). Since you're already in the neighborhood, you can offer a small discount." />
+                    </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-cluster-discount" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="clusterDiscountPct2" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cluster Discount Tier 2 (%)</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Neighbor Discount (%)" info="A larger discount for customers that are extremely close to another stop (within about 100 feet), like next-door neighbors. Since travel time is almost zero, you can pass more savings along." />
+                    </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-cluster-discount-2" /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -542,13 +728,18 @@ function CalculatorPanel() {
       serviceFrequency: "weekly",
       yardDifficulty: "flat",
       distanceFromNearestStopMiles: 1,
-      currentPriceCents: undefined,
+      currentPriceDollars: undefined,
     },
   });
 
   const calculateMutation = useMutation({
     mutationFn: async (data: CalculatorInputValues) => {
-      const res = await apiRequest("POST", "/api/pricing/calculate", data);
+      const payload = {
+        ...data,
+        currentPriceCents: data.currentPriceDollars !== undefined ? dollarsToCents(data.currentPriceDollars) : undefined,
+      };
+      const { currentPriceDollars, ...rest } = payload as any;
+      const res = await apiRequest("POST", "/api/pricing/calculate", rest);
       return res.json();
     },
     onSuccess: (data: CalculatorResult) => {
@@ -574,21 +765,27 @@ function CalculatorPanel() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <FormField control={form.control} name="yardSizeAcres" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Yard Size (acres)</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Yard Size (acres)" info="The size of the yard in acres. 1/10 of an acre (0.1) is a typical small residential yard, about 4,350 sq ft. If you know the square footage, divide by 43,560 to get acres." />
+                    </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-calc-yard-size" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="dogCount" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Number of Dogs</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Number of Dogs" info="How many dogs are at this property. More dogs means more waste and more time on each visit." />
+                    </FormLabel>
                     <FormControl><Input type="number" min="1" {...field} data-testid="input-calc-dog-count" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="serviceFrequency" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Service Frequency</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Service Frequency" info="How often the yard gets cleaned. Less frequent visits mean more buildup and longer service times per visit." />
+                    </FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-calc-frequency"><SelectValue /></SelectTrigger>
@@ -605,7 +802,9 @@ function CalculatorPanel() {
                 )} />
                 <FormField control={form.control} name="yardDifficulty" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Yard Difficulty</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Yard Difficulty" info="How hard is this yard to service? Flat yards are quickest. Moderate yards have some hills or obstacles. Difficult yards have steep terrain, heavy landscaping, or tricky access." />
+                    </FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-calc-difficulty"><SelectValue /></SelectTrigger>
@@ -621,15 +820,19 @@ function CalculatorPanel() {
                 )} />
                 <FormField control={form.control} name="distanceFromNearestStopMiles" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Distance from Nearest Stop (mi)</FormLabel>
+                    <FormLabel>
+                      <LabelWithInfo label="Distance from Nearest Stop (mi)" info="How far this property is from the closest other stop on the route. Closer stops cost less in travel time and gas. Enter 0 if it's right next to another customer." />
+                    </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-calc-distance" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="currentPriceCents" render={({ field }) => (
+                <FormField control={form.control} name="currentPriceDollars" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Current Price (cents, optional)</FormLabel>
-                    <FormControl><Input type="number" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))} data-testid="input-calc-current-price" /></FormControl>
+                    <FormLabel>
+                      <LabelWithInfo label="Current Price ($, optional)" info="If this customer already has a price, enter it here. The calculator will tell you if that price is profitable or if you're losing money on this stop." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))} data-testid="input-calc-current-price" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -656,7 +859,7 @@ function ResultsDisplay({ result }: { result: CalculatorResult }) {
   const costBreakdownItems = [
     { label: "Labor", value: breakdown.laborCostCents, icon: DollarSign },
     { label: "Travel (adjusted)", value: breakdown.adjustedTravelCostCents, icon: Truck },
-    { label: "Equipment", value: breakdown.equipmentCostCents, icon: Wrench },
+    { label: "Supplies", value: breakdown.equipmentCostCents, icon: Wrench },
     { label: "Overhead", value: breakdown.overheadPerVisitCents, icon: Building2 },
   ];
 
@@ -666,21 +869,21 @@ function ResultsDisplay({ result }: { result: CalculatorResult }) {
         <Card className="border-destructive/30">
           <CardContent className="p-4 text-center">
             <p className="text-sm text-muted-foreground mb-1">Minimum (Break-Even)</p>
-            <p className="text-3xl font-bold text-destructive" data-testid="text-price-minimum">{formatCents(result.minimumPriceCents)}</p>
+            <p className="text-3xl font-bold text-destructive" data-testid="text-price-minimum">{formatDollars(result.minimumPriceCents)}</p>
             <p className="text-xs text-muted-foreground mt-1">per visit</p>
           </CardContent>
         </Card>
         <Card className="border-primary/50 ring-2 ring-primary/20">
           <CardContent className="p-4 text-center">
             <p className="text-sm text-muted-foreground mb-1">Recommended</p>
-            <p className="text-3xl font-bold text-primary" data-testid="text-price-recommended">{formatCents(result.recommendedPriceCents)}</p>
+            <p className="text-3xl font-bold text-primary" data-testid="text-price-recommended">{formatDollars(result.recommendedPriceCents)}</p>
             <p className="text-xs text-muted-foreground mt-1">per visit</p>
           </CardContent>
         </Card>
         <Card className="border-chart-4/30">
           <CardContent className="p-4 text-center">
             <p className="text-sm text-muted-foreground mb-1">Premium</p>
-            <p className="text-3xl font-bold" style={{ color: "hsl(var(--chart-4))" }} data-testid="text-price-premium">{formatCents(result.premiumPriceCents)}</p>
+            <p className="text-3xl font-bold" style={{ color: "hsl(var(--chart-4))" }} data-testid="text-price-premium">{formatDollars(result.premiumPriceCents)}</p>
             <p className="text-xs text-muted-foreground mt-1">per visit</p>
           </CardContent>
         </Card>
@@ -714,9 +917,9 @@ function ResultsDisplay({ result }: { result: CalculatorResult }) {
       {result.profitWarning && result.profitWarning.lossPerVisitCents > 0 && (
         <Alert variant="destructive" data-testid="alert-profit-warning">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Profit Warning</AlertTitle>
+          <AlertTitle>Losing Money</AlertTitle>
           <AlertDescription>
-            {result.profitWarning.message} ({formatCents(result.profitWarning.profitPerHourCents)}/hr)
+            You are losing approximately {formatDollars(result.profitWarning.lossPerVisitCents)} on every visit at the current price. Your hourly rate at this price: {formatDollars(result.profitWarning.profitPerHourCents)}/hr.
           </AlertDescription>
         </Alert>
       )}
@@ -724,16 +927,16 @@ function ResultsDisplay({ result }: { result: CalculatorResult }) {
       {result.profitWarning && result.profitWarning.lossPerVisitCents === 0 && (
         <Alert data-testid="alert-profit-info">
           <TrendingUp className="h-4 w-4" />
-          <AlertTitle>Profit Info</AlertTitle>
+          <AlertTitle>Profitable</AlertTitle>
           <AlertDescription>
-            {result.profitWarning.message} ({formatCents(result.profitWarning.profitPerHourCents)}/hr)
+            Earning {formatDollars(result.profitWarning.profitPerVisitCents)} profit per visit ({formatDollars(result.profitWarning.profitPerHourCents)}/hr).
           </AlertDescription>
         </Alert>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Cost Breakdown</CardTitle>
+          <CardTitle className="text-base">Cost Breakdown per Visit</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
@@ -744,13 +947,13 @@ function ResultsDisplay({ result }: { result: CalculatorResult }) {
                   <span className="text-sm">{item.label}</span>
                 </div>
                 <span className="text-sm font-medium" data-testid={`text-cost-${item.label.toLowerCase().replace(/[^a-z]/g, "-")}`}>
-                  {formatCents(item.value)}
+                  {formatDollars(item.value)}
                 </span>
               </div>
             ))}
             <div className="border-t pt-2 flex items-center justify-between gap-2">
               <span className="text-sm font-semibold">Total Cost per Visit</span>
-              <span className="text-sm font-bold" data-testid="text-total-cost">{formatCents(totalCost)}</span>
+              <span className="text-sm font-bold" data-testid="text-total-cost">{formatDollars(totalCost)}</span>
             </div>
           </div>
         </CardContent>
@@ -769,55 +972,55 @@ function ResultsDisplay({ result }: { result: CalculatorResult }) {
               <div>
                 <p className="font-medium mb-1">Service Time</p>
                 <p className="text-muted-foreground">
-                  Base service time: {formatMinutes(breakdown.serviceMinutes)} (includes frequency and difficulty multipliers)
+                  {formatMinutes(breakdown.serviceMinutes)} on-site (includes adjustments for how often you visit and yard difficulty)
                 </p>
               </div>
               <div>
                 <p className="font-medium mb-1">Travel Time</p>
                 <p className="text-muted-foreground">
-                  Raw travel: {formatMinutes(breakdown.travelMinutes)} | Adjusted (density {breakdown.densityMultiplier.toFixed(2)}x): {formatMinutes(breakdown.adjustedTravelMinutes)}
+                  {formatMinutes(breakdown.travelMinutes)} drive time | Adjusted for route density ({breakdown.densityMultiplier.toFixed(2)}x): {formatMinutes(breakdown.adjustedTravelMinutes)}
                 </p>
               </div>
               <div>
-                <p className="font-medium mb-1">Total Job Time</p>
+                <p className="font-medium mb-1">Total Time per Visit</p>
                 <p className="text-muted-foreground">
-                  {formatMinutes(derived.jobMinutes)} (service + adjusted travel)
+                  {formatMinutes(derived.jobMinutes)} (service + travel)
                 </p>
               </div>
               <div>
                 <p className="font-medium mb-1">Labor Cost</p>
                 <p className="text-muted-foreground">
-                  {formatCents(breakdown.laborCostCents)} = ({formatMinutes(derived.jobMinutes)} / 60) x fully burdened hourly rate
+                  {formatDollars(breakdown.laborCostCents)} = {formatMinutes(derived.jobMinutes)} of work at the fully loaded hourly rate
                 </p>
               </div>
               <div>
                 <p className="font-medium mb-1">Travel Cost</p>
                 <p className="text-muted-foreground">
-                  Raw: {formatCents(breakdown.travelCostCents)} | Adjusted: {formatCents(breakdown.adjustedTravelCostCents)}
+                  Vehicle cost: {formatDollars(breakdown.travelCostCents)} | After route density adjustment: {formatDollars(breakdown.adjustedTravelCostCents)}
                 </p>
               </div>
               <div>
-                <p className="font-medium mb-1">Equipment</p>
+                <p className="font-medium mb-1">Supplies</p>
                 <p className="text-muted-foreground">
-                  {formatCents(breakdown.equipmentCostCents)} (disinfectant + deodorizer + bags)
+                  {formatDollars(breakdown.equipmentCostCents)} (disinfectant + deodorizer + bags)
                 </p>
               </div>
               <div>
-                <p className="font-medium mb-1">Overhead</p>
+                <p className="font-medium mb-1">Overhead Share</p>
                 <p className="text-muted-foreground">
-                  {formatCents(breakdown.overheadPerVisitCents)} (monthly overhead / estimated monthly stops)
+                  {formatDollars(breakdown.overheadPerVisitCents)} (your monthly expenses divided across all your stops)
                 </p>
               </div>
               <div>
-                <p className="font-medium mb-1">Pricing Formula</p>
+                <p className="font-medium mb-1">How Prices Are Set</p>
                 <p className="text-muted-foreground">
-                  Minimum = Total Cost | Recommended = Cost / (1 - margin%) | Premium = Cost / (1 - premium%)
+                  Minimum = your total cost (break-even, no profit). Recommended = cost plus your target profit margin. Premium = cost plus a higher margin for premium-tier pricing.
                 </p>
               </div>
               <div>
-                <p className="font-medium mb-1">Profit at Recommended</p>
+                <p className="font-medium mb-1">Profit at Recommended Price</p>
                 <p className="text-muted-foreground">
-                  {formatCents(derived.profitAtRecommendedCents)}/visit | {formatCents(derived.profitPerHourAtRecommendedCents)}/hr
+                  {formatDollars(derived.profitAtRecommendedCents)} per visit | {formatDollars(derived.profitPerHourAtRecommendedCents)} per hour
                 </p>
               </div>
             </div>
@@ -849,7 +1052,7 @@ export default function PricingCalculator() {
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-pricing-calculator-heading">Price Calculator</h1>
-        <p className="text-sm text-muted-foreground">Configure cost inputs and calculate recommended pricing per property</p>
+        <p className="text-sm text-muted-foreground">Figure out what to charge for each property based on your real costs</p>
       </div>
 
       <Tabs defaultValue="calculator">
@@ -860,7 +1063,7 @@ export default function PricingCalculator() {
           </TabsTrigger>
           <TabsTrigger value="settings" data-testid="tab-settings">
             <SlidersHorizontal className="mr-1 h-4 w-4" />
-            Tenant Settings
+            Settings
           </TabsTrigger>
         </TabsList>
         <TabsContent value="calculator" className="mt-4">
