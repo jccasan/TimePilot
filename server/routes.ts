@@ -3325,6 +3325,47 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ AI Pricing Optimizer ================
+
+  const aiPricingRateLimits = new Map<string, number>();
+
+  app.post("/api/ai-pricing/analyze", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const lastRun = aiPricingRateLimits.get(companyId);
+      if (lastRun && Date.now() - lastRun < 5 * 60 * 1000) {
+        const { generateAIPricingAnalysis } = await import("./services/ai-pricing-optimizer");
+        const cached = await generateAIPricingAnalysis(companyId);
+        return res.json(cached);
+      }
+      aiPricingRateLimits.set(companyId, Date.now());
+      const { generateAIPricingAnalysis, clearAnalysisCache } = await import("./services/ai-pricing-optimizer");
+      clearAnalysisCache(companyId);
+      const analysis = await generateAIPricingAnalysis(companyId);
+      res.json(analysis);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/ai-pricing/analyze-property/:propertyId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { propertyId } = req.params;
+      const { generatePropertyAnalysis } = await import("./services/ai-pricing-optimizer");
+      const analysis = await generatePropertyAnalysis(companyId, propertyId);
+      if (!analysis) return res.status(404).json({ message: "Property not found in analysis" });
+      res.json(analysis);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/ai-pricing/latest", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { generateAIPricingAnalysis } = await import("./services/ai-pricing-optimizer");
+      const analysis = await generateAIPricingAnalysis(companyId);
+      res.json(analysis);
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Messages / Communications ================
 
   app.get("/api/messages", isAuthenticated, async (req: Request, res: Response) => {
