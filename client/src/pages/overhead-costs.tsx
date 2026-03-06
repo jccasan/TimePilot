@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -162,38 +162,40 @@ function CostItemRow({
   onDelete: (id: string) => void;
   isPending: boolean;
 }) {
-  const [editValue, setEditValue] = useState(
-    (item.monthlyCostCents / 100).toFixed(2)
-  );
-  const [isEditing, setIsEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const lastSavedCents = useRef(item.monthlyCostCents);
 
   useEffect(() => {
-    if (!isEditing) {
-      setEditValue((item.monthlyCostCents / 100).toFixed(2));
+    if (inputRef.current && document.activeElement !== inputRef.current) {
+      inputRef.current.value = (item.monthlyCostCents / 100).toFixed(2);
+      lastSavedCents.current = item.monthlyCostCents;
     }
-  }, [item.monthlyCostCents, isEditing]);
+  }, [item.monthlyCostCents]);
 
-  const handleBlur = () => {
-    setIsEditing(false);
-    const parsed = parseFloat(editValue);
+  const handleBlur = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const parsed = parseFloat(el.value);
     if (!isNaN(parsed) && parsed >= 0) {
       const cents = Math.round(parsed * 100);
-      if (cents !== item.monthlyCostCents) {
+      if (cents !== lastSavedCents.current) {
+        lastSavedCents.current = cents;
         onUpdateCost(item.id, cents);
       }
     } else {
-      setEditValue((item.monthlyCostCents / 100).toFixed(2));
+      el.value = (lastSavedCents.current / 100).toFixed(2);
     }
-  };
+  }, [item.id, onUpdateCost]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       (e.target as HTMLInputElement).blur();
     } else if (e.key === "Escape") {
-      setEditValue((item.monthlyCostCents / 100).toFixed(2));
-      setIsEditing(false);
+      const el = inputRef.current;
+      if (el) el.value = (lastSavedCents.current / 100).toFixed(2);
+      (e.target as HTMLInputElement).blur();
     }
-  };
+  }, []);
 
   const isScoopilotSub = item.name === "ScooPilot subscription" && item.isDefault;
 
@@ -224,20 +226,16 @@ function CostItemRow({
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
         <span className="text-xs text-muted-foreground">$</span>
-        <Input
+        <input
+          ref={inputRef}
           type="number"
           min="0"
           step="0.01"
-          value={isEditing ? editValue : (item.monthlyCostCents / 100).toFixed(2)}
-          onChange={(e) => {
-            setEditValue(e.target.value);
-            setIsEditing(true);
-          }}
-          onFocus={() => setIsEditing(true)}
+          defaultValue={(item.monthlyCostCents / 100).toFixed(2)}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           disabled={isPending}
-          className="w-24 h-7 text-sm text-right tabular-nums"
+          className="w-24 h-7 text-sm text-right tabular-nums rounded-md border border-input bg-background px-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           data-testid={`input-cost-${item.id}`}
         />
         <span className="text-xs text-muted-foreground">/mo</span>
@@ -282,7 +280,26 @@ export default function OverheadCosts() {
   const updateMutation = useMutation({
     mutationFn: ({ id, monthlyCostCents }: { id: string; monthlyCostCents: number }) =>
       apiRequest("PATCH", `/api/overhead-costs/${id}`, { monthlyCostCents }),
-    onSuccess: () => {
+    onMutate: async ({ id, monthlyCostCents }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/overhead-costs"] });
+      const previous = queryClient.getQueryData<OverheadData>(["/api/overhead-costs"]);
+      if (previous) {
+        const updatedItems = previous.items.map((i) =>
+          i.id === id ? { ...i, monthlyCostCents } : i
+        );
+        queryClient.setQueryData<OverheadData>(["/api/overhead-costs"], {
+          items: updatedItems,
+          totalMonthlyOverheadCents: updatedItems.reduce((s, i) => s + i.monthlyCostCents, 0),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["/api/overhead-costs"], context.previous);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs"] });
     },
   });
@@ -383,7 +400,7 @@ export default function OverheadCosts() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto" data-testid="page-overhead-costs">
+    <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto h-full overflow-y-auto" data-testid="page-overhead-costs">
       <div className="flex items-center gap-2">
         <DollarSign className="h-5 w-5 text-primary" />
         <h1 className="text-lg font-semibold" data-testid="text-page-title">
