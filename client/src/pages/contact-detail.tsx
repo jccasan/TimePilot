@@ -527,7 +527,7 @@ export default function ContactDetail() {
                     address={`${prop.streetAddress}, ${prop.city}, ${prop.state} ${prop.zipCode}`}
                     lat={prop.latitude ? Number(prop.latitude) : undefined}
                     lng={prop.longitude ? Number(prop.longitude) : undefined}
-                    className="rounded-none border-0 border-b h-[180px]"
+                    className="rounded-none border-0 border-b h-[120px]"
                     size="600x300"
                   />
                   <div className="p-3 flex items-start justify-between gap-2">

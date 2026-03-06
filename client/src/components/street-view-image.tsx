@@ -65,7 +65,7 @@ export function StreetViewImage({ address, lat, lng, className = "", size, click
       <img
         src={imgUrl}
         alt={`Street view of ${address || "property"}`}
-        className={`w-full h-full object-cover transition-opacity duration-300 ${loading ? "opacity-0" : "opacity-100"}`}
+        className={`w-full h-full object-contain transition-opacity duration-300 ${loading ? "opacity-0" : "opacity-100"}`}
         loading="lazy"
         onLoad={() => setLoading(false)}
         onError={() => { setLoading(false); setError(true); }}
