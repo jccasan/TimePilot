@@ -54,10 +54,15 @@ const menuSections = [
     ],
   },
   {
+    label: "Business",
+    items: [
+      { title: "Price Calculator", url: "/pricing-calculator", icon: Calculator },
+    ],
+  },
+  {
     label: "Billing",
     items: [
       { title: "Pricing", url: "/pricing", icon: DollarSign },
-      { title: "Price Calculator", url: "/pricing-calculator", icon: Calculator },
       { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Scoopilot Subscription", url: "/billing", icon: CreditCard },
     ],
