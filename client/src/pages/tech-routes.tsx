@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin, Dog, Phone, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { StreetViewImage } from "@/components/street-view-image";
 import { Link } from "wouter";
 
 const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -81,6 +82,13 @@ function ContactRow({ contact, visitStatus, onStatusChange, isUpdating }: {
 
         {expanded && (
           <div className="space-y-3 pt-2 border-t">
+            {contact.streetAddress && (
+              <StreetViewImage
+                address={`${contact.streetAddress}${contact.city ? `, ${contact.city}` : ""}${contact.state ? `, ${contact.state}` : ""}`}
+                className="h-[120px]"
+                size="400x200"
+              />
+            )}
             <div className="grid grid-cols-2 gap-2 text-xs">
               {contact.numberOfDogs != null && contact.numberOfDogs > 0 && (
                 <div className="flex items-center gap-1 text-muted-foreground">

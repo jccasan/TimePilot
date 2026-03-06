@@ -253,6 +253,49 @@ export async function registerRoutes(
     res.json({ token });
   });
 
+  app.get("/api/streetview", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) return res.status(503).json({ error: "Street View not configured" });
+
+      const { address, lat, lng, size, fov } = req.query;
+      if (!address && !(lat && lng)) {
+        return res.status(400).json({ error: "address or lat+lng required" });
+      }
+
+      const allowedSizes = ["400x200", "400x250", "600x300", "640x400"];
+      const safeSize = allowedSizes.includes(size as string) ? (size as string) : "600x300";
+      const safeFov = Math.min(120, Math.max(20, parseInt(fov as string) || 90));
+
+      const params = new URLSearchParams({
+        size: safeSize,
+        fov: String(safeFov),
+        key: apiKey,
+      });
+
+      if (lat && lng) {
+        params.set("location", `${lat},${lng}`);
+      } else {
+        params.set("location", address as string);
+      }
+
+      const url = `https://maps.googleapis.com/maps/api/streetview?${params.toString()}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        return res.status(response.status).json({ error: "Street View request failed" });
+      }
+
+      res.set("Content-Type", response.headers.get("content-type") || "image/jpeg");
+      res.set("Cache-Control", "public, max-age=604800");
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.send(buffer);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // ================ Auth Routes ================
 
   app.post("/api/auth/register", async (req: Request, res: Response) => {

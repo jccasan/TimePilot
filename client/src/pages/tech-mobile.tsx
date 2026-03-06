@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2 } from "lucide-react";
+import { StreetViewImage } from "@/components/street-view-image";
 
 type TodayVisit = {
   id: string;
@@ -214,6 +215,13 @@ export default function TechMobile() {
                 </CardHeader>
                 {isExpanded && (
                   <CardContent className="p-4 pt-0 space-y-3">
+                    {visit.property && (
+                      <StreetViewImage
+                        address={`${visit.property.streetAddress}, ${visit.property.city}, ${visit.property.state}`}
+                        className="h-[150px]"
+                        size="600x300"
+                      />
+                    )}
                     {visit.property?.gateCode && (
                       <div>
                         <p className="text-xs font-medium text-muted-foreground">Gate Code</p>

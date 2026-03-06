@@ -70,4 +70,5 @@ Scoopilot is a full-stack, multi-tenant SaaS application emphasizing role-based 
 - **Twilio**: SMS messaging service.
 - **Stripe**: Payment gateway for processing payments and managing customer data.
 - **Mapbox**: Directions API, Geocoding API, and GL JS for mapping and routing functionalities.
+- **Google Maps**: Street View Static API for property images on contact detail and technician views. Proxied via `GET /api/streetview` endpoint using `GOOGLE_MAPS_API_KEY`.
 - **OpenAI**: Used for AI-assisted import wizard functionalities via Replit AI Integrations.

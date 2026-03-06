@@ -49,6 +49,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn } from "lucide-react";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { StreetViewImage } from "@/components/street-view-image";
 
 const statusColors: Record<string, string> = {
   lead: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -508,10 +509,19 @@ export default function ContactDetail() {
           {properties && properties.length > 0 ? (
             <div className="space-y-2">
               {properties.map((prop) => (
-                <div key={prop.id} className="border rounded-md p-3" data-testid={`text-property-${prop.id}`}>
-                  <p className="font-medium">{prop.streetAddress}</p>
-                  <p className="text-sm text-muted-foreground">{prop.city}, {prop.state} {prop.zipCode}</p>
-                  {prop.gateCode && <p className="text-sm text-muted-foreground">Gate: {prop.gateCode}</p>}
+                <div key={prop.id} className="border rounded-md overflow-hidden" data-testid={`text-property-${prop.id}`}>
+                  <StreetViewImage
+                    address={`${prop.streetAddress}, ${prop.city}, ${prop.state} ${prop.zipCode}`}
+                    lat={prop.latitude ? Number(prop.latitude) : undefined}
+                    lng={prop.longitude ? Number(prop.longitude) : undefined}
+                    className="rounded-none border-0 border-b h-[180px]"
+                    size="600x300"
+                  />
+                  <div className="p-3">
+                    <p className="font-medium">{prop.streetAddress}</p>
+                    <p className="text-sm text-muted-foreground">{prop.city}, {prop.state} {prop.zipCode}</p>
+                    {prop.gateCode && <p className="text-sm text-muted-foreground">Gate: {prop.gateCode}</p>}
+                  </div>
                 </div>
               ))}
             </div>
