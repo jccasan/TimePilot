@@ -81,6 +81,12 @@ export default function ProfitabilityMap({
       const mapboxgl = (await import("mapbox-gl")).default;
       if (cancelled) return;
 
+      try {
+        const workerModule = await import("mapbox-gl/dist/mapbox-gl-csp-worker?worker");
+        (mapboxgl as any).workerClass = workerModule.default;
+      } catch {
+      }
+
       mapboxglRef.current = mapboxgl;
       mapboxgl.accessToken = tokenData.token;
 
@@ -101,12 +107,42 @@ export default function ProfitabilityMap({
 
       map.on("load", () => {
         if (cancelled) return;
+        map.resize();
         setMapLoaded(true);
       });
+
+      map.on("style.load", () => {
+        if (cancelled) return;
+        map.resize();
+      });
+
+      setTimeout(() => {
+        if (!cancelled && map) {
+          map.resize();
+        }
+      }, 200);
+
+      setTimeout(() => {
+        if (!cancelled && map) {
+          map.resize();
+        }
+      }, 1000);
     })();
+
+    const container = mapContainerRef.current;
+    let resizeObserver: ResizeObserver | null = null;
+    if (container) {
+      resizeObserver = new ResizeObserver(() => {
+        if (mapRef.current && !cancelled) {
+          mapRef.current.resize();
+        }
+      });
+      resizeObserver.observe(container);
+    }
 
     return () => {
       cancelled = true;
+      if (resizeObserver) resizeObserver.disconnect();
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
       if (mapRef.current) {
@@ -346,7 +382,7 @@ export default function ProfitabilityMap({
           <Skeleton className="w-full h-full" />
         </div>
       )}
-      <div ref={mapContainerRef} className="w-full h-full" data-testid="profitability-map-canvas" />
+      <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: "400px" }} data-testid="profitability-map-canvas" />
     </div>
   );
 }
