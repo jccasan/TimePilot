@@ -46,9 +46,11 @@ import {
   type PricingConfig,
   type ProfitabilitySnapshot, type InsertProfitabilitySnapshot,
   type OverheadCost, type InsertOverheadCost,
+  type CompetitorPricing, type InsertCompetitorPricing,
   priceRecommendations,
   profitabilitySnapshots,
   overheadCosts,
+  competitorPricing,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -304,6 +306,12 @@ export interface IStorage {
   updateOverheadCost(id: string, companyId: string, data: Partial<InsertOverheadCost>): Promise<OverheadCost>;
   deleteOverheadCost(id: string, companyId: string): Promise<void>;
   getTotalMonthlyOverheadCents(companyId: string): Promise<number>;
+
+  // Competitor Pricing
+  getCompetitorPricing(companyId: string, zipCode?: string): Promise<CompetitorPricing[]>;
+  createCompetitorPricing(data: InsertCompetitorPricing): Promise<CompetitorPricing>;
+  updateCompetitorPricing(id: string, companyId: string, data: Partial<InsertCompetitorPricing>): Promise<CompetitorPricing>;
+  deleteCompetitorPricing(id: string, companyId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1633,6 +1641,33 @@ export class DatabaseStorage implements IStorage {
       .from(overheadCosts)
       .where(eq(overheadCosts.companyId, companyId));
     return Number(result[0]?.total ?? 0);
+  }
+
+  // ================ Competitor Pricing ================
+  async getCompetitorPricing(companyId: string, zipCode?: string): Promise<CompetitorPricing[]> {
+    const conditions = [eq(competitorPricing.companyId, companyId)];
+    if (zipCode) conditions.push(eq(competitorPricing.zipCode, zipCode));
+    return db.select().from(competitorPricing)
+      .where(and(...conditions))
+      .orderBy(asc(competitorPricing.zipCode), asc(competitorPricing.competitorName));
+  }
+
+  async createCompetitorPricing(data: InsertCompetitorPricing): Promise<CompetitorPricing> {
+    const [item] = await db.insert(competitorPricing).values(data).returning();
+    return item;
+  }
+
+  async updateCompetitorPricing(id: string, companyId: string, data: Partial<InsertCompetitorPricing>): Promise<CompetitorPricing> {
+    const [item] = await db.update(competitorPricing)
+      .set(data)
+      .where(and(eq(competitorPricing.id, id), eq(competitorPricing.companyId, companyId)))
+      .returning();
+    return item;
+  }
+
+  async deleteCompetitorPricing(id: string, companyId: string): Promise<void> {
+    await db.delete(competitorPricing)
+      .where(and(eq(competitorPricing.id, id), eq(competitorPricing.companyId, companyId)));
   }
 }
 

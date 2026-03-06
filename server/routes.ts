@@ -3325,44 +3325,115 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
-  // ================ AI Pricing Optimizer ================
+  // ================ Pricing Simulator ================
 
-  const aiPricingRateLimits = new Map<string, number>();
-
-  app.post("/api/ai-pricing/analyze", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/pricing-simulator/simulate", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const lastRun = aiPricingRateLimits.get(companyId);
-      if (lastRun && Date.now() - lastRun < 5 * 60 * 1000) {
-        const { generateAIPricingAnalysis } = await import("./services/ai-pricing-optimizer");
-        const cached = await generateAIPricingAnalysis(companyId);
-        return res.json(cached);
-      }
-      aiPricingRateLimits.set(companyId, Date.now());
-      const { generateAIPricingAnalysis, clearAnalysisCache } = await import("./services/ai-pricing-optimizer");
-      clearAnalysisCache(companyId);
-      const analysis = await generateAIPricingAnalysis(companyId);
-      res.json(analysis);
+      const schema = z.object({
+        targetMarginPct: z.number().min(1).max(80),
+        overheadAdjustmentPct: z.number().min(-50).max(100),
+        laborRateAdjustmentPct: z.number().min(-50).max(100),
+        travelCostFactor: z.number().min(0.1).max(5),
+      });
+      const params = schema.parse(req.body);
+      const { runPricingSimulation } = await import("./services/pricing-simulator");
+      const result = await runPricingSimulation(companyId, params);
+      res.json(result);
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/ai-pricing/analyze-property/:propertyId", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/pricing-simulator/elasticity", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { propertyId } = req.params;
-      const { generatePropertyAnalysis } = await import("./services/ai-pricing-optimizer");
-      const analysis = await generatePropertyAnalysis(companyId, propertyId);
-      if (!analysis) return res.status(404).json({ message: "Property not found in analysis" });
-      res.json(analysis);
+      const schema = z.object({
+        propertyId: z.string().optional(),
+      });
+      const { propertyId } = schema.parse(req.body);
+      const { runPriceElasticitySimulation } = await import("./services/pricing-simulator");
+      const result = await runPriceElasticitySimulation(companyId, propertyId || undefined);
+      res.json(result);
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/ai-pricing/latest", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/pricing-simulator/competitor-analysis", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { generateAIPricingAnalysis } = await import("./services/ai-pricing-optimizer");
-      const analysis = await generateAIPricingAnalysis(companyId);
-      res.json(analysis);
+      const schema = z.object({
+        zipCode: z.string().optional(),
+      });
+      const { zipCode } = schema.parse(req.body);
+      const { runCompetitorAnalysis } = await import("./services/pricing-simulator");
+      const result = await runCompetitorAnalysis(companyId, zipCode || undefined);
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/pricing-simulator/zip-codes", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const props = await storage.getProperties(companyId);
+      const zipSet = new Set(props.map(p => p.zipCode).filter(Boolean));
+      res.json([...zipSet].sort());
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Competitor Pricing ================
+
+  app.get("/api/competitor-pricing", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const zipCode = req.query.zipCode as string | undefined;
+      const items = await storage.getCompetitorPricing(companyId, zipCode);
+      res.json(items);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/competitor-pricing", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const schema = z.object({
+        zipCode: z.string().min(1),
+        competitorName: z.string().min(1),
+        frequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
+        priceCents: z.number().int().min(0),
+        dogCountRange: z.string().optional().default("1-2"),
+        yardSizeCategory: z.string().optional().default("medium"),
+        source: z.enum(["manual", "research"]).optional().default("manual"),
+        notes: z.string().optional(),
+      });
+      const data = schema.parse(req.body);
+      const item = await storage.createCompetitorPricing({ ...data, companyId });
+      res.json(item);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/competitor-pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { id } = req.params;
+      const schema = z.object({
+        zipCode: z.string().min(1).optional(),
+        competitorName: z.string().min(1).optional(),
+        frequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]).optional(),
+        priceCents: z.number().int().min(0).optional(),
+        dogCountRange: z.string().optional(),
+        yardSizeCategory: z.string().optional(),
+        source: z.enum(["manual", "research"]).optional(),
+        notes: z.string().optional(),
+      });
+      const data = schema.parse(req.body);
+      const item = await storage.updateCompetitorPricing(id, companyId, data);
+      res.json(item);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/competitor-pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { id } = req.params;
+      await storage.deleteCompetitorPricing(id, companyId);
+      res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
 

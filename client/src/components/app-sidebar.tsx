@@ -21,7 +21,7 @@ import {
   Building2,
   ArrowRightLeft,
   Map,
-  Brain,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   Sidebar,
@@ -61,7 +61,7 @@ const menuSections = [
       { title: "Price Calculator", url: "/pricing-calculator", icon: Calculator },
       { title: "Customer Profitability", url: "/profitability", icon: TrendingUp },
       { title: "Route Profit Maps", url: "/route-profit-maps", icon: Map },
-      { title: "AI Pricing Optimizer", url: "/ai-pricing-optimizer", icon: Brain },
+      { title: "Pricing Simulator", url: "/ai-pricing-optimizer", icon: SlidersHorizontal },
       { title: "Overhead Costs", url: "/overhead-costs", icon: DollarSign },
     ],
   },

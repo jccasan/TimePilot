@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -7,6 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -23,88 +26,119 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Sparkles,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   TrendingUp,
   TrendingDown,
-  AlertTriangle,
   DollarSign,
-  ChevronDown,
-  ChevronRight,
   Target,
-  ShieldAlert,
-  Zap,
   ArrowUpRight,
   ArrowDownRight,
   Minus,
   Loader2,
-  Brain,
+  SlidersHorizontal,
+  BarChart3,
+  Users,
+  Plus,
+  Trash2,
+  Play,
+  MapPin,
+  Star,
 } from "lucide-react";
 
-type Confidence = "high" | "medium" | "low";
-type ChurnRisk = "low" | "moderate" | "high";
-
-interface AIPropertyRecommendation {
+interface SimulatedProperty {
   propertyId: string;
+  propertyAddress: string;
   contactId: string;
   contactName: string;
-  propertyAddress: string;
-  currentPriceCents: number;
-  aiRecommendedPriceCents: number;
-  calculatorRecommendedPriceCents: number;
-  priceChangeCents: number;
-  priceChangePct: number;
-  currentMarginPct: number;
-  projectedMarginPct: number;
-  costPerVisitCents: number;
-  confidence: Confidence;
-  reasoning: string;
-  monthlyRevenueImpactCents: number;
-  annualRevenueImpactCents: number;
+  zipCode: string;
   frequency: string;
   dogCount: number;
   yardSizeAcres: number;
-  churnRisk: ChurnRisk;
-  churnRiskReason: string;
+  currentPriceCents: number;
+  simulatedPriceCents: number;
+  changeCents: number;
+  changePct: number;
+  currentMarginPct: number;
+  projectedMarginPct: number;
+  currentCostPerVisitCents: number;
+  simulatedCostPerVisitCents: number;
 }
 
-interface AIPricingAnalysis {
-  generatedAt: string;
-  portfolioSummary: {
-    totalProperties: number;
-    underpricedCount: number;
-    overpricedCount: number;
-    fairlyPricedCount: number;
+interface SimulationResult {
+  properties: SimulatedProperty[];
+  summary: {
     totalCurrentMonthlyRevenueCents: number;
-    totalOptimizedMonthlyRevenueCents: number;
-    potentialMonthlyGainCents: number;
-    potentialAnnualGainCents: number;
+    totalSimulatedMonthlyRevenueCents: number;
+    monthlyRevenueDeltaCents: number;
     averageCurrentMarginPct: number;
-    averageOptimizedMarginPct: number;
-    marketPositioningSummary: string;
+    averageSimulatedMarginPct: number;
+    propertiesNeedingIncrease: number;
+    propertiesNeedingDecrease: number;
+    propertiesUnchanged: number;
   };
-  recommendations: AIPropertyRecommendation[];
-  priorityActions: Array<{
-    rank: number;
-    propertyId: string;
-    contactName: string;
-    propertyAddress: string;
-    action: string;
-    revenueImpactCents: number;
-    reason: string;
-  }>;
-  riskFlags: Array<{
-    propertyId: string;
-    contactName: string;
-    propertyAddress: string;
-    riskLevel: "moderate" | "high";
-    reason: string;
-    suggestedApproach: string;
-  }>;
-  overallInsight: string;
-  aiPowered: boolean;
 }
 
-type FilterMode = "all" | "underpriced" | "overpriced" | "fair";
+interface ElasticityPoint {
+  priceChangePct: number;
+  estimatedChurnPct: number;
+  retainedCustomers: number;
+  totalCustomers: number;
+  currentMonthlyRevenueCents: number;
+  adjustedMonthlyRevenueCents: number;
+  netRevenueDeltaCents: number;
+  avgNewPriceCents: number;
+}
+
+interface ElasticityResult {
+  propertyId: string | null;
+  propertyLabel: string;
+  points: ElasticityPoint[];
+  sweetSpotIndex: number;
+}
+
+interface CompetitorEntry {
+  id: string;
+  companyId: string;
+  zipCode: string;
+  competitorName: string;
+  frequency: string;
+  priceCents: number;
+  dogCountRange: string;
+  yardSizeCategory: string;
+  source: string;
+  notes: string | null;
+  createdAt: string;
+}
+
+interface CompetitorAnalysisEntry {
+  zipCode: string;
+  yourAvgPriceCents: number;
+  yourPropertyCount: number;
+  marketAvgPriceCents: number;
+  competitorCount: number;
+  competitors: Array<{
+    name: string;
+    priceCents: number;
+    frequency: string;
+    dogCountRange: string;
+    yardSizeCategory: string;
+  }>;
+  positionPct: number;
+  position: "below_market" | "at_market" | "above_market";
+}
+
+interface CompetitorAnalysisResult {
+  zipCodes: CompetitorAnalysisEntry[];
+  overallPosition: "below_market" | "at_market" | "above_market";
+  overallYourAvgCents: number;
+  overallMarketAvgCents: number;
+}
 
 function formatDollars(cents: number): string {
   const abs = Math.abs(cents);
@@ -112,462 +146,754 @@ function formatDollars(cents: number): string {
   return cents < 0 ? `-${formatted}` : formatted;
 }
 
-function confidenceBadge(confidence: Confidence) {
-  const styles: Record<Confidence, string> = {
-    high: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    low: "bg-gray-100 text-gray-600 dark:bg-gray-800/40 dark:text-gray-400",
-  };
-  return (
-    <Badge variant="outline" className={`text-xs ${styles[confidence]}`}>
-      {confidence.charAt(0).toUpperCase() + confidence.slice(1)}
-    </Badge>
-  );
+function marginColor(pct: number): string {
+  if (pct >= 15) return "text-green-600 dark:text-green-400";
+  if (pct >= 0) return "text-yellow-600 dark:text-yellow-400";
+  return "text-red-600 dark:text-red-400";
 }
 
-function churnBadge(risk: ChurnRisk) {
-  if (risk === "low") return null;
-  const styles: Record<string, string> = {
-    moderate: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    high: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+function positionBadge(position: string) {
+  const map: Record<string, { label: string; className: string }> = {
+    below_market: { label: "Below Market", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+    at_market: { label: "At Market", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+    above_market: { label: "Above Market", className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
   };
-  return (
-    <Badge variant="outline" className={`text-xs ${styles[risk]}`}>
-      {risk === "high" ? "High Risk" : "Moderate Risk"}
-    </Badge>
-  );
+  const info = map[position] || map.at_market;
+  return <Badge variant="outline" className={`text-xs ${info.className}`}>{info.label}</Badge>;
 }
 
 export default function AIPricingOptimizer() {
   const { toast } = useToast();
-  const [, navigate] = useLocation();
-  const [expandedPropertyId, setExpandedPropertyId] = useState<string | null>(null);
-  const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  const [activeTab, setActiveTab] = useState("simulator");
 
-  const { data: analysis, isLoading } = useQuery<AIPricingAnalysis>({
-    queryKey: ["/api/ai-pricing/latest"],
+  const [targetMarginPct, setTargetMarginPct] = useState(30);
+  const [overheadAdjustmentPct, setOverheadAdjustmentPct] = useState(0);
+  const [laborRateAdjustmentPct, setLaborRateAdjustmentPct] = useState(0);
+  const [travelCostFactor, setTravelCostFactor] = useState(1.0);
+  const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null);
+
+  const [elasticityPropertyId, setElasticityPropertyId] = useState<string>("");
+  const [elasticityResult, setElasticityResult] = useState<ElasticityResult | null>(null);
+
+  const [compZipFilter, setCompZipFilter] = useState<string>("all");
+  const [compAnalysisResult, setCompAnalysisResult] = useState<CompetitorAnalysisResult | null>(null);
+  const [addCompDialogOpen, setAddCompDialogOpen] = useState(false);
+  const [newCompName, setNewCompName] = useState("");
+  const [newCompPrice, setNewCompPrice] = useState("");
+  const [newCompZip, setNewCompZip] = useState("");
+  const [newCompFrequency, setNewCompFrequency] = useState("weekly");
+  const [newCompYardSize, setNewCompYardSize] = useState("medium");
+  const [newCompDogRange, setNewCompDogRange] = useState("1-2");
+
+  const { data: zipCodes } = useQuery<string[]>({
+    queryKey: ["/api/pricing-simulator/zip-codes"],
   });
 
-  const analyzeMutation = useMutation({
+  const { data: competitors, isLoading: competitorsLoading } = useQuery<CompetitorEntry[]>({
+    queryKey: ["/api/competitor-pricing"],
+  });
+
+  const simulateMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/ai-pricing/analyze");
+      const res = await apiRequest("POST", "/api/pricing-simulator/simulate", {
+        targetMarginPct,
+        overheadAdjustmentPct,
+        laborRateAdjustmentPct,
+        travelCostFactor,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setSimulationResult(data);
+      toast({ title: "Simulation complete", description: `Analyzed ${data.properties.length} properties.` });
+    },
+    onError: () => {
+      toast({ title: "Simulation failed", variant: "destructive" });
+    },
+  });
+
+  const elasticityMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/pricing-simulator/elasticity", {
+        propertyId: elasticityPropertyId && elasticityPropertyId !== "all" ? elasticityPropertyId : undefined,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setElasticityResult(data);
+    },
+    onError: () => {
+      toast({ title: "Elasticity analysis failed", variant: "destructive" });
+    },
+  });
+
+  const competitorAnalysisMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/pricing-simulator/competitor-analysis", {
+        zipCode: compZipFilter !== "all" ? compZipFilter : undefined,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setCompAnalysisResult(data);
+    },
+    onError: () => {
+      toast({ title: "Competitor analysis failed", variant: "destructive" });
+    },
+  });
+
+  const addCompetitorMutation = useMutation({
+    mutationFn: async () => {
+      const priceCents = Math.round(parseFloat(newCompPrice) * 100);
+      if (isNaN(priceCents) || priceCents <= 0) throw new Error("Invalid price");
+      const res = await apiRequest("POST", "/api/competitor-pricing", {
+        zipCode: newCompZip,
+        competitorName: newCompName,
+        frequency: newCompFrequency,
+        priceCents,
+        dogCountRange: newCompDogRange,
+        yardSizeCategory: newCompYardSize,
+      });
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/ai-pricing/latest"] });
-      toast({ title: "Analysis complete", description: "AI pricing recommendations have been generated." });
+      queryClient.invalidateQueries({ queryKey: ["/api/competitor-pricing"] });
+      setAddCompDialogOpen(false);
+      setNewCompName("");
+      setNewCompPrice("");
+      setNewCompZip("");
+      setNewCompFrequency("weekly");
+      setNewCompYardSize("medium");
+      setNewCompDogRange("1-2");
+      toast({ title: "Competitor added" });
     },
     onError: () => {
-      toast({ title: "Analysis failed", description: "Could not generate pricing analysis. Please try again.", variant: "destructive" });
+      toast({ title: "Failed to add competitor", variant: "destructive" });
     },
   });
 
-  const filteredRecs = (analysis?.recommendations ?? []).filter((r) => {
-    if (filterMode === "underpriced") return r.priceChangeCents > 0;
-    if (filterMode === "overpriced") return r.priceChangeCents < 0;
-    if (filterMode === "fair") return r.priceChangeCents === 0;
-    return true;
+  const deleteCompetitorMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/competitor-pricing/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/competitor-pricing"] });
+      toast({ title: "Competitor removed" });
+    },
   });
 
-  if (isLoading) {
-    return (
-      <div className="p-6 space-y-4" data-testid="loading-ai-pricing">
-        <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)}
-        </div>
-        <Skeleton className="h-64" />
-      </div>
-    );
-  }
-
-  const summary = analysis?.portfolioSummary;
+  const allProperties = simulationResult?.properties ?? [];
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 overflow-auto max-h-[calc(100vh-4rem)]" data-testid="page-ai-pricing-optimizer">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-            <Brain className="h-6 w-6 text-primary" />
-            AI Pricing Optimizer
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {analysis?.aiPowered
-              ? "AI-powered analysis of your pricing portfolio with intelligent recommendations."
-              : "Rule-based analysis of your pricing portfolio. Connect OpenAI for AI-enhanced insights."}
-          </p>
-        </div>
-        <Button
-          onClick={() => analyzeMutation.mutate()}
-          disabled={analyzeMutation.isPending}
-          className="gap-2"
-          data-testid="button-run-analysis"
-        >
-          {analyzeMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4" />
-              Run Analysis
-            </>
-          )}
-        </Button>
+    <div className="p-4 sm:p-6 space-y-6 h-full overflow-y-auto" data-testid="page-ai-pricing-optimizer">
+      <div>
+        <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
+          <SlidersHorizontal className="h-6 w-6 text-primary" />
+          Pricing Simulator
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Adjust variables, simulate pricing scenarios, analyze price elasticity, and compare against competitors.
+        </p>
       </div>
 
-      {analysis?.aiPowered && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="text-ai-badge">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
-          <span>AI-enhanced analysis</span>
-          <span>|</span>
-          <span>Generated {new Date(analysis.generatedAt).toLocaleString()}</span>
-        </div>
-      )}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3" data-testid="tabs-simulator">
+          <TabsTrigger value="simulator" data-testid="tab-simulator" className="gap-1.5">
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Simulator
+          </TabsTrigger>
+          <TabsTrigger value="elasticity" data-testid="tab-elasticity" className="gap-1.5">
+            <BarChart3 className="h-3.5 w-3.5" />
+            Price Elasticity
+          </TabsTrigger>
+          <TabsTrigger value="competitor" data-testid="tab-competitor" className="gap-1.5">
+            <Users className="h-3.5 w-3.5" />
+            Competitor Analysis
+          </TabsTrigger>
+        </TabsList>
 
-      {analysis?.overallInsight && (
-        <Card data-testid="card-overall-insight">
-          <CardContent className="p-4">
-            <p className="text-sm leading-relaxed" data-testid="text-overall-insight">{analysis.overallInsight}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {summary && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card data-testid="card-kpi-potential-gain">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Potential Annual Gain</p>
-                <p className={`text-2xl font-bold ${summary.potentialAnnualGainCents > 0 ? "text-green-600 dark:text-green-400" : ""}`} data-testid="text-kpi-annual-gain">
-                  {formatDollars(summary.potentialAnnualGainCents)}
-                </p>
-                <p className="text-xs text-muted-foreground">{formatDollars(summary.potentialMonthlyGainCents)}/mo</p>
-              </div>
-              <div className="p-2 rounded-md bg-primary/10">
-                <TrendingUp className="h-4 w-4 text-primary" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card data-testid="card-kpi-underpriced">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Underpriced</p>
-                <p className="text-2xl font-bold" data-testid="text-kpi-underpriced">
-                  {summary.underpricedCount}
-                </p>
-                <p className="text-xs text-muted-foreground">of {summary.totalProperties} properties</p>
-              </div>
-              <div className="p-2 rounded-md bg-yellow-100 dark:bg-yellow-900/30">
-                <ArrowUpRight className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card data-testid="card-kpi-margin-current">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Current Avg Margin</p>
-                <p className="text-2xl font-bold" data-testid="text-kpi-current-margin">
-                  {summary.averageCurrentMarginPct.toFixed(1)}%
-                </p>
-                <p className="text-xs text-muted-foreground">across portfolio</p>
-              </div>
-              <div className="p-2 rounded-md bg-primary/10">
-                <Target className="h-4 w-4 text-primary" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card data-testid="card-kpi-margin-optimized">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Optimized Avg Margin</p>
-                <p className={`text-2xl font-bold ${summary.averageOptimizedMarginPct > summary.averageCurrentMarginPct ? "text-green-600 dark:text-green-400" : ""}`} data-testid="text-kpi-optimized-margin">
-                  {summary.averageOptimizedMarginPct.toFixed(1)}%
-                </p>
-                <p className="text-xs text-muted-foreground">after optimization</p>
-              </div>
-              <div className="p-2 rounded-md bg-green-100 dark:bg-green-900/30">
-                <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {(analysis?.priorityActions?.length ?? 0) > 0 && (
-        <Card data-testid="card-priority-actions">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Zap className="h-4 w-4 text-primary" />
-              Top Priority Actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {analysis!.priorityActions.map((action) => (
-              <div
-                key={`${action.propertyId}-${action.rank}`}
-                className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30"
-                data-testid={`card-priority-action-${action.rank}`}
-              >
-                <div className="flex items-center justify-center h-7 w-7 rounded-full bg-primary text-primary-foreground text-sm font-bold shrink-0">
-                  {action.rank}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm" data-testid={`text-priority-customer-${action.rank}`}>{action.contactName}</span>
-                    <span className="text-xs text-muted-foreground truncate">{action.propertyAddress}</span>
+        {/* ========== TAB 1: PRICING SIMULATOR ========== */}
+        <TabsContent value="simulator" className="space-y-4 mt-4">
+          <Card data-testid="card-simulator-controls">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Simulation Variables</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label className="text-sm">Target Profit Margin</Label>
+                    <span className="text-sm font-medium" data-testid="text-slider-margin">{targetMarginPct}%</span>
                   </div>
-                  <p className="text-sm mt-0.5" data-testid={`text-priority-action-${action.rank}`}>{action.action}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{action.reason}</p>
+                  <Slider
+                    value={[targetMarginPct]}
+                    onValueChange={([v]) => setTargetMarginPct(v)}
+                    min={5}
+                    max={60}
+                    step={1}
+                    data-testid="slider-target-margin"
+                  />
+                  <p className="text-xs text-muted-foreground">Min price margin target for each property</p>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-semibold text-green-600 dark:text-green-400" data-testid={`text-priority-impact-${action.rank}`}>
-                    +{formatDollars(action.revenueImpactCents)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">per year</p>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label className="text-sm">Overhead Adjustment</Label>
+                    <span className="text-sm font-medium" data-testid="text-slider-overhead">{overheadAdjustmentPct > 0 ? "+" : ""}{overheadAdjustmentPct}%</span>
+                  </div>
+                  <Slider
+                    value={[overheadAdjustmentPct]}
+                    onValueChange={([v]) => setOverheadAdjustmentPct(v)}
+                    min={-20}
+                    max={50}
+                    step={1}
+                    data-testid="slider-overhead"
+                  />
+                  <p className="text-xs text-muted-foreground">Simulate changes in monthly overhead costs</p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label className="text-sm">Labor Rate Adjustment</Label>
+                    <span className="text-sm font-medium" data-testid="text-slider-labor">{laborRateAdjustmentPct > 0 ? "+" : ""}{laborRateAdjustmentPct}%</span>
+                  </div>
+                  <Slider
+                    value={[laborRateAdjustmentPct]}
+                    onValueChange={([v]) => setLaborRateAdjustmentPct(v)}
+                    min={-20}
+                    max={30}
+                    step={1}
+                    data-testid="slider-labor"
+                  />
+                  <p className="text-xs text-muted-foreground">Simulate wage increases or efficiency gains</p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label className="text-sm">Travel Cost Factor</Label>
+                    <span className="text-sm font-medium" data-testid="text-slider-travel">{travelCostFactor.toFixed(1)}x</span>
+                  </div>
+                  <Slider
+                    value={[travelCostFactor * 10]}
+                    onValueChange={([v]) => setTravelCostFactor(v / 10)}
+                    min={5}
+                    max={20}
+                    step={1}
+                    data-testid="slider-travel"
+                  />
+                  <p className="text-xs text-muted-foreground">Multiply travel costs (gas, wear, etc.)</p>
                 </div>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
 
-      {(analysis?.riskFlags?.length ?? 0) > 0 && (
-        <Card data-testid="card-risk-flags">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-              Churn Risk Flags
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {analysis!.riskFlags.map((flag, idx) => (
-              <div
-                key={`${flag.propertyId}-${idx}`}
-                className={`p-3 rounded-lg border ${flag.riskLevel === "high" ? "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" : "border-yellow-200 dark:border-yellow-800 bg-yellow-50/50 dark:bg-yellow-950/20"}`}
-                data-testid={`card-risk-flag-${idx}`}
+              <Button
+                onClick={() => simulateMutation.mutate()}
+                disabled={simulateMutation.isPending}
+                className="gap-2"
+                data-testid="button-run-simulation"
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <AlertTriangle className={`h-4 w-4 ${flag.riskLevel === "high" ? "text-red-500" : "text-yellow-500"}`} />
-                  <span className="font-medium text-sm">{flag.contactName}</span>
-                  <span className="text-xs text-muted-foreground">{flag.propertyAddress}</span>
-                  {flag.riskLevel === "high" ? (
-                    <Badge variant="outline" className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">High Risk</Badge>
+                {simulateMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Running...</>
+                ) : (
+                  <><Play className="h-4 w-4" /> Run Simulation</>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {simulationResult && (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card data-testid="card-sim-kpi-revenue">
+                  <CardContent className="p-4">
+                    <p className="text-xs font-medium text-muted-foreground">Monthly Revenue Change</p>
+                    <p className={`text-2xl font-bold mt-1 ${simulationResult.summary.monthlyRevenueDeltaCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-sim-revenue-delta">
+                      {simulationResult.summary.monthlyRevenueDeltaCents >= 0 ? "+" : ""}{formatDollars(simulationResult.summary.monthlyRevenueDeltaCents)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">per month</p>
+                  </CardContent>
+                </Card>
+
+                <Card data-testid="card-sim-kpi-margin">
+                  <CardContent className="p-4">
+                    <p className="text-xs font-medium text-muted-foreground">Avg Margin Change</p>
+                    <p className="text-2xl font-bold mt-1" data-testid="text-sim-margin-change">
+                      {simulationResult.summary.averageCurrentMarginPct.toFixed(1)}% <ArrowUpRight className="inline h-4 w-4" /> {simulationResult.summary.averageSimulatedMarginPct.toFixed(1)}%
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">current to simulated</p>
+                  </CardContent>
+                </Card>
+
+                <Card data-testid="card-sim-kpi-increase">
+                  <CardContent className="p-4">
+                    <p className="text-xs font-medium text-muted-foreground">Need Price Increase</p>
+                    <p className="text-2xl font-bold mt-1" data-testid="text-sim-increases">{simulationResult.summary.propertiesNeedingIncrease}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">properties</p>
+                  </CardContent>
+                </Card>
+
+                <Card data-testid="card-sim-kpi-decrease">
+                  <CardContent className="p-4">
+                    <p className="text-xs font-medium text-muted-foreground">Could Decrease</p>
+                    <p className="text-2xl font-bold mt-1" data-testid="text-sim-decreases">{simulationResult.summary.propertiesNeedingDecrease}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">properties</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card data-testid="card-sim-results">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Simulation Results ({allProperties.length} properties)</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Customer</TableHead>
+                          <TableHead className="text-right">Current</TableHead>
+                          <TableHead className="text-right">Simulated</TableHead>
+                          <TableHead className="text-right">Change</TableHead>
+                          <TableHead className="text-right">Current Margin</TableHead>
+                          <TableHead className="text-right">Projected Margin</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allProperties.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                              No properties to simulate. Add customers with active service plans first.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          allProperties.map((p) => {
+                            const changeColor = p.changeCents > 50
+                              ? "text-green-600 dark:text-green-400"
+                              : p.changeCents < -50
+                                ? "text-red-600 dark:text-red-400"
+                                : "text-muted-foreground";
+                            return (
+                              <TableRow key={p.propertyId} data-testid={`row-sim-${p.propertyId}`}>
+                                <TableCell>
+                                  <div>
+                                    <span className="font-medium text-sm" data-testid={`text-sim-customer-${p.propertyId}`}>{p.contactName}</span>
+                                    <p className="text-xs text-muted-foreground truncate max-w-52">{p.propertyAddress}</p>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right font-medium" data-testid={`text-sim-current-${p.propertyId}`}>
+                                  {formatDollars(p.currentPriceCents)}
+                                </TableCell>
+                                <TableCell className="text-right font-medium" data-testid={`text-sim-simulated-${p.propertyId}`}>
+                                  {formatDollars(p.simulatedPriceCents)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <span className={`flex items-center justify-end gap-0.5 text-sm ${changeColor}`} data-testid={`text-sim-change-${p.propertyId}`}>
+                                    {p.changeCents > 50 && <ArrowUpRight className="h-3.5 w-3.5" />}
+                                    {p.changeCents < -50 && <ArrowDownRight className="h-3.5 w-3.5" />}
+                                    {Math.abs(p.changeCents) <= 50 && <Minus className="h-3.5 w-3.5" />}
+                                    {formatDollars(p.changeCents)} ({p.changePct > 0 ? "+" : ""}{p.changePct.toFixed(1)}%)
+                                  </span>
+                                </TableCell>
+                                <TableCell className={`text-right ${marginColor(p.currentMarginPct)}`} data-testid={`text-sim-cur-margin-${p.propertyId}`}>
+                                  {p.currentMarginPct.toFixed(1)}%
+                                </TableCell>
+                                <TableCell className={`text-right ${marginColor(p.projectedMarginPct)}`} data-testid={`text-sim-proj-margin-${p.propertyId}`}>
+                                  {p.projectedMarginPct.toFixed(1)}%
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {!simulationResult && !simulateMutation.isPending && (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <SlidersHorizontal className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground">Adjust the sliders above and click "Run Simulation" to see how pricing changes affect your portfolio.</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ========== TAB 2: PRICE ELASTICITY ========== */}
+        <TabsContent value="elasticity" className="space-y-4 mt-4">
+          <Card data-testid="card-elasticity-controls">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Price Elasticity Simulation</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                See how different price changes affect customer retention and net revenue. The model estimates churn based on price sensitivity curves.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Select value={elasticityPropertyId} onValueChange={setElasticityPropertyId}>
+                  <SelectTrigger className="w-64" data-testid="select-elasticity-property">
+                    <SelectValue placeholder="All Properties" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Properties</SelectItem>
+                    {simulationResult?.properties.map((p) => (
+                      <SelectItem key={p.propertyId} value={p.propertyId}>
+                        {p.contactName} - {p.propertyAddress.split(",")[0]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={() => elasticityMutation.mutate()}
+                  disabled={elasticityMutation.isPending}
+                  className="gap-2"
+                  data-testid="button-run-elasticity"
+                >
+                  {elasticityMutation.isPending ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing...</>
                   ) : (
-                    <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">Moderate Risk</Badge>
+                    <><BarChart3 className="h-4 w-4" /> Run Elasticity Analysis</>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {elasticityResult && (
+            <>
+              <Card data-testid="card-elasticity-label">
+                <CardContent className="p-4">
+                  <p className="text-sm font-medium">{elasticityResult.propertyLabel}</p>
+                  <p className="text-xs text-muted-foreground">{elasticityResult.points[0]?.totalCustomers ?? 0} properties analyzed</p>
+                </CardContent>
+              </Card>
+
+              <Card data-testid="card-elasticity-results">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Price Points Analysis</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Price Change</TableHead>
+                          <TableHead className="text-right">Avg Price</TableHead>
+                          <TableHead className="text-right">Est. Churn</TableHead>
+                          <TableHead className="text-right">Retained</TableHead>
+                          <TableHead className="text-right">Monthly Revenue</TableHead>
+                          <TableHead className="text-right">Net Change</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {elasticityResult.points.map((pt, idx) => {
+                          const isSweetSpot = idx === elasticityResult.sweetSpotIndex;
+                          const isBaseline = pt.priceChangePct === 0;
+                          return (
+                            <TableRow
+                              key={pt.priceChangePct}
+                              className={isSweetSpot ? "bg-green-50/50 dark:bg-green-950/20" : ""}
+                              data-testid={`row-elasticity-${pt.priceChangePct}`}
+                            >
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <span className={`font-medium ${pt.priceChangePct > 0 ? "text-green-600 dark:text-green-400" : pt.priceChangePct < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                                    {pt.priceChangePct > 0 ? "+" : ""}{pt.priceChangePct}%
+                                  </span>
+                                  {isSweetSpot && <Badge variant="outline" className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"><Star className="h-3 w-3 mr-0.5 inline" />Best</Badge>}
+                                  {isBaseline && <Badge variant="outline" className="text-xs">Current</Badge>}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right" data-testid={`text-el-avg-price-${pt.priceChangePct}`}>
+                                {formatDollars(pt.avgNewPriceCents)}
+                              </TableCell>
+                              <TableCell className="text-right" data-testid={`text-el-churn-${pt.priceChangePct}`}>
+                                <span className={pt.estimatedChurnPct > 5 ? "text-red-600 dark:text-red-400" : ""}>
+                                  {pt.estimatedChurnPct.toFixed(1)}%
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right" data-testid={`text-el-retained-${pt.priceChangePct}`}>
+                                {pt.retainedCustomers} / {pt.totalCustomers}
+                              </TableCell>
+                              <TableCell className="text-right font-medium" data-testid={`text-el-revenue-${pt.priceChangePct}`}>
+                                {formatDollars(pt.adjustedMonthlyRevenueCents)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <span className={`font-medium ${pt.netRevenueDeltaCents > 0 ? "text-green-600 dark:text-green-400" : pt.netRevenueDeltaCents < 0 ? "text-red-600 dark:text-red-400" : ""}`} data-testid={`text-el-delta-${pt.priceChangePct}`}>
+                                  {pt.netRevenueDeltaCents > 0 ? "+" : ""}{formatDollars(pt.netRevenueDeltaCents)}
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {!elasticityResult && !elasticityMutation.isPending && (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <BarChart3 className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground">Select a property (or all) and click "Run Elasticity Analysis" to see how price changes affect retention and revenue.</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ========== TAB 3: COMPETITOR ANALYSIS ========== */}
+        <TabsContent value="competitor" className="space-y-4 mt-4">
+          <Card data-testid="card-competitor-entry">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base">Competitor Pricing Data</CardTitle>
+              <Dialog open={addCompDialogOpen} onOpenChange={setAddCompDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-1.5" data-testid="button-add-competitor">
+                    <Plus className="h-3.5 w-3.5" /> Add Competitor
+                  </Button>
+                </DialogTrigger>
+                <DialogContent data-testid="dialog-add-competitor">
+                  <DialogHeader>
+                    <DialogTitle>Add Competitor Pricing</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 mt-2">
+                    <div className="space-y-1">
+                      <Label className="text-sm">Competitor Name</Label>
+                      <Input
+                        value={newCompName}
+                        onChange={(e) => setNewCompName(e.target.value)}
+                        placeholder="e.g. Paws & Scoop"
+                        data-testid="input-comp-name"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-sm">Price Per Visit</Label>
+                        <Input
+                          value={newCompPrice}
+                          onChange={(e) => setNewCompPrice(e.target.value)}
+                          placeholder="25.00"
+                          type="number"
+                          step="0.01"
+                          data-testid="input-comp-price"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-sm">Zip Code</Label>
+                        <Input
+                          value={newCompZip}
+                          onChange={(e) => setNewCompZip(e.target.value)}
+                          placeholder="23456"
+                          data-testid="input-comp-zip"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-sm">Frequency</Label>
+                        <Select value={newCompFrequency} onValueChange={setNewCompFrequency}>
+                          <SelectTrigger data-testid="select-comp-frequency">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="biweekly">Biweekly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-sm">Yard Size</Label>
+                        <Select value={newCompYardSize} onValueChange={setNewCompYardSize}>
+                          <SelectTrigger data-testid="select-comp-yard">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="small">Small</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="large">Large</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-sm">Dogs</Label>
+                        <Select value={newCompDogRange} onValueChange={setNewCompDogRange}>
+                          <SelectTrigger data-testid="select-comp-dogs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1-2">1-2</SelectItem>
+                            <SelectItem value="3-5">3-5</SelectItem>
+                            <SelectItem value="6+">6+</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => addCompetitorMutation.mutate()}
+                      disabled={addCompetitorMutation.isPending || !newCompName || !newCompPrice || !newCompZip}
+                      className="w-full"
+                      data-testid="button-save-competitor"
+                    >
+                      {addCompetitorMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Save Competitor
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {competitors && competitors.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Competitor</TableHead>
+                        <TableHead>Zip Code</TableHead>
+                        <TableHead className="text-right">Price</TableHead>
+                        <TableHead>Frequency</TableHead>
+                        <TableHead>Yard / Dogs</TableHead>
+                        <TableHead className="w-10"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {competitors.map((c) => (
+                        <TableRow key={c.id} data-testid={`row-competitor-${c.id}`}>
+                          <TableCell className="font-medium" data-testid={`text-comp-name-${c.id}`}>{c.competitorName}</TableCell>
+                          <TableCell data-testid={`text-comp-zip-${c.id}`}>
+                            <span className="flex items-center gap-1"><MapPin className="h-3 w-3 text-muted-foreground" />{c.zipCode}</span>
+                          </TableCell>
+                          <TableCell className="text-right font-medium" data-testid={`text-comp-price-${c.id}`}>{formatDollars(c.priceCents)}</TableCell>
+                          <TableCell className="capitalize">{c.frequency}</TableCell>
+                          <TableCell>{c.yardSizeCategory} / {c.dogCountRange} dogs</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => deleteCompetitorMutation.mutate(c.id)}
+                              data-testid={`button-delete-comp-${c.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  No competitor pricing data yet. Click "Add Competitor" to enter local competitor rates.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-competitor-analysis">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0 flex-wrap gap-2">
+              <CardTitle className="text-base">Market Comparison</CardTitle>
+              <div className="flex gap-2">
+                <Select value={compZipFilter} onValueChange={setCompZipFilter}>
+                  <SelectTrigger className="w-40" data-testid="select-comp-zip-filter">
+                    <SelectValue placeholder="All Zip Codes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Zip Codes</SelectItem>
+                    {(zipCodes ?? []).map((z) => (
+                      <SelectItem key={z} value={z}>{z}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={() => competitorAnalysisMutation.mutate()}
+                  disabled={competitorAnalysisMutation.isPending || (competitors?.length ?? 0) === 0}
+                  className="gap-1.5"
+                  data-testid="button-run-comp-analysis"
+                >
+                  {competitorAnalysisMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <BarChart3 className="h-4 w-4" />
+                  )}
+                  Analyze
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {compAnalysisResult ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Overall Position:</span>
+                      {positionBadge(compAnalysisResult.overallPosition)}
+                    </div>
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Your avg: </span>
+                      <span className="font-medium" data-testid="text-overall-your-avg">{formatDollars(compAnalysisResult.overallYourAvgCents)}</span>
+                      <span className="text-muted-foreground"> / wk</span>
+                    </div>
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Market avg: </span>
+                      <span className="font-medium" data-testid="text-overall-market-avg">{formatDollars(compAnalysisResult.overallMarketAvgCents)}</span>
+                      <span className="text-muted-foreground"> / wk</span>
+                    </div>
+                  </div>
+
+                  {compAnalysisResult.zipCodes.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Zip Code</TableHead>
+                            <TableHead className="text-right">Your Avg (wk)</TableHead>
+                            <TableHead className="text-right">Market Avg (wk)</TableHead>
+                            <TableHead className="text-right">Your Properties</TableHead>
+                            <TableHead className="text-right">Competitors</TableHead>
+                            <TableHead>Position</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {compAnalysisResult.zipCodes.map((z) => (
+                            <TableRow key={z.zipCode} data-testid={`row-comp-zip-${z.zipCode}`}>
+                              <TableCell className="font-medium" data-testid={`text-comp-analysis-zip-${z.zipCode}`}>
+                                <span className="flex items-center gap-1"><MapPin className="h-3 w-3 text-muted-foreground" />{z.zipCode}</span>
+                              </TableCell>
+                              <TableCell className="text-right font-medium" data-testid={`text-comp-your-avg-${z.zipCode}`}>
+                                {z.yourAvgPriceCents > 0 ? formatDollars(z.yourAvgPriceCents) : "--"}
+                              </TableCell>
+                              <TableCell className="text-right" data-testid={`text-comp-market-avg-${z.zipCode}`}>
+                                {z.marketAvgPriceCents > 0 ? formatDollars(z.marketAvgPriceCents) : "--"}
+                              </TableCell>
+                              <TableCell className="text-right">{z.yourPropertyCount}</TableCell>
+                              <TableCell className="text-right">{z.competitorCount}</TableCell>
+                              <TableCell>{positionBadge(z.position)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground">{flag.reason}</p>
-                <p className="text-xs mt-1 italic text-muted-foreground">{flag.suggestedApproach}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      <Card data-testid="card-recommendations-table">
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-4">
-          <CardTitle className="text-base">Property Recommendations</CardTitle>
-          <Select value={filterMode} onValueChange={(v) => setFilterMode(v as FilterMode)}>
-            <SelectTrigger className="w-44" data-testid="select-filter-mode">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Properties</SelectItem>
-              <SelectItem value="underpriced">Underpriced Only</SelectItem>
-              <SelectItem value="overpriced">Overpriced Only</SelectItem>
-              <SelectItem value="fair">Fairly Priced</SelectItem>
-            </SelectContent>
-          </Select>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8"></TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Current Price</TableHead>
-                  <TableHead>AI Recommended</TableHead>
-                  <TableHead>Change</TableHead>
-                  <TableHead>Current Margin</TableHead>
-                  <TableHead>Projected Margin</TableHead>
-                  <TableHead>Confidence</TableHead>
-                  <TableHead>Risk</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredRecs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                      {(analysis?.recommendations?.length ?? 0) === 0
-                        ? "No properties to analyze. Add customers with active service plans to get recommendations."
-                        : "No properties match this filter."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredRecs.map((rec) => {
-                    const isExpanded = expandedPropertyId === rec.propertyId;
-                    const changeColor = rec.priceChangeCents > 0
-                      ? "text-green-600 dark:text-green-400"
-                      : rec.priceChangeCents < 0
-                        ? "text-red-600 dark:text-red-400"
-                        : "text-muted-foreground";
-                    const ChangeIcon = rec.priceChangeCents > 0 ? ArrowUpRight : rec.priceChangeCents < 0 ? ArrowDownRight : Minus;
-
-                    return (
-                      <TableRow
-                        key={rec.propertyId}
-                        className="cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => setExpandedPropertyId(isExpanded ? null : rec.propertyId)}
-                        data-testid={`row-recommendation-${rec.propertyId}`}
-                      >
-                        <TableCell className="w-8 pr-0">
-                          {isExpanded
-                            ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                            : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <span className="font-medium text-sm" data-testid={`text-rec-customer-${rec.propertyId}`}>{rec.contactName}</span>
-                            <p className="text-xs text-muted-foreground truncate max-w-48" data-testid={`text-rec-address-${rec.propertyId}`}>{rec.propertyAddress}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell data-testid={`text-rec-current-price-${rec.propertyId}`}>
-                          {formatDollars(rec.currentPriceCents)}
-                        </TableCell>
-                        <TableCell data-testid={`text-rec-ai-price-${rec.propertyId}`}>
-                          <span className="font-medium">{formatDollars(rec.aiRecommendedPriceCents)}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className={`flex items-center gap-0.5 text-sm ${changeColor}`} data-testid={`text-rec-change-${rec.propertyId}`}>
-                            <ChangeIcon className="h-3.5 w-3.5" />
-                            {rec.priceChangeCents !== 0 ? `${Math.abs(rec.priceChangePct).toFixed(0)}%` : "--"}
-                          </span>
-                        </TableCell>
-                        <TableCell data-testid={`text-rec-current-margin-${rec.propertyId}`}>
-                          <span className={rec.currentMarginPct >= 15 ? "text-green-600 dark:text-green-400" : rec.currentMarginPct >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}>
-                            {rec.currentMarginPct.toFixed(1)}%
-                          </span>
-                        </TableCell>
-                        <TableCell data-testid={`text-rec-projected-margin-${rec.propertyId}`}>
-                          <span className={rec.projectedMarginPct >= 15 ? "text-green-600 dark:text-green-400" : rec.projectedMarginPct >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}>
-                            {rec.projectedMarginPct.toFixed(1)}%
-                          </span>
-                        </TableCell>
-                        <TableCell>{confidenceBadge(rec.confidence)}</TableCell>
-                        <TableCell>{churnBadge(rec.churnRisk)}</TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {filteredRecs.map((rec) => {
-            if (expandedPropertyId !== rec.propertyId) return null;
-            const monthlyGain = rec.monthlyRevenueImpactCents;
-            return (
-              <div
-                key={`detail-${rec.propertyId}`}
-                className="border-t bg-muted/20 p-4 space-y-4"
-                data-testid={`detail-panel-${rec.propertyId}`}
-              >
-                <div>
-                  <h4 className="text-sm font-semibold mb-1">AI Reasoning</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed" data-testid={`text-detail-reasoning-${rec.propertyId}`}>
-                    {rec.reasoning}
+              ) : (
+                <div className="py-8 text-center">
+                  <Users className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground text-sm">
+                    {(competitors?.length ?? 0) === 0
+                      ? "Add competitor pricing data above, then run the analysis to see how your pricing compares to the local market."
+                      : "Click \"Analyze\" to compare your pricing against competitors in your service areas."}
                   </p>
                 </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] text-muted-foreground">Current Price</p>
-                    <p className="text-sm font-medium" data-testid={`text-detail-current-${rec.propertyId}`}>{formatDollars(rec.currentPriceCents)}</p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] text-muted-foreground">AI Recommended</p>
-                    <p className="text-sm font-medium text-primary" data-testid={`text-detail-ai-rec-${rec.propertyId}`}>{formatDollars(rec.aiRecommendedPriceCents)}</p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] text-muted-foreground">Calculator Recommended</p>
-                    <p className="text-sm font-medium" data-testid={`text-detail-calc-rec-${rec.propertyId}`}>{formatDollars(rec.calculatorRecommendedPriceCents)}</p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] text-muted-foreground">Cost/Visit</p>
-                    <p className="text-sm font-medium" data-testid={`text-detail-cost-${rec.propertyId}`}>{formatDollars(rec.costPerVisitCents)}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] text-muted-foreground">Monthly Impact</p>
-                    <p className={`text-sm font-medium ${monthlyGain > 0 ? "text-green-600 dark:text-green-400" : monthlyGain < 0 ? "text-red-600 dark:text-red-400" : ""}`} data-testid={`text-detail-monthly-${rec.propertyId}`}>
-                      {monthlyGain > 0 ? "+" : ""}{formatDollars(monthlyGain)}
-                    </p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] text-muted-foreground">Annual Impact</p>
-                    <p className={`text-sm font-medium ${rec.annualRevenueImpactCents > 0 ? "text-green-600 dark:text-green-400" : rec.annualRevenueImpactCents < 0 ? "text-red-600 dark:text-red-400" : ""}`} data-testid={`text-detail-annual-${rec.propertyId}`}>
-                      {rec.annualRevenueImpactCents > 0 ? "+" : ""}{formatDollars(rec.annualRevenueImpactCents)}
-                    </p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] text-muted-foreground">Frequency</p>
-                    <p className="text-sm font-medium capitalize">{rec.frequency}</p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] text-muted-foreground">Property</p>
-                    <p className="text-sm font-medium">{rec.dogCount} dog{rec.dogCount !== 1 ? "s" : ""}, {(rec.yardSizeAcres * 43560).toFixed(0)} sqft</p>
-                  </div>
-                </div>
-
-                {rec.churnRisk !== "low" && (
-                  <div className={`p-3 rounded-lg border ${rec.churnRisk === "high" ? "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" : "border-yellow-200 dark:border-yellow-800 bg-yellow-50/50 dark:bg-yellow-950/20"}`}>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <AlertTriangle className={`h-3.5 w-3.5 ${rec.churnRisk === "high" ? "text-red-500" : "text-yellow-500"}`} />
-                      <span className="text-xs font-medium">Churn Risk: {rec.churnRisk}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{rec.churnRiskReason}</p>
-                  </div>
-                )}
-
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/profitability/${rec.contactId}`);
-                    }}
-                    data-testid={`button-view-profitability-${rec.propertyId}`}
-                  >
-                    View Profitability
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/contacts/${rec.contactId}`);
-                    }}
-                    data-testid={`button-edit-plan-${rec.propertyId}`}
-                  >
-                    Edit Service Plan
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

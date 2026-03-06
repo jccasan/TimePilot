@@ -1072,3 +1072,30 @@ export type InsertOverheadCost = z.infer<typeof insertOverheadCostSchema>;
 export const overheadCostRelations = relations(overheadCosts, ({ one }) => ({
   company: one(companies, { fields: [overheadCosts.companyId], references: [companies.id] }),
 }));
+
+export const competitorSourceEnum = pgEnum("competitor_source", ["manual", "research"]);
+
+export const competitorPricing = pgTable("competitor_pricing", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  zipCode: varchar("zip_code", { length: 20 }).notNull(),
+  competitorName: varchar("competitor_name", { length: 255 }).notNull(),
+  frequency: serviceFrequencyEnum("frequency").notNull().default("weekly"),
+  priceCents: integer("price_cents").notNull(),
+  dogCountRange: varchar("dog_count_range", { length: 20 }).default("1-2"),
+  yardSizeCategory: varchar("yard_size_category", { length: 50 }).default("medium"),
+  source: competitorSourceEnum("source").notNull().default("manual"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_comp_pricing_company").on(table.companyId),
+  index("idx_comp_pricing_zip").on(table.companyId, table.zipCode),
+]);
+
+export const insertCompetitorPricingSchema = createInsertSchema(competitorPricing).omit({ id: true, createdAt: true });
+export type CompetitorPricing = typeof competitorPricing.$inferSelect;
+export type InsertCompetitorPricing = z.infer<typeof insertCompetitorPricingSchema>;
+
+export const competitorPricingRelations = relations(competitorPricing, ({ one }) => ({
+  company: one(companies, { fields: [competitorPricing.companyId], references: [companies.id] }),
+}));
