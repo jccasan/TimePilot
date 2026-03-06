@@ -44,7 +44,9 @@ import {
   type InvoicePayment, type InsertInvoicePayment,
   type PriceRecommendation, type InsertPriceRecommendation,
   type PricingConfig,
+  type ProfitabilitySnapshot, type InsertProfitabilitySnapshot,
   priceRecommendations,
+  profitabilitySnapshots,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -285,6 +287,14 @@ export interface IStorage {
   createPriceRecommendation(data: InsertPriceRecommendation): Promise<PriceRecommendation>;
   getPriceRecommendations(companyId: string, propertyId?: string): Promise<PriceRecommendation[]>;
   getLatestPriceRecommendation(companyId: string, propertyId: string): Promise<PriceRecommendation | undefined>;
+
+  // Profitability Snapshots
+  getProfitabilitySnapshots(companyId: string, filters?: { startDate?: string; endDate?: string; contactId?: string }): Promise<ProfitabilitySnapshot[]>;
+  getProfitabilitySnapshot(id: string, companyId: string): Promise<ProfitabilitySnapshot | undefined>;
+  createProfitabilitySnapshot(data: InsertProfitabilitySnapshot): Promise<ProfitabilitySnapshot>;
+  deleteProfitabilitySnapshots(companyId: string, olderThan?: string): Promise<void>;
+  getCustomerProfitabilitySummary(companyId: string): Promise<any[]>;
+  getRouteProfitabilitySummary(companyId: string): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1411,6 +1421,177 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(priceRecommendations.calculatedAt))
       .limit(1);
     return rec;
+  }
+
+  // ================ Profitability Snapshots ================
+  async getProfitabilitySnapshots(companyId: string, filters?: { startDate?: string; endDate?: string; contactId?: string }): Promise<ProfitabilitySnapshot[]> {
+    const conditions = [eq(profitabilitySnapshots.companyId, companyId)];
+    if (filters?.contactId) conditions.push(eq(profitabilitySnapshots.contactId, filters.contactId));
+    if (filters?.startDate) conditions.push(gte(profitabilitySnapshots.snapshotDate, filters.startDate));
+    if (filters?.endDate) conditions.push(lte(profitabilitySnapshots.snapshotDate, filters.endDate));
+    return db.select().from(profitabilitySnapshots).where(and(...conditions)).orderBy(desc(profitabilitySnapshots.snapshotDate));
+  }
+
+  async getProfitabilitySnapshot(id: string, companyId: string): Promise<ProfitabilitySnapshot | undefined> {
+    const [snap] = await db.select().from(profitabilitySnapshots).where(and(eq(profitabilitySnapshots.id, id), eq(profitabilitySnapshots.companyId, companyId)));
+    return snap;
+  }
+
+  async createProfitabilitySnapshot(data: InsertProfitabilitySnapshot): Promise<ProfitabilitySnapshot> {
+    const [snap] = await db.insert(profitabilitySnapshots).values(data).returning();
+    return snap;
+  }
+
+  async deleteProfitabilitySnapshots(companyId: string, olderThan?: string): Promise<void> {
+    const conditions = [eq(profitabilitySnapshots.companyId, companyId)];
+    if (olderThan) conditions.push(lt(profitabilitySnapshots.snapshotDate, olderThan));
+    await db.delete(profitabilitySnapshots).where(and(...conditions));
+  }
+
+  async getCustomerProfitabilitySummary(companyId: string): Promise<any[]> {
+    const activeContacts = await db.select({
+      id: contacts.id,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
+      email: contacts.email,
+      phone: contacts.phone,
+      status: contacts.status,
+    }).from(contacts).where(and(eq(contacts.companyId, companyId), eq(contacts.status, "active")));
+
+    const activePlans = await db.select().from(servicePlans).where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.isActive, true)));
+
+    const allProperties = await db.select().from(properties).where(eq(properties.companyId, companyId));
+
+    const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+
+    const result: any[] = [];
+
+    for (const contact of activeContacts) {
+      const contactPlans = activePlans.filter(p => p.contactId === contact.id);
+      if (contactPlans.length === 0) continue;
+
+      let totalRevenueCentsPerMonth = 0;
+      let totalCostCentsPerMonth = 0;
+      let propertyCount = 0;
+
+      for (const plan of contactPlans) {
+        const property = propertyMap.get(plan.propertyId);
+        if (!property) continue;
+        propertyCount++;
+
+        const pricePerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100);
+
+        let visitsPerMonth = 4;
+        switch (plan.frequency) {
+          case "weekly": visitsPerMonth = 4.33; break;
+          case "biweekly": visitsPerMonth = 2.17; break;
+          case "monthly": visitsPerMonth = 1; break;
+          case "onetime": visitsPerMonth = 0.25; break;
+        }
+
+        totalRevenueCentsPerMonth += pricePerVisitCents * visitsPerMonth;
+      }
+
+      const profitCents = totalRevenueCentsPerMonth - totalCostCentsPerMonth;
+      const marginPct = totalRevenueCentsPerMonth > 0 ? (profitCents / totalRevenueCentsPerMonth) * 100 : 0;
+
+      let profitabilityStatus: "profitable" | "marginal" | "unprofitable" = "profitable";
+      if (profitCents < 0) profitabilityStatus = "unprofitable";
+      else if (marginPct < 15) profitabilityStatus = "marginal";
+
+      result.push({
+        contactId: contact.id,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        email: contact.email,
+        phone: contact.phone,
+        propertyCount,
+        revenueCentsPerMonth: Math.round(totalRevenueCentsPerMonth),
+        costCentsPerMonth: Math.round(totalCostCentsPerMonth),
+        profitCentsPerMonth: Math.round(profitCents),
+        profitMarginPct: Math.round(marginPct * 100) / 100,
+        status: profitabilityStatus,
+        planCount: contactPlans.length,
+      });
+    }
+
+    return result;
+  }
+
+  async getRouteProfitabilitySummary(companyId: string): Promise<any[]> {
+    const companyRoutes = await db.select().from(routes).where(eq(routes.companyId, companyId));
+    const activePlans = await db.select().from(servicePlans).where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.isActive, true)));
+    const allContacts = await db.select({
+      id: contacts.id,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
+    }).from(contacts).where(eq(contacts.companyId, companyId));
+
+    const contactMap = new Map(allContacts.map(c => [c.id, c]));
+
+    const result: any[] = [];
+
+    for (const route of companyRoutes) {
+      const routePlans = activePlans.filter(p => p.routeId === route.id);
+      if (routePlans.length === 0) {
+        result.push({
+          routeId: route.id,
+          routeName: route.name,
+          dayOfWeek: route.dayOfWeek,
+          technicianId: route.technicianId,
+          totalStops: 0,
+          totalRevenueCents: 0,
+          totalCostCents: 0,
+          totalProfitCents: 0,
+          avgMarginPct: 0,
+          customers: [],
+        });
+        continue;
+      }
+
+      let totalRevenueCents = 0;
+      let totalCostCents = 0;
+      const customerMap = new Map<string, { contactId: string; firstName: string; lastName: string; revenueCents: number; costCents: number }>();
+
+      for (const plan of routePlans) {
+        const pricePerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100);
+        totalRevenueCents += pricePerVisitCents;
+
+        const contact = contactMap.get(plan.contactId);
+        if (contact) {
+          const existing = customerMap.get(plan.contactId);
+          if (existing) {
+            existing.revenueCents += pricePerVisitCents;
+          } else {
+            customerMap.set(plan.contactId, {
+              contactId: contact.id,
+              firstName: contact.firstName,
+              lastName: contact.lastName,
+              revenueCents: pricePerVisitCents,
+              costCents: 0,
+            });
+          }
+        }
+      }
+
+      const totalProfitCents = totalRevenueCents - totalCostCents;
+      const avgMarginPct = totalRevenueCents > 0 ? (totalProfitCents / totalRevenueCents) * 100 : 0;
+
+      result.push({
+        routeId: route.id,
+        routeName: route.name,
+        dayOfWeek: route.dayOfWeek,
+        technicianId: route.technicianId,
+        totalStops: routePlans.length,
+        totalRevenueCents,
+        totalCostCents,
+        totalProfitCents,
+        avgMarginPct: Math.round(avgMarginPct * 100) / 100,
+        customers: Array.from(customerMap.values()).sort((a, b) => a.revenueCents - b.revenueCents),
+      });
+    }
+
+    return result;
   }
 }
 

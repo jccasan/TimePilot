@@ -1017,3 +1017,37 @@ export const priceRecommendationRelations = relations(priceRecommendations, ({ o
   property: one(properties, { fields: [priceRecommendations.propertyId], references: [properties.id] }),
   route: one(routes, { fields: [priceRecommendations.routeId], references: [routes.id] }),
 }));
+
+export const profitabilityStatusEnum = pgEnum("profitability_status", ["profitable", "marginal", "unprofitable"]);
+
+export const profitabilitySnapshots = pgTable("profitability_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  propertyId: varchar("property_id").references(() => properties.id, { onDelete: "set null" }),
+  snapshotDate: date("snapshot_date").notNull(),
+  revenueCents: integer("revenue_cents").notNull().default(0),
+  totalCostCents: integer("total_cost_cents").notNull().default(0),
+  profitCents: integer("profit_cents").notNull().default(0),
+  profitMarginPct: decimal("profit_margin_pct", { precision: 8, scale: 2 }).notNull().default("0"),
+  visitCount: integer("visit_count").notNull().default(0),
+  avgRevenuePerVisitCents: integer("avg_revenue_per_visit_cents").notNull().default(0),
+  avgCostPerVisitCents: integer("avg_cost_per_visit_cents").notNull().default(0),
+  status: profitabilityStatusEnum("status").notNull().default("profitable"),
+  breakdownJson: jsonb("breakdown_json").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_profsnap_company_contact").on(table.companyId, table.contactId),
+  index("idx_profsnap_company_date").on(table.companyId, table.snapshotDate),
+  index("idx_profsnap_company_status").on(table.companyId, table.status),
+]);
+
+export const insertProfitabilitySnapshotSchema = createInsertSchema(profitabilitySnapshots).omit({ id: true, createdAt: true });
+export type ProfitabilitySnapshot = typeof profitabilitySnapshots.$inferSelect;
+export type InsertProfitabilitySnapshot = z.infer<typeof insertProfitabilitySnapshotSchema>;
+
+export const profitabilitySnapshotRelations = relations(profitabilitySnapshots, ({ one }) => ({
+  company: one(companies, { fields: [profitabilitySnapshots.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [profitabilitySnapshots.contactId], references: [contacts.id] }),
+  property: one(properties, { fields: [profitabilitySnapshots.propertyId], references: [properties.id] }),
+}));

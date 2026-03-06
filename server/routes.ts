@@ -3089,6 +3089,117 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Customer Profitability ================
+
+  app.get("/api/profitability/summary", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { calculateAllCustomerProfitability } = await import("./services/profitability-calculator");
+      const results = await calculateAllCustomerProfitability(companyId);
+      res.json(results);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/profitability/customer/:contactId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { calculateCustomerProfitability } = await import("./services/profitability-calculator");
+      const result = await calculateCustomerProfitability(companyId, req.params.contactId);
+      if (!result) return res.status(404).json({ message: "No profitability data for this customer" });
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/profitability/route-summary", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { calculateAllCustomerProfitability } = await import("./services/profitability-calculator");
+      const allProfitability = await calculateAllCustomerProfitability(companyId);
+      const routes = await storage.getRoutes(companyId);
+      const plans = await storage.getServicePlans(companyId, { isActive: true });
+
+      const planRouteMap = new Map<string, string>();
+      const planContactMap = new Map<string, string>();
+      for (const plan of plans) {
+        if (plan.routeId) planRouteMap.set(plan.id, plan.routeId);
+        planContactMap.set(plan.id, plan.contactId);
+      }
+
+      const routeMap = new Map<string, { routeId: string; routeName: string; dayOfWeek: string; totalStops: number; totalRevenueCents: number; totalCostCents: number; totalProfitCents: number; customers: Array<{ contactId: string; firstName: string; lastName: string; revenueCents: number; costCents: number }> }>();
+
+      for (const route of routes) {
+        routeMap.set(route.id, {
+          routeId: route.id,
+          routeName: route.name,
+          dayOfWeek: route.dayOfWeek,
+          totalStops: 0,
+          totalRevenueCents: 0,
+          totalCostCents: 0,
+          totalProfitCents: 0,
+          customers: [],
+        });
+      }
+
+      for (const customer of allProfitability) {
+        for (const prop of customer.properties) {
+          const routeId = planRouteMap.get(prop.servicePlanId);
+          if (!routeId || !routeMap.has(routeId)) continue;
+          const routeEntry = routeMap.get(routeId)!;
+          routeEntry.totalStops++;
+          routeEntry.totalRevenueCents += prop.revenuePerVisitCents;
+          routeEntry.totalCostCents += prop.costPerVisitCents;
+          routeEntry.totalProfitCents += prop.profitPerVisitCents;
+
+          let existing = routeEntry.customers.find(c => c.contactId === customer.contactId);
+          if (!existing) {
+            existing = { contactId: customer.contactId, firstName: customer.contactName.split(" ")[0], lastName: customer.contactName.split(" ").slice(1).join(" "), revenueCents: 0, costCents: 0 };
+            routeEntry.customers.push(existing);
+          }
+          existing.revenueCents += prop.revenuePerVisitCents;
+          existing.costCents += prop.costPerVisitCents;
+        }
+      }
+
+      const result = Array.from(routeMap.values())
+        .filter(r => r.totalStops > 0)
+        .map(r => ({
+          ...r,
+          avgMarginPct: r.totalRevenueCents > 0 ? Math.round((r.totalProfitCents / r.totalRevenueCents) * 10000) / 100 : 0,
+        }));
+
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/profitability/recalculate", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { generateProfitabilitySnapshots } = await import("./services/profitability-calculator");
+      const count = await generateProfitabilitySnapshots(companyId);
+      res.json({ success: true, snapshotsCreated: count });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/profitability/history/:contactId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const snapshots = await storage.getProfitabilitySnapshots(companyId, {
+        contactId: req.params.contactId,
+      });
+      res.json(snapshots);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/profitability/bulk-recommendations", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { calculateAllCustomerProfitability, generateBulkRecommendations } = await import("./services/profitability-calculator");
+      const allProfitability = await calculateAllCustomerProfitability(companyId);
+      const recommendations = generateBulkRecommendations(allProfitability);
+      res.json(recommendations);
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Messages / Communications ================
 
   app.get("/api/messages", isAuthenticated, async (req: Request, res: Response) => {

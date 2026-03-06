@@ -57,6 +57,7 @@ const menuSections = [
     label: "Business",
     items: [
       { title: "Price Calculator", url: "/pricing-calculator", icon: Calculator },
+      { title: "Customer Profitability", url: "/profitability", icon: TrendingUp },
     ],
   },
   {

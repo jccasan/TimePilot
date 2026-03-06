@@ -47,7 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
@@ -485,6 +485,8 @@ export default function ContactDetail() {
           )}
         </CardContent>
       </Card>
+
+      <ProfitabilityIndicator contactId={id!} contactStatus={contact.status} />
 
       <BillingPreferences contact={contact} contactId={id!} />
 
@@ -952,6 +954,127 @@ function PaymentMethodsCard({ contact, contactId }: { contact: Contact; contactI
                 No payment methods on file. Cards will be added when customers pay via checkout.
               </p>
             )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: string; contactStatus: string }) {
+  const { data, isLoading, isError } = useQuery<{
+    contactId: string;
+    contactName: string;
+    propertyCount: number;
+    totalRevenuePerVisitCents: number;
+    totalCostPerVisitCents: number;
+    totalProfitPerVisitCents: number;
+    profitMarginPct: number;
+    status: "profitable" | "marginal" | "unprofitable";
+    properties: Array<{
+      propertyId: string;
+      propertyAddress: string;
+      revenuePerVisitCents: number;
+      costPerVisitCents: number;
+      profitPerVisitCents: number;
+      profitMarginPct: number;
+      recommendedPriceCents: number;
+    }>;
+    monthlyRevenueCents: number;
+    monthlyCostCents: number;
+    monthlyProfitCents: number;
+  }>({
+    queryKey: ["/api/profitability/customer", contactId],
+    enabled: contactStatus === "active",
+  });
+
+  if (contactStatus !== "active") return null;
+  if (isLoading) {
+    return (
+      <Card data-testid="card-profitability-indicator">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap pb-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" /> Profitability
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-16 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+  if (isError || !data) return null;
+
+  const centsToDisplay = (cents: number) => `$${(Math.abs(cents) / 100).toFixed(2)}`;
+
+  const statusConfig: Record<string, { label: string; badgeClass: string }> = {
+    profitable: { label: "Profitable", badgeClass: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+    marginal: { label: "Marginal", badgeClass: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
+    unprofitable: { label: "Unprofitable", badgeClass: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
+  };
+
+  const cfg = statusConfig[data.status] || statusConfig.profitable;
+  const isUnprofitable = data.status === "unprofitable";
+
+  const unprofitableProperties = data.properties.filter(p => p.profitMarginPct < 0);
+
+  return (
+    <Card data-testid="card-profitability-indicator">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap pb-2">
+        <CardTitle className="text-lg flex items-center gap-2">
+          {isUnprofitable ? (
+            <TrendingDown className="h-4 w-4 text-destructive" />
+          ) : (
+            <TrendingUp className="h-4 w-4" />
+          )}
+          Profitability
+        </CardTitle>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="secondary" className={cfg.badgeClass} data-testid="badge-profitability-status">
+            {cfg.label}
+          </Badge>
+          <Button variant="ghost" size="sm" asChild data-testid="link-profitability-drilldown">
+            <Link href={`/profitability/${contactId}`}>
+              Details <ArrowRight className="h-3.5 w-3.5 ml-1" />
+            </Link>
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-3 gap-3" data-testid="grid-profitability-metrics">
+          <div className="text-center" data-testid="metric-profit-per-visit">
+            <p className="text-xs text-muted-foreground">Profit/Visit</p>
+            <p className={`text-lg font-bold ${data.totalProfitPerVisitCents < 0 ? "text-destructive" : ""}`}>
+              {data.totalProfitPerVisitCents < 0 ? "-" : ""}{centsToDisplay(data.totalProfitPerVisitCents)}
+            </p>
+          </div>
+          <div className="text-center" data-testid="metric-margin">
+            <p className="text-xs text-muted-foreground">Margin</p>
+            <p className={`text-lg font-bold ${data.profitMarginPct < 0 ? "text-destructive" : data.profitMarginPct <= 15 ? "text-yellow-600 dark:text-yellow-400" : ""}`}>
+              {data.profitMarginPct.toFixed(1)}%
+            </p>
+          </div>
+          <div className="text-center" data-testid="metric-monthly-profit">
+            <p className="text-xs text-muted-foreground">Monthly Profit</p>
+            <p className={`text-lg font-bold ${data.monthlyProfitCents < 0 ? "text-destructive" : ""}`}>
+              {data.monthlyProfitCents < 0 ? "-" : ""}{centsToDisplay(data.monthlyProfitCents)}
+            </p>
+          </div>
+        </div>
+
+        {isUnprofitable && unprofitableProperties.length > 0 && (
+          <div className="flex items-start gap-2 p-2 rounded-md bg-destructive/10 text-destructive text-sm" data-testid="alert-unprofitable-warning">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium">
+                {unprofitableProperties.length} {unprofitableProperties.length === 1 ? "property is" : "properties are"} losing money
+              </p>
+              {unprofitableProperties.slice(0, 2).map(p => (
+                <p key={p.propertyId} className="text-xs opacity-75">
+                  {p.propertyAddress}: Current {centsToDisplay(p.revenuePerVisitCents)}/visit — Recommended {centsToDisplay(p.recommendedPriceCents)}/visit
+                </p>
+              ))}
+            </div>
           </div>
         )}
       </CardContent>
