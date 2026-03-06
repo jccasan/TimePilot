@@ -62,6 +62,7 @@ const menuSections = [
       { title: "Customer Profitability", url: "/profitability", icon: TrendingUp },
       { title: "Route Profit Maps", url: "/route-profit-maps", icon: Map },
       { title: "AI Pricing Optimizer", url: "/ai-pricing-optimizer", icon: Brain },
+      { title: "Overhead Costs", url: "/overhead-costs", icon: DollarSign },
     ],
   },
   {

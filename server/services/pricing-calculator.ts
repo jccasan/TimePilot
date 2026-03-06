@@ -79,7 +79,8 @@ function roundToNearestDollar(cents: number): number {
 
 export function calculatePrice(
   inputs: PriceCalculatorInputs,
-  tenantConfig: Partial<PricingConfig> | null | undefined
+  tenantConfig: Partial<PricingConfig> | null | undefined,
+  overrideMonthlyOverheadCents?: number
 ): PriceCalculatorResult {
   const config = getEffectivePricingConfig(tenantConfig);
   const SMALL_EPSILON = 0.01;
@@ -119,13 +120,14 @@ export function calculatePrice(
 
   const equipmentCostCents = config.disinfectantCents + config.deodorizerCents + config.bagsCents;
 
-  const monthlyOverheadCents =
-    config.advertisingCents +
-    config.payrollProviderCents +
-    config.benefitsCents +
-    config.insuranceCents +
-    config.softwareCents +
-    config.otherOverheadCents;
+  const monthlyOverheadCents = overrideMonthlyOverheadCents !== undefined
+    ? overrideMonthlyOverheadCents
+    : (config.advertisingCents +
+       config.payrollProviderCents +
+       config.benefitsCents +
+       config.insuranceCents +
+       config.softwareCents +
+       config.otherOverheadCents);
   const estimatedMonthlyStops = Math.max(config.estimatedMonthlyStops, 1);
   const overheadPerVisitCents = monthlyOverheadCents / estimatedMonthlyStops;
 

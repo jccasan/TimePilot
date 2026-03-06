@@ -99,6 +99,9 @@ export async function calculateCustomerProfitability(
 
   const pricingConfig = company.pricingConfig as Partial<PricingConfig> | null;
 
+  const overheadTotal = await storage.getTotalMonthlyOverheadCents(companyId);
+  const overrideOverhead = overheadTotal > 0 ? overheadTotal : undefined;
+
   const propertyResults: CustomerPropertyProfitability[] = [];
 
   for (const plan of plans) {
@@ -124,7 +127,7 @@ export async function calculateCustomerProfitability(
       currentPriceCents: Math.round(parseFloat(plan.pricePerVisit) * 100),
     };
 
-    const result = calculatePrice(inputs, pricingConfig);
+    const result = calculatePrice(inputs, pricingConfig, overrideOverhead);
 
     const revenuePerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100);
     const costPerVisitCents = result.minimumPriceCents;

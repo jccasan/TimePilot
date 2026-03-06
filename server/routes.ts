@@ -3366,6 +3366,145 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Overhead Costs ================
+
+  app.get("/api/overhead-costs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const items = await storage.getOverheadCosts(companyId);
+      const totalMonthlyOverheadCents = items.reduce((sum, i) => sum + i.monthlyCostCents, 0);
+      res.json({ items, totalMonthlyOverheadCents });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/overhead-costs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { category, name, monthlyCostCents, type, sortOrder } = req.body;
+      if (!category || typeof category !== "string" || !name || typeof name !== "string") {
+        return res.status(400).json({ error: "category and name are required strings" });
+      }
+      const costCents = typeof monthlyCostCents === "number" && monthlyCostCents >= 0 ? Math.round(monthlyCostCents) : 0;
+      const validType = type === "variable" ? "variable" : "fixed";
+      const item = await storage.createOverheadCost({
+        companyId,
+        category: category.trim(),
+        name: name.trim(),
+        monthlyCostCents: costCents,
+        type: validType,
+        isDefault: false,
+        sortOrder: typeof sortOrder === "number" ? sortOrder : 0,
+      });
+      res.json(item);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/overhead-costs/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { id } = req.params;
+      const updates: Record<string, any> = {};
+      if (typeof req.body.name === "string") updates.name = req.body.name.trim();
+      if (typeof req.body.monthlyCostCents === "number" && req.body.monthlyCostCents >= 0) {
+        updates.monthlyCostCents = Math.round(req.body.monthlyCostCents);
+      }
+      if (req.body.type === "fixed" || req.body.type === "variable") updates.type = req.body.type;
+      if (typeof req.body.category === "string") updates.category = req.body.category.trim();
+      if (typeof req.body.sortOrder === "number") updates.sortOrder = req.body.sortOrder;
+      if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
+      const item = await storage.updateOverheadCost(id, companyId, updates);
+      if (!item) return res.status(404).json({ error: "Item not found" });
+      res.json(item);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/overhead-costs/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      await storage.deleteOverheadCost(req.params.id, companyId);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/overhead-costs/seed-defaults", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const existing = await storage.getOverheadCosts(companyId);
+      if (existing.length > 0) {
+        return res.json({ seeded: false, message: "Items already exist", count: existing.length });
+      }
+
+      const company = await storage.getCompany(companyId);
+      const { TIER_CONFIG } = await import("@shared/schema");
+      const tier = (company?.subscriptionTier || "free_trial") as keyof typeof TIER_CONFIG;
+      const subscriptionPriceCents = Math.round((TIER_CONFIG[tier]?.price ?? 0) * 100);
+
+      const defaults: Array<{ category: string; name: string; type: "fixed" | "variable"; sortOrder: number; monthlyCostCents?: number }> = [
+        { category: "Office + Admin", name: "Scheduling/CRM software", type: "fixed", sortOrder: 0 },
+        { category: "Office + Admin", name: "Website hosting and domain", type: "fixed", sortOrder: 1 },
+        { category: "Office + Admin", name: "Phone line/business number", type: "fixed", sortOrder: 2 },
+        { category: "Office + Admin", name: "Email and workspace tools", type: "fixed", sortOrder: 3 },
+        { category: "Office + Admin", name: "Bookkeeping/accounting software", type: "fixed", sortOrder: 4 },
+        { category: "Office + Admin", name: "Payment processing fees", type: "variable", sortOrder: 5 },
+        { category: "Office + Admin", name: "Business insurance", type: "fixed", sortOrder: 6 },
+        { category: "Office + Admin", name: "Licenses and permits", type: "fixed", sortOrder: 7 },
+        { category: "Office + Admin", name: "Legal and tax prep", type: "fixed", sortOrder: 8 },
+        { category: "Office + Admin", name: "ScooPilot subscription", type: "fixed", sortOrder: 9, monthlyCostCents: subscriptionPriceCents },
+        { category: "Marketing", name: "Google Ads", type: "variable", sortOrder: 0 },
+        { category: "Marketing", name: "Facebook/Instagram ads", type: "variable", sortOrder: 1 },
+        { category: "Marketing", name: "Yard signs", type: "variable", sortOrder: 2 },
+        { category: "Marketing", name: "Flyers/door hangers", type: "variable", sortOrder: 3 },
+        { category: "Marketing", name: "Vehicle magnets or wraps", type: "fixed", sortOrder: 4 },
+        { category: "Marketing", name: "Referral rewards", type: "variable", sortOrder: 5 },
+        { category: "Marketing", name: "Print materials and business cards", type: "variable", sortOrder: 6 },
+        { category: "Vehicles + Transportation", name: "Fuel", type: "variable", sortOrder: 0 },
+        { category: "Vehicles + Transportation", name: "Vehicle payment or lease", type: "fixed", sortOrder: 1 },
+        { category: "Vehicles + Transportation", name: "Vehicle insurance", type: "fixed", sortOrder: 2 },
+        { category: "Vehicles + Transportation", name: "Repairs and maintenance", type: "variable", sortOrder: 3 },
+        { category: "Vehicles + Transportation", name: "Tires", type: "variable", sortOrder: 4 },
+        { category: "Vehicles + Transportation", name: "Registration", type: "fixed", sortOrder: 5 },
+        { category: "Vehicles + Transportation", name: "Route optimization software", type: "fixed", sortOrder: 6 },
+        { category: "Tools + Field Supplies", name: "Rakes, bins, scoopers, bags", type: "variable", sortOrder: 0 },
+        { category: "Tools + Field Supplies", name: "Gloves", type: "variable", sortOrder: 1 },
+        { category: "Tools + Field Supplies", name: "Disinfectant and sanitizer", type: "variable", sortOrder: 2 },
+        { category: "Tools + Field Supplies", name: "Boot spray/cleaning supplies", type: "variable", sortOrder: 3 },
+        { category: "Tools + Field Supplies", name: "Uniforms/branded shirts", type: "fixed", sortOrder: 4 },
+        { category: "Tools + Field Supplies", name: "Replacement tools from wear and tear", type: "variable", sortOrder: 5 },
+        { category: "Labor", name: "Employee wages", type: "variable", sortOrder: 0 },
+        { category: "Labor", name: "Payroll taxes", type: "variable", sortOrder: 1 },
+        { category: "Labor", name: "Workers' comp", type: "fixed", sortOrder: 2 },
+        { category: "Labor", name: "Training time", type: "variable", sortOrder: 3 },
+        { category: "Labor", name: "Bonuses/incentives", type: "variable", sortOrder: 4 },
+        { category: "Labor", name: "Hiring costs", type: "variable", sortOrder: 5 },
+        { category: "Labor", name: "Background checks", type: "variable", sortOrder: 6 },
+        { category: "Operations", name: "Mobile data plans", type: "fixed", sortOrder: 0 },
+        { category: "Operations", name: "GPS/time tracking apps", type: "fixed", sortOrder: 1 },
+        { category: "Operations", name: "Customer notification tools", type: "fixed", sortOrder: 2 },
+        { category: "Operations", name: "Storage bins or small storage unit", type: "fixed", sortOrder: 3 },
+        { category: "Operations", name: "Equipment cleaning area/supplies", type: "variable", sortOrder: 4 },
+        { category: "Financial Overhead", name: "Bank fees", type: "fixed", sortOrder: 0 },
+        { category: "Financial Overhead", name: "Merchant service fees", type: "variable", sortOrder: 1 },
+        { category: "Financial Overhead", name: "Bad debt/unpaid invoices", type: "variable", sortOrder: 2 },
+        { category: "Financial Overhead", name: "Refunds or service credits", type: "variable", sortOrder: 3 },
+      ];
+
+      for (const item of defaults) {
+        await storage.createOverheadCost({
+          companyId,
+          category: item.category,
+          name: item.name,
+          monthlyCostCents: item.monthlyCostCents ?? 0,
+          type: item.type,
+          isDefault: true,
+          sortOrder: item.sortOrder,
+        });
+      }
+
+      const items = await storage.getOverheadCosts(companyId);
+      res.json({ seeded: true, count: items.length, items });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Messages / Communications ================
 
   app.get("/api/messages", isAuthenticated, async (req: Request, res: Response) => {

@@ -47,6 +47,7 @@ import Profitability from "@/pages/profitability";
 import ProfitabilityDetail from "@/pages/profitability-detail";
 import RouteProfitMaps from "@/pages/route-profit-maps";
 import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
+import OverheadCosts from "@/pages/overhead-costs";
 import MigrationPage from "@/pages/migration-page";
 import ResetPassword from "@/pages/reset-password";
 import { NotificationBell } from "@/components/notification-bell";
@@ -82,6 +83,7 @@ function Router() {
       <Route path="/profitability/:contactId" component={ProfitabilityDetail} />
       <Route path="/route-profit-maps" component={RouteProfitMaps} />
       <Route path="/ai-pricing-optimizer" component={AIPricingOptimizer} />
+      <Route path="/overhead-costs" component={OverheadCosts} />
       <Route path="/communications" component={Communications} />
       <Route path="/reports" component={Reports} />
       <Route path="/analytics" component={Analytics} />

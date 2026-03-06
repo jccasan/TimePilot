@@ -1051,3 +1051,24 @@ export const profitabilitySnapshotRelations = relations(profitabilitySnapshots, 
   contact: one(contacts, { fields: [profitabilitySnapshots.contactId], references: [contacts.id] }),
   property: one(properties, { fields: [profitabilitySnapshots.propertyId], references: [properties.id] }),
 }));
+
+export const overheadCostTypeEnum = pgEnum("overhead_cost_type", ["fixed", "variable"]);
+
+export const overheadCosts = pgTable("overhead_costs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  category: varchar("category", { length: 100 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  monthlyCostCents: integer("monthly_cost_cents").notNull().default(0),
+  type: overheadCostTypeEnum("type").notNull().default("fixed"),
+  isDefault: boolean("is_default").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const insertOverheadCostSchema = createInsertSchema(overheadCosts).omit({ id: true });
+export type OverheadCost = typeof overheadCosts.$inferSelect;
+export type InsertOverheadCost = z.infer<typeof insertOverheadCostSchema>;
+
+export const overheadCostRelations = relations(overheadCosts, ({ one }) => ({
+  company: one(companies, { fields: [overheadCosts.companyId], references: [companies.id] }),
+}));

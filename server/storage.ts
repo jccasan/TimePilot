@@ -45,8 +45,10 @@ import {
   type PriceRecommendation, type InsertPriceRecommendation,
   type PricingConfig,
   type ProfitabilitySnapshot, type InsertProfitabilitySnapshot,
+  type OverheadCost, type InsertOverheadCost,
   priceRecommendations,
   profitabilitySnapshots,
+  overheadCosts,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -295,6 +297,13 @@ export interface IStorage {
   deleteProfitabilitySnapshots(companyId: string, olderThan?: string): Promise<void>;
   getCustomerProfitabilitySummary(companyId: string): Promise<any[]>;
   getRouteProfitabilitySummary(companyId: string): Promise<any[]>;
+
+  // Overhead Costs
+  getOverheadCosts(companyId: string): Promise<OverheadCost[]>;
+  createOverheadCost(data: InsertOverheadCost): Promise<OverheadCost>;
+  updateOverheadCost(id: string, companyId: string, data: Partial<InsertOverheadCost>): Promise<OverheadCost>;
+  deleteOverheadCost(id: string, companyId: string): Promise<void>;
+  getTotalMonthlyOverheadCents(companyId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1592,6 +1601,38 @@ export class DatabaseStorage implements IStorage {
     }
 
     return result;
+  }
+
+  // ================ Overhead Costs ================
+  async getOverheadCosts(companyId: string): Promise<OverheadCost[]> {
+    return db.select().from(overheadCosts)
+      .where(eq(overheadCosts.companyId, companyId))
+      .orderBy(asc(overheadCosts.category), asc(overheadCosts.sortOrder));
+  }
+
+  async createOverheadCost(data: InsertOverheadCost): Promise<OverheadCost> {
+    const [item] = await db.insert(overheadCosts).values(data).returning();
+    return item;
+  }
+
+  async updateOverheadCost(id: string, companyId: string, data: Partial<InsertOverheadCost>): Promise<OverheadCost> {
+    const [item] = await db.update(overheadCosts)
+      .set(data)
+      .where(and(eq(overheadCosts.id, id), eq(overheadCosts.companyId, companyId)))
+      .returning();
+    return item;
+  }
+
+  async deleteOverheadCost(id: string, companyId: string): Promise<void> {
+    await db.delete(overheadCosts)
+      .where(and(eq(overheadCosts.id, id), eq(overheadCosts.companyId, companyId)));
+  }
+
+  async getTotalMonthlyOverheadCents(companyId: string): Promise<number> {
+    const result = await db.select({ total: sql<number>`COALESCE(SUM(${overheadCosts.monthlyCostCents}), 0)` })
+      .from(overheadCosts)
+      .where(eq(overheadCosts.companyId, companyId));
+    return Number(result[0]?.total ?? 0);
   }
 }
 
