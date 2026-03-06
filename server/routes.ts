@@ -296,6 +296,48 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/satellite", async (req: Request, res: Response) => {
+    try {
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) return res.status(503).json({ error: "Satellite view not configured" });
+
+      const { address, lat, lng, size, zoom } = req.query;
+      if (!address && !(lat && lng)) {
+        return res.status(400).json({ error: "address or lat+lng required" });
+      }
+
+      const allowedSizes = ["400x200", "400x250", "400x300", "600x300", "600x400", "640x400"];
+      const safeSize = allowedSizes.includes(size as string) ? (size as string) : "600x300";
+      const safeZoom = Math.min(21, Math.max(15, parseInt(zoom as string) || 19));
+
+      const location = (lat && lng) ? `${lat},${lng}` : (address as string);
+
+      const params = new URLSearchParams({
+        center: location,
+        zoom: String(safeZoom),
+        size: safeSize,
+        maptype: "satellite",
+        markers: `color:red|${location}`,
+        key: apiKey,
+      });
+
+      const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        return res.status(response.status).json({ error: "Satellite view request failed" });
+      }
+
+      res.set("Content-Type", response.headers.get("content-type") || "image/png");
+      res.set("Cache-Control", "public, max-age=604800");
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.send(buffer);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // ================ Auth Routes ================
 
   app.post("/api/auth/register", async (req: Request, res: Response) => {

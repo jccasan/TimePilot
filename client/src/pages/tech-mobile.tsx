@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2 } from "lucide-react";
+import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
+import { SatelliteImage } from "@/components/satellite-image";
+import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
 
 type TodayVisit = {
   id: string;
@@ -25,6 +27,8 @@ type TodayVisit = {
     state: string;
     gateCode: string | null;
     specialInstructions: string | null;
+    measuredYardSqft: number | null;
+    lotSize: string | null;
   };
   contact?: {
     firstName: string;
@@ -41,6 +45,40 @@ const visitStatusColors: Record<string, string> = {
 };
 
 type PhotoUploadType = "before" | "after";
+
+function PropertyImageSection({ visit }: { visit: TodayVisit }) {
+  const [showSatellite, setShowSatellite] = useState(false);
+  const prop = visit.property!;
+  const addr = `${prop.streetAddress}, ${prop.city}, ${prop.state}`;
+  const yardCat = prop.measuredYardSqft ? getYardCategory(prop.measuredYardSqft) : null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs gap-1 px-2"
+          onClick={() => setShowSatellite(!showSatellite)}
+          data-testid={`button-toggle-view-${visit.id}`}
+        >
+          <Satellite className="h-3.5 w-3.5" />
+          {showSatellite ? "Street View" : "Aerial View"}
+        </Button>
+        {yardCat && prop.measuredYardSqft && (
+          <Badge className={`text-xs ${yardCat.color}`} data-testid={`badge-tech-yard-${visit.id}`}>
+            {yardCat.label} - {formatArea(prop.measuredYardSqft)}
+          </Badge>
+        )}
+      </div>
+      {showSatellite ? (
+        <SatelliteImage address={addr} className="h-[150px]" size="600x300" zoom={19} />
+      ) : (
+        <StreetViewImage address={addr} className="h-[150px]" size="600x300" />
+      )}
+    </div>
+  );
+}
 
 export default function TechMobile() {
   const { toast } = useToast();
@@ -216,11 +254,7 @@ export default function TechMobile() {
                 {isExpanded && (
                   <CardContent className="p-4 pt-0 space-y-3">
                     {visit.property && (
-                      <StreetViewImage
-                        address={`${visit.property.streetAddress}, ${visit.property.city}, ${visit.property.state}`}
-                        className="h-[150px]"
-                        size="600x300"
-                      />
+                      <PropertyImageSection visit={visit} />
                     )}
                     {visit.property?.gateCode && (
                       <div>

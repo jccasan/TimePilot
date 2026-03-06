@@ -149,6 +149,9 @@ export const properties = pgTable("properties", {
   specialInstructions: text("special_instructions"),
   latitude: decimal("latitude", { precision: 10, scale: 7 }),
   longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  lotSize: varchar("lot_size", { length: 50 }),
+  yardPolygon: jsonb("yard_polygon"),
+  measuredYardSqft: integer("measured_yard_sqft"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

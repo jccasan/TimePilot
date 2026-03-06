@@ -7,8 +7,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Dog, Phone, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { MapPin, Dog, Phone, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp, Satellite } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
+import { SatelliteImage } from "@/components/satellite-image";
+import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
 import { Link } from "wouter";
 
 const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -46,6 +48,7 @@ function ContactRow({ contact, visitStatus, onStatusChange, isUpdating }: {
   isUpdating: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showSatellite, setShowSatellite] = useState(false);
   const config = visitStatusConfig[visitStatus];
   const StatusIcon = config.icon;
 
@@ -83,11 +86,34 @@ function ContactRow({ contact, visitStatus, onStatusChange, isUpdating }: {
         {expanded && (
           <div className="space-y-3 pt-2 border-t">
             {contact.streetAddress && (
-              <StreetViewImage
-                address={`${contact.streetAddress}${contact.city ? `, ${contact.city}` : ""}${contact.state ? `, ${contact.state}` : ""}`}
-                className="h-[120px]"
-                size="400x200"
-              />
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] gap-1 px-1.5"
+                    onClick={() => setShowSatellite(!showSatellite)}
+                    data-testid={`button-toggle-route-view-${contact.id}`}
+                  >
+                    <Satellite className="h-3 w-3" />
+                    {showSatellite ? "Street" : "Aerial"}
+                  </Button>
+                </div>
+                {showSatellite ? (
+                  <SatelliteImage
+                    address={`${contact.streetAddress}${contact.city ? `, ${contact.city}` : ""}${contact.state ? `, ${contact.state}` : ""}`}
+                    className="h-[120px]"
+                    size="400x200"
+                    zoom={19}
+                  />
+                ) : (
+                  <StreetViewImage
+                    address={`${contact.streetAddress}${contact.city ? `, ${contact.city}` : ""}${contact.state ? `, ${contact.state}` : ""}`}
+                    className="h-[120px]"
+                    size="400x200"
+                  />
+                )}
+              </div>
             )}
             <div className="grid grid-cols-2 gap-2 text-xs">
               {contact.numberOfDogs != null && contact.numberOfDogs > 0 && (

@@ -52,6 +52,8 @@ Scoopilot is a full-stack, multi-tenant SaaS application emphasizing role-based 
 - **Communication**: Integrated email and SMS with a centralized log.
 - **Automation**: Event-driven automation rules.
 - **User Roles**: Owner, admin, and technician roles with access control.
+- **Satellite/Aerial View**: Google Maps satellite imagery for properties, with street/aerial toggle on technician views.
+- **Yard Measurement Tool**: Interactive Mapbox polygon drawing tool for measuring yard area from satellite view, with automatic size categorization (Small/Standard/Large/Extra Large).
 - **Proof of Service**: Technicians can upload photos via mobile.
 - **Technician Time Tracking**: Clock in/out functionality.
 - **Bulk Contact Actions**: Multi-select actions for contacts.
@@ -70,5 +72,5 @@ Scoopilot is a full-stack, multi-tenant SaaS application emphasizing role-based 
 - **Twilio**: SMS messaging service.
 - **Stripe**: Payment gateway for processing payments and managing customer data.
 - **Mapbox**: Directions API, Geocoding API, and GL JS for mapping and routing functionalities.
-- **Google Maps**: Street View Static API for property images on contact detail and technician views. Proxied via `GET /api/streetview` endpoint using `GOOGLE_MAPS_API_KEY`.
+- **Google Maps**: Street View Static API and Static Maps API (satellite) for property images on contact detail and technician views. Proxied via `GET /api/streetview` and `GET /api/satellite` endpoints using `GOOGLE_MAPS_API_KEY`.
 - **OpenAI**: Used for AI-assisted import wizard functionalities via Replit AI Integrations.

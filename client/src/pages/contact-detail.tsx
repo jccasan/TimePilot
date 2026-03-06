@@ -47,9 +47,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler } from "lucide-react";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { StreetViewImage } from "@/components/street-view-image";
+import { SatelliteImage } from "@/components/satellite-image";
+import { YardMeasureTool, getYardCategory, formatArea } from "@/components/yard-measure-tool";
 
 const statusColors: Record<string, string> = {
   lead: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -67,6 +69,7 @@ const propertyFormSchema = z.object({
   numberOfDogs: z.coerce.number().min(0).optional(),
   yardSize: z.string().optional(),
   gateCode: z.string().optional(),
+  lotSize: z.string().optional(),
   specialInstructions: z.string().optional(),
 });
 
@@ -75,6 +78,7 @@ export default function ContactDetail() {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
+  const [measurePropertyId, setMeasurePropertyId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [newTagName, setNewTagName] = useState("");
 
@@ -134,6 +138,7 @@ export default function ContactDetail() {
       numberOfDogs: 1,
       yardSize: "",
       gateCode: "",
+      lotSize: "",
       specialInstructions: "",
     },
   });
@@ -157,6 +162,23 @@ export default function ContactDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/properties" + `?contactId=${id}`] });
       toast({ title: "Property deleted", description: "Property removed successfully." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const saveMeasurementMutation = useMutation({
+    mutationFn: async ({ propertyId, polygon, areaSqft }: { propertyId: string; polygon: number[][]; areaSqft: number }) => {
+      await apiRequest("PATCH", `/api/properties/${propertyId}`, {
+        yardPolygon: polygon,
+        measuredYardSqft: areaSqft,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties" + `?contactId=${id}`] });
+      setMeasurePropertyId(null);
+      toast({ title: "Measurement saved", description: "Yard area has been recorded." });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -507,6 +529,9 @@ export default function ContactDetail() {
                   <FormField control={propertyForm.control} name="gateCode" render={({ field }) => (
                     <FormItem><FormLabel>Gate Code</FormLabel><FormControl><Input {...field} data-testid="input-gate-code" /></FormControl><FormMessage /></FormItem>
                   )} />
+                  <FormField control={propertyForm.control} name="lotSize" render={({ field }) => (
+                    <FormItem><FormLabel>Lot Size</FormLabel><FormControl><Input {...field} placeholder="e.g. 0.18 acres, 7,840 sqft" data-testid="input-lot-size" /></FormControl><FormMessage /></FormItem>
+                  )} />
                   <FormField control={propertyForm.control} name="specialInstructions" render={({ field }) => (
                     <FormItem><FormLabel>Special Instructions</FormLabel><FormControl><Textarea {...field} data-testid="input-special-instructions" /></FormControl><FormMessage /></FormItem>
                   )} />
@@ -521,49 +546,110 @@ export default function ContactDetail() {
         <CardContent>
           {properties && properties.length > 0 ? (
             <div className="space-y-2">
-              {properties.map((prop) => (
+              {properties.map((prop) => {
+                const propAddress = `${prop.streetAddress}, ${prop.city}, ${prop.state} ${prop.zipCode}`;
+                const propLat = prop.latitude ? Number(prop.latitude) : undefined;
+                const propLng = prop.longitude ? Number(prop.longitude) : undefined;
+                const yardCat = prop.measuredYardSqft ? getYardCategory(prop.measuredYardSqft) : null;
+                return (
                 <div key={prop.id} className="border rounded-md overflow-hidden" data-testid={`text-property-${prop.id}`}>
-                  <StreetViewImage
-                    address={`${prop.streetAddress}, ${prop.city}, ${prop.state} ${prop.zipCode}`}
-                    lat={prop.latitude ? Number(prop.latitude) : undefined}
-                    lng={prop.longitude ? Number(prop.longitude) : undefined}
-                    className="rounded-none border-0 border-b h-[120px]"
-                    size="600x300"
-                  />
-                  <div className="p-3 flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-medium">{prop.streetAddress}</p>
-                      <p className="text-sm text-muted-foreground">{prop.city}, {prop.state} {prop.zipCode}</p>
-                      {prop.gateCode && <p className="text-sm text-muted-foreground">Gate: {prop.gateCode}</p>}
-                    </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0" data-testid={`button-delete-property-${prop.id}`}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Property</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Are you sure you want to delete {prop.streetAddress}? This action cannot be undone. Any service plans linked to this property will also be affected.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deletePropertyMutation.mutate(prop.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            data-testid={`button-confirm-delete-property-${prop.id}`}
-                          >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 border-b">
+                    <StreetViewImage
+                      address={propAddress}
+                      lat={propLat}
+                      lng={propLng}
+                      className="rounded-none border-0 h-[120px]"
+                      size="600x300"
+                    />
+                    <SatelliteImage
+                      address={propAddress}
+                      lat={propLat}
+                      lng={propLng}
+                      className="rounded-none border-0 border-t sm:border-t-0 sm:border-l h-[120px]"
+                      size="600x300"
+                      zoom={19}
+                    />
                   </div>
+                  <div className="p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{prop.streetAddress}</p>
+                        <p className="text-sm text-muted-foreground">{prop.city}, {prop.state} {prop.zipCode}</p>
+                        {prop.gateCode && <p className="text-sm text-muted-foreground">Gate: {prop.gateCode}</p>}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {propLat != null && propLng != null && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            onClick={() => setMeasurePropertyId(measurePropertyId === prop.id ? null : prop.id)}
+                            data-testid={`button-measure-yard-${prop.id}`}
+                          >
+                            <Ruler className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0" data-testid={`button-delete-property-${prop.id}`}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Property</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete {prop.streetAddress}? This action cannot be undone. Any service plans linked to this property will also be affected.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deletePropertyMutation.mutate(prop.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                data-testid={`button-confirm-delete-property-${prop.id}`}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                    {(prop.measuredYardSqft || prop.lotSize) && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {prop.measuredYardSqft && yardCat && (
+                          <>
+                            <Badge className={`text-xs ${yardCat.color}`} data-testid={`badge-yard-category-${prop.id}`}>
+                              {yardCat.label}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground" data-testid={`text-yard-area-${prop.id}`}>
+                              {formatArea(prop.measuredYardSqft)}
+                            </span>
+                          </>
+                        )}
+                        {prop.lotSize && (
+                          <span className="text-sm text-muted-foreground">Lot: {prop.lotSize}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {measurePropertyId === prop.id && propLat != null && propLng != null && (
+                    <div className="border-t p-3">
+                      <YardMeasureTool
+                        lat={propLat}
+                        lng={propLng}
+                        propertyId={prop.id}
+                        existingPolygon={prop.yardPolygon as number[][] | null}
+                        existingArea={prop.measuredYardSqft}
+                        onSave={(polygon, areaSqft) => saveMeasurementMutation.mutate({ propertyId: prop.id, polygon, areaSqft })}
+                        onCancel={() => setMeasurePropertyId(null)}
+                      />
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No properties yet.</p>
