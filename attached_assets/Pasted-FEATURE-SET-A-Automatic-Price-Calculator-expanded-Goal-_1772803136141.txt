@@ -1,0 +1,349 @@
+FEATURE SET A: Automatic Price Calculator (expanded)
+Goal: Recommend pricing by yard size and route density that ensures profitability.
+
+A1) Inputs (configurable tenant settings)
+Labor:
+- techHourlyWageCents (default tenant-level; optional per-tech override)
+- burdenMultiplier = 1.4 (fully burdened W2 rate)
+
+Fuel/Vehicle:
+- averageGasPriceCentsPerGallon (tenant setting)
+- vehicleMPG (tenant setting; optional)
+- vehicleCostPerMileCents (tenant setting; default 65 cents/mile). If set, this overrides MPG-based fuel calc.
+
+Time assumptions:
+- baseTimePerTenthAcreMinutes = 10
+- extraDogMinutesAfterFirst = 2
+- driveSpeedAverageMph = 30
+- minimumServiceMinutesFloor = 8
+
+Frequency multipliers (tenant editable):
+- weeklyMultiplier = 1.0
+- biweeklyMultiplier = 1.3
+- monthlyMultiplier = 1.8
+- oneTimeMultiplier = 1.0 (or separate)
+
+Yard difficulty (tenant editable):
+- difficultyFlat = 1.0
+- difficultyModerate = 1.2
+- difficultyDifficult = 1.5
+
+Overhead (monthly tenant settings):
+- advertisingCents
+- payrollProviderCents
+- benefitsCents
+- insuranceCents
+- softwareCents
+- otherOverheadCents
+
+Equipment per visit (tenant settings or pricing catalog defaults):
+- disinfectantCents
+- deodorizerCents
+- bagsCents
+
+Optional market anchor:
+- localMarketAverageWeeklyPriceCents (tenant setting; optional)
+- marketAnchorTolerancePct (default 35%) to prevent absurd recommendations
+
+Profit targets:
+- targetProfitMarginPct (default 30%)
+- pricingMode presets:
+  - Aggressive Growth: 20%
+  - Standard: 30%
+  - Premium: 40%
+
+A2) Property/Job inputs
+- propertyId
+- yardSizeAcres
+- dogCount
+- serviceFrequency (weekly/biweekly/monthly/one-time)
+- yardDifficulty (flat/moderate/difficult)
+- distanceFromNearestStopMiles (or computed from route graph)
+- routeId (optional)
+- routeDensity metrics (stopsPerMile, stopsPerHour) if routeId present
+
+A3) Density and cluster logic (required)
+Route density multiplier:
+- baselineStopsPerMile = tenant-level rolling avg stops/mile (compute from route_day_metrics over last 30 days)
+- densityMultiplier = baselineStopsPerMile / max(routeStopsPerMile, smallEpsilon)
+Apply densityMultiplier to travel time and travel cost allocation:
+- adjustedTravelMinutes = travelMinutes * densityMultiplier
+- adjustedTravelCost = travelCost * densityMultiplier
+Guardrails: clamp densityMultiplier between 0.6 and 1.8.
+
+Cluster discount (required):
+- If distanceFromNearestStopMiles <= 0.05, apply clusterDiscountPct (tenant setting default 10%).
+- If <= 0.02, apply higher tier clusterDiscountPct2 (default 15%).
+This discount applies to the recommended price only (not minimum break-even).
+
+A4) Frequency adjustment (required)
+- serviceMinutesBase = (yardSizeAcres / 0.1) * baseTimePerTenthAcreMinutes
+- extraDogMinutes = max(dogCount - 1, 0) * extraDogMinutesAfterFirst
+- serviceMinutes = max(minimumServiceMinutesFloor, serviceMinutesBase + extraDogMinutes)
+- serviceMinutes *= frequencyMultiplier(serviceFrequency)
+- serviceMinutes *= difficultyMultiplier(yardDifficulty)
+
+A5) Travel time and cost
+- travelMinutes = (distanceFromNearestStopMiles / driveSpeedAverageMph) * 60
+- adjustedTravelMinutes = travelMinutes * densityMultiplier
+
+Vehicle cost:
+- If vehicleCostPerMileCents set: travelCost = distanceFromNearestStopMiles * vehicleCostPerMileCents
+- Else if MPG set: fuelCostPerMileCents = averageGasPriceCentsPerGallon / vehicleMPG
+  travelCost = distanceFromNearestStopMiles * fuelCostPerMileCents
+- adjustedTravelCost = travelCost * densityMultiplier
+
+A6) Labor cost
+- fullyBurdenedRateCentsPerHour = techHourlyWageCents * burdenMultiplier
+- jobMinutes = serviceMinutes + adjustedTravelMinutes
+- laborCostCents = (jobMinutes / 60) * fullyBurdenedRateCentsPerHour
+
+A7) Equipment cost
+- equipmentCostCents = disinfectantCents + deodorizerCents + bagsCents
+
+A8) Overhead allocation (required)
+Compute overhead per stop using real ops data:
+- monthlyOverheadCents = sum(overhead settings)
+- estimatedMonthlyStops = use actual completed visits last 30 days normalized to month OR use (stopsPerHour * techHoursPerMonth) fallback.
+Prefer actual. If no history, use a conservative default estimatedMonthlyStops (tenant editable).
+- overheadPerVisitCents = monthlyOverheadCents / estimatedMonthlyStops
+
+A9) Total cost and pricing outputs (required)
+- totalCostPerVisitCents = laborCostCents + adjustedTravelCost + equipmentCostCents + overheadPerVisitCents
+
+Three-tier price outputs (required):
+- minimumPriceCents = totalCostPerVisitCents (break-even)
+- recommendedPriceCents = minimumPriceCents / (1 - targetProfitMarginPct)
+- premiumPriceCents = minimumPriceCents / (1 - premiumMarginPct) (default premiumMarginPct=40%)
+
+Apply cluster discount to recommended/premium only:
+- recommendedPriceCents *= (1 - clusterDiscountPct)
+- premiumPriceCents *= (1 - clusterDiscountPct)
+
+Market anchor guardrail (optional but implement):
+If localMarketAverageWeeklyPriceCents exists AND serviceFrequency is weekly:
+- clamp recommendedPrice to within +/- marketAnchorTolerancePct of market average unless user overrides.
+Always show a warning if clamped.
+
+Round to nearest whole dollar.
+
+A10) Profit warning system (required)
+Given a user-entered price (currentPriceCents) or quote price:
+- if currentPriceCents < minimumPriceCents:
+  show “Likely losing $X per visit” (X = minimum - current)
+- show profit per visit and profit per hour at current price.
+
+A11) Output schema (required)
+Return structured JSON:
+{
+  minimumPriceCents,
+  recommendedPriceCents,
+  premiumPriceCents,
+  inputsUsed: {...},
+  breakdown: {
+    serviceMinutes,
+    travelMinutes,
+    adjustedTravelMinutes,
+    densityMultiplier,
+    laborCostCents,
+    travelCostCents,
+    adjustedTravelCostCents,
+    equipmentCostCents,
+    overheadPerVisitCents
+  },
+  derived: {
+    jobMinutes,
+    profitAtRecommendedCents,
+    profitPerHourAtRecommendedCents,
+    clusterDiscountAppliedPct,
+    marketAnchorClamped: boolean,
+    isEstimated: boolean
+  }
+}
+
+A12) UI (required)
+Add calculator to:
+- Estimate Builder (quote flow)
+- Property detail
+- Admin pricing tool page
+
+UI must show:
+- Three-tier prices (Minimum / Recommended / Premium)
+- Cost breakdown
+- Density + cluster badge
+- Profit warning if current price < minimum
+- “How calculated” expandable panel
+- Toggle for pricing mode (Aggressive/Standard/Premium)
+- Override controls (Owner/Admin)
+
+A13) Storage (required)
+Create `price_recommendations` table:
+tenantId, propertyId, serviceFrequency, yardSizeAcres, dogCount, yardDifficulty,
+routeId (nullable),
+minimumPriceCents, recommendedPriceCents, premiumPriceCents,
+jobMinutes, serviceMinutes, travelMinutes, densityMultiplier,
+breakdownJson, inputsJson,
+calculatedAt, calculationVersion,
+createdByUserId (nullable), source ("manual"|"auto"|"ai_optimizer")
+
+Index tenantId+propertyId, tenantId+calculatedAt.
+
+============================================================
+FEATURE SET B: Profit per Customer (required)
+Goal: show profitability at customer level to guide repricing and churn risk.
+
+Definitions:
+- Revenue per customer: sum of paid invoice amounts OR invoice totals (configurable) for selected period.
+- Cost per customer:
+  - Allocate labor based on completed visits time tracked; if missing, estimate serviceMinutes from pricing engine assumptions.
+  - Allocate travel cost: use route_day_metrics miles and allocate by customer stops proportionally.
+  - Allocate overhead per visit as computed above.
+  - Equipment costs per visit.
+
+Outputs per customer:
+- revenueCents, costCents, grossProfitCents, marginPct
+- profitPerVisitCents
+- profitPerHourCents (estimate)
+- “Underpriced” flag if avg price < min recommended
+
+UI:
+- Analytics > “Customer Profitability”
+Filters:
+- date range (default last 30 days)
+- route, tech, frequency
+Table columns:
+Customer, Stops, Revenue, Cost, Profit, Margin%, Profit/Stop, Underpriced
+Drilldown:
+Customer detail modal: list of visits + revenue + cost estimate
+
+Data:
+Create rollup table `customer_profit_rollup` keyed by (tenantId, customerId, periodStart, periodEnd).
+Compute nightly for last 30/60/90 days and on-demand for custom ranges.
+
+API:
+- GET /api/analytics/customer-profit?start=&end=&routeId=&techId=
+- GET /api/analytics/customer-profit/:customerId?start=&end=
+
+============================================================
+FEATURE SET C: Route Profit Maps (required)
+Goal: visualize profit hotspots and problem zones geographically.
+
+Map UI:
+- Analytics > “Profit Map”
+- Mapbox map with:
+  - Heatmap layer for profit density (grossProfit per area)
+  - Optional hex/grid aggregation (H3 or simple grid buckets)
+  - Toggle layers:
+    1) Profit heatmap
+    2) Revenue heatmap
+    3) Underpriced customers (pins)
+    4) Route profitability overlay (color-coded routes by profitPerMile or margin)
+- Filters:
+  - date range
+  - route
+  - technician
+  - include/exclude estimated revenue
+
+Aggregation:
+- For each completed visit, compute estimated profit contribution:
+  profit = visitRevenue - allocatedCosts
+- Bucket by geo cell (grid or H3).
+Return GeoJSON with properties:
+cellId, revenueCents, costCents, profitCents, visitsCount, marginPct.
+
+API:
+- GET /api/analytics/profit-map?start=&end=&layer=profit|revenue|underpriced|routeOverlay&routeId=&techId=
+Return GeoJSON.
+
+Performance:
+- Precompute map tiles/aggregations nightly for common ranges (last 7/30/90 days).
+- Store in `profit_map_rollups` keyed by (tenantId, rangeKey, layer, filtersHash).
+
+============================================================
+FEATURE SET D: AI Pricing Optimizer (required)
+Goal: use AI to recommend better pricing tiers across the book of business while respecting market anchors and profitability targets.
+
+Principles:
+- AI never writes directly to prices.
+- AI produces recommendations + reasoning + confidence and requires Owner/Admin approval.
+
+Inputs to optimizer:
+- customer profit rollups
+- route density metrics
+- current prices per plan/customer
+- yard size, dog count, frequency
+- local market anchor (if provided)
+- churn risk proxies (optional): late payments, cancellations, complaints flags if exist
+
+Outputs:
+For each customer:
+- recommendedNewPriceCents (and optionally a range)
+- expectedProfitLiftCentsPerMonth
+- confidence score
+- reason codes (e.g., "Underpriced vs cost", "Low density travel penalty", "Biweekly multiplier", "Premium zone")
+- suggested communication template category (friendly notice)
+
+AI constraints and guardrails:
+- Use structured JSON output validated by schema.
+- Hard constraints:
+  - recommendedNewPrice >= minimumPrice
+  - recommendedNewPrice within market anchor clamp unless user overrides
+  - max increase per cycle default 15% unless flagged “severely underpriced”
+- Provide batch mode:
+  - “Conservative increases” (cap 10%)
+  - “Standard” (cap 15%)
+  - “Fix underpriced fast” (cap 25% for severely underpriced)
+
+UI:
+- Analytics > “AI Pricing Optimizer”
+- Show list of customers with:
+  current price, minimum price, recommended price, delta, profit lift
+  checkboxes to approve
+- Bulk apply:
+  - creates “Price Change Proposals” (not auto-applied)
+  - optionally generates draft emails/SMS templates (do not send automatically unless user triggers)
+
+Data model:
+- `pricing_optimizer_runs` (tenantId, runAt, parametersJson, status, summaryJson)
+- `pricing_recommendations` (tenantId, customerId, propertyId, currentPriceCents, minPriceCents, recommendedPriceCents, deltaCents, expectedLiftCents, confidence, reasonsJson, status: proposed/approved/rejected/applied)
+- `price_change_proposals` (tenantId, customerId, newPriceCents, effectiveDate, status)
+
+API:
+- POST /api/ai/pricing-optimizer/run
+- GET /api/ai/pricing-optimizer/runs
+- POST /api/ai/pricing-optimizer/recommendations/:id/approve
+- POST /api/ai/pricing-optimizer/recommendations/bulk-approve
+
+Cost control:
+- Only send AI the minimal necessary aggregates, not raw PII.
+- Limit batch size per run (e.g., 500 customers).
+- Cache and re-use embeddings/feature vectors if implemented.
+
+============================================================
+DELIVERABLES
+1) DB migrations + indexes for all new tables.
+2) Back-end services for pricing calculations, customer profit rollups, map aggregations, and optimizer orchestration.
+3) Nightly jobs:
+  - price baseline metrics
+  - customer profit rollups (30/60/90)
+  - profit map rollups
+4) UI pages/components:
+  - Estimate Builder pricing card (3-tier + breakdown + warning)
+  - Customer Profitability dashboard + drilldown + CSV export
+  - Profit Map with layers and filters
+  - AI Pricing Optimizer run + approve workflow
+5) Tests:
+  - calculation correctness (frequency multipliers, difficulty, density clamps, cluster discount)
+  - market anchor clamping
+  - tenant scoping and RBAC
+  - rollup accuracy on sample fixtures
+6) Minimal docs for operators:
+  - “How pricing is calculated”
+  - “How to use AI optimizer safely”
+
+Start by scanning the codebase for:
+- invoices -> visits linkage
+- route_day_metrics (or create if missing)
+- existing analytics patterns and Mapbox usage
+- pricing/catalog service
+Then implement in a staged approach behind feature flags.
