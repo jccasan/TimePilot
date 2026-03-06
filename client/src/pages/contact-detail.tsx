@@ -70,6 +70,8 @@ const propertyFormSchema = z.object({
   yardSize: z.string().optional(),
   gateCode: z.string().optional(),
   lotSize: z.string().optional(),
+  latitude: z.string().optional(),
+  longitude: z.string().optional(),
   specialInstructions: z.string().optional(),
 });
 
@@ -507,6 +509,8 @@ export default function ContactDetail() {
                           propertyForm.setValue("city", addr.city);
                           propertyForm.setValue("state", addr.state);
                           propertyForm.setValue("zipCode", addr.zipCode);
+                          if (addr.latitude) propertyForm.setValue("latitude", String(addr.latitude));
+                          if (addr.longitude) propertyForm.setValue("longitude", String(addr.longitude));
                         }}
                         data-testid="input-street"
                       />

@@ -54,6 +54,7 @@ export function YardMeasureTool({ lat, lng, propertyId, existingPolygon, existin
   const [points, setPoints] = useState<number[][]>(existingPolygon || []);
   const [closed, setClosed] = useState(!!existingPolygon && existingPolygon.length >= 3);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
 
   useEffect(() => {
@@ -92,6 +93,7 @@ export function YardMeasureTool({ lat, lng, propertyId, existingPolygon, existin
     if (!mapboxToken || !mapContainerRef.current || mapRef.current) return;
 
     const initMap = async () => {
+      try {
       const mapboxgl = (await import("mapbox-gl")).default;
       await import("mapbox-gl/dist/mapbox-gl.css");
       (mapboxgl as any).accessToken = mapboxToken;
@@ -102,6 +104,10 @@ export function YardMeasureTool({ lat, lng, propertyId, existingPolygon, existin
         center: [lng, lat],
         zoom: 19,
         attributionControl: false,
+      });
+
+      map.on("error", (e: any) => {
+        console.warn("Mapbox error:", e);
       });
 
       map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
@@ -150,6 +156,10 @@ export function YardMeasureTool({ lat, lng, propertyId, existingPolygon, existin
           updateMapLayers(map, existingPolygon, true);
         }
       });
+      } catch (err) {
+        console.warn("Failed to initialize map:", err);
+        setMapError("Unable to load the interactive map. Your browser may not support WebGL.");
+      }
     };
 
     initMap();
@@ -233,6 +243,24 @@ export function YardMeasureTool({ lat, lng, propertyId, existingPolygon, existin
   };
 
   const category = areaSqft > 0 ? getYardCategory(areaSqft) : null;
+
+  if (mapError) {
+    return (
+      <div className="space-y-3" data-testid="yard-measure-tool">
+        <div className="w-full h-[200px] rounded-md border flex items-center justify-center bg-muted" data-testid="yard-measure-map">
+          <div className="text-center text-muted-foreground p-4">
+            <p className="text-sm font-medium mb-1">Map unavailable</p>
+            <p className="text-xs">{mapError}</p>
+          </div>
+        </div>
+        {onCancel && (
+          <Button size="sm" variant="ghost" onClick={onCancel} data-testid="button-cancel-measure">
+            Close
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3" data-testid="yard-measure-tool">
