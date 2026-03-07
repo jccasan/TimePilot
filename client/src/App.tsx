@@ -13,7 +13,6 @@ import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users } from "lu
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
 import RoverChatbot from "@/components/rover-chatbot";
-import OnboardingWizard from "@/components/onboarding-wizard";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
@@ -447,7 +446,6 @@ function App() {
           <Toaster />
           <PwaInstallPrompt />
           <RoverChatbot />
-          <OnboardingWizard />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

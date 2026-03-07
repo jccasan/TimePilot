@@ -578,14 +578,47 @@ export async function registerRoutes(
       const hasRoutes = routesList.length > 0;
       const hasServicePlans = plansList.length > 0;
 
+      let firstContact: any = null;
+      let firstProperty: any = null;
+      let firstServicePlan: any = null;
+      if (hasContacts) {
+        firstContact = contactsList[0];
+        const props = await storage.getProperties(companyId, firstContact.id);
+        if (props.length > 0) firstProperty = props[0];
+      }
+      if (hasServicePlans) {
+        firstServicePlan = plansList[0];
+      }
+
+      let hasPriceRecommendation = false;
+      if (firstProperty) {
+        const recs = await storage.getPriceRecommendations(companyId);
+        hasPriceRecommendation = recs.some((r: any) => r.propertyId === firstProperty.id);
+      }
+
       const steps = [
-        { key: "contact", label: "Add your first client", completed: hasContacts },
-        { key: "route", label: "Create a route", completed: hasRoutes },
-        { key: "service_plan", label: "Set up a service plan", completed: hasServicePlans },
+        { key: "add_customer", label: "Add your first customer", completed: hasContacts },
+        { key: "price_property", label: "Price your first property", completed: hasPriceRecommendation || hasServicePlans },
+        { key: "create_service_plan", label: "Create your first service plan", completed: hasServicePlans },
+        { key: "generate_route", label: "Generate your first route", completed: hasRoutes },
       ];
 
       const isComplete = steps.every(s => s.completed);
-      res.json({ isComplete, steps, totalContacts: contactsList.length, totalRoutes: routesList.length, totalServicePlans: plansList.length });
+      res.json({
+        isComplete,
+        steps,
+        firstContact: firstContact ? { id: firstContact.id, firstName: firstContact.firstName, lastName: firstContact.lastName } : null,
+        firstProperty: firstProperty ? {
+          id: firstProperty.id,
+          streetAddress: firstProperty.streetAddress,
+          city: firstProperty.city,
+          state: firstProperty.state,
+          yardSize: firstProperty.yardSize,
+          numberOfDogs: firstProperty.numberOfDogs,
+          measuredYardSqft: firstProperty.measuredYardSqft,
+        } : null,
+        firstServicePlan: firstServicePlan ? { id: firstServicePlan.id, routeId: firstServicePlan.routeId } : null,
+      });
     } catch (err) { handleError(res, err); }
   });
 

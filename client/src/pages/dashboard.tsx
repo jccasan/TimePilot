@@ -24,10 +24,22 @@ import {
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import GuidedSetup from "@/components/guided-setup";
 
 type OnboardingStatus = {
   isComplete: boolean;
   steps: { key: string; label: string; completed: boolean }[];
+  firstContact: { id: string; firstName: string; lastName: string } | null;
+  firstProperty: {
+    id: string;
+    streetAddress: string;
+    city: string;
+    state: string;
+    yardSize: string;
+    numberOfDogs: number;
+    measuredYardSqft: number | null;
+  } | null;
+  firstServicePlan: { id: string; routeId: string | null } | null;
 };
 
 type CompanyStats = {
@@ -397,44 +409,7 @@ export default function Dashboard() {
       </div>
 
       {onboarding && !onboarding.isComplete && (
-        <Card data-testid="card-onboarding">
-          <CardHeader>
-            <CardTitle className="text-lg">Getting Started</CardTitle>
-            <CardDescription>Complete these steps to set up your business</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {onboarding.steps.map((step) => {
-              const stepLinks: Record<string, string> = {
-                contact: "/contacts",
-                route: "/routes",
-                service_plan: "/scheduling",
-              };
-              return (
-                <div key={step.key} className="flex items-center justify-between gap-2" data-testid={`onboarding-step-${step.key}`}>
-                  <div className="flex items-center gap-2">
-                    {step.completed ? (
-                      <CheckCircle2 className="h-5 w-5 text-primary" />
-                    ) : (
-                      <Circle className="h-5 w-5 text-muted-foreground" />
-                    )}
-                    <span className={step.completed ? "line-through text-muted-foreground" : ""}>{step.label}</span>
-                  </div>
-                  {!step.completed && (
-                    <Button asChild variant="ghost" size="sm" data-testid={`button-onboarding-${step.key}`}>
-                      <Link href={stepLinks[step.key] || "/"}>
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-              );
-            })}
-            <Progress
-              value={(onboarding.steps.filter(s => s.completed).length / onboarding.steps.length) * 100}
-              className="h-2 mt-2"
-            />
-          </CardContent>
-        </Card>
+        <GuidedSetup onboarding={onboarding} />
       )}
 
       {activeStatWidgets.length > 0 && (
