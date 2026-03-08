@@ -102,6 +102,12 @@ function requireRole(role: string, allowed: string[] = ["owner", "admin"]) {
   }
 }
 
+function getBaseUrl(req: Request): string {
+  const host = req.get("host") || "localhost";
+  const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+  return `${proto === "http" && !host.startsWith("localhost") ? "https" : proto}://${host}`;
+}
+
 function handleError(res: Response, err: any) {
   if (err && typeof err === "object" && "status" in err) {
     return res.status(err.status).json({ error: err.message });
@@ -3989,7 +3995,7 @@ export async function registerRoutes(
         await storage.updateContact(contact.id, { stripeCustomerId });
       }
 
-      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const baseUrl = getBaseUrl(req);
       const result = await createCheckoutSession({
         customerId: stripeCustomerId,
         invoiceId: invoice.id,
@@ -4238,7 +4244,7 @@ export async function registerRoutes(
         await storage.updateContact(contact.id, { stripeCustomerId });
       }
 
-      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const baseUrl = getBaseUrl(req);
       const result = await createCheckoutSession({
         customerId: stripeCustomerId,
         invoiceId: invoice.id,
@@ -4451,7 +4457,7 @@ export async function registerRoutes(
       await storage.updateContact(req.params.id, { hasPortalAccess: true, portalPasswordHash });
 
       const company = await storage.getCompany(companyId);
-      const portalUrl = `${req.protocol}://${req.get("host")}/portal/login`;
+      const portalUrl = `${getBaseUrl(req)}/portal/login`;
       sendEmail({
         to: contact.email,
         subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
@@ -4514,7 +4520,7 @@ export async function registerRoutes(
       await storage.updateContact(req.params.id, { portalPasswordHash });
 
       const company = await storage.getCompany(companyId);
-      const portalUrl = `${req.protocol}://${req.get("host")}/portal/login`;
+      const portalUrl = `${getBaseUrl(req)}/portal/login`;
       sendEmail({
         to: contact.email,
         subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
@@ -4554,7 +4560,7 @@ export async function registerRoutes(
       }
 
       const company = await storage.getCompany(companyId);
-      const portalUrl = `${req.protocol}://${req.get("host")}/portal/login`;
+      const portalUrl = `${getBaseUrl(req)}/portal/login`;
       let sent = 0;
       let skipped = 0;
       const errors: string[] = [];
@@ -4694,7 +4700,7 @@ export async function registerRoutes(
       const discountNum = parseFloat(invoice.discountAmount || "0");
       const paidNum = invoice.paidAt ? parseFloat(invoice.total) : 0;
 
-      const logoUrl = company?.logoUrl ? `${req.protocol}://${req.get("host")}${company.logoUrl}` : "";
+      const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : "";
       const invoiceData: any = {
         business: {
           name: company?.name || "",
