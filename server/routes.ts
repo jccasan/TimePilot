@@ -4408,6 +4408,15 @@ export async function registerRoutes(
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const updates: any = {};
       if (req.body.numberOfDogs !== undefined) updates.numberOfDogs = Number(req.body.numberOfDogs);
+      if (req.body.firstName !== undefined) updates.firstName = String(req.body.firstName).trim();
+      if (req.body.lastName !== undefined) updates.lastName = String(req.body.lastName).trim();
+      if (req.body.phone !== undefined) updates.phone = String(req.body.phone).trim() || null;
+      if (req.body.email !== undefined) {
+        const newEmail = String(req.body.email).trim().toLowerCase();
+        if (newEmail && newEmail !== contact.email) {
+          updates.email = newEmail;
+        }
+      }
       if (Object.keys(updates).length > 0) {
         await storage.updateContact(contactId, updates);
       }
@@ -4419,6 +4428,10 @@ export async function registerRoutes(
               const propUpdates: any = {};
               if (prop.gateCode !== undefined) propUpdates.gateCode = prop.gateCode;
               if (prop.specialInstructions !== undefined) propUpdates.specialInstructions = prop.specialInstructions;
+              if (prop.streetAddress !== undefined) propUpdates.streetAddress = String(prop.streetAddress).trim();
+              if (prop.city !== undefined) propUpdates.city = String(prop.city).trim();
+              if (prop.state !== undefined) propUpdates.state = String(prop.state).trim();
+              if (prop.zipCode !== undefined) propUpdates.zipCode = String(prop.zipCode).trim();
               if (Object.keys(propUpdates).length > 0) {
                 await storage.updateProperty(prop.id, propUpdates);
               }
@@ -4426,7 +4439,20 @@ export async function registerRoutes(
           }
         }
       }
-      res.json({ success: true });
+      const updatedContact = await storage.getContactById(contactId);
+      const company = await storage.getCompany(companyId);
+      res.json({
+        success: true,
+        profile: {
+          id: updatedContact!.id,
+          firstName: updatedContact!.firstName,
+          lastName: updatedContact!.lastName,
+          email: updatedContact!.email,
+          phone: updatedContact!.phone,
+          companyName: company?.name || "",
+          numberOfDogs: updatedContact!.numberOfDogs,
+        },
+      });
     } catch (err) { handleError(res, err); }
   });
 

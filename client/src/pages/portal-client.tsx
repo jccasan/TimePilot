@@ -300,10 +300,12 @@ export default function PortalClient() {
   const [cleanupNotes, setCleanupNotes] = useState("");
   const [cleanupPending, setCleanupPending] = useState(false);
   const [properties, setProperties] = useState<PortalProperty[]>([]);
-  const [propertyEdits, setPropertyEdits] = useState<Record<string, { gateCode: string; specialInstructions: string }>>({});
+  const [propertyEdits, setPropertyEdits] = useState<Record<string, { gateCode: string; specialInstructions: string; streetAddress: string; city: string; state: string; zipCode: string }>>({});
   const [savingProperties, setSavingProperties] = useState(false);
   const [numberOfDogs, setNumberOfDogs] = useState<number>(0);
   const [savingDogs, setSavingDogs] = useState(false);
+  const [profileEdits, setProfileEdits] = useState({ firstName: "", lastName: "", email: "", phone: "" });
+  const [savingProfile, setSavingProfile] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [autoPayEnabled, setAutoPayEnabled] = useState(false);
   const [addingCard, setAddingCard] = useState(false);
@@ -366,9 +368,22 @@ export default function PortalClient() {
         if (profileData.numberOfDogs != null) {
           setNumberOfDogs(profileData.numberOfDogs);
         }
-        const edits: Record<string, { gateCode: string; specialInstructions: string }> = {};
+        setProfileEdits({
+          firstName: profileData.firstName || "",
+          lastName: profileData.lastName || "",
+          email: profileData.email || "",
+          phone: profileData.phone || "",
+        });
+        const edits: Record<string, { gateCode: string; specialInstructions: string; streetAddress: string; city: string; state: string; zipCode: string }> = {};
         for (const p of propertiesData) {
-          edits[p.id] = { gateCode: p.gateCode || "", specialInstructions: p.specialInstructions || "" };
+          edits[p.id] = {
+            gateCode: p.gateCode || "",
+            specialInstructions: p.specialInstructions || "",
+            streetAddress: p.streetAddress || "",
+            city: p.city || "",
+            state: p.state || "",
+            zipCode: p.zipCode || "",
+          };
         }
         setPropertyEdits(edits);
 
@@ -499,6 +514,39 @@ export default function PortalClient() {
     }
   };
 
+  const handleSaveProfile = async () => {
+    if (!profileEdits.firstName.trim()) {
+      toast({ title: "Required", description: "First name is required.", variant: "destructive" });
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      const result = await portalFetch("/api/portal/profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          firstName: profileEdits.firstName,
+          lastName: profileEdits.lastName,
+          email: profileEdits.email,
+          phone: profileEdits.phone,
+        }),
+      });
+      if (result.profile) {
+        setProfile(result.profile);
+        setProfileEdits({
+          firstName: result.profile.firstName || "",
+          lastName: result.profile.lastName || "",
+          email: result.profile.email || "",
+          phone: result.profile.phone || "",
+        });
+      }
+      toast({ title: "Saved", description: "Your information has been updated." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const handleSaveProperties = async () => {
     setSavingProperties(true);
     try {
@@ -506,11 +554,29 @@ export default function PortalClient() {
         id,
         gateCode: vals.gateCode,
         specialInstructions: vals.specialInstructions,
+        streetAddress: vals.streetAddress,
+        city: vals.city,
+        state: vals.state,
+        zipCode: vals.zipCode,
       }));
       await portalFetch("/api/portal/profile", {
         method: "PATCH",
         body: JSON.stringify({ properties: propertyUpdates }),
       });
+      const updatedProps = await portalFetch("/api/portal/properties").catch(() => []);
+      setProperties(updatedProps);
+      const newEdits: Record<string, { gateCode: string; specialInstructions: string; streetAddress: string; city: string; state: string; zipCode: string }> = {};
+      for (const p of updatedProps) {
+        newEdits[p.id] = {
+          gateCode: p.gateCode || "",
+          specialInstructions: p.specialInstructions || "",
+          streetAddress: p.streetAddress || "",
+          city: p.city || "",
+          state: p.state || "",
+          zipCode: p.zipCode || "",
+        };
+      }
+      setPropertyEdits(newEdits);
       toast({ title: "Saved", description: "Property details have been updated." });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -1423,6 +1489,68 @@ export default function PortalClient() {
           {/* ==================== ACCOUNT TAB ==================== */}
           <TabsContent value="account" className="space-y-6">
             <section>
+              <SectionHeader title="Personal Information" description="Update your name, email, and phone number" />
+              <Card>
+                <CardContent className="pt-4 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="profile-first-name" className="text-xs">First Name</Label>
+                      <Input
+                        id="profile-first-name"
+                        value={profileEdits.firstName}
+                        onChange={(e) => setProfileEdits((p) => ({ ...p, firstName: e.target.value }))}
+                        placeholder="First name"
+                        className="h-9"
+                        data-testid="input-profile-first-name"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="profile-last-name" className="text-xs">Last Name</Label>
+                      <Input
+                        id="profile-last-name"
+                        value={profileEdits.lastName}
+                        onChange={(e) => setProfileEdits((p) => ({ ...p, lastName: e.target.value }))}
+                        placeholder="Last name"
+                        className="h-9"
+                        data-testid="input-profile-last-name"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="profile-email" className="text-xs">Email</Label>
+                      <Input
+                        id="profile-email"
+                        type="email"
+                        value={profileEdits.email}
+                        onChange={(e) => setProfileEdits((p) => ({ ...p, email: e.target.value }))}
+                        placeholder="Email address"
+                        className="h-9"
+                        data-testid="input-profile-email"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="profile-phone" className="text-xs">Phone</Label>
+                      <Input
+                        id="profile-phone"
+                        type="tel"
+                        value={profileEdits.phone}
+                        onChange={(e) => setProfileEdits((p) => ({ ...p, phone: e.target.value }))}
+                        placeholder="Phone number"
+                        className="h-9"
+                        data-testid="input-profile-phone"
+                      />
+                    </div>
+                  </div>
+                  <Button size="sm" onClick={handleSaveProfile} disabled={savingProfile} data-testid="button-save-profile">
+                    <Save className="mr-1.5 h-3.5 w-3.5" />
+                    {savingProfile ? "Saving..." : "Save Changes"}
+                  </Button>
+                </CardContent>
+              </Card>
+            </section>
+
+            <section>
               <SectionHeader title="Pet Information" />
               <Card>
                 <CardContent className="pt-4">
@@ -1457,7 +1585,7 @@ export default function PortalClient() {
               <section>
                 <SectionHeader
                   title="My Properties"
-                  description="Update gate codes and special instructions"
+                  description="Update your address, gate codes, and special instructions"
                   action={
                     <Button size="sm" onClick={handleSaveProperties} disabled={savingProperties} data-testid="button-save-properties">
                       <Save className="mr-1.5 h-3.5 w-3.5" />
@@ -1468,47 +1596,117 @@ export default function PortalClient() {
                 <div className="space-y-3">
                   {properties.map((prop) => (
                     <Card key={prop.id} data-testid={`card-property-${prop.id}`}>
-                      <CardContent className="pt-4">
-                        <div className="flex items-start gap-3 mb-3">
+                      <CardContent className="pt-4 space-y-3">
+                        <div className="flex items-start gap-3">
                           <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
                             <Home className="h-4 w-4 text-muted-foreground" />
                           </div>
                           <p className="font-medium text-sm pt-1.5" data-testid={`text-property-address-${prop.id}`}>
-                            {prop.streetAddress}, {prop.city}, {prop.state} {prop.zipCode}
+                            {prop.streetAddress ? `${prop.streetAddress}, ${prop.city}, ${prop.state} ${prop.zipCode}` : "No address on file"}
                           </p>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-12">
-                          <div className="space-y-1.5">
-                            <Label htmlFor={`gate-code-${prop.id}`} className="text-xs">Gate Code</Label>
-                            <Input
-                              id={`gate-code-${prop.id}`}
-                              value={propertyEdits[prop.id]?.gateCode || ""}
-                              onChange={(e) =>
-                                setPropertyEdits((prev) => ({
-                                  ...prev,
-                                  [prop.id]: { ...prev[prop.id], gateCode: e.target.value },
-                                }))
-                              }
-                              placeholder="Enter gate code"
-                              className="h-9"
-                              data-testid={`input-gate-code-${prop.id}`}
-                            />
+                        <div className="pl-12 space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1.5 sm:col-span-2">
+                              <Label htmlFor={`street-${prop.id}`} className="text-xs">Street Address</Label>
+                              <Input
+                                id={`street-${prop.id}`}
+                                value={propertyEdits[prop.id]?.streetAddress || ""}
+                                onChange={(e) =>
+                                  setPropertyEdits((prev) => ({
+                                    ...prev,
+                                    [prop.id]: { ...prev[prop.id], streetAddress: e.target.value },
+                                  }))
+                                }
+                                placeholder="Street address"
+                                className="h-9"
+                                data-testid={`input-street-address-${prop.id}`}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`city-${prop.id}`} className="text-xs">City</Label>
+                              <Input
+                                id={`city-${prop.id}`}
+                                value={propertyEdits[prop.id]?.city || ""}
+                                onChange={(e) =>
+                                  setPropertyEdits((prev) => ({
+                                    ...prev,
+                                    [prop.id]: { ...prev[prop.id], city: e.target.value },
+                                  }))
+                                }
+                                placeholder="City"
+                                className="h-9"
+                                data-testid={`input-city-${prop.id}`}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1.5">
+                                <Label htmlFor={`state-${prop.id}`} className="text-xs">State</Label>
+                                <Input
+                                  id={`state-${prop.id}`}
+                                  value={propertyEdits[prop.id]?.state || ""}
+                                  onChange={(e) =>
+                                    setPropertyEdits((prev) => ({
+                                      ...prev,
+                                      [prop.id]: { ...prev[prop.id], state: e.target.value },
+                                    }))
+                                  }
+                                  placeholder="State"
+                                  className="h-9"
+                                  data-testid={`input-state-${prop.id}`}
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label htmlFor={`zip-${prop.id}`} className="text-xs">Zip Code</Label>
+                                <Input
+                                  id={`zip-${prop.id}`}
+                                  value={propertyEdits[prop.id]?.zipCode || ""}
+                                  onChange={(e) =>
+                                    setPropertyEdits((prev) => ({
+                                      ...prev,
+                                      [prop.id]: { ...prev[prop.id], zipCode: e.target.value },
+                                    }))
+                                  }
+                                  placeholder="Zip"
+                                  className="h-9"
+                                  data-testid={`input-zip-code-${prop.id}`}
+                                />
+                              </div>
+                            </div>
                           </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor={`special-${prop.id}`} className="text-xs">Special Instructions</Label>
-                            <Input
-                              id={`special-${prop.id}`}
-                              value={propertyEdits[prop.id]?.specialInstructions || ""}
-                              onChange={(e) =>
-                                setPropertyEdits((prev) => ({
-                                  ...prev,
-                                  [prop.id]: { ...prev[prop.id], specialInstructions: e.target.value },
-                                }))
-                              }
-                              placeholder="Special instructions"
-                              className="h-9"
-                              data-testid={`input-special-instructions-${prop.id}`}
-                            />
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`gate-code-${prop.id}`} className="text-xs">Gate Code</Label>
+                              <Input
+                                id={`gate-code-${prop.id}`}
+                                value={propertyEdits[prop.id]?.gateCode || ""}
+                                onChange={(e) =>
+                                  setPropertyEdits((prev) => ({
+                                    ...prev,
+                                    [prop.id]: { ...prev[prop.id], gateCode: e.target.value },
+                                  }))
+                                }
+                                placeholder="Enter gate code"
+                                className="h-9"
+                                data-testid={`input-gate-code-${prop.id}`}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`special-${prop.id}`} className="text-xs">Special Instructions</Label>
+                              <Input
+                                id={`special-${prop.id}`}
+                                value={propertyEdits[prop.id]?.specialInstructions || ""}
+                                onChange={(e) =>
+                                  setPropertyEdits((prev) => ({
+                                    ...prev,
+                                    [prop.id]: { ...prev[prop.id], specialInstructions: e.target.value },
+                                  }))
+                                }
+                                placeholder="Special instructions"
+                                className="h-9"
+                                data-testid={`input-special-instructions-${prop.id}`}
+                              />
+                            </div>
                           </div>
                         </div>
                       </CardContent>

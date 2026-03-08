@@ -32,7 +32,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Forms**: react-hook-form with zodResolver.
 - **PWA Support**: Progressive Web App features for offline access.
 - **Mobile View**: Dedicated mobile-optimized views for field technicians.
-- **Client Portal**: Self-service portal for clients to manage services, view history, approve estimates, manage payments, and utilize a referral program.
+- **Client Portal**: Self-service portal with 4-tab layout (Overview, Services, Billing, Account). Clients can edit their contact info (name, email, phone), update property addresses/gate codes/instructions, manage pet count, view service history, approve estimates, manage payments, set notification preferences, and use a referral program. Changes sync back to the CRM via `PATCH /api/portal/profile`.
 - **Admin Dashboard**: Platform-level administration for tenant management and analytics.
 - **Notifications System**: In-app notifications for business events.
 - **Rover Chatbot**: In-app AI assistant.
