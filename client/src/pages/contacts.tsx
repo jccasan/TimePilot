@@ -57,7 +57,7 @@ const statusColors: Record<string, string> = {
 
 const contactFormSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
+  lastName: z.string().optional().or(z.literal("")),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
   streetAddress: z.string().optional().or(z.literal("")),

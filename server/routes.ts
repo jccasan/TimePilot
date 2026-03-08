@@ -1369,7 +1369,7 @@ export async function registerRoutes(
 
         const rowIssues: string[] = [];
         if (!row.firstName) rowIssues.push("Missing first name");
-        if (!row.lastName) rowIssues.push("Missing last name");
+        
         if (row.numberOfDogs && isNaN(parseInt(row.numberOfDogs, 10))) {
           rowIssues.push(`Invalid number of dogs: "${row.numberOfDogs}"`);
         }
@@ -1418,8 +1418,8 @@ export async function registerRoutes(
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        if (!row.firstName || !row.lastName) {
-          errors.push(`Row ${i + 1}: missing firstName or lastName, skipped`);
+        if (!row.firstName) {
+          errors.push(`Row ${i + 1}: missing firstName, skipped`);
           continue;
         }
 
@@ -1516,8 +1516,8 @@ export async function registerRoutes(
         const row: any = {};
         headers.forEach((h: string, idx: number) => { row[h] = values[idx] || ""; });
 
-        if (!row.firstName || !row.lastName) {
-          errors.push(`Row ${i + 1}: missing firstName or lastName, skipped`);
+        if (!row.firstName) {
+          errors.push(`Row ${i + 1}: missing firstName, skipped`);
           continue;
         }
 

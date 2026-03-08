@@ -153,7 +153,7 @@ export const contacts = pgTable("contacts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   firstName: varchar("first_name", { length: 255 }).notNull(),
-  lastName: varchar("last_name", { length: 255 }).notNull(),
+  lastName: varchar("last_name", { length: 255 }).notNull().default(""),
   email: varchar("email", { length: 255 }),
   phone: varchar("phone", { length: 50 }),
   streetAddress: varchar("street_address", { length: 255 }),
