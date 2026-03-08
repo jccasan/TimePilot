@@ -34,7 +34,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application emphasizing role-based 
 - **Forms**: react-hook-form with zodResolver
 - **PWA Support**: Progressive Web App with manifest, service worker, and offline fallback.
 - **Mobile View**: Dedicated mobile-optimized views for field technicians with role-based UI.
-- **Client Portal**: Separate authentication and UI for self-service, allowing clients to manage services and view information.
+- **Client Portal**: Separate authentication and UI for self-service, allowing clients to manage services and view information. Portal access is managed from the contact detail page (enable/disable) and credentials are emailed via SendGrid. "Send Portal Link" button on PortalAccessCard resends credentials (POST `/api/contacts/:id/portal-access/resend`). Bulk "Send Portal Link" action on contacts list page (POST `/api/contacts/bulk/send-portal-link`) enables portal access and sends credentials to multiple contacts at once. Portal login URL: `/portal/login`. All portal emails include a direct login link and temporary password.
 - **Admin Dashboard**: Platform-level administration for tenant management, analytics, and company provisioning.
 - **Notifications System**: In-app notifications for business events.
 - **Rover Chatbot**: In-app AI assistant for app functionality questions and trouble ticket submission.

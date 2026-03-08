@@ -807,6 +807,18 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
     },
   });
 
+  const resendPortalMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/contacts/${contactId}/portal-access/resend`);
+    },
+    onSuccess: () => {
+      toast({ title: "Portal link sent", description: "A new password and portal link have been emailed to the customer." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
@@ -822,20 +834,31 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
             </p>
             <p className="text-xs text-muted-foreground">
               {contact.hasPortalAccess
-                ? "Customer can log in with their email and last name to view schedule, invoices, and manage service."
+                ? "Customer can log in with their email to view schedule, invoices, and manage service."
                 : "Enable portal access to let this customer self-serve."}
             </p>
           </div>
           {contact.hasPortalAccess ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => disablePortalMutation.mutate()}
-              disabled={disablePortalMutation.isPending}
-              data-testid="button-disable-portal"
-            >
-              <ShieldOff className="mr-1 h-4 w-4" /> Disable
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => resendPortalMutation.mutate()}
+                disabled={resendPortalMutation.isPending}
+                data-testid="button-send-portal-link"
+              >
+                <Mail className="mr-1 h-4 w-4" /> Send Portal Link
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => disablePortalMutation.mutate()}
+                disabled={disablePortalMutation.isPending}
+                data-testid="button-disable-portal"
+              >
+                <ShieldOff className="mr-1 h-4 w-4" /> Disable
+              </Button>
+            </div>
           ) : (
             <Button
               size="sm"

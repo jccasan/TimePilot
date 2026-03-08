@@ -4451,10 +4451,11 @@ export async function registerRoutes(
       await storage.updateContact(req.params.id, { hasPortalAccess: true, portalPasswordHash });
 
       const company = await storage.getCompany(companyId);
+      const portalUrl = `${req.protocol}://${req.get("host")}/portal/login`;
       sendEmail({
         to: contact.email,
         subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
-        text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nYour temporary password is: ${tempPassword}\n\nPlease log in at the portal with your email address and this password.\n\nThank you!`,
+        text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password.\n\nThank you!`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
@@ -4468,7 +4469,9 @@ export async function registerRoutes(
                 <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>
                 <p style="margin: 0;">Temporary Password: <strong>${tempPassword}</strong></p>
               </div>
-              <p style="color: #6b7280; font-size: 14px;">Log in to view your service schedule, invoices, and manage your account.</p>
+              <a href="${portalUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Log In to Portal</a>
+              <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${portalUrl}</p>
+              <p style="color: #6b7280; font-size: 14px;">View your service schedule, invoices, and manage your account.</p>
             </div>
           </div>
         `,
@@ -4487,6 +4490,136 @@ export async function registerRoutes(
 
       await storage.updateContact(req.params.id, { hasPortalAccess: false });
       res.json({ success: true, message: "Portal access disabled." });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/contacts/:id/portal-access/resend", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (!contact.email) return res.status(400).json({ error: "Contact must have an email address" });
+      if (!contact.hasPortalAccess) return res.status(400).json({ error: "Portal access is not enabled for this contact. Enable it first." });
+
+      const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
+      const salt = crypto.randomBytes(16).toString("hex");
+      const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+        crypto.scrypt(tempPassword, salt, 64, (err, key) => {
+          if (err) reject(err);
+          resolve(`${salt}:${key.toString("hex")}`);
+        });
+      });
+
+      await storage.updateContact(req.params.id, { portalPasswordHash });
+
+      const company = await storage.getCompany(companyId);
+      const portalUrl = `${req.protocol}://${req.get("host")}/portal/login`;
+      sendEmail({
+        to: contact.email,
+        subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
+        text: `Hi ${contact.firstName},\n\nHere is your client portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nNew Password: ${tempPassword}\n\nThank you!`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+              <h1 style="color: white; margin: 0;">${company?.name || "ScooPilot"}</h1>
+            </div>
+            <div style="padding: 20px; border: 1px solid #e5e7eb;">
+              <p>Hi ${contact.firstName},</p>
+              <p>Here is your updated login for the client portal.</p>
+              <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
+                <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>
+                <p style="margin: 0;">New Password: <strong>${tempPassword}</strong></p>
+              </div>
+              <a href="${portalUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Log In to Portal</a>
+              <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${portalUrl}</p>
+              <p style="color: #6b7280; font-size: 14px;">View your service schedule, invoices, and manage your account.</p>
+            </div>
+          </div>
+        `,
+      }).catch((err) => console.error("Failed to send portal link email:", err));
+
+      res.json({ success: true, message: "Portal link with new credentials has been emailed to the customer." });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/contacts/bulk/send-portal-link", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const { contactIds } = req.body;
+      if (!Array.isArray(contactIds) || contactIds.length === 0) {
+        return res.status(400).json({ error: "contactIds array is required" });
+      }
+
+      const company = await storage.getCompany(companyId);
+      const portalUrl = `${req.protocol}://${req.get("host")}/portal/login`;
+      let sent = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+
+      for (const contactId of contactIds) {
+        try {
+          const contact = await storage.getContact(contactId, companyId);
+          if (!contact) { skipped++; continue; }
+          if (!contact.email) { skipped++; errors.push(`${contact.firstName} ${contact.lastName}: no email`); continue; }
+
+          let tempPassword: string | null = null;
+          if (!contact.hasPortalAccess) {
+            tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
+            const salt = crypto.randomBytes(16).toString("hex");
+            const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+              crypto.scrypt(tempPassword!, salt, 64, (err, key) => {
+                if (err) reject(err);
+                resolve(`${salt}:${key.toString("hex")}`);
+              });
+            });
+            await storage.updateContact(contactId, { hasPortalAccess: true, portalPasswordHash });
+          } else {
+            tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
+            const salt = crypto.randomBytes(16).toString("hex");
+            const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+              crypto.scrypt(tempPassword!, salt, 64, (err, key) => {
+                if (err) reject(err);
+                resolve(`${salt}:${key.toString("hex")}`);
+              });
+            });
+            await storage.updateContact(contactId, { portalPasswordHash });
+          }
+
+          sendEmail({
+            to: contact.email,
+            subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
+            text: `Hi ${contact.firstName},\n\nHere is your client portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nPassword: ${tempPassword}\n\nThank you!`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">${company?.name || "ScooPilot"}</h1>
+                </div>
+                <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                  <p>Hi ${contact.firstName},</p>
+                  <p>Here is your login for the client portal.</p>
+                  <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                    <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
+                    <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>
+                    <p style="margin: 0;">Password: <strong>${tempPassword}</strong></p>
+                  </div>
+                  <a href="${portalUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Log In to Portal</a>
+                  <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${portalUrl}</p>
+                </div>
+              </div>
+            `,
+          }).catch((err) => console.error(`Failed to send portal link to ${contact.email}:`, err));
+
+          sent++;
+        } catch (e: any) {
+          skipped++;
+          errors.push(e.message || "Unknown error");
+        }
+      }
+
+      res.json({ success: true, sent, skipped, errors: errors.length > 0 ? errors : undefined });
     } catch (err) { handleError(res, err); }
   });
 

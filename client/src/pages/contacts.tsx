@@ -43,7 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Trash2, Tags, RefreshCw } from "lucide-react";
+import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Trash2, Tags, RefreshCw, Send } from "lucide-react";
 import { DialogFooter } from "@/components/ui/dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
@@ -171,6 +171,24 @@ export default function Contacts() {
     },
     onError: (error: Error) => {
       toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const sendPortalLinkMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await apiRequest("POST", "/api/contacts/bulk/send-portal-link", { contactIds: ids });
+      return res.json();
+    },
+    onSuccess: (data: { sent: number; skipped: number; errors?: string[] }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      setSelectedIds(new Set());
+      let description = `Portal link sent to ${data.sent} contact(s).`;
+      if (data.skipped > 0) description += ` ${data.skipped} skipped.`;
+      if (data.errors && data.errors.length > 0) description += ` Issues: ${data.errors.join(", ")}`;
+      toast({ title: "Portal links sent", description });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -713,6 +731,17 @@ export default function Contacts() {
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => sendPortalLinkMutation.mutate(Array.from(selectedIds))}
+                disabled={sendPortalLinkMutation.isPending}
+                data-testid="button-bulk-send-portal"
+              >
+                <Send className="mr-1 h-4 w-4" />
+                Send Portal Link
+              </Button>
 
               <Button
                 variant="destructive"
