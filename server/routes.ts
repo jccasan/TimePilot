@@ -4311,13 +4311,24 @@ export async function registerRoutes(
 
       const props = await storage.getProperties(companyId, contactId);
 
-      res.json(pastVisits.slice(0, 50).map((v: any) => ({
-        id: v.id,
-        scheduledDate: v.scheduledDate,
-        status: v.status,
-        propertyAddress: props.find((p) => p.id === v.propertyId)?.streetAddress || "",
-        completedAt: v.completedAt || null,
-      })));
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const start = (page - 1) * limit;
+
+      res.json({
+        visits: pastVisits.slice(start, start + limit).map((v: any) => ({
+          id: v.id,
+          scheduledDate: v.scheduledDate,
+          status: v.status,
+          propertyAddress: props.find((p) => p.id === v.propertyId)?.streetAddress || "",
+          completedAt: v.completedAt || null,
+          proofOfServicePhoto: v.proofOfServicePhoto || null,
+          proofOfServicePhotoBefore: v.proofOfServicePhotoBefore || null,
+        })),
+        total: pastVisits.length,
+        page,
+        totalPages: Math.ceil(pastVisits.length / limit),
+      });
     } catch (err) { handleError(res, err); }
   });
 
@@ -4432,6 +4443,553 @@ export async function registerRoutes(
         message: `${contact.firstName} ${contact.lastName} requested a cleanup${preferredDate ? ` on ${preferredDate}` : ""}${notes ? `: ${notes}` : ""}`,
         data: { contactId, preferredDate, notes },
       });
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Portal: Payment Methods (T001) ================
+
+  app.post("/api/portal/setup-intent", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      let stripeCustomerId = contact.stripeCustomerId;
+      if (!stripeCustomerId) {
+        stripeCustomerId = await createStripeCustomer({
+          email: contact.email || undefined,
+          name: `${contact.firstName} ${contact.lastName}`.trim(),
+          metadata: { contactId: contact.id, companyId },
+        });
+        await storage.updateContact(contact.id, { stripeCustomerId });
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-04-30.basil" });
+      const session = await stripe.checkout.sessions.create({
+        customer: stripeCustomerId,
+        mode: "setup",
+        payment_method_types: ["card"],
+        success_url: `${baseUrl}/portal/client?card_added=1`,
+        cancel_url: `${baseUrl}/portal/client`,
+      });
+
+      res.json({ url: session.url });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/portal/payment-methods", async (req: Request, res: Response) => {
+    try {
+      const { contactId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (!contact.stripeCustomerId) return res.json({ methods: [], autoPayEnabled: contact.autoPayEnabled });
+
+      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId);
+      res.json({ methods, autoPayEnabled: contact.autoPayEnabled });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/portal/payment-methods/:id", async (req: Request, res: Response) => {
+    try {
+      const { contactId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact?.stripeCustomerId) return res.status(400).json({ error: "No payment methods on file" });
+
+      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId);
+      const owns = methods.some((m) => m.id === req.params.id);
+      if (!owns) return res.status(403).json({ error: "Payment method not found" });
+
+      await detachPaymentMethod(req.params.id);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/portal/auto-pay", async (req: Request, res: Response) => {
+    try {
+      const { contactId } = await getPortalContext(req);
+      const { enabled } = req.body;
+      await storage.updateContact(contactId, { autoPayEnabled: !!enabled });
+      res.json({ success: true, autoPayEnabled: !!enabled });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Portal: Referral Program (T003) ================
+
+  app.get("/api/portal/referral", async (req: Request, res: Response) => {
+    try {
+      const { contactId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      const referralCount = contact.referralCode ? await storage.getReferralCount(contactId) : 0;
+      res.json({
+        referralCode: contact.referralCode || null,
+        referralCount,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/portal/referral/generate", async (req: Request, res: Response) => {
+    try {
+      const { contactId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (contact.referralCode) return res.json({ referralCode: contact.referralCode });
+
+      const code = `REF-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+      await storage.updateContact(contactId, { referralCode: code });
+      res.json({ referralCode: code });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Portal: Estimates (T004) ================
+
+  app.get("/api/portal/estimates", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const allEstimates = await storage.getEstimates(companyId, { contactId });
+      res.json(allEstimates.map((e) => ({
+        id: e.id,
+        description: e.description,
+        items: e.items,
+        totalCents: e.totalCents,
+        status: e.status,
+        sentAt: e.sentAt,
+        respondedAt: e.respondedAt,
+        responseNote: e.responseNote,
+        createdAt: e.createdAt,
+      })));
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/portal/estimates/:id/approve", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const estimate = await storage.getEstimate(req.params.id, companyId);
+      if (!estimate || estimate.contactId !== contactId) return res.status(404).json({ error: "Estimate not found" });
+      if (estimate.status !== "pending") return res.status(400).json({ error: "Estimate is no longer pending" });
+
+      await storage.updateEstimate(estimate.id, {
+        status: "approved",
+        respondedAt: new Date(),
+        responseNote: req.body.note || null,
+      });
+
+      const contact = await storage.getContactById(contactId);
+      notify(companyId, "general", "Estimate Approved", `${contact?.firstName} ${contact?.lastName} approved estimate: ${estimate.description}`, `/contacts/${contactId}`);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/portal/estimates/:id/decline", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const estimate = await storage.getEstimate(req.params.id, companyId);
+      if (!estimate || estimate.contactId !== contactId) return res.status(404).json({ error: "Estimate not found" });
+      if (estimate.status !== "pending") return res.status(400).json({ error: "Estimate is no longer pending" });
+
+      await storage.updateEstimate(estimate.id, {
+        status: "declined",
+        respondedAt: new Date(),
+        responseNote: req.body.reason || null,
+      });
+
+      const contact = await storage.getContactById(contactId);
+      notify(companyId, "general", "Estimate Declined", `${contact?.firstName} ${contact?.lastName} declined estimate: ${estimate.description}${req.body.reason ? ` - Reason: ${req.body.reason}` : ""}`, `/contacts/${contactId}`);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Portal: Notification Preferences (T005) ================
+
+  app.get("/api/portal/notifications", async (req: Request, res: Response) => {
+    try {
+      const { contactId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      res.json(contact.reminderPreferences || { email: true, sms: false });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/portal/notifications", async (req: Request, res: Response) => {
+    try {
+      const { contactId } = await getPortalContext(req);
+      const prefs = req.body;
+      const allowed = ["email", "sms", "serviceReminder", "serviceCompleted", "invoiceReady", "invoiceDueReminder", "paymentConfirmation"];
+      const cleaned: Record<string, boolean> = {};
+      for (const key of allowed) {
+        if (prefs[key] !== undefined) cleaned[key] = !!prefs[key];
+      }
+      const contact = await storage.getContactById(contactId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const merged = { ...(contact.reminderPreferences || { email: true, sms: false }), ...cleaned };
+      await storage.updateContact(contactId, { reminderPreferences: merged });
+      res.json({ success: true, preferences: merged });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Portal: Service Change Requests (T006) ================
+
+  app.post("/api/portal/service-change", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const { servicePlanId, requestType, requestedValue, note } = req.body;
+      if (!requestType) return res.status(400).json({ error: "Request type is required" });
+
+      let currentValue = "";
+      if (servicePlanId) {
+        const plan = await storage.getServicePlan(servicePlanId, companyId);
+        if (plan && plan.contactId === contactId) {
+          if (requestType === "frequency_change") currentValue = plan.frequency;
+          else if (requestType === "day_change") currentValue = plan.dayOfWeek || "";
+        }
+      }
+
+      const request = await storage.createServiceChangeRequest({
+        companyId,
+        contactId,
+        servicePlanId: servicePlanId || null,
+        requestType,
+        currentValue,
+        requestedValue: requestedValue || null,
+        note: note || null,
+        status: "pending",
+      });
+
+      const contact = await storage.getContactById(contactId);
+      notify(companyId, "general", "Service Change Request", `${contact?.firstName} ${contact?.lastName} requested a ${requestType.replace(/_/g, " ")}${note ? `: ${note}` : ""}`, `/contacts/${contactId}`);
+
+      res.json({ success: true, id: request.id });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/portal/service-changes", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const requests = await storage.getServiceChangeRequests(companyId, { contactId });
+      res.json(requests.map((r) => ({
+        id: r.id,
+        requestType: r.requestType,
+        currentValue: r.currentValue,
+        requestedValue: r.requestedValue,
+        note: r.note,
+        status: r.status,
+        adminNote: r.adminNote,
+        createdAt: r.createdAt,
+        respondedAt: r.respondedAt,
+      })));
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Portal: Photo Gallery (T007) ================
+
+  app.get("/api/portal/photos", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const plans = await storage.getServicePlans(companyId, { contactId });
+      const planIds = new Set(plans.map((p) => p.id));
+
+      const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const today = new Date().toISOString().split("T")[0];
+      const allVisits = await storage.getVisitsForDateRange(companyId, sixMonthsAgo, today);
+      const props = await storage.getProperties(companyId, contactId);
+
+      const visitsWithPhotos = allVisits
+        .filter((v: any) => planIds.has(v.servicePlanId) && (v.proofOfServicePhoto || v.proofOfServicePhotoBefore))
+        .sort((a: any, b: any) => b.scheduledDate.localeCompare(a.scheduledDate))
+        .slice(0, 50)
+        .map((v: any) => ({
+          id: v.id,
+          scheduledDate: v.scheduledDate,
+          propertyAddress: props.find((p) => p.id === v.propertyId)?.streetAddress || "",
+          proofOfServicePhoto: v.proofOfServicePhoto || null,
+          proofOfServicePhotoBefore: v.proofOfServicePhotoBefore || null,
+        }));
+
+      res.json(visitsWithPhotos);
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Portal: Billing PDF Download (T008) ================
+
+  app.get("/api/portal/invoices/:id/pdf", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const invoice = await storage.getInvoice(req.params.id, companyId);
+      if (!invoice || invoice.contactId !== contactId) return res.status(404).json({ error: "Invoice not found" });
+
+      const contact = await storage.getContactById(contactId);
+      const company = await storage.getCompany(companyId);
+      const lineItems = await storage.getInvoiceLineItems(invoice.id);
+
+      const PDFDocument = (await import("pdfkit")).default;
+      const doc = new PDFDocument({ size: "LETTER", margin: 50 });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`);
+      doc.pipe(res);
+
+      doc.fontSize(20).text(company?.name || "Invoice", { align: "left" });
+      doc.moveDown(0.5);
+      doc.fontSize(10).fillColor("#666666").text(`${company?.address || ""} ${company?.city || ""} ${company?.state || ""}`);
+      if (company?.phone) doc.text(`Phone: ${company.phone}`);
+      if (company?.email) doc.text(`Email: ${company.email}`);
+      doc.moveDown(1);
+
+      doc.fontSize(16).fillColor("#000000").text(`Invoice ${invoice.invoiceNumber}`, { align: "right" });
+      doc.moveDown(0.5);
+      doc.fontSize(10).fillColor("#666666");
+      doc.text(`Date: ${invoice.issuedDate || invoice.createdAt?.toISOString().split("T")[0] || ""}`, { align: "right" });
+      doc.text(`Due: ${invoice.dueDate}`, { align: "right" });
+      doc.text(`Status: ${invoice.status.toUpperCase()}`, { align: "right" });
+      doc.moveDown(1);
+
+      doc.fontSize(10).fillColor("#000000").text("Bill To:", { underline: true });
+      doc.text(`${contact?.firstName || ""} ${contact?.lastName || ""}`);
+      if (contact?.streetAddress) doc.text(contact.streetAddress);
+      if (contact?.email) doc.text(contact.email);
+      doc.moveDown(1);
+
+      const tableTop = doc.y;
+      doc.fontSize(9).fillColor("#333333");
+      doc.text("Description", 50, tableTop, { width: 250 });
+      doc.text("Qty", 310, tableTop, { width: 50, align: "center" });
+      doc.text("Unit Price", 370, tableTop, { width: 80, align: "right" });
+      doc.text("Total", 460, tableTop, { width: 80, align: "right" });
+      doc.moveTo(50, tableTop + 15).lineTo(540, tableTop + 15).stroke("#cccccc");
+
+      let yPos = tableTop + 25;
+      for (const item of lineItems) {
+        doc.fontSize(9).fillColor("#000000");
+        doc.text(item.description, 50, yPos, { width: 250 });
+        doc.text(String(item.quantity), 310, yPos, { width: 50, align: "center" });
+        doc.text(`$${Number(item.unitPrice).toFixed(2)}`, 370, yPos, { width: 80, align: "right" });
+        doc.text(`$${Number(item.total).toFixed(2)}`, 460, yPos, { width: 80, align: "right" });
+        yPos += 20;
+      }
+
+      doc.moveTo(50, yPos).lineTo(540, yPos).stroke("#cccccc");
+      yPos += 10;
+      doc.fontSize(10).fillColor("#000000");
+      if (Number(invoice.discountAmount) > 0) {
+        doc.text(`Discount: -$${Number(invoice.discountAmount).toFixed(2)}`, 370, yPos, { width: 170, align: "right" });
+        yPos += 18;
+      }
+      if (Number(invoice.tax) > 0) {
+        doc.text(`Tax: $${Number(invoice.tax).toFixed(2)}`, 370, yPos, { width: 170, align: "right" });
+        yPos += 18;
+      }
+      doc.fontSize(12).font("Helvetica-Bold").text(`Total: $${Number(invoice.total).toFixed(2)}`, 370, yPos, { width: 170, align: "right" });
+
+      doc.end();
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/portal/billing-statement", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const contact = await storage.getContactById(contactId);
+      const company = await storage.getCompany(companyId);
+
+      const startDate = (req.query.startDate as string) || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const endDate = (req.query.endDate as string) || new Date().toISOString().split("T")[0];
+
+      const allInvoices = await storage.getInvoices(companyId, { contactId });
+      const filtered = allInvoices.filter((inv) => {
+        if (inv.status === "voided") return false;
+        const d = inv.dueDate || inv.createdAt?.toISOString().split("T")[0];
+        return d >= startDate && d <= endDate;
+      });
+
+      const PDFDocument = (await import("pdfkit")).default;
+      const doc = new PDFDocument({ size: "LETTER", margin: 50 });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="billing-statement-${startDate}-to-${endDate}.pdf"`);
+      doc.pipe(res);
+
+      doc.fontSize(20).text(company?.name || "Billing Statement", { align: "left" });
+      doc.moveDown(0.5);
+      doc.fontSize(12).text("Billing Statement", { align: "left" });
+      doc.fontSize(10).fillColor("#666666").text(`Period: ${startDate} to ${endDate}`);
+      doc.moveDown(0.5);
+      doc.text(`Client: ${contact?.firstName || ""} ${contact?.lastName || ""}`);
+      if (contact?.email) doc.text(`Email: ${contact.email}`);
+      doc.moveDown(1);
+
+      const tableTop = doc.y;
+      doc.fontSize(9).fillColor("#333333");
+      doc.text("Invoice #", 50, tableTop, { width: 100 });
+      doc.text("Date", 160, tableTop, { width: 80 });
+      doc.text("Due Date", 250, tableTop, { width: 80 });
+      doc.text("Status", 340, tableTop, { width: 70 });
+      doc.text("Amount", 420, tableTop, { width: 100, align: "right" });
+      doc.moveTo(50, tableTop + 15).lineTo(540, tableTop + 15).stroke("#cccccc");
+
+      let yPos = tableTop + 25;
+      let grandTotal = 0;
+      for (const inv of filtered) {
+        doc.fontSize(9).fillColor("#000000");
+        doc.text(inv.invoiceNumber, 50, yPos, { width: 100 });
+        doc.text(inv.issuedDate || inv.createdAt?.toISOString().split("T")[0] || "", 160, yPos, { width: 80 });
+        doc.text(inv.dueDate, 250, yPos, { width: 80 });
+        doc.text(inv.status, 340, yPos, { width: 70 });
+        doc.text(`$${Number(inv.total).toFixed(2)}`, 420, yPos, { width: 100, align: "right" });
+        grandTotal += Number(inv.total);
+        yPos += 18;
+        if (yPos > 700) {
+          doc.addPage();
+          yPos = 50;
+        }
+      }
+
+      doc.moveTo(50, yPos).lineTo(540, yPos).stroke("#cccccc");
+      yPos += 10;
+      doc.fontSize(11).font("Helvetica-Bold").fillColor("#000000");
+      doc.text(`Total: $${grandTotal.toFixed(2)}`, 420, yPos, { width: 100, align: "right" });
+
+      const paidTotal = filtered.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.total), 0);
+      const outstandingTotal = grandTotal - paidTotal;
+      yPos += 20;
+      doc.fontSize(10).font("Helvetica").fillColor("#666666");
+      doc.text(`Paid: $${paidTotal.toFixed(2)}`, 420, yPos, { width: 100, align: "right" });
+      yPos += 15;
+      doc.text(`Outstanding: $${outstandingTotal.toFixed(2)}`, 420, yPos, { width: 100, align: "right" });
+
+      doc.end();
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Admin: Estimates (T004) ================
+
+  app.post("/api/estimates", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const { contactId, propertyId, description, items, totalCents } = req.body;
+      if (!contactId || !description || !items || totalCents === undefined) {
+        return res.status(400).json({ error: "contactId, description, items, and totalCents are required" });
+      }
+
+      const contact = await storage.getContact(contactId, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      const estimate = await storage.createEstimate({
+        companyId,
+        contactId,
+        propertyId: propertyId || null,
+        description,
+        items,
+        totalCents,
+        status: "pending",
+        sentAt: new Date(),
+      });
+
+      if (contact.email) {
+        const company = await storage.getCompany(companyId);
+        const portalUrl = `${getBaseUrl(req)}/portal/client`;
+        sendEmail({
+          to: contact.email,
+          subject: `New Estimate from ${company?.name || "Your Service Provider"}`,
+          text: `Hi ${contact.firstName},\n\nYou have a new estimate: ${description}\nTotal: $${(totalCents / 100).toFixed(2)}\n\nLog in to your portal to approve or decline: ${portalUrl}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">${company?.name || "ScooPilot"}</h1>
+              </div>
+              <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                <p>Hi ${contact.firstName},</p>
+                <p>You have a new estimate for review:</p>
+                <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                  <p style="margin: 0; font-weight: bold;">${description}</p>
+                  <p style="margin: 8px 0 0; font-size: 18px;">Total: $${(totalCents / 100).toFixed(2)}</p>
+                </div>
+                <a href="${portalUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold;">Review Estimate</a>
+              </div>
+            </div>
+          `,
+        }).catch((err) => console.error("Failed to send estimate email:", err));
+      }
+
+      res.json(estimate);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/estimates", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const allEstimates = await storage.getEstimates(companyId, {
+        status: req.query.status as string | undefined,
+        contactId: req.query.contactId as string | undefined,
+      });
+      res.json(allEstimates);
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Admin: Service Change Requests (T006) ================
+
+  app.get("/api/service-change-requests", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const requests = await storage.getServiceChangeRequests(companyId, {
+        status: req.query.status as string | undefined,
+      });
+
+      const enriched = await Promise.all(requests.map(async (r) => {
+        const contact = await storage.getContactById(r.contactId);
+        return {
+          ...r,
+          contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
+        };
+      }));
+
+      res.json(enriched);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/service-change-requests/:id/approve", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const request = await storage.getServiceChangeRequest(req.params.id, companyId);
+      if (!request) return res.status(404).json({ error: "Change request not found" });
+      if (request.status !== "pending") return res.status(400).json({ error: "Request is not pending" });
+
+      await storage.updateServiceChangeRequest(request.id, {
+        status: "approved",
+        adminNote: req.body.adminNote || null,
+        respondedAt: new Date(),
+      });
+
+      if (request.servicePlanId && request.requestedValue) {
+        if (request.requestType === "frequency_change") {
+          await storage.updateServicePlan(request.servicePlanId, { frequency: request.requestedValue as any });
+        } else if (request.requestType === "day_change") {
+          await storage.updateServicePlan(request.servicePlanId, { dayOfWeek: request.requestedValue as any });
+        } else if (request.requestType === "cancel") {
+          await storage.updateServicePlan(request.servicePlanId, { isActive: false });
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/service-change-requests/:id/deny", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const request = await storage.getServiceChangeRequest(req.params.id, companyId);
+      if (!request) return res.status(404).json({ error: "Change request not found" });
+      if (request.status !== "pending") return res.status(400).json({ error: "Request is not pending" });
+
+      await storage.updateServiceChangeRequest(request.id, {
+        status: "denied",
+        adminNote: req.body.adminNote || req.body.reason || null,
+        respondedAt: new Date(),
+      });
+
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });

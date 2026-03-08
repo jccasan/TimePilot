@@ -175,7 +175,16 @@ export const contacts = pgTable("contacts", {
   referralSource: varchar("referral_source", { length: 255 }),
   portalPasswordHash: varchar("portal_password_hash", { length: 255 }),
   autoPayEnabled: boolean("auto_pay_enabled").notNull().default(false),
-  reminderPreferences: jsonb("reminder_preferences").$type<{ email: boolean; sms: boolean }>().default({ email: true, sms: false }),
+  referralCode: varchar("referral_code", { length: 20 }),
+  reminderPreferences: jsonb("reminder_preferences").$type<{
+    email: boolean;
+    sms: boolean;
+    serviceReminder?: boolean;
+    serviceCompleted?: boolean;
+    invoiceReady?: boolean;
+    invoiceDueReminder?: boolean;
+    paymentConfirmation?: boolean;
+  }>().default({ email: true, sms: false }),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -1098,4 +1107,68 @@ export type InsertCompetitorPricing = z.infer<typeof insertCompetitorPricingSche
 
 export const competitorPricingRelations = relations(competitorPricing, ({ one }) => ({
   company: one(companies, { fields: [competitorPricing.companyId], references: [companies.id] }),
+}));
+
+export const estimateStatusEnum = pgEnum("estimate_status", ["pending", "approved", "declined", "expired"]);
+
+export const estimates = pgTable("estimates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  propertyId: varchar("property_id").references(() => properties.id, { onDelete: "set null" }),
+  description: text("description").notNull(),
+  items: jsonb("items").$type<Array<{ description: string; quantity: number; unitPrice: string; total: string }>>().notNull(),
+  totalCents: integer("total_cents").notNull(),
+  status: estimateStatusEnum("status").notNull().default("pending"),
+  sentAt: timestamp("sent_at"),
+  respondedAt: timestamp("responded_at"),
+  responseNote: text("response_note"),
+  adminNote: text("admin_note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_estimates_company").on(table.companyId),
+  index("idx_estimates_contact").on(table.contactId),
+  index("idx_estimates_status").on(table.status),
+]);
+
+export const insertEstimateSchema = createInsertSchema(estimates).omit({ id: true, createdAt: true });
+export type Estimate = typeof estimates.$inferSelect;
+export type InsertEstimate = z.infer<typeof insertEstimateSchema>;
+
+export const estimateRelations = relations(estimates, ({ one }) => ({
+  company: one(companies, { fields: [estimates.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [estimates.contactId], references: [contacts.id] }),
+  property: one(properties, { fields: [estimates.propertyId], references: [properties.id] }),
+}));
+
+export const changeRequestTypeEnum = pgEnum("change_request_type", ["frequency_change", "day_change", "cancel", "other"]);
+export const changeRequestStatusEnum = pgEnum("change_request_status", ["pending", "approved", "denied"]);
+
+export const serviceChangeRequests = pgTable("service_change_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  servicePlanId: varchar("service_plan_id").references(() => servicePlans.id, { onDelete: "set null" }),
+  requestType: changeRequestTypeEnum("request_type").notNull(),
+  currentValue: varchar("current_value", { length: 255 }),
+  requestedValue: varchar("requested_value", { length: 255 }),
+  note: text("note"),
+  status: changeRequestStatusEnum("status").notNull().default("pending"),
+  adminNote: text("admin_note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  respondedAt: timestamp("responded_at"),
+}, (table) => [
+  index("idx_scr_company").on(table.companyId),
+  index("idx_scr_contact").on(table.contactId),
+  index("idx_scr_status").on(table.status),
+]);
+
+export const insertServiceChangeRequestSchema = createInsertSchema(serviceChangeRequests).omit({ id: true, createdAt: true });
+export type ServiceChangeRequest = typeof serviceChangeRequests.$inferSelect;
+export type InsertServiceChangeRequest = z.infer<typeof insertServiceChangeRequestSchema>;
+
+export const serviceChangeRequestRelations = relations(serviceChangeRequests, ({ one }) => ({
+  company: one(companies, { fields: [serviceChangeRequests.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [serviceChangeRequests.contactId], references: [contacts.id] }),
+  servicePlan: one(servicePlans, { fields: [serviceChangeRequests.servicePlanId], references: [servicePlans.id] }),
 }));

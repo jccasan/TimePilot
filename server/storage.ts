@@ -9,6 +9,7 @@ import {
   smsMessages, emailsSent, accountDailyMetrics, saasCostsMonthly, costConfig,
   notifications, timeEntries, activityLog, auditTrail,
   importRuns, invoicePayments,
+  estimates, serviceChangeRequests,
   type Company, type InsertCompany,
   type CompanyUser, type InsertCompanyUser,
   type Contact, type InsertContact,
@@ -47,6 +48,8 @@ import {
   type ProfitabilitySnapshot, type InsertProfitabilitySnapshot,
   type OverheadCost, type InsertOverheadCost,
   type CompetitorPricing, type InsertCompetitorPricing,
+  type Estimate, type InsertEstimate,
+  type ServiceChangeRequest, type InsertServiceChangeRequest,
   priceRecommendations,
   profitabilitySnapshots,
   overheadCosts,
@@ -312,6 +315,22 @@ export interface IStorage {
   createCompetitorPricing(data: InsertCompetitorPricing): Promise<CompetitorPricing>;
   updateCompetitorPricing(id: string, companyId: string, data: Partial<InsertCompetitorPricing>): Promise<CompetitorPricing>;
   deleteCompetitorPricing(id: string, companyId: string): Promise<void>;
+
+  // Estimates
+  getEstimate(id: string, companyId: string): Promise<Estimate | undefined>;
+  getEstimates(companyId: string, filters?: { contactId?: string; status?: string }): Promise<Estimate[]>;
+  createEstimate(data: InsertEstimate): Promise<Estimate>;
+  updateEstimate(id: string, data: Partial<InsertEstimate>): Promise<Estimate>;
+
+  // Service Change Requests
+  getServiceChangeRequest(id: string, companyId: string): Promise<ServiceChangeRequest | undefined>;
+  getServiceChangeRequests(companyId: string, filters?: { contactId?: string; status?: string }): Promise<ServiceChangeRequest[]>;
+  createServiceChangeRequest(data: InsertServiceChangeRequest): Promise<ServiceChangeRequest>;
+  updateServiceChangeRequest(id: string, data: Partial<InsertServiceChangeRequest>): Promise<ServiceChangeRequest>;
+
+  // Referral helpers
+  getContactByReferralCode(code: string): Promise<Contact | undefined>;
+  getReferralCount(contactId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1668,6 +1687,68 @@ export class DatabaseStorage implements IStorage {
   async deleteCompetitorPricing(id: string, companyId: string): Promise<void> {
     await db.delete(competitorPricing)
       .where(and(eq(competitorPricing.id, id), eq(competitorPricing.companyId, companyId)));
+  }
+
+  // ================ Estimates ================
+  async getEstimate(id: string, companyId: string): Promise<Estimate | undefined> {
+    const [item] = await db.select().from(estimates)
+      .where(and(eq(estimates.id, id), eq(estimates.companyId, companyId)));
+    return item;
+  }
+
+  async getEstimates(companyId: string, filters?: { contactId?: string; status?: string }): Promise<Estimate[]> {
+    const conditions = [eq(estimates.companyId, companyId)];
+    if (filters?.contactId) conditions.push(eq(estimates.contactId, filters.contactId));
+    if (filters?.status) conditions.push(eq(estimates.status, filters.status as any));
+    return db.select().from(estimates).where(and(...conditions)).orderBy(desc(estimates.createdAt));
+  }
+
+  async createEstimate(data: InsertEstimate): Promise<Estimate> {
+    const [item] = await db.insert(estimates).values(data).returning();
+    return item;
+  }
+
+  async updateEstimate(id: string, data: Partial<InsertEstimate>): Promise<Estimate> {
+    const [item] = await db.update(estimates).set(data).where(eq(estimates.id, id)).returning();
+    return item;
+  }
+
+  // ================ Service Change Requests ================
+  async getServiceChangeRequest(id: string, companyId: string): Promise<ServiceChangeRequest | undefined> {
+    const [item] = await db.select().from(serviceChangeRequests)
+      .where(and(eq(serviceChangeRequests.id, id), eq(serviceChangeRequests.companyId, companyId)));
+    return item;
+  }
+
+  async getServiceChangeRequests(companyId: string, filters?: { contactId?: string; status?: string }): Promise<ServiceChangeRequest[]> {
+    const conditions = [eq(serviceChangeRequests.companyId, companyId)];
+    if (filters?.contactId) conditions.push(eq(serviceChangeRequests.contactId, filters.contactId));
+    if (filters?.status) conditions.push(eq(serviceChangeRequests.status, filters.status as any));
+    return db.select().from(serviceChangeRequests).where(and(...conditions)).orderBy(desc(serviceChangeRequests.createdAt));
+  }
+
+  async createServiceChangeRequest(data: InsertServiceChangeRequest): Promise<ServiceChangeRequest> {
+    const [item] = await db.insert(serviceChangeRequests).values(data).returning();
+    return item;
+  }
+
+  async updateServiceChangeRequest(id: string, data: Partial<InsertServiceChangeRequest>): Promise<ServiceChangeRequest> {
+    const [item] = await db.update(serviceChangeRequests).set(data).where(eq(serviceChangeRequests.id, id)).returning();
+    return item;
+  }
+
+  // ================ Referral Helpers ================
+  async getContactByReferralCode(code: string): Promise<Contact | undefined> {
+    const [contact] = await db.select().from(contacts).where(eq(contacts.referralCode, code));
+    return contact;
+  }
+
+  async getReferralCount(contactId: string): Promise<number> {
+    const contact = await this.getContactById(contactId);
+    if (!contact?.referralCode) return 0;
+    const result = await db.select({ count: count() }).from(contacts)
+      .where(eq(contacts.referralSource, contact.referralCode));
+    return Number(result[0]?.count ?? 0);
   }
 }
 
