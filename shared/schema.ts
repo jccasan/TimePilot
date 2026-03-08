@@ -10,7 +10,7 @@ import { users } from "./models/auth";
 export const userRoleEnum = pgEnum("user_role", ["owner", "admin", "tech"]);
 export const leadStatusEnum = pgEnum("lead_status", ["lead", "estimate", "active", "paused", "cancelled"]);
 export const serviceFrequencyEnum = pgEnum("service_frequency", ["weekly", "biweekly", "monthly", "onetime"]);
-export const dayOfWeekEnum = pgEnum("day_of_week", ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
+export const dayOfWeekEnum = pgEnum("day_of_week", ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "tbd"]);
 export const visitStatusEnum = pgEnum("visit_status", ["scheduled", "in_progress", "completed", "skipped", "cancelled"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["draft", "pending", "paid", "failed", "refunded", "voided"]);
 export const chargeTimingEnum = pgEnum("charge_timing", ["day_before", "weekly_batch"]);

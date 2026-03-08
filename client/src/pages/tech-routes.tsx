@@ -16,7 +16,7 @@ import { Link } from "wouter";
 const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const dayFullLabels: Record<string, string> = {
   monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday",
-  friday: "Friday", saturday: "Saturday", sunday: "Sunday",
+  friday: "Friday", saturday: "Saturday", sunday: "Sunday", tbd: "TBD",
 };
 
 const frequencyLabels: Record<string, string> = {

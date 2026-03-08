@@ -33,11 +33,11 @@ const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"
 type DayOfWeek = typeof DAYS[number];
 const DAY_LABELS: Record<string, string> = {
   monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday",
-  friday: "Friday", saturday: "Saturday", sunday: "Sunday",
+  friday: "Friday", saturday: "Saturday", sunday: "Sunday", tbd: "TBD",
 };
 const DAY_SHORT: Record<string, string> = {
   monday: "Mon", tuesday: "Tue", wednesday: "Wed", thursday: "Thu",
-  friday: "Fri", saturday: "Sat", sunday: "Sun",
+  friday: "Fri", saturday: "Sat", sunday: "Sun", tbd: "TBD",
 };
 const UNASSIGNED_DROP = "__unassigned__";
 const ROUTE_COLORS = [

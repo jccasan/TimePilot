@@ -422,6 +422,7 @@ export default function ContactDetail() {
                     <SelectValue placeholder="Service Day" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="tbd">TBD</SelectItem>
                     <SelectItem value="monday">Monday</SelectItem>
                     <SelectItem value="tuesday">Tuesday</SelectItem>
                     <SelectItem value="wednesday">Wednesday</SelectItem>

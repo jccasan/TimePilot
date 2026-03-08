@@ -102,6 +102,7 @@ const STEP_LABELS = [
 ];
 
 const DAYS = [
+  { value: "tbd", label: "TBD" },
   { value: "monday", label: "Monday" },
   { value: "tuesday", label: "Tuesday" },
   { value: "wednesday", label: "Wednesday" },

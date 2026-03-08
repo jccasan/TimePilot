@@ -17,7 +17,7 @@ const statusColors: Record<string, string> = {
 
 const dayLabels: Record<string, string> = {
   monday: "Mon", tuesday: "Tue", wednesday: "Wed", thursday: "Thu",
-  friday: "Fri", saturday: "Sat", sunday: "Sun",
+  friday: "Fri", saturday: "Sat", sunday: "Sun", tbd: "TBD",
 };
 
 const frequencyLabels: Record<string, string> = {
