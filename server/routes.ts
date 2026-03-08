@@ -2089,6 +2089,11 @@ export async function registerRoutes(
       const existingVisits = await storage.getVisits(companyId, { date: targetDate });
       const existingSet = new Set(existingVisits.map(v => `${v.servicePlanId}_${v.scheduledDate}`));
 
+      const dayMap: Record<string, number> = {
+        monday: 1, tuesday: 2, wednesday: 3, thursday: 4,
+        friday: 5, saturday: 6, sunday: 0,
+      };
+
       let created = 0;
       let skipped = 0;
       for (const plan of routePlans) {
@@ -2097,6 +2102,59 @@ export async function registerRoutes(
           skipped++;
           continue;
         }
+
+        const targetDateObj = new Date(targetDate + "T00:00:00Z");
+        const targetDayOfWeek = targetDateObj.getUTCDay();
+        const planDayNum = plan.dayOfWeek ? dayMap[plan.dayOfWeek] : undefined;
+        if (planDayNum !== undefined && targetDayOfWeek !== planDayNum) {
+          skipped++;
+          continue;
+        }
+
+        if (plan.startDate) {
+          const planStartDate = new Date(plan.startDate + "T00:00:00Z");
+          if (targetDateObj < planStartDate) {
+            skipped++;
+            continue;
+          }
+        }
+        if (plan.endDate) {
+          const planEndDate = new Date(plan.endDate + "T00:00:00Z");
+          if (targetDateObj > planEndDate) {
+            skipped++;
+            continue;
+          }
+        }
+
+        let shouldGenerate = true;
+        if (plan.frequency !== "weekly" && !plan.startDate) {
+          shouldGenerate = false;
+        } else if (plan.frequency === "biweekly") {
+          const planStartDate = new Date(plan.startDate + "T00:00:00Z");
+          const diffMs = targetDateObj.getTime() - planStartDate.getTime();
+          const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+          const diffWeeks = Math.floor(diffDays / 7);
+          if (diffWeeks % 2 !== 0) shouldGenerate = false;
+        } else if (plan.frequency === "monthly") {
+          const planStartDate = new Date(plan.startDate + "T00:00:00Z");
+          if (!(targetDateObj.getUTCMonth() === planStartDate.getUTCMonth() && targetDateObj.getUTCFullYear() === planStartDate.getUTCFullYear())) {
+            const effectiveDayNum = planDayNum !== undefined ? planDayNum : targetDayOfWeek;
+            const firstOfMonth = new Date(Date.UTC(targetDateObj.getUTCFullYear(), targetDateObj.getUTCMonth(), 1));
+            let firstTargetDay = new Date(firstOfMonth);
+            while (firstTargetDay.getUTCDay() !== effectiveDayNum) {
+              firstTargetDay.setUTCDate(firstTargetDay.getUTCDate() + 1);
+            }
+            if (targetDateObj.getTime() !== firstTargetDay.getTime()) shouldGenerate = false;
+          }
+        } else if (plan.frequency === "onetime") {
+          if (targetDate !== plan.startDate) shouldGenerate = false;
+        }
+
+        if (!shouldGenerate) {
+          skipped++;
+          continue;
+        }
+
         await storage.createVisit({
           companyId,
           servicePlanId: plan.id,
@@ -2377,22 +2435,22 @@ export async function registerRoutes(
       };
 
       const created: any[] = [];
-      const start = new Date(startDate);
-      const end = new Date(endDate);
+      const start = new Date(startDate + "T00:00:00Z");
+      const end = new Date(endDate + "T00:00:00Z");
 
       for (const plan of plans) {
         if (!plan.dayOfWeek) continue;
         const targetDay = dayMap[plan.dayOfWeek];
         if (targetDay === undefined) continue;
 
-        const planStart = plan.startDate ? new Date(plan.startDate) : start;
-        const planEnd = plan.endDate ? new Date(plan.endDate) : end;
+        const planStart = plan.startDate ? new Date(plan.startDate + "T00:00:00Z") : start;
+        const planEnd = plan.endDate ? new Date(plan.endDate + "T00:00:00Z") : end;
         const effectiveStart = planStart > start ? planStart : start;
         const effectiveEnd = planEnd < end ? planEnd : end;
 
         const current = new Date(effectiveStart);
         while (current <= effectiveEnd) {
-          if (current.getDay() === targetDay) {
+          if (current.getUTCDay() === targetDay) {
             const dateStr = current.toISOString().split("T")[0];
             const key = `${plan.id}_${dateStr}`;
 
@@ -2400,25 +2458,25 @@ export async function registerRoutes(
               let shouldGenerate = true;
 
               if (plan.frequency === "biweekly") {
-                const planStartDate = new Date(plan.startDate);
-                const diffDays = Math.floor((current.getTime() - planStartDate.getTime()) / (1000 * 60 * 60 * 24));
+                const planStartDate = new Date(plan.startDate + "T00:00:00Z");
+                const diffMs = current.getTime() - planStartDate.getTime();
+                const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
                 const diffWeeks = Math.floor(diffDays / 7);
                 if (diffWeeks % 2 !== 0) shouldGenerate = false;
               } else if (plan.frequency === "monthly") {
-                const planStartDate = new Date(plan.startDate);
-                if (current.getMonth() === planStartDate.getMonth() && current.getFullYear() === planStartDate.getFullYear()) {
+                const planStartDate = new Date(plan.startDate + "T00:00:00Z");
+                if (current.getUTCMonth() === planStartDate.getUTCMonth() && current.getUTCFullYear() === planStartDate.getUTCFullYear()) {
                   shouldGenerate = true;
                 } else {
-                  const firstOfMonth = new Date(current.getFullYear(), current.getMonth(), 1);
+                  const firstOfMonth = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1));
                   let firstTargetDay = new Date(firstOfMonth);
-                  while (firstTargetDay.getDay() !== targetDay) {
-                    firstTargetDay.setDate(firstTargetDay.getDate() + 1);
+                  while (firstTargetDay.getUTCDay() !== targetDay) {
+                    firstTargetDay.setUTCDate(firstTargetDay.getUTCDate() + 1);
                   }
                   if (current.getTime() !== firstTargetDay.getTime()) shouldGenerate = false;
                 }
               } else if (plan.frequency === "onetime") {
-                const planStartDate = new Date(plan.startDate);
-                if (current.toISOString().split("T")[0] !== planStartDate.toISOString().split("T")[0]) {
+                if (dateStr !== plan.startDate) {
                   shouldGenerate = false;
                 }
               }
@@ -2438,11 +2496,11 @@ export async function registerRoutes(
             }
 
             if (plan.frequency === "weekly" || plan.frequency === "biweekly") {
-              current.setDate(current.getDate() + 7);
+              current.setUTCDate(current.getUTCDate() + 7);
               continue;
             }
           }
-          current.setDate(current.getDate() + 1);
+          current.setUTCDate(current.getUTCDate() + 1);
         }
       }
 
