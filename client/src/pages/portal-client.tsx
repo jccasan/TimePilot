@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   Calendar,
@@ -37,6 +40,15 @@ import {
   Image,
   Trash2,
   Plus,
+  DollarSign,
+  CalendarCheck,
+  AlertCircle,
+  Settings,
+  LayoutDashboard,
+  Receipt,
+  Wrench,
+  CheckCircle2,
+  Shield,
 } from "lucide-react";
 
 interface PortalProfile {
@@ -195,7 +207,7 @@ const statusColors: Record<string, string> = {
 
 const invoiceStatusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-  pending: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  pending: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   paid: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   voided: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
@@ -224,6 +236,51 @@ const changeRequestStatusColors: Record<string, string> = {
   denied: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
+function SummaryCard({ icon: Icon, label, value, sublabel, accent }: {
+  icon: any;
+  label: string;
+  value: string;
+  sublabel?: string;
+  accent?: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm">
+      <div className={`rounded-lg p-2.5 ${accent || "bg-primary/10 text-primary"}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+        <p className="text-lg font-semibold mt-0.5 truncate" data-testid={`text-summary-${label.toLowerCase().replace(/\s/g, '-')}`}>{value}</p>
+        {sublabel && <p className="text-xs text-muted-foreground mt-0.5">{sublabel}</p>}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, title, description }: { icon: any; title: string; description: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="rounded-full bg-muted p-4 mb-4">
+        <Icon className="h-8 w-8 text-muted-foreground" />
+      </div>
+      <p className="font-medium text-muted-foreground">{title}</p>
+      <p className="text-sm text-muted-foreground/70 mt-1 max-w-xs">{description}</p>
+    </div>
+  );
+}
+
+function SectionHeader({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <h3 className="text-base font-semibold">{title}</h3>
+        {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
 export default function PortalClient() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -247,41 +304,37 @@ export default function PortalClient() {
   const [savingProperties, setSavingProperties] = useState(false);
   const [numberOfDogs, setNumberOfDogs] = useState<number>(0);
   const [savingDogs, setSavingDogs] = useState(false);
-
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [autoPayEnabled, setAutoPayEnabled] = useState(false);
   const [addingCard, setAddingCard] = useState(false);
-
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralCount, setReferralCount] = useState(0);
   const [copiedReferral, setCopiedReferral] = useState(false);
   const [generatingCode, setGeneratingCode] = useState(false);
-
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [estimateNote, setEstimateNote] = useState<Record<string, string>>({});
-
   const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({
     email: true, sms: false,
     serviceReminder: true, serviceCompleted: true,
     invoiceReady: true, invoiceDueReminder: true, paymentConfirmation: true,
   });
   const [savingNotifs, setSavingNotifs] = useState(false);
-
   const [changeRequests, setChangeRequests] = useState<ServiceChangeRequest[]>([]);
   const [changeType, setChangeType] = useState("");
   const [changePlanId, setChangePlanId] = useState("");
   const [changeValue, setChangeValue] = useState("");
   const [changeNote, setChangeNote] = useState("");
   const [submittingChange, setSubmittingChange] = useState(false);
-
   const [galleryPhotos, setGalleryPhotos] = useState<GalleryPhoto[]>([]);
   const [photoModalIndex, setPhotoModalIndex] = useState<number | null>(null);
-
   const [visitPhotoModal, setVisitPhotoModal] = useState<PastVisit | null>(null);
-
   const [billingStartDate, setBillingStartDate] = useState("");
   const [billingEndDate, setBillingEndDate] = useState("");
   const [downloadingStatement, setDownloadingStatement] = useState(false);
+
+  const params = new URLSearchParams(window.location.search);
+  const initialTab = params.get("tab") || "overview";
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   const loadVisitHistory = useCallback(async (page: number) => {
     try {
@@ -626,885 +679,1051 @@ export default function PortalClient() {
     }
   };
 
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url.toString());
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const hasActivePlans = schedule?.servicePlans.some((p) => p.isActive);
+  const activeInvoices = useMemo(() => invoices.filter((inv) => inv.status !== "voided"), [invoices]);
+  const unpaidInvoices = useMemo(() => activeInvoices.filter((inv) => inv.status !== "paid" && inv.status !== "voided"), [activeInvoices]);
+  const balanceDue = useMemo(() => unpaidInvoices.reduce((sum, inv) => sum + Number(inv.total), 0), [unpaidInvoices]);
+  const pendingEstimates = useMemo(() => estimates.filter((e) => e.status === "pending"), [estimates]);
+  const pastEstimates = useMemo(() => estimates.filter((e) => e.status !== "pending"), [estimates]);
+  const totalPages = Math.ceil(pastVisitsTotal / 20);
+  const activePlan = schedule?.servicePlans.find((p) => p.isActive);
+  const nextVisit = schedule?.upcomingVisits?.[0];
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="space-y-4 w-full max-w-2xl p-4">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-32 w-full" />
+      <div className="min-h-screen bg-background">
+        <div className="border-b bg-card">
+          <div className="max-w-4xl mx-auto p-4">
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+        </div>
+        <div className="max-w-4xl mx-auto p-4 space-y-4 mt-4">
+          <Skeleton className="h-10 w-full" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+          <Skeleton className="h-48" />
         </div>
       </div>
     );
   }
 
-  const hasActivePlans = schedule?.servicePlans.some((p) => p.isActive);
-  const activeInvoices = invoices.filter((inv) => inv.status !== "voided");
-  const pendingEstimates = estimates.filter((e) => e.status === "pending");
-  const pastEstimates = estimates.filter((e) => e.status !== "pending");
-  const totalPages = Math.ceil(pastVisitsTotal / 20);
-
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b sticky top-0 z-50 bg-background">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-2 p-3">
-          <div>
-            <h1 className="font-semibold text-lg" data-testid="text-portal-welcome">
-              {profile?.companyName || "Client Portal"}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {profile?.firstName} {profile?.lastName}
-            </p>
+      <header className="border-b bg-card sticky top-0 z-50">
+        <div className="max-w-4xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="font-bold text-xl text-foreground" data-testid="text-portal-welcome">
+                {profile?.companyName || "Client Portal"}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Welcome, {profile?.firstName} {profile?.lastName}
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground" data-testid="button-portal-logout">
+              <LogOut className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </Button>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleLogout} data-testid="button-portal-logout">
-            <LogOut className="h-4 w-4" />
-          </Button>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto p-4 space-y-4">
-        {/* Service Schedule */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Calendar className="h-5 w-5" /> Service Schedule
-            </CardTitle>
-            {hasActivePlans ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handlePauseResume("pause")}
-                disabled={actionPending}
-                data-testid="button-portal-pause"
-              >
-                <Pause className="mr-1 h-4 w-4" /> Pause Service
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                onClick={() => handlePauseResume("resume")}
-                disabled={actionPending}
-                data-testid="button-portal-resume"
-              >
-                <Play className="mr-1 h-4 w-4" /> Resume Service
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {schedule?.servicePlans && schedule.servicePlans.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Your Plans</p>
-                {schedule.servicePlans.map((plan) => (
-                  <div key={plan.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border rounded-md p-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{frequencyLabels[plan.frequency] || plan.frequency}</span>
-                      {plan.dayOfWeek && (
-                        <span className="text-muted-foreground capitalize">- {plan.dayOfWeek}s</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span>${Number(plan.pricePerVisit).toFixed(2)}/visit</span>
-                      <Badge variant="secondary" className={plan.isActive ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"}>
-                        {plan.isActive ? "Active" : "Paused"}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground" data-testid="text-no-plans">No service plans found.</p>
-            )}
-
-            {schedule?.upcomingVisits && schedule.upcomingVisits.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Upcoming Visits</p>
-                {schedule.upcomingVisits.slice(0, 10).map((visit) => (
-                  <div key={visit.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border rounded-md p-2">
-                    <div>
-                      <span className="font-medium">{visit.scheduledDate}</span>
-                      {visit.propertyAddress && (
-                        <span className="text-muted-foreground ml-2">{visit.propertyAddress}</span>
-                      )}
-                    </div>
-                    <Badge variant="secondary" className={statusColors[visit.status] || ""}>
-                      {visit.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground" data-testid="text-no-visits">No upcoming visits scheduled.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Past Visits (T002) */}
-        {pastVisits.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Clock className="h-5 w-5" /> Past Visits
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {pastVisits.map((visit) => (
-                  <div key={visit.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border rounded-md p-2" data-testid={`card-past-visit-${visit.id}`}>
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <span className="font-medium">{visit.scheduledDate}</span>
-                        {visit.propertyAddress && (
-                          <span className="text-muted-foreground ml-2">{visit.propertyAddress}</span>
-                        )}
-                      </div>
-                      {(visit.proofOfServicePhoto || visit.proofOfServicePhotoBefore) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2"
-                          onClick={() => setVisitPhotoModal(visit)}
-                          data-testid={`button-view-photos-${visit.id}`}
-                        >
-                          <Camera className="h-3 w-3 mr-1" /> Photos
-                        </Button>
-                      )}
-                    </div>
-                    <Badge variant="secondary" className={statusColors[visit.status] || ""}>
-                      {visit.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pastVisitsPage <= 1}
-                    onClick={() => loadVisitHistory(pastVisitsPage - 1)}
-                    data-testid="button-prev-visits"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {pastVisitsPage} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pastVisitsPage >= totalPages}
-                    onClick={() => loadVisitHistory(pastVisitsPage + 1)}
-                    data-testid="button-next-visits"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <TabsList className="w-full grid grid-cols-4 mb-6" data-testid="tabs-portal-nav">
+            <TabsTrigger value="overview" className="gap-1.5" data-testid="tab-overview">
+              <LayoutDashboard className="h-4 w-4 hidden sm:block" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="services" className="gap-1.5" data-testid="tab-services">
+              <Wrench className="h-4 w-4 hidden sm:block" />
+              Services
+            </TabsTrigger>
+            <TabsTrigger value="billing" className="gap-1.5 relative" data-testid="tab-billing">
+              <Receipt className="h-4 w-4 hidden sm:block" />
+              Billing
+              {unpaidInvoices.length > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold">
+                  {unpaidInvoices.length}
+                </span>
               )}
-            </CardContent>
-          </Card>
-        )}
+            </TabsTrigger>
+            <TabsTrigger value="account" className="gap-1.5" data-testid="tab-account">
+              <Settings className="h-4 w-4 hidden sm:block" />
+              Account
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Invoices + PDF Downloads (T008) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <FileText className="h-5 w-5" /> Invoices
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {activeInvoices.length > 0 ? (
-              <div className="space-y-2">
-                {activeInvoices.map((inv) => (
-                  <div key={inv.id} className="flex flex-wrap items-center justify-between gap-2 border rounded-md p-3" data-testid={`card-portal-invoice-${inv.id}`}>
-                    <div>
-                      <p className="font-medium text-sm">{inv.invoiceNumber}</p>
-                      <p className="text-xs text-muted-foreground">Due: {inv.dueDate}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm">${Number(inv.total).toFixed(2)}</span>
-                      <Badge variant="secondary" className={invoiceStatusColors[inv.status] || ""}>
-                        {inv.status}
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDownloadInvoicePdf(inv.id, inv.invoiceNumber)}
-                        data-testid={`button-download-invoice-${inv.id}`}
-                      >
-                        <Download className="h-3 w-3" />
-                      </Button>
-                      {inv.status !== "paid" && inv.status !== "voided" && (
-                        <Button
-                          size="sm"
-                          onClick={() => handlePayInvoice(inv.id)}
-                          disabled={actionPending}
-                          data-testid={`button-portal-pay-${inv.id}`}
-                        >
-                          <CreditCard className="mr-1 h-3 w-3" /> Pay
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-invoices">
-                No invoices found.
-              </p>
-            )}
-
-            <div className="border-t mt-4 pt-4">
-              <p className="text-sm font-medium text-muted-foreground mb-3">Download Billing Statement</p>
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="billing-start">Start Date</Label>
-                  <Input
-                    id="billing-start"
-                    type="date"
-                    value={billingStartDate}
-                    onChange={(e) => setBillingStartDate(e.target.value)}
-                    data-testid="input-billing-start"
-                  />
+          {/* ==================== OVERVIEW TAB ==================== */}
+          <TabsContent value="overview" className="space-y-6">
+            {pendingEstimates.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 flex items-start gap-3" data-testid="alert-pending-estimates">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                    You have {pendingEstimates.length} estimate{pendingEstimates.length > 1 ? "s" : ""} awaiting your review
+                  </p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Review and approve or decline from the Billing tab</p>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="billing-end">End Date</Label>
-                  <Input
-                    id="billing-end"
-                    type="date"
-                    value={billingEndDate}
-                    onChange={(e) => setBillingEndDate(e.target.value)}
-                    data-testid="input-billing-end"
-                  />
-                </div>
-                <Button
-                  onClick={handleDownloadStatement}
-                  disabled={downloadingStatement}
-                  data-testid="button-download-statement"
-                >
-                  <Download className="mr-1 h-4 w-4" />
-                  {downloadingStatement ? "Downloading..." : "Download PDF"}
+                <Button size="sm" variant="outline" className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200" onClick={() => handleTabChange("billing")} data-testid="button-go-estimates">
+                  Review
                 </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            )}
 
-        {/* Estimates (T004) */}
-        {estimates.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <FileText className="h-5 w-5" /> Estimates
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {pendingEstimates.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
-                  {pendingEstimates.map((est) => (
-                    <div key={est.id} className="border rounded-md p-3 space-y-3" data-testid={`card-estimate-${est.id}`}>
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium text-sm">{est.description}</p>
-                        <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Pending</Badge>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <SummaryCard
+                icon={CalendarCheck}
+                label="Next Visit"
+                value={nextVisit ? nextVisit.scheduledDate : "None scheduled"}
+                sublabel={nextVisit?.propertyAddress}
+                accent="bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400"
+              />
+              <SummaryCard
+                icon={DollarSign}
+                label="Balance Due"
+                value={balanceDue > 0 ? `$${balanceDue.toFixed(2)}` : "All clear"}
+                sublabel={balanceDue > 0 ? `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length > 1 ? "s" : ""}` : "No outstanding balance"}
+                accent={balanceDue > 0 ? "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400" : "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400"}
+              />
+              <SummaryCard
+                icon={Calendar}
+                label="Active Plan"
+                value={activePlan ? (frequencyLabels[activePlan.frequency] || activePlan.frequency) : "No active plan"}
+                sublabel={activePlan ? `${activePlan.dayOfWeek ? activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1) + "s" : ""} - $${Number(activePlan.pricePerVisit).toFixed(2)}/visit` : undefined}
+                accent="bg-primary/10 text-primary"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {balanceDue > 0 && (
+                <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("billing")} data-testid="button-quick-pay">
+                  <CreditCard className="h-4 w-4" /> Pay Now
+                </Button>
+              )}
+              <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("services")} data-testid="button-quick-services">
+                <ArrowRightLeft className="h-4 w-4" /> Manage Services
+              </Button>
+              <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("account")} data-testid="button-quick-contact">
+                <Mail className="h-4 w-4" /> Contact Us
+              </Button>
+            </div>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-primary" /> Service Plans
+                  </CardTitle>
+                  {hasActivePlans ? (
+                    <Button size="sm" variant="outline" onClick={() => handlePauseResume("pause")} disabled={actionPending} data-testid="button-portal-pause">
+                      <Pause className="mr-1.5 h-3.5 w-3.5" /> Pause
+                    </Button>
+                  ) : schedule?.servicePlans && schedule.servicePlans.length > 0 ? (
+                    <Button size="sm" onClick={() => handlePauseResume("resume")} disabled={actionPending} data-testid="button-portal-resume">
+                      <Play className="mr-1.5 h-3.5 w-3.5" /> Resume
+                    </Button>
+                  ) : null}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {schedule?.servicePlans && schedule.servicePlans.length > 0 ? (
+                  schedule.servicePlans.map((plan) => (
+                    <div key={plan.id} className="flex items-center justify-between rounded-lg border p-3 bg-card hover:bg-accent/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-2.5 w-2.5 rounded-full ${plan.isActive ? "bg-green-500" : "bg-gray-400"}`} />
+                        <div>
+                          <p className="text-sm font-medium">{frequencyLabels[plan.frequency] || plan.frequency}</p>
+                          {plan.dayOfWeek && <p className="text-xs text-muted-foreground capitalize">{plan.dayOfWeek}s</p>}
+                        </div>
                       </div>
-                      {est.items && est.items.length > 0 && (
-                        <div className="text-xs space-y-1 bg-muted/50 rounded p-2">
-                          {est.items.map((item, idx) => (
-                            <div key={idx} className="flex justify-between">
-                              <span>{item.description} x{item.quantity}</span>
-                              <span>${Number(item.total).toFixed(2)}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium">${Number(plan.pricePerVisit).toFixed(2)}/visit</span>
+                        <Badge variant="secondary" className={plan.isActive ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"}>
+                          {plan.isActive ? "Active" : "Paused"}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-plans">No service plans found.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {schedule?.upcomingVisits && schedule.upcomingVisits.length > 0 ? (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-primary" /> Upcoming Visits
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1.5">
+                    {schedule.upcomingVisits.slice(0, 5).map((visit) => (
+                      <div key={visit.id} className="flex items-center justify-between rounded-lg p-2.5 hover:bg-accent/30 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Calendar className="h-3.5 w-3.5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{visit.scheduledDate}</p>
+                            {visit.propertyAddress && <p className="text-xs text-muted-foreground">{visit.propertyAddress}</p>}
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className={statusColors[visit.status] || ""}>
+                          {visit.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                  {schedule.upcomingVisits.length > 5 && (
+                    <Button variant="ghost" size="sm" className="w-full mt-2 text-muted-foreground" onClick={() => handleTabChange("services")}>
+                      View all {schedule.upcomingVisits.length} visits
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-visits">No upcoming visits scheduled.</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {referralCode && (
+              <Card className="border-primary/20 bg-primary/[0.02]">
+                <CardContent className="pt-5">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg p-2 bg-primary/10">
+                      <Gift className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">Refer a Friend</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Share your referral link and earn rewards. {referralCount > 0 && `${referralCount} successful referral${referralCount > 1 ? "s" : ""} so far.`}
+                      </p>
+                      <Button variant="outline" size="sm" className="mt-2 gap-1.5" onClick={handleCopyReferral} data-testid="button-copy-referral-overview">
+                        {copiedReferral ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copiedReferral ? "Copied" : "Copy Link"}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* ==================== SERVICES TAB ==================== */}
+          <TabsContent value="services" className="space-y-6">
+            {schedule?.servicePlans && schedule.servicePlans.length > 0 && (
+              <section>
+                <SectionHeader
+                  title="Service Plans"
+                  description="Your active service plans and scheduling"
+                  action={
+                    hasActivePlans ? (
+                      <Button size="sm" variant="outline" onClick={() => handlePauseResume("pause")} disabled={actionPending} data-testid="button-portal-pause-svc">
+                        <Pause className="mr-1.5 h-3.5 w-3.5" /> Pause All
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={() => handlePauseResume("resume")} disabled={actionPending} data-testid="button-portal-resume-svc">
+                        <Play className="mr-1.5 h-3.5 w-3.5" /> Resume All
+                      </Button>
+                    )
+                  }
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {schedule.servicePlans.map((plan) => (
+                    <Card key={plan.id} className="overflow-hidden">
+                      <CardContent className="pt-4 pb-4">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-semibold">{frequencyLabels[plan.frequency] || plan.frequency}</p>
+                            {plan.dayOfWeek && <p className="text-sm text-muted-foreground capitalize mt-0.5">{plan.dayOfWeek}s</p>}
+                            <p className="text-lg font-bold text-primary mt-2">${Number(plan.pricePerVisit).toFixed(2)}<span className="text-xs font-normal text-muted-foreground">/visit</span></p>
+                          </div>
+                          <Badge variant="secondary" className={plan.isActive ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"}>
+                            {plan.isActive ? "Active" : "Paused"}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {schedule?.upcomingVisits && schedule.upcomingVisits.length > 0 && (
+              <section>
+                <SectionHeader title="Upcoming Visits" description={`${schedule.upcomingVisits.length} visit${schedule.upcomingVisits.length > 1 ? "s" : ""} scheduled`} />
+                <Card>
+                  <CardContent className="pt-4 divide-y">
+                    {schedule.upcomingVisits.slice(0, 10).map((visit) => (
+                      <div key={visit.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-blue-50 dark:bg-blue-950 flex items-center justify-center">
+                            <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{visit.scheduledDate}</p>
+                            {visit.propertyAddress && <p className="text-xs text-muted-foreground">{visit.propertyAddress}</p>}
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className={statusColors[visit.status] || ""}>{visit.status}</Badge>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </section>
+            )}
+
+            {pastVisits.length > 0 && (
+              <section>
+                <SectionHeader title="Past Visits" description={`${pastVisitsTotal} total visit${pastVisitsTotal > 1 ? "s" : ""}`} />
+                <Card>
+                  <CardContent className="pt-4 divide-y">
+                    {pastVisits.map((visit) => (
+                      <div key={visit.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0" data-testid={`card-past-visit-${visit.id}`}>
+                        <div className="flex items-center gap-3">
+                          {(visit.proofOfServicePhoto || visit.proofOfServicePhotoBefore) ? (
+                            <button
+                              className="h-10 w-10 rounded-full overflow-hidden border-2 border-primary/20 hover:border-primary transition-colors shrink-0"
+                              onClick={() => setVisitPhotoModal(visit)}
+                              data-testid={`button-view-photos-${visit.id}`}
+                            >
+                              <img
+                                src={visit.proofOfServicePhoto || visit.proofOfServicePhotoBefore || ""}
+                                alt="Service"
+                                className="h-full w-full object-cover"
+                              />
+                            </button>
+                          ) : (
+                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
                             </div>
-                          ))}
+                          )}
+                          <div>
+                            <p className="text-sm font-medium">{visit.scheduledDate}</p>
+                            {visit.propertyAddress && <p className="text-xs text-muted-foreground">{visit.propertyAddress}</p>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {(visit.proofOfServicePhoto || visit.proofOfServicePhotoBefore) && (
+                            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setVisitPhotoModal(visit)}>
+                              <Camera className="h-3 w-3 mr-1" /> Photos
+                            </Button>
+                          )}
+                          <Badge variant="secondary" className={statusColors[visit.status] || ""}>{visit.status}</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-3 mt-4">
+                    <Button variant="outline" size="sm" disabled={pastVisitsPage <= 1} onClick={() => loadVisitHistory(pastVisitsPage - 1)} data-testid="button-prev-visits">
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">Page {pastVisitsPage} of {totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={pastVisitsPage >= totalPages} onClick={() => loadVisitHistory(pastVisitsPage + 1)} data-testid="button-next-visits">
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {galleryPhotos.length > 0 && (
+              <section>
+                <SectionHeader title="Service Gallery" description="Before and after photos from recent visits" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {galleryPhotos.map((photo, idx) => (
+                    <button
+                      key={photo.id}
+                      className="group relative aspect-square rounded-xl overflow-hidden border hover:ring-2 hover:ring-primary/50 transition-all cursor-pointer bg-muted"
+                      onClick={() => setPhotoModalIndex(idx)}
+                      data-testid={`button-gallery-photo-${photo.id}`}
+                    >
+                      <img
+                        src={photo.proofOfServicePhoto || photo.proofOfServicePhotoBefore || ""}
+                        alt={`Service on ${photo.scheduledDate}`}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="absolute bottom-0 left-0 right-0 p-2">
+                        <p className="text-white text-xs font-medium opacity-80 group-hover:opacity-100 transition-opacity">{photo.scheduledDate}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <Separator />
+
+            <section>
+              <SectionHeader title="Request One-Time Cleanup" description="Need an extra visit? Submit a request below." />
+              <Card>
+                <CardContent className="pt-4">
+                  <form onSubmit={handleRequestCleanup} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="cleanup-date">Preferred Date</Label>
+                        <Input
+                          id="cleanup-date"
+                          type="date"
+                          value={cleanupDate}
+                          onChange={(e) => setCleanupDate(e.target.value)}
+                          min={new Date().toISOString().split("T")[0]}
+                          data-testid="input-cleanup-date"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="cleanup-notes">Notes (optional)</Label>
+                        <Input
+                          id="cleanup-notes"
+                          value={cleanupNotes}
+                          onChange={(e) => setCleanupNotes(e.target.value)}
+                          placeholder="Any special requests..."
+                          data-testid="input-cleanup-notes"
+                        />
+                      </div>
+                    </div>
+                    <Button type="submit" disabled={cleanupPending} data-testid="button-submit-cleanup">
+                      <Send className="mr-1.5 h-4 w-4" />
+                      {cleanupPending ? "Submitting..." : "Submit Request"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </section>
+
+            <section>
+              <SectionHeader title="Request Service Change" description="Change frequency, service day, or cancel" />
+              <Card>
+                <CardContent className="pt-4">
+                  <form onSubmit={handleSubmitChangeRequest} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {schedule?.servicePlans && schedule.servicePlans.length > 1 && (
+                        <div className="space-y-1.5">
+                          <Label>Service Plan</Label>
+                          <Select value={changePlanId} onValueChange={setChangePlanId}>
+                            <SelectTrigger data-testid="select-change-plan">
+                              <SelectValue placeholder="Select a plan..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {schedule.servicePlans.map((plan) => (
+                                <SelectItem key={plan.id} value={plan.id}>
+                                  {frequencyLabels[plan.frequency] || plan.frequency} {plan.dayOfWeek ? `- ${plan.dayOfWeek}` : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       )}
-                      <p className="text-lg font-semibold">Total: ${(est.totalCents / 100).toFixed(2)}</p>
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
+                        <Label>Change Type</Label>
+                        <Select value={changeType} onValueChange={setChangeType}>
+                          <SelectTrigger data-testid="select-change-type">
+                            <SelectValue placeholder="What would you like to change?" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="frequency_change">Change Frequency</SelectItem>
+                            <SelectItem value="day_change">Change Service Day</SelectItem>
+                            <SelectItem value="cancel">Cancel Service</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    {(changeType === "frequency_change" || changeType === "day_change") && (
+                      <div className="space-y-1.5">
+                        <Label>Preferred {changeType === "frequency_change" ? "Frequency" : "Day"}</Label>
+                        {changeType === "frequency_change" ? (
+                          <Select value={changeValue} onValueChange={setChangeValue}>
+                            <SelectTrigger data-testid="select-change-value">
+                              <SelectValue placeholder="Select new frequency..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="biweekly">Bi-Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Select value={changeValue} onValueChange={setChangeValue}>
+                            <SelectTrigger data-testid="select-change-value">
+                              <SelectValue placeholder="Select new day..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map((day) => (
+                                <SelectItem key={day} value={day}>{day.charAt(0).toUpperCase() + day.slice(1)}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="change-note">Details (optional)</Label>
+                      <Textarea
+                        id="change-note"
+                        value={changeNote}
+                        onChange={(e) => setChangeNote(e.target.value)}
+                        placeholder="Any additional details..."
+                        rows={2}
+                        data-testid="input-change-note"
+                      />
+                    </div>
+                    <Button type="submit" disabled={submittingChange} data-testid="button-submit-change">
+                      <Send className="mr-1.5 h-4 w-4" />
+                      {submittingChange ? "Submitting..." : "Submit Request"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              {changeRequests.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Your Requests</p>
+                  {changeRequests.map((cr) => (
+                    <div key={cr.id} className="flex items-start justify-between gap-3 rounded-lg border p-3 bg-card" data-testid={`card-change-request-${cr.id}`}>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium">{changeRequestTypeLabels[cr.requestType] || cr.requestType}</p>
+                          <Badge variant="secondary" className={`text-xs ${changeRequestStatusColors[cr.status] || ""}`}>{cr.status}</Badge>
+                        </div>
+                        {cr.requestedValue && <p className="text-xs text-muted-foreground mt-1">Requested: {cr.requestedValue}</p>}
+                        {cr.note && <p className="text-xs text-muted-foreground">{cr.note}</p>}
+                        {cr.adminNote && <p className="text-xs text-primary mt-1">Response: {cr.adminNote}</p>}
+                      </div>
+                      <p className="text-xs text-muted-foreground shrink-0">{new Date(cr.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </TabsContent>
+
+          {/* ==================== BILLING TAB ==================== */}
+          <TabsContent value="billing" className="space-y-6">
+            {pendingEstimates.length > 0 && (
+              <section>
+                <SectionHeader title="Estimates Awaiting Review" />
+                <div className="space-y-3">
+                  {pendingEstimates.map((est) => (
+                    <Card key={est.id} className="border-amber-200 dark:border-amber-800" data-testid={`card-estimate-${est.id}`}>
+                      <CardContent className="pt-4 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-semibold">{est.description}</p>
+                            {est.sentAt && <p className="text-xs text-muted-foreground mt-0.5">Sent {new Date(est.sentAt).toLocaleDateString()}</p>}
+                          </div>
+                          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">Pending</Badge>
+                        </div>
+                        {est.items && est.items.length > 0 && (
+                          <div className="rounded-lg border overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="bg-muted/50">
+                                  <th className="text-left p-2 font-medium text-muted-foreground">Item</th>
+                                  <th className="text-center p-2 font-medium text-muted-foreground">Qty</th>
+                                  <th className="text-right p-2 font-medium text-muted-foreground">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y">
+                                {est.items.map((item, idx) => (
+                                  <tr key={idx}>
+                                    <td className="p-2">{item.description}</td>
+                                    <td className="p-2 text-center">{item.quantity}</td>
+                                    <td className="p-2 text-right">${Number(item.total).toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between pt-2 border-t">
+                          <p className="text-lg font-bold">Total: ${(est.totalCents / 100).toFixed(2)}</p>
+                        </div>
                         <Textarea
-                          placeholder="Optional note..."
+                          placeholder="Add a note (optional)..."
                           value={estimateNote[est.id] || ""}
                           onChange={(e) => setEstimateNote((prev) => ({ ...prev, [est.id]: e.target.value }))}
                           rows={2}
+                          className="text-sm"
                           data-testid={`input-estimate-note-${est.id}`}
                         />
                         <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleEstimateAction(est.id, "approve")}
-                            data-testid={`button-approve-estimate-${est.id}`}
-                          >
-                            <Check className="mr-1 h-3 w-3" /> Approve
+                          <Button size="sm" onClick={() => handleEstimateAction(est.id, "approve")} className="gap-1.5" data-testid={`button-approve-estimate-${est.id}`}>
+                            <Check className="h-3.5 w-3.5" /> Approve
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEstimateAction(est.id, "decline")}
-                            data-testid={`button-decline-estimate-${est.id}`}
-                          >
-                            <X className="mr-1 h-3 w-3" /> Decline
+                          <Button size="sm" variant="outline" onClick={() => handleEstimateAction(est.id, "decline")} className="gap-1.5" data-testid={`button-decline-estimate-${est.id}`}>
+                            <X className="h-3.5 w-3.5" /> Decline
                           </Button>
                         </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
                   ))}
                 </div>
-              )}
-              {pastEstimates.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Past Estimates</p>
-                  {pastEstimates.map((est) => (
-                    <div key={est.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border rounded-md p-2" data-testid={`card-estimate-past-${est.id}`}>
-                      <div>
-                        <p className="font-medium">{est.description}</p>
-                        <p className="text-xs text-muted-foreground">${(est.totalCents / 100).toFixed(2)}</p>
-                      </div>
-                      <Badge className={est.status === "approved" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"}>
-                        {est.status}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+              </section>
+            )}
 
-        {/* Payment Methods (T001) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <CreditCard className="h-5 w-5" /> Payment Methods
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {paymentMethods.length > 0 ? (
-              <div className="space-y-2">
-                {paymentMethods.map((pm) => (
-                  <div key={pm.id} className="flex items-center justify-between border rounded-md p-3" data-testid={`card-payment-method-${pm.id}`}>
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium capitalize">{pm.brand} **** {pm.last4}</p>
-                        <p className="text-xs text-muted-foreground">Expires {pm.expMonth}/{pm.expYear}</p>
-                      </div>
+            <section>
+              <SectionHeader
+                title="Invoices"
+                description={activeInvoices.length > 0 ? `${activeInvoices.length} invoice${activeInvoices.length > 1 ? "s" : ""}` : undefined}
+              />
+              {activeInvoices.length > 0 ? (
+                <Card>
+                  <CardContent className="pt-0 pb-0">
+                    <div className="divide-y">
+                      {activeInvoices.map((inv) => (
+                        <div key={inv.id} className="flex items-center justify-between py-3 gap-3" data-testid={`card-portal-invoice-${inv.id}`}>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${inv.status === "paid" ? "bg-green-50 dark:bg-green-950" : "bg-amber-50 dark:bg-amber-950"}`}>
+                              {inv.status === "paid" ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" /> : <Receipt className="h-4 w-4 text-amber-600 dark:text-amber-400" />}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{inv.invoiceNumber}</p>
+                              <p className="text-xs text-muted-foreground">Due {inv.dueDate}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="text-right mr-1">
+                              <p className="text-sm font-semibold">${Number(inv.total).toFixed(2)}</p>
+                              <Badge variant="secondary" className={`text-[10px] ${invoiceStatusColors[inv.status] || ""}`}>{inv.status}</Badge>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownloadInvoicePdf(inv.id, inv.invoiceNumber)} data-testid={`button-download-invoice-${inv.id}`}>
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                            {inv.status !== "paid" && inv.status !== "voided" && (
+                              <Button size="sm" onClick={() => handlePayInvoice(inv.id)} disabled={actionPending} data-testid={`button-portal-pay-${inv.id}`}>
+                                Pay
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveCard(pm.id)}
-                      data-testid={`button-remove-card-${pm.id}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardContent className="pt-4">
+                    <EmptyState icon={FileText} title="No invoices yet" description="Your invoices will appear here once generated." />
+                  </CardContent>
+                </Card>
+              )}
+            </section>
+
+            <section>
+              <SectionHeader title="Billing Statement" description="Download a PDF summary for a date range" />
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="billing-start">Start Date</Label>
+                      <Input id="billing-start" type="date" value={billingStartDate} onChange={(e) => setBillingStartDate(e.target.value)} data-testid="input-billing-start" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="billing-end">End Date</Label>
+                      <Input id="billing-end" type="date" value={billingEndDate} onChange={(e) => setBillingEndDate(e.target.value)} data-testid="input-billing-end" />
+                    </div>
+                    <Button onClick={handleDownloadStatement} disabled={downloadingStatement} className="gap-1.5" data-testid="button-download-statement">
+                      <Download className="h-4 w-4" />
+                      {downloadingStatement ? "Downloading..." : "Download PDF"}
                     </Button>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No payment methods on file.</p>
-            )}
+                </CardContent>
+              </Card>
+            </section>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleAddCard}
-              disabled={addingCard}
-              data-testid="button-add-card"
-            >
-              <Plus className="mr-1 h-4 w-4" /> {addingCard ? "Setting up..." : "Add Card"}
-            </Button>
+            <Separator />
 
-            <div className="flex items-center justify-between border-t pt-3">
-              <div>
-                <p className="text-sm font-medium">Auto-Pay</p>
-                <p className="text-xs text-muted-foreground">Automatically pay invoices with your card on file</p>
-              </div>
-              <Switch
-                checked={autoPayEnabled}
-                onCheckedChange={handleToggleAutoPay}
-                data-testid="switch-auto-pay"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Service Gallery (T007) */}
-        {galleryPhotos.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Image className="h-5 w-5" /> Service Gallery
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {galleryPhotos.map((photo, idx) => (
-                  <button
-                    key={photo.id}
-                    className="relative aspect-square rounded-md overflow-hidden border hover:ring-2 hover:ring-primary transition-all cursor-pointer bg-muted"
-                    onClick={() => setPhotoModalIndex(idx)}
-                    data-testid={`button-gallery-photo-${photo.id}`}
-                  >
-                    <img
-                      src={photo.proofOfServicePhoto || photo.proofOfServicePhotoBefore || ""}
-                      alt={`Service on ${photo.scheduledDate}`}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1.5">
-                      {photo.scheduledDate}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Request One-Time Cleanup */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Sparkles className="h-5 w-5" /> Request One-Time Cleanup
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleRequestCleanup} className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="cleanup-date">Preferred Date</Label>
-                <Input
-                  id="cleanup-date"
-                  type="date"
-                  value={cleanupDate}
-                  onChange={(e) => setCleanupDate(e.target.value)}
-                  min={new Date().toISOString().split("T")[0]}
-                  data-testid="input-cleanup-date"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cleanup-notes">Notes (optional)</Label>
-                <Textarea
-                  id="cleanup-notes"
-                  value={cleanupNotes}
-                  onChange={(e) => setCleanupNotes(e.target.value)}
-                  placeholder="Any special requests or details..."
-                  rows={3}
-                  data-testid="input-cleanup-notes"
-                />
-              </div>
-              <Button type="submit" disabled={cleanupPending} data-testid="button-submit-cleanup">
-                <Send className="mr-1 h-4 w-4" />
-                {cleanupPending ? "Submitting..." : "Submit Request"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Service Change Requests (T006) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <ArrowRightLeft className="h-5 w-5" /> Request Service Change
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <form onSubmit={handleSubmitChangeRequest} className="space-y-3">
-              {schedule?.servicePlans && schedule.servicePlans.length > 1 && (
-                <div className="space-y-1">
-                  <Label>Service Plan (optional)</Label>
-                  <Select value={changePlanId} onValueChange={setChangePlanId}>
-                    <SelectTrigger data-testid="select-change-plan">
-                      <SelectValue placeholder="Select a plan..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {schedule.servicePlans.map((plan) => (
-                        <SelectItem key={plan.id} value={plan.id}>
-                          {frequencyLabels[plan.frequency] || plan.frequency} {plan.dayOfWeek ? `- ${plan.dayOfWeek}` : ""}
-                        </SelectItem>
+            <section>
+              <SectionHeader title="Payment Methods" description="Manage your cards on file" />
+              <Card>
+                <CardContent className="pt-4 space-y-4">
+                  {paymentMethods.length > 0 ? (
+                    <div className="space-y-2">
+                      {paymentMethods.map((pm) => (
+                        <div key={pm.id} className="flex items-center justify-between rounded-lg border p-3 bg-card" data-testid={`card-payment-method-${pm.id}`}>
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+                              <CreditCard className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium capitalize">{pm.brand} ending in {pm.last4}</p>
+                              <p className="text-xs text-muted-foreground">Expires {pm.expMonth}/{pm.expYear}</p>
+                            </div>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveCard(pm.id)} data-testid={`button-remove-card-${pm.id}`}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="space-y-1">
-                <Label>Change Type</Label>
-                <Select value={changeType} onValueChange={setChangeType}>
-                  <SelectTrigger data-testid="select-change-type">
-                    <SelectValue placeholder="What would you like to change?" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="frequency_change">Change Frequency</SelectItem>
-                    <SelectItem value="day_change">Change Service Day</SelectItem>
-                    <SelectItem value="cancel">Cancel Service</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {(changeType === "frequency_change" || changeType === "day_change") && (
-                <div className="space-y-1">
-                  <Label>Preferred {changeType === "frequency_change" ? "Frequency" : "Day"}</Label>
-                  {changeType === "frequency_change" ? (
-                    <Select value={changeValue} onValueChange={setChangeValue}>
-                      <SelectTrigger data-testid="select-change-value">
-                        <SelectValue placeholder="Select new frequency..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="biweekly">Bi-Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    </div>
                   ) : (
-                    <Select value={changeValue} onValueChange={setChangeValue}>
-                      <SelectTrigger data-testid="select-change-value">
-                        <SelectValue placeholder="Select new day..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map((day) => (
-                          <SelectItem key={day} value={day}>{day.charAt(0).toUpperCase() + day.slice(1)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <p className="text-sm text-muted-foreground text-center py-2">No payment methods on file.</p>
                   )}
-                </div>
-              )}
-              <div className="space-y-1">
-                <Label htmlFor="change-note">Details (optional)</Label>
-                <Textarea
-                  id="change-note"
-                  value={changeNote}
-                  onChange={(e) => setChangeNote(e.target.value)}
-                  placeholder="Any additional details..."
-                  rows={2}
-                  data-testid="input-change-note"
-                />
-              </div>
-              <Button type="submit" disabled={submittingChange} data-testid="button-submit-change">
-                <Send className="mr-1 h-4 w-4" />
-                {submittingChange ? "Submitting..." : "Submit Request"}
-              </Button>
-            </form>
-
-            {changeRequests.length > 0 && (
-              <div className="border-t pt-3 space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Your Requests</p>
-                {changeRequests.map((cr) => (
-                  <div key={cr.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border rounded-md p-2" data-testid={`card-change-request-${cr.id}`}>
-                    <div>
-                      <p className="font-medium">{changeRequestTypeLabels[cr.requestType] || cr.requestType}</p>
-                      {cr.requestedValue && <p className="text-xs text-muted-foreground">Requested: {cr.requestedValue}</p>}
-                      {cr.note && <p className="text-xs text-muted-foreground">{cr.note}</p>}
-                      {cr.adminNote && <p className="text-xs">Admin: {cr.adminNote}</p>}
-                    </div>
-                    <Badge variant="secondary" className={changeRequestStatusColors[cr.status] || ""}>
-                      {cr.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Referral Program (T003) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Gift className="h-5 w-5" /> Refer a Friend
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {referralCode ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-muted rounded-md px-3 py-2 text-sm font-mono" data-testid="text-referral-code">
-                    {referralCode}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCopyReferral}
-                    data-testid="button-copy-referral"
-                  >
-                    {copiedReferral ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  <Button variant="outline" className="w-full border-dashed gap-1.5" onClick={handleAddCard} disabled={addingCard} data-testid="button-add-card">
+                    <Plus className="h-4 w-4" /> {addingCard ? "Setting up..." : "Add New Card"}
                   </Button>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Share this link with friends to refer them to the service.
-                </p>
-                <p className="text-sm" data-testid="text-referral-count">
-                  Successful referrals: <span className="font-semibold">{referralCount}</span>
-                </p>
-              </>
-            ) : (
-              <div>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Generate your unique referral code to share with friends.
-                </p>
-                <Button
-                  onClick={handleGenerateReferral}
-                  disabled={generatingCode}
-                  data-testid="button-generate-referral"
-                >
-                  <Gift className="mr-1 h-4 w-4" />
-                  {generatingCode ? "Generating..." : "Get My Referral Code"}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Notification Preferences (T005) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Bell className="h-5 w-5" /> Notification Preferences
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b pb-2">
-                <p className="text-sm font-medium">Receive Email Notifications</p>
-                <Switch
-                  checked={notifPrefs.email}
-                  onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, email: v }))}
-                  data-testid="switch-notif-email-global"
-                />
-              </div>
-              <div className="flex items-center justify-between border-b pb-2">
-                <p className="text-sm font-medium">Receive SMS Notifications</p>
-                <Switch
-                  checked={notifPrefs.sms}
-                  onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, sms: v }))}
-                  data-testid="switch-notif-sms-global"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground pt-1">Notification Types</p>
-              {[
-                { key: "serviceReminder", label: "Service Reminders" },
-                { key: "serviceCompleted", label: "Service Completed" },
-                { key: "invoiceReady", label: "Invoice Ready" },
-                { key: "invoiceDueReminder", label: "Invoice Due Reminder" },
-                { key: "paymentConfirmation", label: "Payment Confirmation" },
-              ].map(({ key, label }) => (
-                <div key={key} className="flex items-center justify-between">
-                  <p className="text-sm">{label}</p>
-                  <Switch
-                    checked={notifPrefs[key] ?? true}
-                    onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, [key]: v }))}
-                    data-testid={`switch-notif-${key}`}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <Button onClick={handleSaveNotifPrefs} disabled={savingNotifs} data-testid="button-save-notifications">
-              <Save className="mr-1 h-4 w-4" />
-              {savingNotifs ? "Saving..." : "Save Preferences"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Pet Count */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Dog className="h-5 w-5" /> Pet Count
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="number-of-dogs">Number of Dogs</Label>
-                <Input
-                  id="number-of-dogs"
-                  type="number"
-                  min={0}
-                  value={numberOfDogs}
-                  onChange={(e) => setNumberOfDogs(parseInt(e.target.value) || 0)}
-                  className="w-24"
-                  data-testid="input-number-of-dogs"
-                />
-              </div>
-              <Button onClick={handleSaveDogs} disabled={savingDogs} data-testid="button-save-dogs">
-                <Save className="mr-1 h-4 w-4" />
-                {savingDogs ? "Saving..." : "Save"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Properties */}
-        {properties.length > 0 && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Home className="h-5 w-5" /> My Properties
-              </CardTitle>
-              <Button
-                size="sm"
-                onClick={handleSaveProperties}
-                disabled={savingProperties}
-                data-testid="button-save-properties"
-              >
-                <Save className="mr-1 h-4 w-4" />
-                {savingProperties ? "Saving..." : "Save Changes"}
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {properties.map((prop) => (
-                <div key={prop.id} className="border rounded-md p-3 space-y-3" data-testid={`card-property-${prop.id}`}>
-                  <p className="font-medium text-sm" data-testid={`text-property-address-${prop.id}`}>
-                    {prop.streetAddress}, {prop.city}, {prop.state} {prop.zipCode}
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label htmlFor={`gate-code-${prop.id}`}>Gate Code</Label>
-                      <Input
-                        id={`gate-code-${prop.id}`}
-                        value={propertyEdits[prop.id]?.gateCode || ""}
-                        onChange={(e) =>
-                          setPropertyEdits((prev) => ({
-                            ...prev,
-                            [prop.id]: { ...prev[prop.id], gateCode: e.target.value },
-                          }))
-                        }
-                        placeholder="Gate code"
-                        data-testid={`input-gate-code-${prop.id}`}
-                      />
+                  <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
+                    <div className="flex items-center gap-3">
+                      <Shield className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium">Auto-Pay</p>
+                        <p className="text-xs text-muted-foreground">Automatically pay invoices when due</p>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor={`special-${prop.id}`}>Special Instructions</Label>
-                      <Input
-                        id={`special-${prop.id}`}
-                        value={propertyEdits[prop.id]?.specialInstructions || ""}
-                        onChange={(e) =>
-                          setPropertyEdits((prev) => ({
-                            ...prev,
-                            [prop.id]: { ...prev[prop.id], specialInstructions: e.target.value },
-                          }))
-                        }
-                        placeholder="Special instructions"
-                        data-testid={`input-special-instructions-${prop.id}`}
-                      />
+                    <Switch checked={autoPayEnabled} onCheckedChange={handleToggleAutoPay} data-testid="switch-auto-pay" />
+                  </div>
+                </CardContent>
+              </Card>
+            </section>
+
+            {pastEstimates.length > 0 && (
+              <section>
+                <SectionHeader title="Past Estimates" />
+                <Card>
+                  <CardContent className="pt-0 pb-0 divide-y">
+                    {pastEstimates.map((est) => (
+                      <div key={est.id} className="flex items-center justify-between py-3" data-testid={`card-estimate-past-${est.id}`}>
+                        <div>
+                          <p className="text-sm font-medium">{est.description}</p>
+                          <p className="text-xs text-muted-foreground">${(est.totalCents / 100).toFixed(2)}</p>
+                        </div>
+                        <Badge className={est.status === "approved" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"}>
+                          {est.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </section>
+            )}
+          </TabsContent>
+
+          {/* ==================== ACCOUNT TAB ==================== */}
+          <TabsContent value="account" className="space-y-6">
+            <section>
+              <SectionHeader title="Pet Information" />
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Dog className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="number-of-dogs" className="text-xs text-muted-foreground">Number of Dogs</Label>
+                        <Input
+                          id="number-of-dogs"
+                          type="number"
+                          min={0}
+                          value={numberOfDogs}
+                          onChange={(e) => setNumberOfDogs(parseInt(e.target.value) || 0)}
+                          className="w-20 h-9"
+                          data-testid="input-number-of-dogs"
+                        />
+                      </div>
+                      <Button size="sm" onClick={handleSaveDogs} disabled={savingDogs} className="mt-5" data-testid="button-save-dogs">
+                        <Save className="mr-1 h-3.5 w-3.5" />
+                        {savingDogs ? "Saving..." : "Save"}
+                      </Button>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            </section>
+
+            {properties.length > 0 && (
+              <section>
+                <SectionHeader
+                  title="My Properties"
+                  description="Update gate codes and special instructions"
+                  action={
+                    <Button size="sm" onClick={handleSaveProperties} disabled={savingProperties} data-testid="button-save-properties">
+                      <Save className="mr-1.5 h-3.5 w-3.5" />
+                      {savingProperties ? "Saving..." : "Save Changes"}
+                    </Button>
+                  }
+                />
+                <div className="space-y-3">
+                  {properties.map((prop) => (
+                    <Card key={prop.id} data-testid={`card-property-${prop.id}`}>
+                      <CardContent className="pt-4">
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                            <Home className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <p className="font-medium text-sm pt-1.5" data-testid={`text-property-address-${prop.id}`}>
+                            {prop.streetAddress}, {prop.city}, {prop.state} {prop.zipCode}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-12">
+                          <div className="space-y-1.5">
+                            <Label htmlFor={`gate-code-${prop.id}`} className="text-xs">Gate Code</Label>
+                            <Input
+                              id={`gate-code-${prop.id}`}
+                              value={propertyEdits[prop.id]?.gateCode || ""}
+                              onChange={(e) =>
+                                setPropertyEdits((prev) => ({
+                                  ...prev,
+                                  [prop.id]: { ...prev[prop.id], gateCode: e.target.value },
+                                }))
+                              }
+                              placeholder="Enter gate code"
+                              className="h-9"
+                              data-testid={`input-gate-code-${prop.id}`}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor={`special-${prop.id}`} className="text-xs">Special Instructions</Label>
+                            <Input
+                              id={`special-${prop.id}`}
+                              value={propertyEdits[prop.id]?.specialInstructions || ""}
+                              onChange={(e) =>
+                                setPropertyEdits((prev) => ({
+                                  ...prev,
+                                  [prop.id]: { ...prev[prop.id], specialInstructions: e.target.value },
+                                }))
+                              }
+                              placeholder="Special instructions"
+                              className="h-9"
+                              data-testid={`input-special-instructions-${prop.id}`}
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
+              </section>
+            )}
 
-        {/* Contact Us */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Mail className="h-5 w-5" /> Contact Us
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSendMessage} className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="contact-subject">Subject (optional)</Label>
-                <Input
-                  id="contact-subject"
-                  value={contactSubject}
-                  onChange={(e) => setContactSubject(e.target.value)}
-                  placeholder="Subject"
-                  data-testid="input-contact-subject"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="contact-message">Message</Label>
-                <Textarea
-                  id="contact-message"
-                  value={contactMessage}
-                  onChange={(e) => setContactMessage(e.target.value)}
-                  placeholder="How can we help?"
-                  rows={4}
-                  data-testid="input-contact-message"
-                />
-              </div>
-              <Button type="submit" disabled={sendingMessage} data-testid="button-send-message">
-                <Send className="mr-1 h-4 w-4" />
-                {sendingMessage ? "Sending..." : "Send Message"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </main>
+            <Separator />
 
-      {/* Visit Photo Modal */}
-      {visitPhotoModal && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setVisitPhotoModal(null)}>
-          <div className="bg-background rounded-lg max-w-3xl w-full max-h-[90vh] overflow-auto p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Service Photos - {visitPhotoModal.scheduledDate}</h3>
-              <Button variant="ghost" size="icon" onClick={() => setVisitPhotoModal(null)} data-testid="button-close-photo-modal">
-                <X className="h-4 w-4" />
+            <section>
+              <SectionHeader title="Notification Preferences" description="Choose how you want to be notified" />
+              <Card>
+                <CardContent className="pt-4 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center gap-2.5">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-sm font-medium">Email</p>
+                      </div>
+                      <Switch checked={notifPrefs.email} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, email: v }))} data-testid="switch-notif-email-global" />
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center gap-2.5">
+                        <Send className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-sm font-medium">SMS</p>
+                      </div>
+                      <Switch checked={notifPrefs.sms} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, sms: v }))} data-testid="switch-notif-sms-global" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Notification Types</p>
+                    <div className="divide-y rounded-lg border">
+                      {[
+                        { key: "serviceReminder", label: "Service Reminders", desc: "Before upcoming visits" },
+                        { key: "serviceCompleted", label: "Service Completed", desc: "After a visit is done" },
+                        { key: "invoiceReady", label: "Invoice Ready", desc: "When a new invoice is created" },
+                        { key: "invoiceDueReminder", label: "Invoice Due Reminder", desc: "Before payment is due" },
+                        { key: "paymentConfirmation", label: "Payment Confirmation", desc: "After a payment is processed" },
+                      ].map(({ key, label, desc }) => (
+                        <div key={key} className="flex items-center justify-between p-3">
+                          <div>
+                            <p className="text-sm font-medium">{label}</p>
+                            <p className="text-xs text-muted-foreground">{desc}</p>
+                          </div>
+                          <Switch checked={notifPrefs[key] ?? true} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, [key]: v }))} data-testid={`switch-notif-${key}`} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button onClick={handleSaveNotifPrefs} disabled={savingNotifs} className="w-full sm:w-auto" data-testid="button-save-notifications">
+                    <Save className="mr-1.5 h-4 w-4" />
+                    {savingNotifs ? "Saving..." : "Save Preferences"}
+                  </Button>
+                </CardContent>
+              </Card>
+            </section>
+
+            <section>
+              <SectionHeader title="Refer a Friend" description="Share your referral link and earn rewards" />
+              <Card className="border-primary/20">
+                <CardContent className="pt-4">
+                  {referralCode ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-muted rounded-lg px-4 py-2.5 text-sm font-mono truncate" data-testid="text-referral-code">
+                          {`${window.location.origin}/portal/login?ref=${referralCode}`}
+                        </div>
+                        <Button variant="outline" size="icon" className="shrink-0 h-10 w-10" onClick={handleCopyReferral} data-testid="button-copy-referral">
+                          {copiedReferral ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Gift className="h-4 w-4 text-primary" />
+                        <span data-testid="text-referral-count">
+                          <span className="font-semibold">{referralCount}</span> successful referral{referralCount !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <Gift className="h-10 w-10 text-primary mx-auto mb-3" />
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Generate your unique referral link to share with friends and family.
+                      </p>
+                      <Button onClick={handleGenerateReferral} disabled={generatingCode} className="gap-1.5" data-testid="button-generate-referral">
+                        <Gift className="h-4 w-4" />
+                        {generatingCode ? "Generating..." : "Get My Referral Link"}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </section>
+
+            <Separator />
+
+            <section>
+              <SectionHeader title="Contact Us" description="Send a message to your service provider" />
+              <Card>
+                <CardContent className="pt-4">
+                  <form onSubmit={handleSendMessage} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="contact-subject">Subject (optional)</Label>
+                      <Input
+                        id="contact-subject"
+                        value={contactSubject}
+                        onChange={(e) => setContactSubject(e.target.value)}
+                        placeholder="What is this about?"
+                        data-testid="input-contact-subject"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="contact-message">Message</Label>
+                      <Textarea
+                        id="contact-message"
+                        value={contactMessage}
+                        onChange={(e) => setContactMessage(e.target.value)}
+                        placeholder="How can we help?"
+                        rows={4}
+                        data-testid="input-contact-message"
+                      />
+                    </div>
+                    <Button type="submit" disabled={sendingMessage} className="gap-1.5" data-testid="button-send-message">
+                      <Send className="h-4 w-4" />
+                      {sendingMessage ? "Sending..." : "Send Message"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </section>
+
+            <div className="pt-4 pb-8">
+              <Button variant="outline" className="w-full text-muted-foreground hover:text-destructive hover:border-destructive/50" onClick={handleLogout} data-testid="button-portal-signout">
+                <LogOut className="h-4 w-4 mr-2" /> Sign Out
               </Button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {visitPhotoModal.proofOfServicePhotoBefore && (
-                <div>
-                  <p className="text-sm font-medium mb-2 text-muted-foreground">Before</p>
-                  <img
-                    src={visitPhotoModal.proofOfServicePhotoBefore}
-                    alt="Before service"
-                    className="w-full rounded-md"
-                    data-testid="img-visit-before"
-                  />
-                </div>
-              )}
-              {visitPhotoModal.proofOfServicePhoto && (
-                <div>
-                  <p className="text-sm font-medium mb-2 text-muted-foreground">After</p>
-                  <img
-                    src={visitPhotoModal.proofOfServicePhoto}
-                    alt="After service"
-                    className="w-full rounded-md"
-                    data-testid="img-visit-after"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+          </TabsContent>
+        </Tabs>
+      </div>
 
-      {/* Gallery Photo Modal */}
-      {photoModalIndex !== null && galleryPhotos[photoModalIndex] && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setPhotoModalIndex(null)}>
-          <div className="bg-background rounded-lg max-w-3xl w-full max-h-[90vh] overflow-auto p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+      {/* Visit Photo Dialog */}
+      <Dialog open={!!visitPhotoModal} onOpenChange={(open) => !open && setVisitPhotoModal(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Service Photos</DialogTitle>
+            <DialogDescription>{visitPhotoModal?.scheduledDate} {visitPhotoModal?.propertyAddress && `- ${visitPhotoModal.propertyAddress}`}</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {visitPhotoModal?.proofOfServicePhotoBefore && (
               <div>
-                <h3 className="font-semibold">
-                  {galleryPhotos[photoModalIndex].scheduledDate}
-                </h3>
-                <p className="text-sm text-muted-foreground">{galleryPhotos[photoModalIndex].propertyAddress}</p>
+                <p className="text-sm font-medium mb-2 text-muted-foreground">Before</p>
+                <img
+                  src={visitPhotoModal.proofOfServicePhotoBefore}
+                  alt="Before service"
+                  className="w-full rounded-lg border"
+                  data-testid="img-visit-before"
+                />
               </div>
-              <div className="flex items-center gap-2">
+            )}
+            {visitPhotoModal?.proofOfServicePhoto && (
+              <div>
+                <p className="text-sm font-medium mb-2 text-muted-foreground">After</p>
+                <img
+                  src={visitPhotoModal.proofOfServicePhoto}
+                  alt="After service"
+                  className="w-full rounded-lg border"
+                  data-testid="img-visit-after"
+                />
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Gallery Photo Dialog */}
+      <Dialog open={photoModalIndex !== null} onOpenChange={(open) => !open && setPhotoModalIndex(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>{photoModalIndex !== null && galleryPhotos[photoModalIndex]?.scheduledDate}</span>
+              <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="icon"
-                  disabled={photoModalIndex <= 0}
+                  className="h-8 w-8"
+                  disabled={photoModalIndex === null || photoModalIndex <= 0}
                   onClick={() => setPhotoModalIndex((prev) => (prev !== null ? prev - 1 : null))}
                   data-testid="button-gallery-prev"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <span className="text-sm text-muted-foreground">{photoModalIndex + 1} / {galleryPhotos.length}</span>
+                <span className="text-sm text-muted-foreground font-normal min-w-[60px] text-center">
+                  {photoModalIndex !== null ? photoModalIndex + 1 : 0} / {galleryPhotos.length}
+                </span>
                 <Button
                   variant="ghost"
                   size="icon"
-                  disabled={photoModalIndex >= galleryPhotos.length - 1}
+                  className="h-8 w-8"
+                  disabled={photoModalIndex === null || photoModalIndex >= galleryPhotos.length - 1}
                   onClick={() => setPhotoModalIndex((prev) => (prev !== null ? prev + 1 : null))}
                   data-testid="button-gallery-next"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => setPhotoModalIndex(null)} data-testid="button-close-gallery">
-                  <X className="h-4 w-4" />
-                </Button>
               </div>
-            </div>
+            </DialogTitle>
+            <DialogDescription>
+              {photoModalIndex !== null && galleryPhotos[photoModalIndex]?.propertyAddress}
+            </DialogDescription>
+          </DialogHeader>
+          {photoModalIndex !== null && galleryPhotos[photoModalIndex] && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {galleryPhotos[photoModalIndex].proofOfServicePhotoBefore && (
                 <div>
@@ -1512,7 +1731,7 @@ export default function PortalClient() {
                   <img
                     src={galleryPhotos[photoModalIndex].proofOfServicePhotoBefore!}
                     alt="Before service"
-                    className="w-full rounded-md"
+                    className="w-full rounded-lg border"
                     data-testid="img-gallery-before"
                   />
                 </div>
@@ -1523,15 +1742,15 @@ export default function PortalClient() {
                   <img
                     src={galleryPhotos[photoModalIndex].proofOfServicePhoto!}
                     alt="After service"
-                    className="w-full rounded-md"
+                    className="w-full rounded-lg border"
                     data-testid="img-gallery-after"
                   />
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
