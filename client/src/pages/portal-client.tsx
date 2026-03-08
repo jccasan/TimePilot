@@ -49,6 +49,8 @@ import {
   Wrench,
   CheckCircle2,
   Shield,
+  User,
+  Phone,
 } from "lucide-react";
 
 interface PortalProfile {
@@ -886,6 +888,72 @@ export default function PortalClient() {
                 <Mail className="h-4 w-4" /> Contact Us
               </Button>
             </div>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <User className="h-4 w-4 text-primary" /> Your Information
+                  </CardTitle>
+                  <Button size="sm" onClick={handleSaveProfile} disabled={savingProfile} data-testid="button-save-profile-overview">
+                    <Save className="mr-1.5 h-3.5 w-3.5" />
+                    {savingProfile ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="overview-first-name" className="text-xs">First Name</Label>
+                    <Input
+                      id="overview-first-name"
+                      value={profileEdits.firstName}
+                      onChange={(e) => setProfileEdits((p) => ({ ...p, firstName: e.target.value }))}
+                      placeholder="First name"
+                      className="h-9"
+                      data-testid="input-overview-first-name"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="overview-last-name" className="text-xs">Last Name</Label>
+                    <Input
+                      id="overview-last-name"
+                      value={profileEdits.lastName}
+                      onChange={(e) => setProfileEdits((p) => ({ ...p, lastName: e.target.value }))}
+                      placeholder="Last name"
+                      className="h-9"
+                      data-testid="input-overview-last-name"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="overview-email" className="text-xs">Email</Label>
+                    <Input
+                      id="overview-email"
+                      type="email"
+                      value={profileEdits.email}
+                      onChange={(e) => setProfileEdits((p) => ({ ...p, email: e.target.value }))}
+                      placeholder="Email address"
+                      className="h-9"
+                      data-testid="input-overview-email"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="overview-phone" className="text-xs">Phone</Label>
+                    <Input
+                      id="overview-phone"
+                      type="tel"
+                      value={profileEdits.phone}
+                      onChange={(e) => setProfileEdits((p) => ({ ...p, phone: e.target.value }))}
+                      placeholder="Phone number"
+                      className="h-9"
+                      data-testid="input-overview-phone"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             <Card>
               <CardHeader className="pb-3">
