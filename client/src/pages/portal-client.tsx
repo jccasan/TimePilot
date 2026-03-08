@@ -59,6 +59,10 @@ interface PortalProfile {
   lastName: string;
   email: string;
   phone: string;
+  streetAddress: string;
+  city: string;
+  state: string;
+  zipCode: string;
   companyName: string;
   numberOfDogs?: number;
 }
@@ -306,7 +310,7 @@ export default function PortalClient() {
   const [savingProperties, setSavingProperties] = useState(false);
   const [numberOfDogs, setNumberOfDogs] = useState<number>(0);
   const [savingDogs, setSavingDogs] = useState(false);
-  const [profileEdits, setProfileEdits] = useState({ firstName: "", lastName: "", email: "", phone: "" });
+  const [profileEdits, setProfileEdits] = useState({ firstName: "", lastName: "", email: "", phone: "", streetAddress: "", city: "", state: "", zipCode: "" });
   const [savingProfile, setSavingProfile] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [autoPayEnabled, setAutoPayEnabled] = useState(false);
@@ -375,6 +379,10 @@ export default function PortalClient() {
           lastName: profileData.lastName || "",
           email: profileData.email || "",
           phone: profileData.phone || "",
+          streetAddress: profileData.streetAddress || "",
+          city: profileData.city || "",
+          state: profileData.state || "",
+          zipCode: profileData.zipCode || "",
         });
         const edits: Record<string, { gateCode: string; specialInstructions: string; streetAddress: string; city: string; state: string; zipCode: string }> = {};
         for (const p of propertiesData) {
@@ -530,6 +538,10 @@ export default function PortalClient() {
           lastName: profileEdits.lastName,
           email: profileEdits.email,
           phone: profileEdits.phone,
+          streetAddress: profileEdits.streetAddress,
+          city: profileEdits.city,
+          state: profileEdits.state,
+          zipCode: profileEdits.zipCode,
         }),
       });
       if (result.profile) {
@@ -539,6 +551,10 @@ export default function PortalClient() {
           lastName: result.profile.lastName || "",
           email: result.profile.email || "",
           phone: result.profile.phone || "",
+          streetAddress: result.profile.streetAddress || "",
+          city: result.profile.city || "",
+          state: result.profile.state || "",
+          zipCode: result.profile.zipCode || "",
         });
       }
       toast({ title: "Saved", description: "Your information has been updated." });
@@ -865,6 +881,52 @@ export default function PortalClient() {
                   placeholder="Phone number"
                   className="h-9"
                   data-testid="input-header-phone"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="header-street" className="text-xs text-muted-foreground">Street Address</Label>
+              <Input
+                id="header-street"
+                value={profileEdits.streetAddress}
+                onChange={(e) => setProfileEdits((p) => ({ ...p, streetAddress: e.target.value }))}
+                placeholder="Street address"
+                className="h-9"
+                data-testid="input-header-street-address"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1 col-span-1">
+                <Label htmlFor="header-city" className="text-xs text-muted-foreground">City</Label>
+                <Input
+                  id="header-city"
+                  value={profileEdits.city}
+                  onChange={(e) => setProfileEdits((p) => ({ ...p, city: e.target.value }))}
+                  placeholder="City"
+                  className="h-9"
+                  data-testid="input-header-city"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="header-state" className="text-xs text-muted-foreground">State</Label>
+                <Input
+                  id="header-state"
+                  value={profileEdits.state}
+                  onChange={(e) => setProfileEdits((p) => ({ ...p, state: e.target.value }))}
+                  placeholder="State"
+                  className="h-9"
+                  data-testid="input-header-state"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="header-zip" className="text-xs text-muted-foreground">Zip Code</Label>
+                <Input
+                  id="header-zip"
+                  value={profileEdits.zipCode}
+                  onChange={(e) => setProfileEdits((p) => ({ ...p, zipCode: e.target.value }))}
+                  placeholder="Zip code"
+                  className="h-9"
+                  data-testid="input-header-zip-code"
                 />
               </div>
             </div>

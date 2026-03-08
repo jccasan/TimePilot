@@ -4173,6 +4173,10 @@ export async function registerRoutes(
         lastName: contact.lastName,
         email: contact.email,
         phone: contact.phone,
+        streetAddress: contact.streetAddress || "",
+        city: contact.city || "",
+        state: contact.state || "",
+        zipCode: contact.zipCode || "",
         companyName: company?.name || "",
       });
     } catch (err) { handleError(res, err); }
@@ -4411,6 +4415,10 @@ export async function registerRoutes(
       if (req.body.firstName !== undefined) updates.firstName = String(req.body.firstName).trim();
       if (req.body.lastName !== undefined) updates.lastName = String(req.body.lastName).trim();
       if (req.body.phone !== undefined) updates.phone = String(req.body.phone).trim() || null;
+      if (req.body.streetAddress !== undefined) updates.streetAddress = String(req.body.streetAddress).trim();
+      if (req.body.city !== undefined) updates.city = String(req.body.city).trim();
+      if (req.body.state !== undefined) updates.state = String(req.body.state).trim();
+      if (req.body.zipCode !== undefined) updates.zipCode = String(req.body.zipCode).trim();
       if (req.body.email !== undefined) {
         const newEmail = String(req.body.email).trim().toLowerCase();
         if (newEmail && newEmail !== contact.email) {
@@ -4449,6 +4457,10 @@ export async function registerRoutes(
           lastName: updatedContact!.lastName,
           email: updatedContact!.email,
           phone: updatedContact!.phone,
+          streetAddress: updatedContact!.streetAddress || "",
+          city: updatedContact!.city || "",
+          state: updatedContact!.state || "",
+          zipCode: updatedContact!.zipCode || "",
           companyName: company?.name || "",
           numberOfDogs: updatedContact!.numberOfDogs,
         },
