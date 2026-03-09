@@ -6023,6 +6023,189 @@ export async function registerRoutes(
   const { parseSweepAndGoInvoices } = await import("./services/sweepandgo-parser");
   const { aiMapColumns, getDeterministicMapping, hashFileContent, CONTACT_FIELDS, INVOICE_FIELDS, ROUTE_FIELDS } = await import("./services/ai-mapper");
   const { applyTransformations, parseCSV: parseCSVUtil } = await import("./services/import-transforms");
+  const { parseCompetitorCSV } = await import("./services/competitor-import");
+
+  const VALID_PLATFORMS = ["sweepandgo", "jobber"] as const;
+
+  app.post("/api/migrations/competitor/detect", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { csvText, platform } = req.body;
+      if (!csvText || typeof csvText !== "string") return res.status(400).json({ error: "csvText is required" });
+      if (platform && !VALID_PLATFORMS.includes(platform)) return res.status(400).json({ error: "Invalid platform" });
+      const result = parseCompetitorCSV(csvText, platform || undefined);
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/migrations/competitor/import", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getCompanyContext(req);
+      const { csvText, platform, duplicateHandling } = req.body;
+      if (!csvText || typeof csvText !== "string") return res.status(400).json({ error: "csvText is required" });
+      if (platform && !VALID_PLATFORMS.includes(platform)) return res.status(400).json({ error: "Invalid platform" });
+      if (duplicateHandling && !["skip", "update"].includes(duplicateHandling)) return res.status(400).json({ error: "Invalid duplicateHandling value" });
+
+      const result = parseCompetitorCSV(csvText, platform || undefined, 0);
+      if (result.errors.some(e => e.row === 0)) {
+        return res.status(400).json({ error: result.errors[0].message });
+      }
+
+      const fileHash = hashFileContent(csvText);
+      const importRun = await storage.createImportRun({
+        companyId,
+        type: `${result.platform}_contacts`,
+        status: "processing",
+        fileName: `${result.platform}-contacts.csv`,
+        fileHash,
+        totalRows: result.totalRows,
+        importedRows: 0,
+        skippedRows: 0,
+      });
+
+      const allContacts = result.preview;
+      const existingContacts = await storage.getContacts(companyId, {});
+      const emailSet = new Set(existingContacts.map(c => c.email?.toLowerCase()).filter(Boolean));
+      const addressSet = new Set(
+        existingContacts.map(c => {
+          if (c.streetAddress && c.city && c.state) {
+            return `${c.streetAddress}|${c.city}|${c.state}|${c.zipCode}`.toLowerCase();
+          }
+          return null;
+        }).filter(Boolean)
+      );
+
+      let imported = 0;
+      let skipped = 0;
+      let updated = 0;
+      const importErrors: Array<{ row: number; message: string }> = [];
+
+      const leadSourceName = result.platformLabel;
+      let leadSourceRecord = (await storage.getLeadSources(companyId)).find(
+        ls => ls.name.toLowerCase() === leadSourceName.toLowerCase()
+      ) || null;
+      if (!leadSourceRecord) {
+        leadSourceRecord = await storage.createLeadSource({ companyId, name: leadSourceName });
+      }
+
+      for (let i = 0; i < allContacts.length; i++) {
+        try {
+          const pc = allContacts[i];
+          const email = pc.email;
+          const addressKey = pc.streetAddress && pc.city && pc.state
+            ? `${pc.streetAddress}|${pc.city}|${pc.state}|${pc.zipCode}`.toLowerCase()
+            : null;
+
+          const isDuplicateEmail = email && emailSet.has(email);
+          const isDuplicateAddress = addressKey && addressSet.has(addressKey);
+
+          if (isDuplicateEmail || isDuplicateAddress) {
+            if (duplicateHandling === "skip") {
+              skipped++;
+              continue;
+            }
+            if (duplicateHandling === "update") {
+              let existing = isDuplicateEmail
+                ? existingContacts.find(c => c.email?.toLowerCase() === email)
+                : null;
+              if (!existing && isDuplicateAddress) {
+                existing = existingContacts.find(c => {
+                  if (!c.streetAddress || !c.city || !c.state) return false;
+                  return `${c.streetAddress}|${c.city}|${c.state}|${c.zipCode}`.toLowerCase() === addressKey;
+                });
+              }
+              if (existing) {
+                const updates: any = {};
+                if (pc.phone && !existing.phone) updates.phone = pc.phone;
+                if (pc.email && !existing.email) updates.email = pc.email;
+                if (pc.streetAddress && !existing.streetAddress) updates.streetAddress = pc.streetAddress;
+                if (pc.city && !existing.city) updates.city = pc.city;
+                if (pc.state && !existing.state) updates.state = pc.state;
+                if (pc.zipCode && !existing.zipCode) updates.zipCode = pc.zipCode;
+                if (pc.numberOfDogs && !existing.numberOfDogs) updates.numberOfDogs = pc.numberOfDogs;
+                if (pc.notes && !existing.notes) updates.notes = pc.notes;
+                if (pc.serviceFrequency && !existing.serviceFrequency) updates.serviceFrequency = pc.serviceFrequency;
+                if (pc.serviceDay && !existing.serviceDay) updates.serviceDay = pc.serviceDay;
+                if (Object.keys(updates).length > 0) {
+                  await storage.updateContact(existing.id, updates);
+                }
+                updated++;
+                continue;
+              }
+            }
+            skipped++;
+            continue;
+          }
+
+          const contactLeadSource = pc.leadSource || leadSourceName;
+
+          const contact = await storage.createContact({
+            companyId,
+            firstName: pc.firstName,
+            lastName: pc.lastName || "",
+            email: pc.email || undefined,
+            phone: pc.phone || undefined,
+            streetAddress: pc.streetAddress || undefined,
+            address2: pc.address2 || undefined,
+            city: pc.city || undefined,
+            state: pc.state || undefined,
+            zipCode: pc.zipCode || undefined,
+            numberOfDogs: pc.numberOfDogs,
+            yardSize: pc.yardSize || undefined,
+            serviceFrequency: pc.serviceFrequency || undefined,
+            serviceDay: (pc.serviceDay as any) || undefined,
+            notes: pc.notes || undefined,
+            leadSource: contactLeadSource || undefined,
+            status: (pc.status as any) || "lead",
+          });
+
+          if (email) emailSet.add(email);
+          if (addressKey) addressSet.add(addressKey);
+
+          if (pc.streetAddress && pc.city && pc.state && pc.zipCode) {
+            try {
+              await createPropertyWithGeocode({
+                companyId,
+                contactId: contact.id,
+                streetAddress: pc.streetAddress,
+                city: pc.city,
+                state: pc.state,
+                zipCode: pc.zipCode,
+                numberOfDogs: pc.numberOfDogs ?? 1,
+                yardSize: pc.yardSize || null,
+                gateCode: pc.gateCode || null,
+              });
+            } catch (propErr: any) {
+              importErrors.push({ row: i + 2, message: `Contact created but property failed: ${propErr.message}` });
+            }
+          }
+
+          imported++;
+        } catch (rowErr: any) {
+          skipped++;
+          importErrors.push({ row: i + 2, message: rowErr.message });
+        }
+      }
+
+      await storage.updateImportRun(importRun.id, {
+        status: "completed",
+        importedRows: imported,
+        skippedRows: skipped,
+        errors: importErrors.length > 0 ? importErrors : undefined,
+        completedAt: new Date(),
+      });
+
+      res.json({
+        importRunId: importRun.id,
+        platform: result.platform,
+        platformLabel: result.platformLabel,
+        imported,
+        updated,
+        skipped,
+        total: allContacts.length,
+        errors: importErrors,
+      });
+    } catch (err) { handleError(res, err); }
+  });
 
   app.post("/api/migrations/sweepandgo/parse-invoices", isAuthenticated, async (req: Request, res: Response) => {
     try {

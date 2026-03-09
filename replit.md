@@ -39,7 +39,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Dark Mode**: Full dark mode support.
 
 ### Key Features
-- **Data Management**: CSV import with AI-assisted mapping, CRM for contacts and properties, activity logs, global search, and an audit trail.
+- **Data Management**: CSV import with AI-assisted mapping, competitor data transfer (Sweep & Go, Jobber) with auto-detection, CRM for contacts and properties, activity logs, global search, and an audit trail.
 - **Scheduling & Routing**: Recurring service plans, visit management, route assignments, and a drag-and-drop route builder with map visualization.
 - **Financials**: Detailed invoicing with Stripe integration, payment ledger, cost-based automatic price calculator, and a profitability dashboard (per customer and route).
 - **Communication**: Integrated email and SMS, client portal for self-service, and notification preferences.
