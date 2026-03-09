@@ -232,6 +232,8 @@ const frequencyLabels: Record<string, string> = {
 const changeRequestTypeLabels: Record<string, string> = {
   frequency_change: "Change Frequency",
   day_change: "Change Service Day",
+  same_day_service: "Same-Day Service",
+  pause: "Pause Service",
   cancel: "Cancel Service",
   other: "Other",
 };
@@ -1307,7 +1309,7 @@ export default function PortalClient() {
             </section>
 
             <section>
-              <SectionHeader title="Request Service Change" description="Change frequency, service day, or cancel" />
+              <SectionHeader title="Request Service Change" description="Change frequency, service day, pause, or request same-day service" />
               <Card>
                 <CardContent className="pt-4">
                   <form onSubmit={handleSubmitChangeRequest} className="space-y-4">
@@ -1336,8 +1338,10 @@ export default function PortalClient() {
                             <SelectValue placeholder="What would you like to change?" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="same_day_service">Request Same-Day Service</SelectItem>
                             <SelectItem value="frequency_change">Change Frequency</SelectItem>
                             <SelectItem value="day_change">Change Service Day</SelectItem>
+                            <SelectItem value="pause">Pause Service</SelectItem>
                             <SelectItem value="cancel">Cancel Service</SelectItem>
                             <SelectItem value="other">Other</SelectItem>
                           </SelectContent>

@@ -32,7 +32,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Forms**: react-hook-form with zodResolver.
 - **PWA Support**: Progressive Web App features for offline access.
 - **Mobile View**: Dedicated mobile-optimized views for field technicians.
-- **Client Portal**: Self-service portal with 4-tab layout (Overview, Services, Billing, Account). Clients can edit their contact info (name, email, phone), update property addresses/gate codes/instructions, manage pet count, view service history, approve estimates, manage payments, set notification preferences, and use a referral program. Changes sync back to the CRM via `PATCH /api/portal/profile`.
+- **Client Portal**: Self-service portal with 4-tab layout (Overview, Services, Billing, Account). Clients can edit their contact info (name, email, phone), update property addresses/gate codes/instructions, manage pet count, view service history, approve estimates, manage payments, set notification preferences, request service changes (frequency, day, same-day service, pause, cancel), and use a referral program. Changes sync back to the CRM via `PATCH /api/portal/profile`.
 - **Admin Dashboard**: Platform-level administration for tenant management and analytics.
 - **Notifications System**: In-app notifications for business events.
 - **Rover Chatbot**: In-app AI assistant.
@@ -42,7 +42,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Data Management**: CSV import with AI-assisted mapping, competitor data transfer (Sweep & Go, Jobber) with auto-detection, CRM for contacts and properties, activity logs, global search, and an audit trail.
 - **Scheduling & Routing**: Recurring service plans, visit management, route assignments, and a drag-and-drop route builder with map visualization.
 - **Financials**: Detailed invoicing with Stripe integration, payment ledger, cost-based automatic price calculator, and a profitability dashboard (per customer and route).
-- **Communication**: Integrated email and SMS, client portal for self-service, and notification preferences.
+- **Communication**: Integrated email and SMS, client portal for self-service, notification preferences, and inbound SMS/portal message notifications.
 - **Field Operations**: Technician mobile interface with proof-of-service photo uploads, time tracking, satellite/aerial views, and a yard measurement tool.
 - **Business Intelligence**: Overhead cost tracking, customer profitability dashboard, route profit maps, and a pricing simulator with competitor analysis.
 - **Automation**: Event-driven automation rules and automated jobs (invoicing, reminders).

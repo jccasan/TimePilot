@@ -779,7 +779,7 @@ export type AdminSession = typeof adminSessions.$inferSelect;
 export const notificationTypeEnum = pgEnum("notification_type", [
   "invoice_paid", "invoice_overdue", "visit_completed", "new_lead",
   "payment_failed", "service_paused", "service_resumed", "portal_login",
-  "team_joined", "general",
+  "team_joined", "general", "portal_message", "new_message",
 ]);
 
 export const notifications = pgTable("notifications", {
@@ -1141,7 +1141,7 @@ export const estimateRelations = relations(estimates, ({ one }) => ({
   property: one(properties, { fields: [estimates.propertyId], references: [properties.id] }),
 }));
 
-export const changeRequestTypeEnum = pgEnum("change_request_type", ["frequency_change", "day_change", "cancel", "other"]);
+export const changeRequestTypeEnum = pgEnum("change_request_type", ["frequency_change", "day_change", "cancel", "other", "same_day_service", "pause"]);
 export const changeRequestStatusEnum = pgEnum("change_request_status", ["pending", "approved", "denied"]);
 
 export const serviceChangeRequests = pgTable("service_change_requests", {

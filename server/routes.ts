@@ -3804,6 +3804,10 @@ export async function registerRoutes(
           body: Body,
           externalId: MessageSid,
         });
+
+        if (matchedContact) {
+          notify(companyId, "new_message", "New Text Message", `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`, `/contacts/${matchedContact.id}`);
+        }
       }
 
       res.type("text/xml").send("<Response></Response>");
@@ -5000,7 +5004,13 @@ export async function registerRoutes(
         respondedAt: new Date(),
       });
 
-      if (request.servicePlanId && request.requestedValue) {
+      if (request.requestType === "pause") {
+        await storage.updateContact(request.contactId, { status: "paused" });
+        const plans = await storage.getServicePlans(companyId, { contactId: request.contactId, isActive: true });
+        for (const plan of plans) {
+          await storage.updateServicePlan(plan.id, { isActive: false });
+        }
+      } else if (request.servicePlanId && request.requestedValue) {
         if (request.requestType === "frequency_change") {
           await storage.updateServicePlan(request.servicePlanId, { frequency: request.requestedValue as any });
         } else if (request.requestType === "day_change") {
