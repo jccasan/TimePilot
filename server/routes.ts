@@ -125,8 +125,71 @@ function auditLog(companyId: string, userId: string, entityType: string, entityI
   storage.createAuditEntry({ companyId, userId, entityType, entityId, action, changes: changes || {}, ipAddress: ipAddress || null }).catch(console.error);
 }
 
+const EMAIL_NOTIFY_TYPES = new Set([
+  "portal_message", "new_message", "service_paused", "service_resumed",
+  "payment_failed", "invoice_paid", "new_lead", "general",
+]);
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function notify(companyId: string, type: string, title: string, message: string, linkUrl?: string) {
   storage.createNotification({ companyId, type: type as any, title, message, isRead: false, linkUrl: linkUrl || null }).catch(console.error);
+
+  if (EMAIL_NOTIFY_TYPES.has(type)) {
+    (async () => {
+      try {
+        const ownerRows = await db.select({ email: users.email, firstName: users.firstName })
+          .from(companyUsers)
+          .innerJoin(users, eq(companyUsers.userId, users.id))
+          .where(and(eq(companyUsers.companyId, companyId), eq(companyUsers.role, "owner"), eq(companyUsers.isActive, true)));
+        const company = await storage.getCompany(companyId);
+        const companyName = company?.name || "ScooPilot";
+        const baseUrl = process.env.REPLIT_DEPLOYMENT_URL
+          ? `https://${process.env.REPLIT_DEPLOYMENT_URL}`
+          : process.env.REPLIT_DEV_DOMAIN
+            ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+            : "https://scoopilot.replit.app";
+        const fullLink = linkUrl?.startsWith("/") ? `${baseUrl}${linkUrl}` : null;
+        const safeCompany = escapeHtml(companyName);
+        const safeTitle = escapeHtml(title);
+        const safeMessage = escapeHtml(message);
+        const seen = new Set<string>();
+        const sends = ownerRows
+          .filter(r => {
+            if (!r.email) return false;
+            const key = r.email.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .map(row => sendEmail({
+            to: row.email!,
+            subject: `${companyName} - ${title}`,
+            text: `${message}${fullLink ? `\n\nView details: ${fullLink}` : ""}`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #2d8a5e; padding: 16px 20px;">
+                  <h2 style="color: white; margin: 0; font-size: 18px;">${safeCompany}</h2>
+                </div>
+                <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: none;">
+                  <h3 style="margin: 0 0 8px 0; color: #1f2937;">${safeTitle}</h3>
+                  <p style="color: #4b5563; margin: 0 0 16px 0;">${safeMessage}</p>
+                  ${fullLink ? `<a href="${escapeHtml(fullLink)}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: bold;">View Details</a>` : ""}
+                </div>
+              </div>`,
+          }));
+        const results = await Promise.allSettled(sends);
+        for (const r of results) {
+          if (r.status === "rejected") console.error("Notification email send failed:", r.reason);
+          else if (!r.value.success) console.error("Notification email error:", r.value.error);
+        }
+      } catch (err) {
+        console.error("Failed to send notification email:", err);
+      }
+    })();
+  }
 
   const eventMap: Record<string, string> = {
     invoice_paid: "invoice.paid",
