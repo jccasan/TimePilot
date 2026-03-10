@@ -47,7 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound } from "lucide-react";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
@@ -781,6 +781,9 @@ export default function ContactDetail() {
 
 function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId: string }) {
   const { toast } = useToast();
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [portalNewPassword, setPortalNewPassword] = useState("");
+  const [portalConfirmPassword, setPortalConfirmPassword] = useState("");
 
   const enablePortalMutation = useMutation({
     mutationFn: async () => {
@@ -820,59 +823,131 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
     },
   });
 
+  const resetPortalPasswordMutation = useMutation({
+    mutationFn: async (newPassword: string) => {
+      const res = await apiRequest("POST", `/api/contacts/${contactId}/portal-access/reset-password`, { newPassword });
+      return res.json();
+    },
+    onSuccess: () => {
+      setResetDialogOpen(false);
+      setPortalNewPassword("");
+      setPortalConfirmPassword("");
+      toast({ title: "Password updated", description: "The client's portal password has been changed." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Shield className="h-5 w-5" /> Client Portal
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-medium" data-testid="text-portal-status">
-              Portal Access: {contact.hasPortalAccess ? "Enabled" : "Disabled"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {contact.hasPortalAccess
-                ? "Customer can log in with their email to view schedule, invoices, and manage service."
-                : "Enable portal access to let this customer self-serve."}
-            </p>
-          </div>
-          {contact.hasPortalAccess ? (
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => resendPortalMutation.mutate()}
-                disabled={resendPortalMutation.isPending}
-                data-testid="button-send-portal-link"
-              >
-                <Mail className="mr-1 h-4 w-4" /> Send Portal Link
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => disablePortalMutation.mutate()}
-                disabled={disablePortalMutation.isPending}
-                data-testid="button-disable-portal"
-              >
-                <ShieldOff className="mr-1 h-4 w-4" /> Disable
-              </Button>
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Shield className="h-5 w-5" /> Client Portal
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium" data-testid="text-portal-status">
+                Portal Access: {contact.hasPortalAccess ? "Enabled" : "Disabled"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {contact.hasPortalAccess
+                  ? "Customer can log in with their email to view schedule, invoices, and manage service."
+                  : "Enable portal access to let this customer self-serve."}
+              </p>
             </div>
-          ) : (
+            {contact.hasPortalAccess ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => resendPortalMutation.mutate()}
+                  disabled={resendPortalMutation.isPending}
+                  data-testid="button-send-portal-link"
+                >
+                  <Mail className="mr-1 h-4 w-4" /> Send Portal Link
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setResetDialogOpen(true)}
+                  data-testid="button-reset-portal-password"
+                >
+                  <KeyRound className="mr-1 h-4 w-4" /> Reset Password
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => disablePortalMutation.mutate()}
+                  disabled={disablePortalMutation.isPending}
+                  data-testid="button-disable-portal"
+                >
+                  <ShieldOff className="mr-1 h-4 w-4" /> Disable
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => enablePortalMutation.mutate()}
+                disabled={enablePortalMutation.isPending}
+                data-testid="button-enable-portal"
+              >
+                <Shield className="mr-1 h-4 w-4" /> Enable Portal
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={resetDialogOpen} onOpenChange={(open) => { if (!open) { setResetDialogOpen(false); setPortalNewPassword(""); setPortalConfirmPassword(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Portal Password</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Set a new portal password for {contact.firstName} {contact.lastName} ({contact.email}).
+          </p>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label>New Password</Label>
+              <Input
+                type="password"
+                value={portalNewPassword}
+                onChange={(e) => setPortalNewPassword(e.target.value)}
+                placeholder="Minimum 8 characters"
+                data-testid="input-portal-new-password"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Confirm Password</Label>
+              <Input
+                type="password"
+                value={portalConfirmPassword}
+                onChange={(e) => setPortalConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                data-testid="input-portal-confirm-password"
+              />
+            </div>
+            {portalNewPassword && portalConfirmPassword && portalNewPassword !== portalConfirmPassword && (
+              <p className="text-sm text-destructive">Passwords do not match</p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setResetDialogOpen(false); setPortalNewPassword(""); setPortalConfirmPassword(""); }}>Cancel</Button>
             <Button
-              size="sm"
-              onClick={() => enablePortalMutation.mutate()}
-              disabled={enablePortalMutation.isPending}
-              data-testid="button-enable-portal"
+              disabled={!portalNewPassword || portalNewPassword.length < 8 || portalNewPassword !== portalConfirmPassword || resetPortalPasswordMutation.isPending}
+              onClick={() => resetPortalPasswordMutation.mutate(portalNewPassword)}
+              data-testid="button-confirm-portal-password-reset"
             >
-              <Shield className="mr-1 h-4 w-4" /> Enable Portal
+              {resetPortalPasswordMutation.isPending ? "Updating..." : "Update Password"}
             </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

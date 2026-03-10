@@ -5199,6 +5199,30 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/contacts/:id/portal-access/reset-password", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role, userId } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (!contact.hasPortalAccess) return res.status(400).json({ error: "Portal access is not enabled for this contact" });
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.length < 8) {
+        return res.status(400).json({ error: "Password must be at least 8 characters" });
+      }
+      const salt = crypto.randomBytes(16).toString("hex");
+      const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+        crypto.scrypt(newPassword, salt, 64, (err, key) => {
+          if (err) reject(err);
+          resolve(`${salt}:${key.toString("hex")}`);
+        });
+      });
+      await storage.updateContact(req.params.id, { portalPasswordHash });
+      auditLog(companyId, userId, "contact", req.params.id, "portal_password_reset", { resetBy: userId });
+      res.json({ success: true, message: "Client portal password has been updated." });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/contacts/:id/portal-access/resend", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
