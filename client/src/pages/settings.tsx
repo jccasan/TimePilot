@@ -307,6 +307,9 @@ export default function Settings() {
   const [inviteLastName, setInviteLastName] = useState("");
   const [inviteRole, setInviteRole] = useState("tech");
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [resetPasswordMember, setResetPasswordMember] = useState<TeamMember | null>(null);
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -378,6 +381,22 @@ export default function Settings() {
     },
     onError: (err: any) => {
       toast({ title: "Failed to remove", description: err.message || "Something went wrong", variant: "destructive" });
+    },
+  });
+
+  const resetMemberPasswordMutation = useMutation({
+    mutationFn: async ({ userId, newPassword }: { userId: string; newPassword: string }) => {
+      const res = await apiRequest("POST", `/api/company/team/${userId}/reset-password`, { newPassword });
+      return res.json();
+    },
+    onSuccess: () => {
+      setResetPasswordMember(null);
+      setResetNewPassword("");
+      setResetConfirmPassword("");
+      toast({ title: "Password updated", description: "The team member's password has been changed." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to reset password", description: err.message || "Something went wrong", variant: "destructive" });
     },
   });
 
@@ -742,7 +761,9 @@ export default function Settings() {
                 <div className="space-y-3">
                   {team?.map((member) => {
                     const RoleIcon = roleIcons[member.role] || Wrench;
-                    const canRemove = member.id !== currentUser?.id && member.role !== "owner";
+                    const isCurrentUser = member.id === currentUser?.id;
+                    const canRemove = !isCurrentUser && member.role !== "owner";
+                    const canResetPassword = !isCurrentUser && member.role !== "owner" && (currentUser?.role === "owner" || (currentUser?.role === "admin" && member.role !== "admin"));
                     return (
                       <div
                         key={member.companyUserId}
@@ -768,6 +789,18 @@ export default function Settings() {
                           <RoleIcon className="h-3 w-3" />
                           {roleLabels[member.role] || member.role}
                         </Badge>
+                        {canResetPassword && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            onClick={() => setResetPasswordMember(member)}
+                            title="Reset password"
+                            data-testid={`button-reset-password-${member.id}`}
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                        )}
                         {canRemove && (
                           <Button
                             variant="ghost"
@@ -1316,6 +1349,52 @@ export default function Settings() {
               data-testid="button-confirm-remove-member"
             >
               {removeMemberMutation.isPending ? "Removing..." : "Remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!resetPasswordMember} onOpenChange={(open) => { if (!open) { setResetPasswordMember(null); setResetNewPassword(""); setResetConfirmPassword(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Set a new password for {resetPasswordMember?.firstName} {resetPasswordMember?.lastName} ({resetPasswordMember?.email}).
+          </p>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">New Password</label>
+              <Input
+                type="password"
+                value={resetNewPassword}
+                onChange={(e) => setResetNewPassword(e.target.value)}
+                placeholder="Minimum 8 characters"
+                data-testid="input-reset-new-password"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Confirm Password</label>
+              <Input
+                type="password"
+                value={resetConfirmPassword}
+                onChange={(e) => setResetConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                data-testid="input-reset-confirm-password"
+              />
+            </div>
+            {resetNewPassword && resetConfirmPassword && resetNewPassword !== resetConfirmPassword && (
+              <p className="text-sm text-destructive">Passwords do not match</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setResetPasswordMember(null); setResetNewPassword(""); setResetConfirmPassword(""); }}>Cancel</Button>
+            <Button
+              disabled={!resetNewPassword || resetNewPassword.length < 8 || resetNewPassword !== resetConfirmPassword || resetMemberPasswordMutation.isPending}
+              onClick={() => resetPasswordMember && resetMemberPasswordMutation.mutate({ userId: resetPasswordMember.id, newPassword: resetNewPassword })}
+              data-testid="button-confirm-reset-password"
+            >
+              {resetMemberPasswordMutation.isPending ? "Updating..." : "Update Password"}
             </Button>
           </DialogFooter>
         </DialogContent>

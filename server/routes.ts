@@ -885,6 +885,37 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/company/team/:userId/reset-password", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role, userId: currentUserId } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const targetUserId = req.params.userId;
+      if (targetUserId === currentUserId) {
+        return res.status(400).json({ error: "Use the change password form to update your own password" });
+      }
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.length < 8) {
+        return res.status(400).json({ error: "Password must be at least 8 characters" });
+      }
+      const membership = await storage.getCompanyUser(companyId, targetUserId);
+      if (!membership || !membership.isActive) {
+        return res.status(404).json({ error: "Team member not found" });
+      }
+      if (membership.role === "owner") {
+        return res.status(403).json({ error: "Cannot reset the owner's password" });
+      }
+      if (role === "admin" && membership.role === "admin") {
+        return res.status(403).json({ error: "Admins can only reset passwords for technicians" });
+      }
+      const result = await changePassword(targetUserId, newPassword);
+      if ("error" in result) {
+        return res.status(400).json({ error: result.error });
+      }
+      auditLog(companyId, currentUserId, "user", targetUserId, "password_reset", { resetBy: currentUserId });
+      res.json({ success: true, message: "Password has been updated." });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/company/stats", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
