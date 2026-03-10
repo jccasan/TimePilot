@@ -58,3 +58,4 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Mapbox**: Directions API, Geocoding API, and GL JS for mapping and routing.
 - **Google Maps**: Street View Static API and Static Maps API for property images.
 - **OpenAI**: Used for AI-assisted import wizard.
+- **Retell AI**: Voice agent integration with 4 API endpoints (`/api/retell/tenant-profile`, `/create-lead`, `/lookup-customer`, `/log-call`). All protected by `RETELL_API_KEY` header/query param. Companies have voice agent profile fields: `voiceAgentServiceArea`, `voiceAgentPricingSummary`, `voiceAgentPolicies`, `voiceAgentSpecialLines`, `voiceAgentGreeting`.

@@ -2877,6 +2877,193 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Retell AI Voice Agent Routes ================
+
+  function verifyRetellApiKey(req: Request, res: Response): boolean {
+    const apiKey = req.headers["x-retell-api-key"] || req.query.api_key;
+    const expected = process.env.RETELL_API_KEY;
+    if (!expected) {
+      res.status(503).json({ error: "Retell API key not configured" });
+      return false;
+    }
+    if (apiKey !== expected) {
+      res.status(401).json({ error: "Invalid API key" });
+      return false;
+    }
+    return true;
+  }
+
+  app.get("/api/retell/tenant-profile", async (req: Request, res: Response) => {
+    if (!verifyRetellApiKey(req, res)) return;
+    try {
+      const to = req.query.to as string;
+      if (!to) {
+        return res.status(400).json({ error: "Missing 'to' query parameter (phone number)" });
+      }
+
+      const company = await storage.getCompanyByPhone(to);
+      if (!company) {
+        return res.status(404).json({ error: "Tenant not found for this phone number" });
+      }
+
+      const servicePricingItems = await storage.getServicePricing(company.id);
+      const packages = await storage.getServicePackages(company.id);
+
+      const pricingSummary = company.voiceAgentPricingSummary || servicePricingItems
+        .filter(sp => sp.isActive)
+        .map(sp => `${sp.name}: $${sp.basePrice}/${sp.unit.replace("per_", "")}`)
+        .join("; ") || "Contact us for pricing";
+
+      const packagesSummary = packages
+        .filter(p => p.isActive)
+        .map(p => `${p.name} (${p.frequency}): $${p.basePrice}`)
+        .join("; ");
+
+      res.json({
+        tenantId: company.id,
+        businessName: company.name,
+        businessPhone: company.phone,
+        businessEmail: company.email,
+        serviceArea: company.voiceAgentServiceArea || company.address || "",
+        pricingSummary,
+        packages: packagesSummary || undefined,
+        policies: company.voiceAgentPolicies || "",
+        specialLines: company.voiceAgentSpecialLines || "",
+        greeting: company.voiceAgentGreeting || `Thank you for calling ${company.name}! How can I help you today?`,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/retell/create-lead", async (req: Request, res: Response) => {
+    if (!verifyRetellApiKey(req, res)) return;
+    try {
+      const { tenantId, firstName, lastName, email, phone, street, city, state, zipCode, notes, numberOfDogs } = req.body;
+      if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
+      if (!firstName) return res.status(400).json({ error: "firstName is required" });
+
+      const company = await storage.getCompany(tenantId);
+      if (!company) return res.status(404).json({ error: "Tenant not found" });
+
+      const contact = await storage.createContact({
+        companyId: tenantId,
+        firstName,
+        lastName: lastName || "",
+        email: email || null,
+        phone: phone || null,
+        status: "lead",
+        leadSource: "voice_agent",
+        notes: notes || null,
+      });
+
+      if (street) {
+        await createPropertyWithGeocode({
+          companyId: tenantId,
+          contactId: contact.id,
+          streetAddress: street,
+          city: city || null,
+          state: state || null,
+          zipCode: zipCode || null,
+          numberOfDogs: numberOfDogs ? parseInt(numberOfDogs) : null,
+        });
+      }
+
+      notify(tenantId, "new_lead", "New Lead (Voice Agent)", `${firstName} ${lastName || ""} called in and was added as a new lead.`.trim(), `/contacts/${contact.id}`);
+
+      res.status(201).json({
+        success: true,
+        contactId: contact.id,
+        message: `Lead created: ${firstName} ${lastName || ""}`.trim(),
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/retell/lookup-customer", async (req: Request, res: Response) => {
+    if (!verifyRetellApiKey(req, res)) return;
+    try {
+      const { tenantId, phone, email } = req.body;
+      if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
+      if (!phone && !email) return res.status(400).json({ error: "phone or email is required" });
+
+      const company = await storage.getCompany(tenantId);
+      if (!company) return res.status(404).json({ error: "Tenant not found" });
+
+      const allContacts = await storage.getContacts(tenantId);
+      let match = null;
+
+      if (phone) {
+        const digits = phone.replace(/\D/g, "");
+        match = allContacts.find(c => {
+          const cDigits = (c.phone || "").replace(/\D/g, "");
+          return cDigits.length >= 10 && digits.length >= 10 && digits.endsWith(cDigits.slice(-10));
+        });
+      }
+      if (!match && email) {
+        match = allContacts.find(c => c.email?.toLowerCase() === email.toLowerCase());
+      }
+
+      if (!match) {
+        return res.json({ found: false });
+      }
+
+      const properties = await storage.getProperties(tenantId, match.id);
+      const servicePlans = await storage.getServicePlans(tenantId, { contactId: match.id, isActive: true });
+
+      res.json({
+        found: true,
+        customer: {
+          id: match.id,
+          firstName: match.firstName,
+          lastName: match.lastName,
+          email: match.email,
+          phone: match.phone,
+          status: match.status,
+          properties: properties.map(p => ({
+            address: p.streetAddress,
+            city: p.city,
+            numberOfDogs: p.numberOfDogs,
+          })),
+          servicePlans: servicePlans.map(sp => ({
+            frequency: sp.frequency,
+            dayOfWeek: sp.dayOfWeek,
+            price: sp.price,
+            isActive: sp.isActive,
+          })),
+        },
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/retell/log-call", async (req: Request, res: Response) => {
+    if (!verifyRetellApiKey(req, res)) return;
+    try {
+      const { tenantId, contactId, callerPhone, summary, duration, outcome } = req.body;
+      if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
+
+      const company = await storage.getCompany(tenantId);
+      if (!company) return res.status(404).json({ error: "Tenant not found" });
+
+      if (contactId) {
+        const contact = await storage.getContact(tenantId, contactId);
+        if (!contact) return res.status(404).json({ error: "Contact not found in this tenant" });
+
+        await storage.createMessage({
+          companyId: tenantId,
+          contactId,
+          channel: "sms",
+          direction: "inbound",
+          status: "received",
+          fromAddress: callerPhone || "voice_agent",
+          toAddress: company.phone || "",
+          body: `[Voice Agent Call] ${summary || "No summary"} | Duration: ${duration || "unknown"} | Outcome: ${outcome || "unknown"}`,
+        });
+      }
+
+      notify(tenantId, "new_message", "Voice Agent Call", `Call ${outcome || "completed"}: ${summary || "No summary provided"}`, contactId ? `/contacts/${contactId}` : undefined);
+
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Webhook Routes ================
 
   app.get("/api/webhooks", isAuthenticated, async (req: Request, res: Response) => {

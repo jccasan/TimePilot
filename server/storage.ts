@@ -60,6 +60,7 @@ export interface IStorage {
   // Companies
   getCompany(id: string): Promise<Company | undefined>;
   listCompanies(): Promise<Company[]>;
+  getCompanyByPhone(phone: string): Promise<Company | undefined>;
   createCompany(data: InsertCompany): Promise<Company>;
   updateCompany(id: string, data: Partial<InsertCompany>): Promise<Company>;
 
@@ -342,6 +343,16 @@ export class DatabaseStorage implements IStorage {
 
   async listCompanies(): Promise<Company[]> {
     return db.select().from(companies);
+  }
+
+  async getCompanyByPhone(phone: string): Promise<Company | undefined> {
+    const digits = phone.replace(/\D/g, "");
+    const allCompanies = await db.select().from(companies);
+    return allCompanies.find(c => {
+      if (!c.phone) return false;
+      const cDigits = c.phone.replace(/\D/g, "");
+      return cDigits.length >= 10 && digits.length >= 10 && digits.endsWith(cDigits.slice(-10));
+    });
   }
 
   async createCompany(data: InsertCompany): Promise<Company> {
