@@ -160,6 +160,7 @@ export async function createCheckoutSession(params: {
   amount: number;
   successUrl: string;
   cancelUrl: string;
+  tipAmount?: string;
 }): Promise<{ url: string; sessionId: string }> {
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
@@ -181,6 +182,7 @@ export async function createCheckoutSession(params: {
     metadata: {
       invoiceId: params.invoiceId,
       invoiceNumber: params.invoiceNumber,
+      tipAmount: params.tipAmount || "0",
     },
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,

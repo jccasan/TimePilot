@@ -99,6 +99,7 @@ interface PortalInvoice {
   invoiceNumber: string;
   dueDate: string;
   total: string;
+  tipAmount: string;
   status: string;
   createdAt: string;
 }
@@ -321,6 +322,9 @@ export default function PortalClient() {
   const [referralCount, setReferralCount] = useState(0);
   const [copiedReferral, setCopiedReferral] = useState(false);
   const [generatingCode, setGeneratingCode] = useState(false);
+  const [tipDialogInvoice, setTipDialogInvoice] = useState<PortalInvoice | null>(null);
+  const [selectedTip, setSelectedTip] = useState<number>(0);
+  const [customTip, setCustomTip] = useState("");
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [estimateNote, setEstimateNote] = useState<Record<string, string>>({});
   const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({
@@ -468,13 +472,33 @@ export default function PortalClient() {
     }
   };
 
-  const handlePayInvoice = async (invoiceId: string) => {
+  const handlePayInvoice = (invoiceId: string) => {
+    const inv = invoices.find(i => i.id === invoiceId);
+    if (inv) {
+      setTipDialogInvoice(inv);
+      setSelectedTip(0);
+      setCustomTip("");
+    }
+  };
+
+  const handleConfirmPayWithTip = async () => {
+    if (!tipDialogInvoice) return;
+    const tipValue = customTip ? parseFloat(customTip) : selectedTip;
+    if (isNaN(tipValue) || tipValue < 0) {
+      toast({ title: "Invalid tip", description: "Please enter a valid tip amount.", variant: "destructive" });
+      return;
+    }
     setActionPending(true);
     try {
-      const result = await portalFetch(`/api/portal/invoices/${invoiceId}/pay`, { method: "POST" });
+      const result = await portalFetch(`/api/portal/invoices/${tipDialogInvoice.id}/pay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipAmount: tipValue }),
+      });
       if (result.url) {
         window.open(result.url, "_blank");
       }
+      setTipDialogInvoice(null);
     } catch (err: any) {
       toast({ title: "Payment error", description: err.message, variant: "destructive" });
     } finally {
@@ -1503,7 +1527,10 @@ export default function PortalClient() {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <div className="text-right mr-1">
-                              <p className="text-sm font-semibold">${Number(inv.total).toFixed(2)}</p>
+                              <p className="text-sm font-semibold" data-testid={`text-invoice-total-${inv.id}`}>${Number(inv.total).toFixed(2)}</p>
+                              {Number(inv.tipAmount) > 0 && (
+                                <p className="text-[10px] text-green-600 dark:text-green-400" data-testid={`text-invoice-tip-${inv.id}`}>+ ${Number(inv.tipAmount).toFixed(2)} tip</p>
+                              )}
                               <Badge variant="secondary" className={`text-[10px] ${invoiceStatusColors[inv.status] || ""}`}>{inv.status}</Badge>
                             </div>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownloadInvoicePdf(inv.id, inv.invoiceNumber)} data-testid={`button-download-invoice-${inv.id}`}>
@@ -1616,6 +1643,73 @@ export default function PortalClient() {
                 </Card>
               </section>
             )}
+
+            <Dialog open={!!tipDialogInvoice} onOpenChange={(open) => { if (!open) setTipDialogInvoice(null); }}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Pay Invoice {tipDialogInvoice?.invoiceNumber}</DialogTitle>
+                  <DialogDescription>Would you like to add a tip for your technician?</DialogDescription>
+                </DialogHeader>
+                {tipDialogInvoice && (
+                  <div className="space-y-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Invoice Total</span>
+                      <span className="font-semibold" data-testid="text-tip-invoice-total">${Number(tipDialogInvoice.total).toFixed(2)}</span>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Tip Amount</Label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[0, 5, 10, 15].map((amt) => (
+                          <Button
+                            key={amt}
+                            type="button"
+                            variant={selectedTip === amt && !customTip ? "default" : "outline"}
+                            size="sm"
+                            className="w-full"
+                            onClick={() => { setSelectedTip(amt); setCustomTip(""); }}
+                            data-testid={`button-tip-${amt}`}
+                          >
+                            {amt === 0 ? "No Tip" : `$${amt}`}
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Label htmlFor="custom-tip" className="text-sm text-muted-foreground whitespace-nowrap">Custom:</Label>
+                        <div className="relative flex-1">
+                          <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            id="custom-tip"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            className="pl-7"
+                            value={customTip}
+                            onChange={(e) => { setCustomTip(e.target.value); setSelectedTip(0); }}
+                            data-testid="input-custom-tip"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between text-sm font-semibold">
+                      <span>Total Charge</span>
+                      <span data-testid="text-tip-total-charge">
+                        ${(Number(tipDialogInvoice.total) + (customTip ? parseFloat(customTip) || 0 : selectedTip)).toFixed(2)}
+                      </span>
+                    </div>
+                    <Button
+                      className="w-full"
+                      onClick={handleConfirmPayWithTip}
+                      disabled={actionPending}
+                      data-testid="button-confirm-pay-with-tip"
+                    >
+                      {actionPending ? "Processing..." : "Continue to Payment"}
+                    </Button>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           {/* ==================== ACCOUNT TAB ==================== */}

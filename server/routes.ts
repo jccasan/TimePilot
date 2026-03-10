@@ -4316,6 +4316,7 @@ export async function registerRoutes(
         const session = event.data.object as any;
         const invoiceId = session.metadata?.invoiceId;
         if (invoiceId) {
+          const tipAmount = session.metadata?.tipAmount || "0";
           const allCompanies = await storage.listCompanies();
           for (const company of allCompanies) {
             const invoice = await storage.getInvoice(invoiceId, company.id);
@@ -4324,8 +4325,10 @@ export async function registerRoutes(
                 status: "paid",
                 paidAt: new Date(),
                 stripePaymentIntentId: session.payment_intent,
+                tipAmount,
               });
-              notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+              const tipNote = parseFloat(tipAmount) > 0 ? ` (includes $${tipAmount} tip)` : "";
+              notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
               break;
             }
           }
@@ -4507,6 +4510,7 @@ export async function registerRoutes(
         invoiceNumber: inv.invoiceNumber,
         dueDate: inv.dueDate,
         total: inv.total,
+        tipAmount: inv.tipAmount || "0",
         status: inv.status,
         createdAt: inv.createdAt,
       })));
@@ -4519,6 +4523,10 @@ export async function registerRoutes(
       const invoice = await storage.getInvoice(req.params.id, companyId);
       if (!invoice || invoice.contactId !== contactId) return res.status(404).json({ error: "Invoice not found" });
       if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
+
+      const tipAmount = Math.round(parseFloat(req.body?.tipAmount || "0") * 100) / 100;
+      if (isNaN(tipAmount) || tipAmount < 0) return res.status(400).json({ error: "Invalid tip amount" });
+      if (tipAmount > 500) return res.status(400).json({ error: "Tip amount exceeds maximum" });
 
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
@@ -4533,14 +4541,16 @@ export async function registerRoutes(
         await storage.updateContact(contact.id, { stripeCustomerId });
       }
 
+      const chargeAmount = parseFloat(invoice.total) + tipAmount;
       const baseUrl = getBaseUrl(req);
       const result = await createCheckoutSession({
         customerId: stripeCustomerId,
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
-        amount: parseFloat(invoice.total),
+        amount: chargeAmount,
         successUrl: `${baseUrl}/portal/client?paid=${invoice.id}`,
         cancelUrl: `${baseUrl}/portal/client`,
+        tipAmount: tipAmount.toFixed(2),
       });
 
       res.json(result);

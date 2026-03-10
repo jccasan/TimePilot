@@ -43,6 +43,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Scheduling & Routing**: Recurring service plans, visit management, route assignments, and a drag-and-drop route builder with map visualization.
 - **Financials**: Detailed invoicing with Stripe integration, payment ledger, cost-based automatic price calculator, and a profitability dashboard (per customer and route).
 - **Communication**: Integrated email and SMS, client portal for self-service, notification preferences, and inbound SMS/portal message notifications.
+- **Invoice Tipping**: Clients can add an optional tip ($5/$10/$15/custom) when paying invoices via the portal. Tips are stored in the `tipAmount` column on invoices and persisted only after successful Stripe payment via webhook. Tip metadata flows through Stripe checkout session.
 - **Field Operations**: Technician mobile interface with proof-of-service photo uploads, time tracking, satellite/aerial views, and a yard measurement tool.
 - **Business Intelligence**: Overhead cost tracking, customer profitability dashboard, route profit maps, and a pricing simulator with competitor analysis.
 - **Automation**: Event-driven automation rules and automated jobs (invoicing, reminders).
