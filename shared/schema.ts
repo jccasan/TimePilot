@@ -117,6 +117,8 @@ export const companies = pgTable("companies", {
   logoUrl: text("logo_url"),
   stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
   stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
+  stripeConnectAccountId: varchar("stripe_connect_account_id", { length: 255 }),
+  stripeConnectOnboarded: boolean("stripe_connect_onboarded").notNull().default(false),
   subscriptionTier: subscriptionTierEnum("subscription_tier").notNull().default("tier_1"),
   subscriptionStatus: subscriptionStatusEnum("subscription_status").notNull().default("trialing"),
   chargeTiming: chargeTimingEnum("charge_timing").notNull().default("day_before"),

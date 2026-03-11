@@ -139,12 +139,12 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string) {
       ) {
         chargesAttempted++;
         try {
-          const amountCents = Math.round(subtotal * 100);
           const result = await chargeInvoiceAutomatically({
             customerId: contact.stripeCustomerId,
-            amount: amountCents,
+            amount: subtotal,
             invoiceId: invoice.id,
             invoiceNumber,
+            stripeConnectAccountId: company.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
           });
 
           if (result.status === "succeeded") {

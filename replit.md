@@ -56,7 +56,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Object Storage**: For file uploads (e.g., photos).
 - **SendGrid**: Email sending.
 - **Twilio**: SMS messaging.
-- **Stripe**: Payment gateway.
+- **Stripe**: Payment gateway with Stripe Connect (Express accounts) for multi-tenant payment routing. Each tenant can connect their own Stripe account via Settings. Platform fee: 2.9% (`PLATFORM_FEE_PERCENT` in `server/services/stripe.ts`). Payment functions (`createPaymentIntent`, `chargeInvoiceAutomatically`, `createCheckoutSession`) accept optional `stripeConnectAccountId` for routing. Connect endpoints: `/api/stripe-connect/onboard`, `/status`, `/dashboard-link`, `/disconnect`. Webhook handles `account.updated` for auto-syncing onboarding status.
 - **Mapbox**: Directions API, Geocoding API, and GL JS for mapping and routing.
 - **Google Maps**: Street View Static API and Static Maps API for property images.
 - **OpenAI**: Used for AI-assisted import wizard.

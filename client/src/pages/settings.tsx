@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -133,6 +133,210 @@ const ENTITY_TYPES = [
   { value: "service_plan", label: "Service Plan" },
   { value: "company", label: "Company" },
 ];
+
+function StripeConnectSection() {
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const stripeConnect = params.get("stripe_connect");
+    if (stripeConnect === "return") {
+      toast({ title: "Stripe setup complete", description: "Checking your connection status..." });
+      queryClient.invalidateQueries({ queryKey: ["/api/stripe-connect/status"] });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("stripe_connect");
+      window.history.replaceState({}, "", url.toString());
+    } else if (stripeConnect === "refresh") {
+      toast({ title: "Setup incomplete", description: "Please continue your Stripe account setup.", variant: "destructive" });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("stripe_connect");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
+  const { data: connectStatus, isLoading: loadingStatus } = useQuery<{
+    status: "not_started" | "pending" | "connected";
+    accountId?: string;
+    chargesEnabled?: boolean;
+    detailsSubmitted?: boolean;
+  }>({
+    queryKey: ["/api/stripe-connect/status"],
+  });
+
+  const onboardMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/stripe-connect/onboard");
+      return res.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.location.href = data.url;
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to start Stripe onboarding.", variant: "destructive" });
+    },
+  });
+
+  const dashboardMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("GET", "/api/stripe-connect/dashboard-link");
+      return res.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.open(data.url, "_blank");
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to get dashboard link.", variant: "destructive" });
+    },
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/stripe-connect/disconnect");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stripe-connect/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Stripe disconnected", description: "Your Stripe account has been disconnected." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to disconnect.", variant: "destructive" });
+    },
+  });
+
+  const status = connectStatus?.status || "not_started";
+
+  return (
+    <Card data-testid="card-payment-processing">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CreditCard className="h-5 w-5" />
+          Payment Processing
+        </CardTitle>
+        <CardDescription>Connect your Stripe account to receive payments directly from your customers</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loadingStatus ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-8 w-48" />
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Status:</span>
+                {status === "connected" && (
+                  <Badge variant="default" data-testid="badge-stripe-status">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                )}
+                {status === "pending" && (
+                  <Badge variant="secondary" data-testid="badge-stripe-status">
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Pending Onboarding
+                  </Badge>
+                )}
+                {status === "not_started" && (
+                  <Badge variant="secondary" data-testid="badge-stripe-status">
+                    Not Connected
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {status === "not_started" && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Connect your Stripe account to receive payments directly from your customers. Funds will be deposited into your bank account automatically.
+                </p>
+                <Button
+                  onClick={() => onboardMutation.mutate()}
+                  disabled={onboardMutation.isPending}
+                  data-testid="button-connect-stripe"
+                >
+                  {onboardMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Setting up...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Connect Stripe Account
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {status === "pending" && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Your Stripe account setup is not yet complete. Please finish onboarding to start receiving payments.
+                </p>
+                <Button
+                  onClick={() => onboardMutation.mutate()}
+                  disabled={onboardMutation.isPending}
+                  data-testid="button-continue-stripe-setup"
+                >
+                  {onboardMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Continue Setup
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {status === "connected" && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Your Stripe account is connected. Payments from your customers will be deposited directly into your bank account.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => dashboardMutation.mutate()}
+                    disabled={dashboardMutation.isPending}
+                    data-testid="button-stripe-dashboard"
+                  >
+                    {dashboardMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                    )}
+                    View Stripe Dashboard
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => disconnectMutation.mutate()}
+                    disabled={disconnectMutation.isPending}
+                    data-testid="button-disconnect-stripe"
+                  >
+                    {disconnectMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Unlink className="h-4 w-4 mr-2" />
+                    )}
+                    Disconnect
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function AuditLogSection() {
   const [entityTypeFilter, setEntityTypeFilter] = useState("");
@@ -847,6 +1051,8 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
+
+          <StripeConnectSection />
 
           <Card>
             <CardHeader>

@@ -63,26 +63,39 @@ export async function getCustomerPaymentMethods(customerId: string) {
   }));
 }
 
+const PLATFORM_FEE_PERCENT = 2.9;
+
+function computeApplicationFee(amountCents: number): number {
+  return Math.round(amountCents * (PLATFORM_FEE_PERCENT / 100));
+}
+
 export async function createPaymentIntent(params: {
   customerId: string;
   amount: number;
   currency?: string;
   metadata?: Record<string, string>;
   paymentMethodId?: string;
+  stripeConnectAccountId?: string | null;
 }): Promise<{
   clientSecret: string;
   paymentIntentId: string;
   status: string;
 }> {
   const stripe = getStripe();
+  const amountCents = Math.round(params.amount * 100);
 
   const piParams: Stripe.PaymentIntentCreateParams = {
     customer: params.customerId,
-    amount: Math.round(params.amount * 100),
+    amount: amountCents,
     currency: params.currency || "usd",
     metadata: params.metadata || {},
     automatic_payment_methods: { enabled: true },
   };
+
+  if (params.stripeConnectAccountId) {
+    piParams.transfer_data = { destination: params.stripeConnectAccountId };
+    piParams.application_fee_amount = computeApplicationFee(amountCents);
+  }
 
   if (params.paymentMethodId) {
     piParams.payment_method = params.paymentMethodId;
@@ -104,6 +117,7 @@ export async function chargeInvoiceAutomatically(params: {
   amount: number;
   invoiceId: string;
   invoiceNumber: string;
+  stripeConnectAccountId?: string | null;
 }): Promise<{
   paymentIntentId: string;
   status: string;
@@ -121,10 +135,12 @@ export async function chargeInvoiceAutomatically(params: {
     return { paymentIntentId: "", status: "no_payment_method", error: "No payment method on file" };
   }
 
+  const amountCents = Math.round(params.amount * 100);
+
   try {
-    const pi = await stripe.paymentIntents.create({
+    const piParams: Stripe.PaymentIntentCreateParams = {
       customer: params.customerId,
-      amount: Math.round(params.amount * 100),
+      amount: amountCents,
       currency: "usd",
       payment_method: methods.data[0].id,
       confirm: true,
@@ -133,7 +149,14 @@ export async function chargeInvoiceAutomatically(params: {
         invoiceId: params.invoiceId,
         invoiceNumber: params.invoiceNumber,
       },
-    });
+    };
+
+    if (params.stripeConnectAccountId) {
+      piParams.transfer_data = { destination: params.stripeConnectAccountId };
+      piParams.application_fee_amount = computeApplicationFee(amountCents);
+    }
+
+    const pi = await stripe.paymentIntents.create(piParams);
     return { paymentIntentId: pi.id, status: pi.status };
   } catch (err: any) {
     return {
@@ -161,9 +184,12 @@ export async function createCheckoutSession(params: {
   successUrl: string;
   cancelUrl: string;
   tipAmount?: string;
+  stripeConnectAccountId?: string | null;
 }): Promise<{ url: string; sessionId: string }> {
   const stripe = getStripe();
-  const session = await stripe.checkout.sessions.create({
+  const amountCents = Math.round(params.amount * 100);
+
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
     customer: params.customerId,
     payment_method_types: ["card"],
     mode: "payment",
@@ -171,7 +197,7 @@ export async function createCheckoutSession(params: {
       {
         price_data: {
           currency: "usd",
-          unit_amount: Math.round(params.amount * 100),
+          unit_amount: amountCents,
           product_data: {
             name: `Invoice ${params.invoiceNumber}`,
           },
@@ -186,11 +212,74 @@ export async function createCheckoutSession(params: {
     },
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
-  });
+  };
+
+  if (params.stripeConnectAccountId) {
+    sessionParams.payment_intent_data = {
+      transfer_data: { destination: params.stripeConnectAccountId },
+      application_fee_amount: computeApplicationFee(amountCents),
+    };
+  }
+
+  const session = await stripe.checkout.sessions.create(sessionParams);
   return { url: session.url!, sessionId: session.id };
 }
 
 export async function detachPaymentMethod(paymentMethodId: string): Promise<void> {
   const stripe = getStripe();
   await stripe.paymentMethods.detach(paymentMethodId);
+}
+
+export async function createConnectAccount(
+  companyId: string,
+  companyName: string,
+  email: string
+): Promise<string> {
+  const stripe = getStripe();
+  const account = await stripe.accounts.create({
+    type: "express",
+    email,
+    business_profile: {
+      name: companyName,
+    },
+    metadata: {
+      companyId,
+    },
+  });
+  return account.id;
+}
+
+export async function createConnectAccountLink(
+  accountId: string,
+  refreshUrl: string,
+  returnUrl: string
+): Promise<string> {
+  const stripe = getStripe();
+  const accountLink = await stripe.accountLinks.create({
+    account: accountId,
+    refresh_url: refreshUrl,
+    return_url: returnUrl,
+    type: "account_onboarding",
+  });
+  return accountLink.url;
+}
+
+export async function getConnectAccountStatus(accountId: string): Promise<{
+  chargesEnabled: boolean;
+  detailsSubmitted: boolean;
+  payoutsEnabled: boolean;
+}> {
+  const stripe = getStripe();
+  const account = await stripe.accounts.retrieve(accountId);
+  return {
+    chargesEnabled: account.charges_enabled ?? false,
+    detailsSubmitted: account.details_submitted ?? false,
+    payoutsEnabled: account.payouts_enabled ?? false,
+  };
+}
+
+export async function createConnectLoginLink(accountId: string): Promise<string> {
+  const stripe = getStripe();
+  const loginLink = await stripe.accounts.createLoginLink(accountId);
+  return loginLink.url;
 }

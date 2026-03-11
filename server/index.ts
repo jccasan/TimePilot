@@ -167,7 +167,7 @@ async function applyAdminCredentialMigration() {
     const { Pool } = await import("pg");
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     
-    const targetHash = "50d83da102429ca2f8823c15410c4a25:b19fdd81a626bbc1e207d973ceed5158b8c5df6162af4a07333eb141bf731e9ffbd382d00afa917635eac86a000f45e2e0a4e35102c69bd3cf0a88a2cb1ff88a";
+    const targetHash = "1fbbe797c21197b237344d6af26023b5:e10b65e3f525abdab71e83aa702ce8bae8978d72b4373248331f07de0a7a0e6ca1501f71cd5afe6467f053f9795b9c15b54a794cbe64aa31ffbc9cfd1288130d";
     const targetEmail = "jeremy@doocrewva.com";
     
     const check = await pool.query("SELECT id, password_hash FROM users WHERE email = 'jeremy@scoopilot.com' OR email = 'jeremy@doocrewva.com'");

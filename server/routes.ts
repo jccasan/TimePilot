@@ -24,6 +24,10 @@ import {
   constructWebhookEvent,
   createCheckoutSession,
   detachPaymentMethod,
+  createConnectAccount,
+  createConnectAccountLink,
+  getConnectAccountStatus,
+  createConnectLoginLink,
 } from "./services/stripe";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections } from "./services/route-optimizer";
 import { geocodeAddress } from "./services/geocode";
@@ -4592,11 +4596,13 @@ export async function registerRoutes(
       const contact = await storage.getContact(invoice.contactId, companyId);
       if (!contact?.stripeCustomerId) return res.status(400).json({ error: "Contact has no payment method on file" });
 
+      const company = await storage.getCompany(companyId);
       const result = await chargeInvoiceAutomatically({
         customerId: contact.stripeCustomerId,
         amount: parseFloat(invoice.total),
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
+        stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
       });
 
       const updateData: any = {
@@ -4641,6 +4647,7 @@ export async function registerRoutes(
       }
 
       const baseUrl = getBaseUrl(req);
+      const company = await storage.getCompany(companyId);
       const result = await createCheckoutSession({
         customerId: stripeCustomerId,
         invoiceId: invoice.id,
@@ -4648,9 +4655,104 @@ export async function registerRoutes(
         amount: parseFloat(invoice.total),
         successUrl: `${baseUrl}/invoices?paid=${invoice.id}`,
         cancelUrl: `${baseUrl}/invoices`,
+        stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
       });
 
       res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Stripe Connect Routes ================
+
+  app.post("/api/stripe-connect/onboard", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe is not configured" });
+
+      let accountId = company.stripeConnectAccountId;
+
+      if (!accountId) {
+        accountId = await createConnectAccount(companyId, company.name, company.email || "");
+        await storage.updateCompany(companyId, { stripeConnectAccountId: accountId } as any);
+      }
+
+      const protocol = req.get("host")?.includes("localhost") ? "http" : "https";
+      const baseUrl = `${protocol}://${req.get("host")}`;
+      const onboardingUrl = await createConnectAccountLink(
+        accountId,
+        `${baseUrl}/settings?stripe_connect=refresh`,
+        `${baseUrl}/settings?stripe_connect=return`
+      );
+
+      res.json({ url: onboardingUrl, accountId });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/stripe-connect/status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      if (!company.stripeConnectAccountId) {
+        return res.json({ status: "not_started", chargesEnabled: false, detailsSubmitted: false, payoutsEnabled: false });
+      }
+
+      try {
+        const accountStatus = await getConnectAccountStatus(company.stripeConnectAccountId);
+
+        if (accountStatus.chargesEnabled !== company.stripeConnectOnboarded) {
+          await storage.updateCompany(companyId, { stripeConnectOnboarded: accountStatus.chargesEnabled } as any);
+        }
+
+        return res.json({
+          status: accountStatus.chargesEnabled ? "connected" : "pending",
+          ...accountStatus,
+        });
+      } catch (stripeErr) {
+        return res.json({ status: "error", chargesEnabled: false, detailsSubmitted: false, payoutsEnabled: false });
+      }
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/stripe-connect/dashboard-link", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!company.stripeConnectAccountId) return res.status(400).json({ error: "No Stripe Connect account" });
+
+      try {
+        const url = await createConnectLoginLink(company.stripeConnectAccountId);
+        res.json({ url });
+      } catch (err: any) {
+        if (err.message?.includes("not a Standard account") || err.type === "StripeInvalidRequestError") {
+          const protocol = req.get("host")?.includes("localhost") ? "http" : "https";
+          const baseUrl = `${protocol}://${req.get("host")}`;
+          const onboardingUrl = await createConnectAccountLink(
+            company.stripeConnectAccountId,
+            `${baseUrl}/settings?stripe_connect=refresh`,
+            `${baseUrl}/settings?stripe_connect=return`
+          );
+          return res.json({ url: onboardingUrl, isOnboarding: true });
+        }
+        throw err;
+      }
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/stripe-connect/disconnect", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      await storage.updateCompany(companyId, {
+        stripeConnectAccountId: null,
+        stripeConnectOnboarded: false,
+      } as any);
+      res.json({ ok: true });
     } catch (err) { handleError(res, err); }
   });
 
@@ -4709,6 +4811,24 @@ export async function registerRoutes(
                 stripePaymentIntentId: pi.id,
               });
               notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+              break;
+            }
+          }
+        }
+      }
+
+      if (event.type === "account.updated") {
+        const account = event.data.object as any;
+        const accountId = account.id;
+        if (accountId) {
+          const allCompanies = await storage.listCompanies();
+          for (const company of allCompanies) {
+            if (company.stripeConnectAccountId === accountId) {
+              const isOnboarded = account.charges_enabled === true;
+              if (isOnboarded !== company.stripeConnectOnboarded) {
+                await storage.updateCompany(company.id, { stripeConnectOnboarded: isOnboarded } as any);
+                console.log(`[Stripe Connect] Company ${company.name} (${company.id}) onboarded=${isOnboarded}`);
+              }
               break;
             }
           }
@@ -4903,6 +5023,7 @@ export async function registerRoutes(
 
       const chargeAmount = parseFloat(invoice.total) + tipAmount;
       const baseUrl = getBaseUrl(req);
+      const company = await storage.getCompany(companyId);
       const result = await createCheckoutSession({
         customerId: stripeCustomerId,
         invoiceId: invoice.id,
@@ -4911,6 +5032,7 @@ export async function registerRoutes(
         successUrl: `${baseUrl}/portal/client?paid=${invoice.id}`,
         cancelUrl: `${baseUrl}/portal/client`,
         tipAmount: tipAmount.toFixed(2),
+        stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
       });
 
       res.json(result);
