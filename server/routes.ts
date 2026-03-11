@@ -2987,6 +2987,7 @@ export async function registerRoutes(
 
       const servicePricingItems = await storage.getServicePricing(company.id);
       const packages = await storage.getServicePackages(company.id);
+      const serviceZones = await storage.getServiceZones(company.id);
 
       const pricingSummary = company.voiceAgentPricingSummary || servicePricingItems
         .filter(sp => sp.isActive)
@@ -2998,15 +2999,30 @@ export async function registerRoutes(
         .map(p => `${p.name} (${p.frequency}): $${p.basePrice}`)
         .join("; ");
 
+      const zipRouting: Record<string, string[]> = {};
+      for (const zone of serviceZones.filter(z => z.isActive)) {
+        if (!zipRouting[zone.zipCode]) zipRouting[zone.zipCode] = [];
+        const dayLabel = zone.dayOfWeek.charAt(0).toUpperCase() + zone.dayOfWeek.slice(1);
+        if (!zipRouting[zone.zipCode].includes(dayLabel)) {
+          zipRouting[zone.zipCode].push(dayLabel);
+        }
+      }
+
+      const policiesRaw = company.voiceAgentPolicies || "";
+      const policies = policiesRaw
+        ? policiesRaw.split(/\n+/).map(l => l.trim()).filter(Boolean)
+        : [];
+
       res.json({
         tenantId: company.id,
         businessName: company.name,
         businessPhone: company.phone,
         businessEmail: company.email,
         serviceArea: company.voiceAgentServiceArea || company.address || "",
+        zipRouting,
         pricingSummary,
         packages: packagesSummary || undefined,
-        policies: company.voiceAgentPolicies || "",
+        policies,
         specialLines: company.voiceAgentSpecialLines || "",
         greeting: company.voiceAgentGreeting || `Thank you for calling ${company.name}! How can I help you today?`,
       });
