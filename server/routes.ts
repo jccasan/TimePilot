@@ -3143,6 +3143,102 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/retell/create-booking", async (req: Request, res: Response) => {
+    if (!verifyRetellApiKey(req, res)) return;
+    try {
+      const {
+        tenantId, callerName, phone, email, address, zip,
+        dogs, yardSize, fenced, serviceType, frequency,
+        preferredDayOfWeek, accessNotes, specialInstructions,
+      } = req.body;
+      if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
+      if (!callerName) return res.status(400).json({ error: "callerName is required" });
+
+      const company = await storage.getCompany(tenantId);
+      if (!company) return res.status(404).json({ error: "Tenant not found" });
+
+      const nameParts = callerName.trim().split(/\s+/);
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      let contact: any = null;
+      if (phone || email) {
+        const allContacts = await storage.getContacts(tenantId);
+        if (phone) {
+          const digits = phone.replace(/\D/g, "");
+          contact = allContacts.find(c => {
+            const cDigits = (c.phone || "").replace(/\D/g, "");
+            return cDigits.length >= 10 && digits.length >= 10 && digits.endsWith(cDigits.slice(-10));
+          });
+        }
+        if (!contact && email) {
+          contact = allContacts.find(c => c.email?.toLowerCase() === email.toLowerCase());
+        }
+      }
+
+      if (!contact) {
+        contact = await storage.createContact({
+          companyId: tenantId,
+          firstName,
+          lastName,
+          email: email || null,
+          phone: phone || null,
+          status: "lead",
+          leadSource: "voice_agent",
+          notes: null,
+        });
+      }
+
+      const bookingNotes = [
+        serviceType ? `Service: ${serviceType}` : null,
+        frequency ? `Frequency: ${frequency}` : null,
+        preferredDayOfWeek ? `Preferred day: ${preferredDayOfWeek}` : null,
+        fenced != null ? `Fenced: ${fenced}` : null,
+        accessNotes ? `Access: ${accessNotes}` : null,
+        specialInstructions ? `Instructions: ${specialInstructions}` : null,
+      ].filter(Boolean).join("\n");
+
+      let property = null;
+      if (address) {
+        property = await createPropertyWithGeocode({
+          companyId: tenantId,
+          contactId: contact.id,
+          streetAddress: address,
+          zipCode: zip || null,
+          numberOfDogs: dogs ? parseInt(dogs) : null,
+          yardSize: yardSize || null,
+          specialInstructions: bookingNotes || null,
+        });
+      }
+
+      await storage.createMessage({
+        companyId: tenantId,
+        contactId: contact.id,
+        channel: "sms",
+        direction: "inbound",
+        status: "received",
+        fromAddress: phone || "voice_agent",
+        toAddress: company.phone || "",
+        body: `[Voice Agent Booking] ${callerName} requested a booking.\n${bookingNotes}`,
+      });
+
+      notify(
+        tenantId,
+        "new_lead",
+        "New Booking Request (Voice Agent)",
+        `${callerName} requested a booking via voice agent. Status: pending confirmation.`,
+        `/contacts/${contact.id}`
+      );
+
+      res.json({
+        status: "received",
+        contactId: contact.id,
+        propertyId: property?.id || null,
+        message: "Booking request recorded; team will confirm by email.",
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Webhook Routes ================
 
   app.get("/api/webhooks", isAuthenticated, async (req: Request, res: Response) => {
