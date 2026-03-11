@@ -642,7 +642,9 @@ export async function registerRoutes(
       const contactsList = await storage.getContacts(companyId);
       const routesList = await storage.getRoutes(companyId);
       const plansList = await storage.getServicePlans(companyId);
+      const zonesList = await storage.getServiceZones(companyId);
 
+      const hasServiceZones = zonesList.length > 0;
       const hasContacts = contactsList.length > 0;
       const hasRoutes = routesList.length > 0;
       const hasServicePlans = plansList.length > 0;
@@ -666,13 +668,14 @@ export async function registerRoutes(
       }
 
       const steps = [
+        { key: "service_zones", label: "Set up your service zones", completed: hasServiceZones },
         { key: "add_customer", label: "Add your first customer", completed: hasContacts },
         { key: "price_property", label: "Price your first property", completed: hasPriceRecommendation || hasServicePlans },
         { key: "create_service_plan", label: "Create your first service plan", completed: hasServicePlans },
         { key: "generate_route", label: "Generate your first route", completed: hasRoutes },
       ];
 
-      const isComplete = steps.every(s => s.completed);
+      const isComplete = steps.filter(s => s.key !== "service_zones").every(s => s.completed);
       res.json({
         isComplete,
         steps,
@@ -2374,6 +2377,82 @@ export async function registerRoutes(
       const existing = await storage.getServicePlan(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Service plan not found" });
       await storage.deleteServicePlan(req.params.id);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Service Zone Routes ================
+
+  app.get("/api/service-zones", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const zones = await storage.getServiceZones(companyId);
+      res.json(zones);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/service-zones", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { zipCode, dayOfWeek, label, latitude, longitude } = req.body;
+      if (!zipCode) return res.status(400).json({ error: "zipCode is required" });
+      const zone = await storage.createServiceZone({
+        companyId,
+        zipCode,
+        dayOfWeek: dayOfWeek || "tbd",
+        label: label || null,
+        latitude: latitude || null,
+        longitude: longitude || null,
+      });
+      res.status(201).json(zone);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/service-zones/bulk", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { zones } = req.body;
+      if (!Array.isArray(zones) || zones.length === 0) return res.status(400).json({ error: "zones array is required" });
+      const created = [];
+      for (const z of zones) {
+        if (!z.zipCode) continue;
+        const zone = await storage.createServiceZone({
+          companyId,
+          zipCode: z.zipCode,
+          dayOfWeek: z.dayOfWeek || "tbd",
+          label: z.label || null,
+          latitude: z.latitude || null,
+          longitude: z.longitude || null,
+        });
+        created.push(zone);
+      }
+      res.status(201).json(created);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/service-zones/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const zones = await storage.getServiceZones(companyId);
+      const existing = zones.find(z => z.id === req.params.id);
+      if (!existing) return res.status(404).json({ error: "Service zone not found" });
+      const { dayOfWeek, label, isActive } = req.body;
+      const updates: any = {};
+      if (dayOfWeek !== undefined) updates.dayOfWeek = dayOfWeek;
+      if (label !== undefined) updates.label = label;
+      if (isActive !== undefined) updates.isActive = isActive;
+      const zone = await storage.updateServiceZone(req.params.id, updates);
+      res.json(zone);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/service-zones/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const zones = await storage.getServiceZones(companyId);
+      const existing = zones.find(z => z.id === req.params.id);
+      if (!existing) return res.status(404).json({ error: "Service zone not found" });
+      await storage.deleteServiceZone(req.params.id);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });

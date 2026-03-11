@@ -47,7 +47,8 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Field Operations**: Technician mobile interface with proof-of-service photo uploads, time tracking, satellite/aerial views, and a yard measurement tool.
 - **Business Intelligence**: Overhead cost tracking, customer profitability dashboard, route profit maps, and a pricing simulator with competitor analysis.
 - **Automation**: Event-driven automation rules and automated jobs (invoicing, reminders).
-- **Onboarding**: Guided 4-step onboarding flow for new users.
+- **Onboarding**: Guided 5-step onboarding flow: (1) Set up service zones with interactive map and zip code day assignments, (2) Add first customer, (3) Price property, (4) Create service plan, (5) Generate route. Service zones step is skippable. Service zones also manageable from Settings.
+- **Service Zones**: `service_zones` table stores zip code, day of week, and coordinates per company. Interactive Mapbox map with geocoded markers. CRUD + bulk API at `/api/service-zones`.
 - **Access Control**: Multi-tenant architecture with Owner, Admin, and Technician roles.
 
 ## External Dependencies

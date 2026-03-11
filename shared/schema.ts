@@ -1178,3 +1178,26 @@ export const serviceChangeRequestRelations = relations(serviceChangeRequests, ({
   contact: one(contacts, { fields: [serviceChangeRequests.contactId], references: [contacts.id] }),
   servicePlan: one(servicePlans, { fields: [serviceChangeRequests.servicePlanId], references: [servicePlans.id] }),
 }));
+
+export const serviceZones = pgTable("service_zones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  zipCode: varchar("zip_code", { length: 20 }).notNull(),
+  dayOfWeek: dayOfWeekEnum("day_of_week").notNull().default("tbd"),
+  label: varchar("label", { length: 100 }),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sz_company").on(table.companyId),
+  index("idx_sz_zip").on(table.companyId, table.zipCode),
+]);
+
+export const insertServiceZoneSchema = createInsertSchema(serviceZones).omit({ id: true, createdAt: true });
+export type ServiceZone = typeof serviceZones.$inferSelect;
+export type InsertServiceZone = z.infer<typeof insertServiceZoneSchema>;
+
+export const serviceZoneRelations = relations(serviceZones, ({ one }) => ({
+  company: one(companies, { fields: [serviceZones.companyId], references: [companies.id] }),
+}));

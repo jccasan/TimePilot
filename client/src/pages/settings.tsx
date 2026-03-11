@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
@@ -28,6 +28,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChevronDown } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useUpload } from "@/hooks/use-upload";
+import { ServiceZoneMap, type ZoneEntry } from "@/components/service-zone-map";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 const companyFormSchema = z.object({
@@ -726,6 +727,8 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          <ServiceZonesCard />
         </div>
 
         <div className="space-y-6">
@@ -1400,5 +1403,130 @@ export default function Settings() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ServiceZonesCard() {
+  const { toast } = useToast();
+  const [zones, setZones] = useState<ZoneEntry[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const { data: existingZones, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/service-zones"],
+  });
+
+  useEffect(() => {
+    if (existingZones) {
+      setZones(existingZones.map((z: any) => ({
+        id: z.id,
+        zipCode: z.zipCode,
+        dayOfWeek: z.dayOfWeek,
+        label: z.label,
+        latitude: z.latitude ? parseFloat(z.latitude) : undefined,
+        longitude: z.longitude ? parseFloat(z.longitude) : undefined,
+      })));
+      setHasChanges(false);
+    }
+  }, [existingZones]);
+
+  const handleZonesChange = (newZones: ZoneEntry[]) => {
+    setZones(newZones);
+    setHasChanges(true);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const token = localStorage.getItem("sessionToken");
+      const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) authHeaders["Authorization"] = `Bearer ${token}`;
+
+      if (existingZones) {
+        for (const existing of existingZones) {
+          if (!zones.some(z => z.id === existing.id)) {
+            await fetch(`/api/service-zones/${existing.id}`, {
+              method: "DELETE",
+              credentials: "include",
+              headers: authHeaders,
+            });
+          }
+        }
+        for (const zone of zones) {
+          if (zone.id) {
+            const existing = existingZones.find((e: any) => e.id === zone.id);
+            if (existing && existing.dayOfWeek !== zone.dayOfWeek) {
+              await fetch(`/api/service-zones/${zone.id}`, {
+                method: "PATCH",
+                credentials: "include",
+                headers: authHeaders,
+                body: JSON.stringify({ dayOfWeek: zone.dayOfWeek }),
+              });
+            }
+          } else {
+            await fetch("/api/service-zones", {
+              method: "POST",
+              credentials: "include",
+              headers: authHeaders,
+              body: JSON.stringify(zone),
+            });
+          }
+        }
+      } else {
+        await fetch("/api/service-zones/bulk", {
+          method: "POST",
+          credentials: "include",
+          headers: authHeaders,
+          body: JSON.stringify({ zones }),
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/service-zones"] });
+      setHasChanges(false);
+      toast({ title: "Service zones saved" });
+    } catch (err: any) {
+      toast({ title: "Error saving zones", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MapPin className="h-5 w-5" />
+          Service Zones
+        </CardTitle>
+        <CardDescription>Define which zip codes you service and what day you work each area</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-[250px] w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : (
+          <>
+            <ServiceZoneMap
+              zones={zones}
+              onZonesChange={handleZonesChange}
+              compact
+            />
+            {hasChanges && (
+              <Button
+                className="w-full mt-4"
+                onClick={handleSave}
+                disabled={saving}
+                data-testid="button-save-service-zones"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {saving ? "Saving..." : "Save Service Zones"}
+              </Button>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

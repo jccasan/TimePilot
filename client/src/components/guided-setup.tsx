@@ -39,6 +39,7 @@ import {
   X,
 } from "lucide-react";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { ServiceZoneMap, type ZoneEntry } from "@/components/service-zone-map";
 
 type OnboardingStep = {
   key: string;
@@ -93,8 +94,9 @@ const customerFormSchema = z.object({
 
 type CustomerFormValues = z.infer<typeof customerFormSchema>;
 
-const STEP_ICONS = [Users, DollarSign, Calendar, MapPin];
+const STEP_ICONS = [MapPin, Users, DollarSign, Calendar, MapPin];
 const STEP_LABELS = [
+  "Set up your service zones",
   "Add your first customer",
   "Price your first property",
   "Create your first service plan",
@@ -158,6 +160,9 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
   const [customerDay, setCustomerDay] = useState<string>("monday");
   const [customerYardSize, setCustomerYardSize] = useState<string>("");
   const [customerDogCount, setCustomerDogCount] = useState<number>(1);
+
+  const [serviceZones, setServiceZones] = useState<ZoneEntry[]>([]);
+  const [savingZones, setSavingZones] = useState(false);
 
   const [pricingResult, setPricingResult] = useState<PricingResult | null>(null);
   const [selectedPrice, setSelectedPrice] = useState<number>(0);
@@ -278,7 +283,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
 
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-      setActiveStep(1);
+      setActiveStep(2);
       toast({ title: "Customer added" });
 
       runPriceCalculation(propId, yard, dogs, freq);
@@ -315,7 +320,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
   });
 
   useEffect(() => {
-    if (activeStep === 1 && !pricingResult && onboarding.firstProperty) {
+    if (activeStep === 2 && !pricingResult && onboarding.firstProperty) {
       runPriceCalculation(onboarding.firstProperty.id, onboarding.firstProperty.yardSize, onboarding.firstProperty.numberOfDogs || 1, customerFrequency);
     }
   }, [activeStep]);
@@ -335,10 +340,10 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
-      setActiveStep(2);
+      setActiveStep(3);
     },
     onError: (err: Error) => {
-      setActiveStep(2);
+      setActiveStep(3);
       toast({ title: "Price saved locally", description: "Continuing to next step." });
     },
   });
@@ -377,7 +382,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       setCreatedPlanId(data.id);
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
-      setActiveStep(3);
+      setActiveStep(4);
       toast({ title: "Service plan created" });
     },
     onError: (err: Error) => {
@@ -422,7 +427,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
-      setActiveStep(4);
+      setActiveStep(5);
       toast({ title: "Route created with visits" });
     },
     onError: (err: Error) => {
@@ -433,8 +438,8 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
   const completedCount = onboarding.steps.filter(s => s.completed).length + 
     (activeStep > onboarding.steps.findIndex(s => !s.completed) ? 
       activeStep - onboarding.steps.findIndex(s => !s.completed) : 0);
-  const effectiveCompleted = Math.min(activeStep, 4);
-  const progress = (effectiveCompleted / 4) * 100;
+  const effectiveCompleted = Math.min(activeStep, 5);
+  const progress = (effectiveCompleted / 5) * 100;
 
   if (dismissed || onboarding.isComplete) return null;
 
@@ -455,7 +460,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
           <div>
             <CardTitle className="text-xl" data-testid="text-setup-title">Set up your business in 3 minutes</CardTitle>
             <p className="text-sm text-muted-foreground mt-1" data-testid="text-setup-progress-label">
-              {effectiveCompleted} of 4 complete
+              {effectiveCompleted} of 5 complete
             </p>
           </div>
           <Button
@@ -472,7 +477,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
         <Progress value={progress} className="h-2 mt-3" data-testid="progress-setup" />
       </CardHeader>
       <CardContent className="space-y-3">
-        {[0, 1, 2, 3].map((stepIdx) => {
+        {[0, 1, 2, 3, 4].map((stepIdx) => {
           const Icon = STEP_ICONS[stepIdx];
           const isCompleted = stepIdx < activeStep;
           const isActive = stepIdx === activeStep;
@@ -514,6 +519,60 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
               </button>
 
               {isActive && stepIdx === 0 && (
+                <div className="px-4 pb-4" data-testid="step-0-zones">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Add the zip codes you service and assign which day you work each area.
+                  </p>
+                  <ServiceZoneMap
+                    zones={serviceZones}
+                    onZonesChange={setServiceZones}
+                    compact
+                  />
+                  <div className="flex gap-2 mt-4">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => { setActiveStep(1); queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] }); }}
+                      data-testid="button-skip-zones"
+                    >
+                      Skip for now
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      disabled={serviceZones.length === 0 || savingZones}
+                      onClick={async () => {
+                        setSavingZones(true);
+                        try {
+                          const token = localStorage.getItem("sessionToken");
+                          const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
+                          if (token) authHeaders["Authorization"] = `Bearer ${token}`;
+                          const resp = await fetch("/api/service-zones/bulk", {
+                            method: "POST",
+                            credentials: "include",
+                            headers: authHeaders,
+                            body: JSON.stringify({ zones: serviceZones }),
+                          });
+                          if (!resp.ok) throw new Error("Failed to save zones");
+                          queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
+                          queryClient.invalidateQueries({ queryKey: ["/api/service-zones"] });
+                          setActiveStep(1);
+                          toast({ title: "Service zones saved" });
+                        } catch (err: any) {
+                          toast({ title: "Error", description: err.message, variant: "destructive" });
+                        } finally {
+                          setSavingZones(false);
+                        }
+                      }}
+                      data-testid="button-save-zones"
+                    >
+                      {savingZones ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                      {savingZones ? "Saving..." : "Continue"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {isActive && stepIdx === 1 && (
                 <div className="px-4 pb-4" data-testid="step-0-form">
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit((data) => createContactMutation.mutate(data))} className="space-y-3">
@@ -673,8 +732,8 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                 </div>
               )}
 
-              {isActive && stepIdx === 1 && (
-                <div className="px-4 pb-4 space-y-4" data-testid="step-1-pricing">
+              {isActive && stepIdx === 2 && (
+                <div className="px-4 pb-4 space-y-4" data-testid="step-2-pricing">
                   {(pricingLoading || calculatePriceMutation.isPending) ? (
                     <div className="space-y-3">
                       <Skeleton className="h-20 w-full" />
@@ -758,8 +817,8 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                 </div>
               )}
 
-              {isActive && stepIdx === 2 && (
-                <div className="px-4 pb-4 space-y-3" data-testid="step-2-service-plan">
+              {isActive && stepIdx === 3 && (
+                <div className="px-4 pb-4 space-y-3" data-testid="step-3-service-plan">
                   <div className="rounded-lg bg-muted/30 border p-4 space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Customer</span>
@@ -797,8 +856,8 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                 </div>
               )}
 
-              {isActive && stepIdx === 3 && (
-                <div className="px-4 pb-4 space-y-3" data-testid="step-3-route">
+              {isActive && stepIdx === 4 && (
+                <div className="px-4 pb-4 space-y-3" data-testid="step-4-route">
                   <p className="text-sm text-muted-foreground">
                     We'll create a {DAYS.find(d => d.value === customerDay)?.label || customerDay} route, 
                     assign your service plan to it, and generate visits for the next 4 weeks.
@@ -821,7 +880,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
           );
         })}
 
-        {activeStep >= 4 && (
+        {activeStep >= 5 && (
           <div className="rounded-lg bg-primary/5 border border-primary/20 p-6 text-center space-y-3" data-testid="setup-complete">
             <PartyPopper className="h-10 w-10 text-primary mx-auto" />
             <h3 className="text-lg font-bold" data-testid="text-setup-complete-title">You're all set!</h3>

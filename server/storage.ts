@@ -50,10 +50,12 @@ import {
   type CompetitorPricing, type InsertCompetitorPricing,
   type Estimate, type InsertEstimate,
   type ServiceChangeRequest, type InsertServiceChangeRequest,
+  type ServiceZone, type InsertServiceZone,
   priceRecommendations,
   profitabilitySnapshots,
   overheadCosts,
   competitorPricing,
+  serviceZones,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -328,6 +330,11 @@ export interface IStorage {
   getServiceChangeRequests(companyId: string, filters?: { contactId?: string; status?: string }): Promise<ServiceChangeRequest[]>;
   createServiceChangeRequest(data: InsertServiceChangeRequest): Promise<ServiceChangeRequest>;
   updateServiceChangeRequest(id: string, data: Partial<InsertServiceChangeRequest>): Promise<ServiceChangeRequest>;
+
+  getServiceZones(companyId: string): Promise<ServiceZone[]>;
+  createServiceZone(data: InsertServiceZone): Promise<ServiceZone>;
+  updateServiceZone(id: string, data: Partial<InsertServiceZone>): Promise<ServiceZone>;
+  deleteServiceZone(id: string): Promise<void>;
 
   // Referral helpers
   getContactByReferralCode(code: string): Promise<Contact | undefined>;
@@ -1760,6 +1767,24 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select({ count: count() }).from(contacts)
       .where(eq(contacts.referralSource, contact.referralCode));
     return Number(result[0]?.count ?? 0);
+  }
+
+  async getServiceZones(companyId: string): Promise<ServiceZone[]> {
+    return db.select().from(serviceZones).where(eq(serviceZones.companyId, companyId)).orderBy(serviceZones.zipCode);
+  }
+
+  async createServiceZone(data: InsertServiceZone): Promise<ServiceZone> {
+    const [zone] = await db.insert(serviceZones).values(data).returning();
+    return zone;
+  }
+
+  async updateServiceZone(id: string, data: Partial<InsertServiceZone>): Promise<ServiceZone> {
+    const [zone] = await db.update(serviceZones).set(data).where(eq(serviceZones.id, id)).returning();
+    return zone;
+  }
+
+  async deleteServiceZone(id: string): Promise<void> {
+    await db.delete(serviceZones).where(eq(serviceZones.id, id));
   }
 }
 
