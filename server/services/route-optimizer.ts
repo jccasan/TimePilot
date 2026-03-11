@@ -9,7 +9,7 @@ interface StartPoint {
   longitude: number;
 }
 
-function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 3958.8;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -122,7 +122,7 @@ export function optimizeRoute(stops: Stop[], startPoint?: StartPoint): { ordered
   };
 }
 
-async function fetchMapboxDirections(coordinates: { longitude: number; latitude: number }[]): Promise<{ distance: number; duration: number } | null> {
+export async function fetchMapboxDirections(coordinates: { longitude: number; latitude: number }[]): Promise<{ distance: number; duration: number } | null> {
   const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
   if (!token || coordinates.length < 2) return null;
 

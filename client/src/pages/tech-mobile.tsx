@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
@@ -21,6 +22,9 @@ type TodayVisit = {
   technicianNotes: string | null;
   proofOfServicePhoto: string | null;
   proofOfServicePhotoBefore: string | null;
+  gateClosedPhoto: string | null;
+  servicePlanId: string;
+  routeId: string | null;
   property?: {
     streetAddress: string;
     city: string;
@@ -80,6 +84,26 @@ function PropertyImageSection({ visit }: { visit: TodayVisit }) {
   );
 }
 
+async function uploadFileDirect(file: File): Promise<string> {
+  const token = localStorage.getItem("sessionToken");
+  const hdrs: Record<string, string> = {};
+  if (token) hdrs["Authorization"] = `Bearer ${token}`;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch("/api/uploads/direct", {
+    method: "POST",
+    credentials: "include",
+    headers: hdrs,
+    body: formData,
+  });
+
+  if (!response.ok) throw new Error("Failed to upload photo");
+  const data = await response.json();
+  return data.objectPath;
+}
+
 export default function TechMobile() {
   const { toast } = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -90,6 +114,16 @@ export default function TechMobile() {
   const afterFileInputRef = useRef<HTMLInputElement>(null);
   const pendingVisitIdRef = useRef<string | null>(null);
   const pendingUploadTypeRef = useRef<PhotoUploadType | null>(null);
+
+  const [completeDialogVisit, setCompleteDialogVisit] = useState<TodayVisit | null>(null);
+  const [gatePhoto, setGatePhoto] = useState<File | null>(null);
+  const [gatePhotoPreview, setGatePhotoPreview] = useState<string | null>(null);
+  const [extraFiles, setExtraFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const gateFileInputRef = useRef<HTMLInputElement>(null);
+  const extraFileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: company } = useQuery<{ name: string }>({ queryKey: ["/api/company"] });
 
   const { data: visits, isLoading } = useQuery<TodayVisit[]>({
     queryKey: ["/api/visits/today"],
@@ -105,20 +139,6 @@ export default function TechMobile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
       toast({ title: "Visit started" });
-    },
-  });
-
-  const completeMutation = useMutation({
-    mutationFn: async (visitId: string) => {
-      await apiRequest("PATCH", `/api/visits/${visitId}`, {
-        completedAt: new Date().toISOString(),
-        status: "completed",
-        technicianNotes: notes[visitId] || undefined,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
-      toast({ title: "Visit completed" });
     },
   });
 
@@ -139,40 +159,13 @@ export default function TechMobile() {
     if (!file || !visitId || !photoType) return;
 
     e.target.value = "";
-
     setUploadingVisitId(visitId);
     setUploadingType(photoType);
 
     try {
-      const token = localStorage.getItem("sessionToken");
-      const uploadHeaders: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) uploadHeaders["Authorization"] = `Bearer ${token}`;
-      const urlRes = await fetch("/api/uploads/request-url", {
-        method: "POST",
-        headers: uploadHeaders,
-        credentials: "include",
-        body: JSON.stringify({
-          name: file.name,
-          size: file.size,
-          contentType: file.type,
-        }),
-      });
-
-      if (!urlRes.ok) throw new Error("Failed to get upload URL");
-      const { uploadURL, objectPath } = await urlRes.json();
-
-      const uploadRes = await fetch(uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-
-      if (!uploadRes.ok) throw new Error("Failed to upload photo");
-
+      const objectPath = await uploadFileDirect(file);
       const patchField = photoType === "before" ? "proofOfServicePhotoBefore" : "proofOfServicePhoto";
-      await apiRequest("PATCH", `/api/visits/${visitId}`, {
-        [patchField]: objectPath,
-      });
+      await apiRequest("PATCH", `/api/visits/${visitId}`, { [patchField]: objectPath });
 
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
       const label = photoType === "before" ? "Before" : "After";
@@ -186,6 +179,72 @@ export default function TechMobile() {
       pendingUploadTypeRef.current = null;
     }
   };
+
+  const openCompleteDialog = (visit: TodayVisit) => {
+    setCompleteDialogVisit(visit);
+    setGatePhoto(null);
+    setGatePhotoPreview(null);
+    setExtraFiles([]);
+    setIsCompleting(false);
+  };
+
+  const handleGatePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setGatePhoto(file);
+    const reader = new FileReader();
+    reader.onload = () => setGatePhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleExtraPhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const reader = new FileReader();
+    reader.onload = () => {
+      setExtraFiles(prev => [...prev, { file, preview: reader.result as string }]);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeExtraPhoto = (index: number) => {
+    setExtraFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleCompleteAndSend = async () => {
+    if (!completeDialogVisit || !gatePhoto) return;
+    setIsCompleting(true);
+
+    try {
+      const gateClosedPath = await uploadFileDirect(gatePhoto);
+
+      const extraPaths: string[] = [];
+      for (const extra of extraFiles) {
+        const path = await uploadFileDirect(extra.file);
+        extraPaths.push(path);
+      }
+
+      await apiRequest("POST", `/api/visits/${completeDialogVisit.id}/complete-notify`, {
+        gateClosedPhoto: gateClosedPath,
+        extraPhotos: extraPaths.length > 0 ? extraPaths : undefined,
+        technicianNotes: notes[completeDialogVisit.id] || undefined,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
+      setCompleteDialogVisit(null);
+      toast({ title: "Visit completed", description: "Customer has been notified." });
+    } catch (err: any) {
+      toast({ title: "Completion failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
+  const completionMessage = completeDialogVisit?.contact
+    ? `Hi ${completeDialogVisit.contact.firstName}. ${company?.name || "Our team"} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`
+    : "";
 
   return (
     <div className="p-4 space-y-4 overflow-auto h-full max-w-lg mx-auto">
@@ -224,6 +283,7 @@ export default function TechMobile() {
             const isUploadingAfter = uploadingVisitId === visit.id && uploadingType === "after";
             const hasBefore = !!visit.proofOfServicePhotoBefore;
             const hasAfter = !!visit.proofOfServicePhoto;
+            const hasGate = !!visit.gateClosedPhoto;
             const canUpload = visit.status === "scheduled" || visit.status === "in_progress";
             return (
               <Card key={visit.id} data-testid={`card-visit-${visit.id}`}>
@@ -241,7 +301,7 @@ export default function TechMobile() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {(hasBefore || hasAfter) && (
+                      {(hasBefore || hasAfter || hasGate) && (
                         <ImageIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
                       )}
                       <Badge variant="secondary" className={visitStatusColors[visit.status] || ""} data-testid={`badge-visit-status-${visit.id}`}>
@@ -269,10 +329,10 @@ export default function TechMobile() {
                       </div>
                     )}
 
-                    {(hasBefore || hasAfter) && (
+                    {(hasBefore || hasAfter || hasGate) && (
                       <div data-testid={`photos-container-${visit.id}`}>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Proof of Service</p>
-                        <div className={`grid gap-2 ${hasBefore && hasAfter ? "grid-cols-2" : "grid-cols-1"}`}>
+                        <div className="grid gap-2 grid-cols-2">
                           {hasBefore && (
                             <div data-testid={`photo-before-container-${visit.id}`}>
                               <p className="text-xs font-medium text-center mb-1" data-testid={`text-label-before-${visit.id}`}>Before</p>
@@ -292,6 +352,17 @@ export default function TechMobile() {
                                 alt="After service"
                                 className="rounded-md max-h-48 w-full object-cover"
                                 data-testid={`img-proof-after-${visit.id}`}
+                              />
+                            </div>
+                          )}
+                          {hasGate && (
+                            <div data-testid={`photo-gate-container-${visit.id}`}>
+                              <p className="text-xs font-medium text-center mb-1">Gate Closed</p>
+                              <img
+                                src={visit.gateClosedPhoto!}
+                                alt="Gate closed"
+                                className="rounded-md max-h-48 w-full object-cover"
+                                data-testid={`img-gate-closed-${visit.id}`}
                               />
                             </div>
                           )}
@@ -323,8 +394,7 @@ export default function TechMobile() {
                       )}
                       {(visit.status === "scheduled" || visit.status === "in_progress") && (
                         <Button
-                          onClick={() => completeMutation.mutate(visit.id)}
-                          disabled={completeMutation.isPending}
+                          onClick={() => openCompleteDialog(visit)}
                           variant="outline"
                           className="flex-1"
                           data-testid={`button-complete-${visit.id}`}
@@ -366,6 +436,136 @@ export default function TechMobile() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={!!completeDialogVisit} onOpenChange={(open) => { if (!open) setCompleteDialogVisit(null); }}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-complete-visit">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DoorClosed className="h-5 w-5" />
+              Complete Visit
+            </DialogTitle>
+            <DialogDescription>
+              {completeDialogVisit?.property?.streetAddress} - {completeDialogVisit?.contact?.firstName} {completeDialogVisit?.contact?.lastName}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-2">Gate Closed Photo (required)</p>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                ref={gateFileInputRef}
+                className="hidden"
+                onChange={handleGatePhotoCapture}
+                data-testid="input-gate-photo"
+              />
+              {gatePhotoPreview ? (
+                <div className="relative">
+                  <img
+                    src={gatePhotoPreview}
+                    alt="Gate closed"
+                    className="rounded-md max-h-48 w-full object-cover"
+                    data-testid="img-gate-preview"
+                  />
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-1 right-1 h-6 w-6"
+                    onClick={() => { setGatePhoto(null); setGatePhotoPreview(null); }}
+                    data-testid="button-remove-gate-photo"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full h-24 border-dashed"
+                  onClick={() => gateFileInputRef.current?.click()}
+                  data-testid="button-capture-gate-photo"
+                >
+                  <Camera className="mr-2 h-5 w-5" />
+                  Take Gate Closed Photo
+                </Button>
+              )}
+            </div>
+
+            <div>
+              <p className="text-sm font-medium mb-2">Additional Photos (optional)</p>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                ref={extraFileInputRef}
+                className="hidden"
+                onChange={handleExtraPhotoCapture}
+                data-testid="input-extra-photo"
+              />
+              {extraFiles.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  {extraFiles.map((ef, i) => (
+                    <div key={i} className="relative">
+                      <img
+                        src={ef.preview}
+                        alt={`Extra ${i + 1}`}
+                        className="rounded-md h-20 w-full object-cover"
+                        data-testid={`img-extra-preview-${i}`}
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-0.5 right-0.5 h-5 w-5"
+                        onClick={() => removeExtraPhoto(i)}
+                        data-testid={`button-remove-extra-${i}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => extraFileInputRef.current?.click()}
+                data-testid="button-add-extra-photo"
+              >
+                <Plus className="mr-1 h-4 w-4" /> Add Photo
+              </Button>
+            </div>
+
+            <div className="rounded-md bg-muted p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Text to customer:</p>
+              <p className="text-sm" data-testid="text-completion-sms-preview">{completionMessage}</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCompleteDialogVisit(null)}
+              disabled={isCompleting}
+              data-testid="button-cancel-complete"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCompleteAndSend}
+              disabled={!gatePhoto || isCompleting}
+              data-testid="button-send-complete"
+            >
+              {isCompleting ? (
+                <Loader2 className="animate-spin mr-2 h-4 w-4" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {isCompleting ? "Sending..." : "Send & Complete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -9,6 +9,7 @@ interface SendSmsOptions {
   to: string;
   body: string;
   from?: string;
+  mediaUrl?: string;
 }
 
 interface SendSmsResult {
@@ -39,6 +40,9 @@ export async function sendSms(options: SendSmsOptions): Promise<SendSmsResult> {
       From: from,
       Body: options.body,
     });
+    if (options.mediaUrl) {
+      params.append("MediaUrl", options.mediaUrl);
+    }
 
     const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
     const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString("base64");

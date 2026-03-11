@@ -305,6 +305,8 @@ export const visits = pgTable("visits", {
   completedBy: varchar("completed_by").references(() => users.id),
   proofOfServicePhoto: text("proof_of_service_photo"),
   proofOfServicePhotoBefore: text("proof_of_service_photo_before"),
+  gateClosedPhoto: text("gate_closed_photo"),
+  extraPhotos: jsonb("extra_photos"),
   technicianNotes: text("technician_notes"),
   invoiceId: varchar("invoice_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

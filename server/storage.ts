@@ -111,7 +111,7 @@ export interface IStorage {
 
   // Service Plans
   getServicePlan(id: string, companyId: string): Promise<ServicePlan | undefined>;
-  getServicePlans(companyId: string, filters?: { contactId?: string; propertyId?: string; isActive?: boolean }): Promise<ServicePlan[]>;
+  getServicePlans(companyId: string, filters?: { contactId?: string; propertyId?: string; isActive?: boolean; routeId?: string }): Promise<ServicePlan[]>;
   createServicePlan(data: InsertServicePlan): Promise<ServicePlan>;
   updateServicePlan(id: string, data: Partial<InsertServicePlan>): Promise<ServicePlan>;
   deleteServicePlan(id: string): Promise<void>;
@@ -545,11 +545,12 @@ export class DatabaseStorage implements IStorage {
     return sp;
   }
 
-  async getServicePlans(companyId: string, filters?: { contactId?: string; propertyId?: string; isActive?: boolean }): Promise<ServicePlan[]> {
+  async getServicePlans(companyId: string, filters?: { contactId?: string; propertyId?: string; isActive?: boolean; routeId?: string }): Promise<ServicePlan[]> {
     const conditions = [eq(servicePlans.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(servicePlans.contactId, filters.contactId));
     if (filters?.propertyId) conditions.push(eq(servicePlans.propertyId, filters.propertyId));
     if (filters?.isActive !== undefined) conditions.push(eq(servicePlans.isActive, filters.isActive));
+    if (filters?.routeId) conditions.push(eq(servicePlans.routeId, filters.routeId));
     return db.select().from(servicePlans).where(and(...conditions));
   }
 
