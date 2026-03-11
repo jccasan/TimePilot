@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Route, ServicePlan, Contact, Property } from "@shared/schema";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,9 +20,10 @@ import {
 import {
   MapPin, Dog, GripVertical, Plus, Pencil, Trash2, Route as RouteIcon,
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
-  Clock, ShoppingCart, RotateCcw, Map, List
+  Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp
 } from "lucide-react";
 import RouteMapView, { type RouteStop } from "@/components/route-map-view";
+import { ServiceZoneMap, type ZoneEntry } from "@/components/service-zone-map";
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, TouchSensor,
   useSensor, useSensors, useDroppable, useDraggable,
@@ -439,6 +440,7 @@ export default function RoutesPage() {
   const [unassigningRouteId, setUnassigningRouteId] = useState<string | null>(null);
   const [confirmUnassignAll, setConfirmUnassignAll] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [showZones, setShowZones] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -692,6 +694,14 @@ export default function RoutesPage() {
               {viewMode === "list" ? <Map className="h-4 w-4 mr-1" /> : <List className="h-4 w-4 mr-1" />}
               {viewMode === "list" ? "Map" : "List"}
             </Button>
+            <Button
+              variant={showZones ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowZones(!showZones)}
+              data-testid="button-toggle-zones"
+            >
+              <MapPin className="h-4 w-4 mr-1" /> {showZones ? "Hide Zones" : "Manage Zones"}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setShowPurchase(true)} data-testid="button-buy-credits">
               <ShoppingCart className="h-4 w-4 mr-1" /> Buy Credits
             </Button>
@@ -714,6 +724,8 @@ export default function RoutesPage() {
             </Button>
           ))}
         </div>
+
+        {showZones && <ServiceZonesPanel />}
       </div>
 
       <Separator className="shrink-0" />
@@ -875,5 +887,128 @@ export default function RoutesPage() {
         onPurchase={(amount) => purchaseCreditsMutation.mutate(amount)}
         isPurchasing={purchaseCreditsMutation.isPending} />
     </div>
+  );
+}
+
+function ServiceZonesPanel() {
+  const { toast } = useToast();
+  const [zones, setZones] = useState<ZoneEntry[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const { data: existingZones, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/service-zones"],
+  });
+
+  useEffect(() => {
+    if (existingZones) {
+      setZones(existingZones.map((z: any) => ({
+        id: z.id,
+        zipCode: z.zipCode,
+        dayOfWeek: z.dayOfWeek,
+        label: z.label,
+        latitude: z.latitude ? parseFloat(z.latitude) : undefined,
+        longitude: z.longitude ? parseFloat(z.longitude) : undefined,
+      })));
+      setHasChanges(false);
+    }
+  }, [existingZones]);
+
+  const handleZonesChange = (newZones: ZoneEntry[]) => {
+    setZones(newZones);
+    setHasChanges(true);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const token = localStorage.getItem("sessionToken");
+      const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) authHeaders["Authorization"] = `Bearer ${token}`;
+
+      if (existingZones) {
+        for (const existing of existingZones) {
+          if (!zones.some(z => z.id === existing.id)) {
+            await fetch(`/api/service-zones/${existing.id}`, {
+              method: "DELETE",
+              credentials: "include",
+              headers: authHeaders,
+            });
+          }
+        }
+        for (const zone of zones) {
+          if (zone.id) {
+            const existing = existingZones.find((e: any) => e.id === zone.id);
+            if (existing && existing.dayOfWeek !== zone.dayOfWeek) {
+              await fetch(`/api/service-zones/${zone.id}`, {
+                method: "PATCH",
+                credentials: "include",
+                headers: authHeaders,
+                body: JSON.stringify({ dayOfWeek: zone.dayOfWeek }),
+              });
+            }
+          } else {
+            await fetch("/api/service-zones", {
+              method: "POST",
+              credentials: "include",
+              headers: authHeaders,
+              body: JSON.stringify(zone),
+            });
+          }
+        }
+      } else {
+        await fetch("/api/service-zones/bulk", {
+          method: "POST",
+          credentials: "include",
+          headers: authHeaders,
+          body: JSON.stringify({ zones }),
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/service-zones"] });
+      setHasChanges(false);
+      toast({ title: "Service zones saved" });
+    } catch (err: any) {
+      toast({ title: "Error saving zones", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card data-testid="panel-service-zones">
+      <CardHeader className="p-3 pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <MapPin className="h-4 w-4" />
+          Service Zones
+        </CardTitle>
+        <CardDescription className="text-xs">Define which zip codes you service and what day you work each area</CardDescription>
+      </CardHeader>
+      <CardContent className="p-3 pt-0">
+        {isLoading ? (
+          <Skeleton className="h-[200px] w-full" />
+        ) : (
+          <>
+            <ServiceZoneMap
+              zones={zones}
+              onZonesChange={handleZonesChange}
+              compact
+            />
+            {hasChanges && (
+              <Button
+                className="w-full mt-3"
+                size="sm"
+                onClick={handleSave}
+                disabled={saving}
+                data-testid="button-save-service-zones"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {saving ? "Saving..." : "Save Service Zones"}
+              </Button>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
