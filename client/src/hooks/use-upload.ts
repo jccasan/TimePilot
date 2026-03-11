@@ -106,8 +106,34 @@ export function useUpload(options: UseUploadOptions = {}) {
     []
   );
 
+  const uploadFileDirect = useCallback(
+    async (file: File): Promise<UploadResponse | null> => {
+      const token = localStorage.getItem("sessionToken");
+      const hdrs: Record<string, string> = {};
+      if (token) hdrs["Authorization"] = `Bearer ${token}`;
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/uploads/direct", {
+        method: "POST",
+        credentials: "include",
+        headers: hdrs,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Upload failed");
+      }
+
+      return response.json();
+    },
+    []
+  );
+
   /**
-   * Upload a file using the presigned URL flow.
+   * Upload a file. Uses server-side proxy to avoid CORS issues with presigned URLs.
    *
    * @param file - The file to upload
    * @returns The upload response containing the object path
@@ -119,13 +145,9 @@ export function useUpload(options: UseUploadOptions = {}) {
       setProgress(0);
 
       try {
-        // Step 1: Request presigned URL (send metadata as JSON)
-        setProgress(10);
-        const uploadResponse = await requestUploadUrl(file);
-
-        // Step 2: Upload file directly to presigned URL
         setProgress(30);
-        await uploadToPresignedUrl(file, uploadResponse.uploadURL);
+        const uploadResponse = await uploadFileDirect(file);
+        if (!uploadResponse) throw new Error("Upload failed");
 
         setProgress(100);
         options.onSuccess?.(uploadResponse);
@@ -139,7 +161,7 @@ export function useUpload(options: UseUploadOptions = {}) {
         setIsUploading(false);
       }
     },
-    [requestUploadUrl, uploadToPresignedUrl, options]
+    [uploadFileDirect, options]
   );
 
   /**

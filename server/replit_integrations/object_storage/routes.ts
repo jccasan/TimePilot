@@ -1,5 +1,8 @@
 import type { Express, RequestHandler } from "express";
+import multer from "multer";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 export function registerObjectStorageRoutes(app: Express, authMiddleware?: RequestHandler): void {
   const objectStorageService = new ObjectStorageService();
@@ -31,6 +34,41 @@ export function registerObjectStorageRoutes(app: Express, authMiddleware?: Reque
     } catch (error) {
       console.error("Error generating upload URL:", error);
       res.status(500).json({ error: "Failed to generate upload URL" });
+    }
+  });
+
+  app.post("/api/uploads/direct", ...middlewares, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+      const putResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: req.file.buffer,
+        headers: {
+          "Content-Type": req.file.mimetype || "application/octet-stream",
+        },
+      });
+
+      if (!putResponse.ok) {
+        throw new Error(`Storage upload failed: ${putResponse.status}`);
+      }
+
+      res.json({
+        objectPath,
+        metadata: {
+          name: req.file.originalname,
+          size: req.file.size,
+          contentType: req.file.mimetype,
+        },
+      });
+    } catch (error) {
+      console.error("Error in direct upload:", error);
+      res.status(500).json({ error: "Failed to upload file" });
     }
   });
 
