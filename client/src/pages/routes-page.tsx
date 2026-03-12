@@ -577,8 +577,13 @@ export default function RoutesPage() {
   const visitStatusMutation = useMutation({
     mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
       setUpdatingVisitId(visitId);
-      const body: { status: string; completedAt?: string } = { status };
-      if (status === "completed") body.completedAt = new Date().toISOString();
+      const body: { status: string; completedAt?: string | null; startedAt?: string | null } = { status };
+      if (status === "completed") {
+        body.completedAt = new Date().toISOString();
+      } else if (status === "scheduled") {
+        body.completedAt = null;
+        body.startedAt = null;
+      }
       const res = await apiRequest("PATCH", `/api/visits/${visitId}`, body);
       return res.json();
     },
