@@ -1500,7 +1500,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<ServicePlan | null>(null);
 
-  const { data: servicePlans } = useQuery<ServicePlan[]>({
+  const { data: servicePlans } = useQuery<(ServicePlan & { addOns?: { id: string; servicePricingId: string; name: string; price: string }[] })[]>({
     queryKey: ["/api/service-plans" + `?contactId=${contactId}`],
     enabled: !!contactId,
   });
@@ -1513,10 +1513,27 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     queryKey: ["/api/routes"],
   });
 
-  const recurringPricing = useMemo(() => {
+  const [createSelectedAddOns, setCreateSelectedAddOns] = useState<string[]>([]);
+  const [editSelectedAddOns, setEditSelectedAddOns] = useState<string[]>([]);
+
+  const basePricingForFreq = useCallback((freq: string) => {
     if (!pricingItems) return [];
-    return pricingItems.filter((p) => p.category === "recurring_service" && p.isActive);
+    const categoryMap: Record<string, string> = {
+      weekly: "recurring_service",
+      biweekly: "recurring_service",
+      monthly: "recurring_service",
+      onetime: "one_time_service",
+    };
+    const cat = categoryMap[freq] || "recurring_service";
+    return pricingItems.filter((p) => p.category === cat && p.isActive);
   }, [pricingItems]);
+
+  const addOnPricing = useMemo(() => {
+    if (!pricingItems) return [];
+    return pricingItems.filter((p) => p.category === "add_on" && p.isActive);
+  }, [pricingItems]);
+
+  const recurringPricing = useMemo(() => basePricingForFreq("weekly"), [basePricingForFreq]);
 
   const defaultPrice = useMemo(() => {
     if (recurringPricing.length > 0) return recurringPricing[0].basePrice;
@@ -1571,18 +1588,32 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
         routeId: editingPlan.routeId || "",
         isActive: editingPlan.isActive,
       });
+      const planWithAddOns = servicePlans?.find(sp => sp.id === editingPlan.id);
+      setEditSelectedAddOns(planWithAddOns?.addOns?.map(a => a.servicePricingId) || []);
     }
-  }, [editingPlan, editForm]);
+  }, [editingPlan, editForm, servicePlans]);
+
+  const buildAddOnsPayload = (selectedIds: string[]) => {
+    return selectedIds.map(id => {
+      const item = addOnPricing.find(p => p.id === id);
+      return { servicePricingId: id, name: item?.name || "", price: item?.basePrice || "0" };
+    });
+  };
 
   const createMutation = useMutation({
     mutationFn: async (data: ServicePlanFormValues) => {
-      await apiRequest("POST", "/api/service-plans", { ...data, contactId });
+      await apiRequest("POST", "/api/service-plans", {
+        ...data,
+        contactId,
+        addOns: buildAddOnsPayload(createSelectedAddOns),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
       toast({ title: "Service plan created" });
       setCreateDialogOpen(false);
       createForm.reset();
+      setCreateSelectedAddOns([]);
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1591,12 +1622,16 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<ServicePlanFormValues> }) => {
-      await apiRequest("PATCH", `/api/service-plans/${id}`, data);
+      await apiRequest("PATCH", `/api/service-plans/${id}`, {
+        ...data,
+        addOns: buildAddOnsPayload(editSelectedAddOns),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
       toast({ title: "Service plan updated" });
       setEditingPlan(null);
+      setEditSelectedAddOns([]);
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1645,124 +1680,191 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     submitLabel: string,
     isEdit?: boolean,
     calcResult?: PriceCalcResult | null,
-    calcLoading?: boolean
-  ) => (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField control={form.control} name="propertyId" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Property</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl><SelectTrigger data-testid="select-plan-property"><SelectValue placeholder={properties.length === 0 ? "No properties" : "Select property"} /></SelectTrigger></FormControl>
-              <SelectContent>
-                {properties.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.streetAddress}, {p.city}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )} />
-        <FormField control={form.control} name="frequency" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Frequency</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl><SelectTrigger data-testid="select-plan-frequency"><SelectValue /></SelectTrigger></FormControl>
-              <SelectContent>
-                <SelectItem value="weekly">Weekly</SelectItem>
-                <SelectItem value="biweekly">Biweekly</SelectItem>
-                <SelectItem value="monthly">Monthly</SelectItem>
-                <SelectItem value="onetime">One-time</SelectItem>
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )} />
-        <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Day of Week</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl><SelectTrigger data-testid="select-plan-day"><SelectValue /></SelectTrigger></FormControl>
-              <SelectContent>
-                {daysOfWeek.map((d) => (
-                  <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )} />
-        {recurringPricing.length > 0 && (
-          <div>
-            <Label className="text-sm">Use Pricing Template</Label>
-            <Select onValueChange={(v) => handlePricingSelect(v, form)}>
-              <SelectTrigger data-testid="select-pricing-template">
-                <SelectValue placeholder="Select pricing template" />
-              </SelectTrigger>
-              <SelectContent>
-                {recurringPricing.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name} - ${p.basePrice}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        <FormField control={form.control} name="pricePerVisit" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Price Per Visit ($)</FormLabel>
-            <FormControl><Input type="number" step="0.01" {...field} data-testid="input-plan-price" /></FormControl>
-            <InlinePriceSuggestion
-              calcResult={calcResult || null}
-              calcLoading={calcLoading || false}
-              pricePerVisit={field.value || ""}
-              onUsePrice={(price) => form.setValue("pricePerVisit", price)}
-            />
-            <FormMessage />
-          </FormItem>
-        )} />
-        <FormField control={form.control} name="startDate" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Start Date</FormLabel>
-            <FormControl><Input type="date" {...field} data-testid="input-plan-start-date" /></FormControl>
-            <FormMessage />
-          </FormItem>
-        )} />
-        <FormField control={form.control} name="routeId" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Route (optional)</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl><SelectTrigger data-testid="select-plan-route"><SelectValue placeholder="No route" /></SelectTrigger></FormControl>
-              <SelectContent>
-                {routes?.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )} />
-        {isEdit && (
-          <FormField control={form.control} name="isActive" render={({ field }) => (
-            <FormItem className="flex items-center gap-2">
-              <FormControl>
-                <input
-                  type="checkbox"
-                  checked={!!field.value}
-                  onChange={(e) => field.onChange(e.target.checked)}
-                  className="accent-primary"
-                  data-testid="checkbox-plan-active"
-                />
-              </FormControl>
-              <FormLabel className="!mt-0">Active</FormLabel>
+    calcLoading?: boolean,
+    selectedAddOns?: string[],
+    setSelectedAddOns?: (ids: string[]) => void
+  ) => {
+    const freq = form.watch("frequency");
+    const basePrice = form.watch("pricePerVisit");
+    const templates = basePricingForFreq(freq);
+    const addOnsTotal = (selectedAddOns || []).reduce((sum, id) => {
+      const item = addOnPricing.find(p => p.id === id);
+      return sum + parseFloat(item?.basePrice || "0");
+    }, 0);
+    const totalPerVisit = parseFloat(basePrice || "0") + addOnsTotal;
+
+    return (
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <FormField control={form.control} name="propertyId" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Property</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl><SelectTrigger data-testid="select-plan-property"><SelectValue placeholder={properties.length === 0 ? "No properties" : "Select property"} /></SelectTrigger></FormControl>
+                <SelectContent>
+                  {properties.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.streetAddress}, {p.city}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
             </FormItem>
           )} />
-        )}
-        <Button type="submit" disabled={isPending} data-testid="button-submit-plan">
-          {isPending ? "Saving..." : submitLabel}
-        </Button>
-      </form>
-    </Form>
-  );
+          <FormField control={form.control} name="frequency" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Frequency</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl><SelectTrigger data-testid="select-plan-frequency"><SelectValue /></SelectTrigger></FormControl>
+                <SelectContent>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Biweekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="onetime">One-time</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )} />
+          {freq !== "onetime" && (
+            <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Day of Week</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger data-testid="select-plan-day"><SelectValue /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {daysOfWeek.map((d) => (
+                      <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+          )}
+          {templates.length > 0 && (
+            <div>
+              <Label className="text-sm">Use Pricing Template</Label>
+              <Select onValueChange={(v) => handlePricingSelect(v, form)}>
+                <SelectTrigger data-testid="select-pricing-template">
+                  <SelectValue placeholder="Select pricing template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name} - ${p.basePrice}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <FormField control={form.control} name="pricePerVisit" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Base Price Per Visit ($)</FormLabel>
+              <FormControl><Input type="number" step="0.01" {...field} data-testid="input-plan-price" /></FormControl>
+              <InlinePriceSuggestion
+                calcResult={calcResult || null}
+                calcLoading={calcLoading || false}
+                pricePerVisit={field.value || ""}
+                onUsePrice={(price) => form.setValue("pricePerVisit", price)}
+              />
+              <FormMessage />
+            </FormItem>
+          )} />
+          {addOnPricing.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-sm">Add-Ons (per visit)</Label>
+              <div className="border rounded-md p-3 space-y-2">
+                {addOnPricing.map((addon) => {
+                  const checked = (selectedAddOns || []).includes(addon.id);
+                  return (
+                    <label key={addon.id} className="flex items-center gap-2 cursor-pointer" data-testid={`addon-${addon.id}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          if (!setSelectedAddOns) return;
+                          setSelectedAddOns(
+                            checked
+                              ? (selectedAddOns || []).filter(id => id !== addon.id)
+                              : [...(selectedAddOns || []), addon.id]
+                          );
+                        }}
+                        className="accent-primary"
+                      />
+                      <span className="text-sm flex-1">{addon.name}</span>
+                      <span className="text-sm text-muted-foreground">+${addon.basePrice}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {addOnsTotal > 0 && (
+            <div className="bg-muted/50 rounded-md p-3 text-sm space-y-1" data-testid="price-breakdown">
+              <div className="flex justify-between">
+                <span>Base price</span>
+                <span>${parseFloat(basePrice || "0").toFixed(2)}</span>
+              </div>
+              {(selectedAddOns || []).map(id => {
+                const item = addOnPricing.find(p => p.id === id);
+                return item ? (
+                  <div key={id} className="flex justify-between text-muted-foreground">
+                    <span>+ {item.name}</span>
+                    <span>${parseFloat(item.basePrice).toFixed(2)}</span>
+                  </div>
+                ) : null;
+              })}
+              <div className="flex justify-between font-medium border-t pt-1">
+                <span>Total per visit</span>
+                <span>${totalPerVisit.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+          <FormField control={form.control} name="startDate" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Start Date</FormLabel>
+              <FormControl><Input type="date" {...field} data-testid="input-plan-start-date" /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          {freq !== "onetime" && (
+            <FormField control={form.control} name="routeId" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Route (optional)</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger data-testid="select-plan-route"><SelectValue placeholder="No route" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {routes?.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+          )}
+          {isEdit && (
+            <FormField control={form.control} name="isActive" render={({ field }) => (
+              <FormItem className="flex items-center gap-2">
+                <FormControl>
+                  <input
+                    type="checkbox"
+                    checked={!!field.value}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                    className="accent-primary"
+                    data-testid="checkbox-plan-active"
+                  />
+                </FormControl>
+                <FormLabel className="!mt-0">Active</FormLabel>
+              </FormItem>
+            )} />
+          )}
+          <Button type="submit" disabled={isPending} data-testid="button-submit-plan">
+            {isPending ? "Saving..." : submitLabel}
+          </Button>
+        </form>
+      </Form>
+    );
+  };
 
   return (
     <Card>
@@ -1781,7 +1883,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
             <DialogHeader>
               <DialogTitle>Create Service Plan</DialogTitle>
             </DialogHeader>
-            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Service Plan", false, createCalcResult, createCalcLoading)}
+            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Service Plan", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns)}
           </DialogContent>
         </Dialog>
       </CardHeader>
@@ -1794,7 +1896,17 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                   <div>
                     <p className="font-medium capitalize">{frequencyLabelsMap[plan.frequency] || plan.frequency} service</p>
                     <p className="text-sm text-muted-foreground">${plan.pricePerVisit}/visit</p>
-                    {plan.dayOfWeek && (
+                    {plan.addOns && plan.addOns.length > 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        {plan.addOns.map(a => (
+                          <span key={a.id} className="inline-block mr-2">+ {a.name} (${a.price})</span>
+                        ))}
+                        <p className="font-medium text-foreground text-sm mt-0.5">
+                          Total: ${(parseFloat(plan.pricePerVisit) + plan.addOns.reduce((s, a) => s + parseFloat(a.price), 0)).toFixed(2)}/visit
+                        </p>
+                      </div>
+                    )}
+                    {plan.dayOfWeek && plan.frequency !== "onetime" && (
                       <p className="text-xs text-muted-foreground capitalize">Day: {plan.dayOfWeek}</p>
                     )}
                     <p className="text-xs text-muted-foreground">Started: {plan.startDate}</p>
@@ -1856,7 +1968,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               "Save Changes",
               true,
               editCalcResult,
-              editCalcLoading
+              editCalcLoading,
+              editSelectedAddOns,
+              setEditSelectedAddOns
             )}
           </DialogContent>
         </Dialog>

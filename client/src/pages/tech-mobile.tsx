@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -25,6 +25,8 @@ type TodayVisit = {
   gateClosedPhoto: string | null;
   servicePlanId: string;
   routeId: string | null;
+  servicePlanName?: string | null;
+  addOns?: { name: string; price: string }[];
   property?: {
     streetAddress: string;
     city: string;
@@ -38,6 +40,14 @@ type TodayVisit = {
     firstName: string;
     lastName: string;
   };
+};
+
+type PropertyGroup = {
+  propertyKey: string;
+  visits: TodayVisit[];
+  address: string;
+  contact: TodayVisit["contact"];
+  property: TodayVisit["property"];
 };
 
 const visitStatusColors: Record<string, string> = {
@@ -128,6 +138,25 @@ export default function TechMobile() {
   const { data: visits, isLoading } = useQuery<TodayVisit[]>({
     queryKey: ["/api/visits/today"],
   });
+
+  const propertyGroups = useMemo<PropertyGroup[]>(() => {
+    if (!visits) return [];
+    const groups = new Map<string, PropertyGroup>();
+    for (const visit of visits) {
+      const key = visit.property?.streetAddress || visit.id;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          propertyKey: key,
+          visits: [],
+          address: visit.property?.streetAddress || "Unknown address",
+          contact: visit.contact,
+          property: visit.property,
+        });
+      }
+      groups.get(key)!.visits.push(visit);
+    }
+    return Array.from(groups.values());
+  }, [visits]);
 
   const startMutation = useMutation({
     mutationFn: async (visitId: string) => {
@@ -277,7 +306,9 @@ export default function TechMobile() {
         </div>
       ) : visits && visits.length > 0 ? (
         <div className="space-y-4">
-          {visits.map((visit) => {
+          {propertyGroups.flatMap((group) => {
+            const isMulti = group.visits.length > 1;
+            return group.visits.map((visit) => {
             const isExpanded = expandedId === visit.id;
             const isUploadingBefore = uploadingVisitId === visit.id && uploadingType === "before";
             const isUploadingAfter = uploadingVisitId === visit.id && uploadingType === "after";
@@ -295,10 +326,25 @@ export default function TechMobile() {
                     <div>
                       <CardTitle className="text-base" data-testid={`text-visit-address-${visit.id}`}>
                         {visit.property?.streetAddress || "Unknown address"}
+                        {isMulti && <span className="text-xs font-normal text-muted-foreground ml-2">({group.visits.length} services)</span>}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground" data-testid={`text-visit-contact-${visit.id}`}>
                         {visit.contact ? `${visit.contact.firstName} ${visit.contact.lastName}` : "Unknown"}
                       </p>
+                      {(visit.servicePlanName || (visit.addOns && visit.addOns.length > 0)) && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {visit.servicePlanName && (
+                            <Badge variant="outline" className="text-xs capitalize" data-testid={`badge-service-type-${visit.id}`}>
+                              {visit.servicePlanName}
+                            </Badge>
+                          )}
+                          {visit.addOns?.map((a, i) => (
+                            <Badge key={i} variant="outline" className="text-xs bg-muted" data-testid={`badge-addon-${visit.id}-${i}`}>
+                              + {a.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {(hasBefore || hasAfter || hasGate) && (
@@ -427,6 +473,7 @@ export default function TechMobile() {
                 )}
               </Card>
             );
+            });
           })}
         </div>
       ) : (

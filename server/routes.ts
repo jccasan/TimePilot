@@ -2294,7 +2294,11 @@ export async function registerRoutes(
       if (req.query.propertyId) filters.propertyId = req.query.propertyId as string;
       if (req.query.isActive !== undefined) filters.isActive = req.query.isActive === "true";
       const plans = await storage.getServicePlans(companyId, filters);
-      res.json(plans);
+      const plansWithAddOns = await Promise.all(plans.map(async (plan) => {
+        const addOns = await storage.getServicePlanAddOns(plan.id);
+        return { ...plan, addOns };
+      }));
+      res.json(plansWithAddOns);
     } catch (err) { handleError(res, err); }
   });
 
@@ -2303,7 +2307,8 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const plan = await storage.getServicePlan(req.params.id, companyId);
       if (!plan) return res.status(404).json({ error: "Service plan not found" });
-      res.json(plan);
+      const addOns = await storage.getServicePlanAddOns(plan.id);
+      res.json({ ...plan, addOns });
     } catch (err) { handleError(res, err); }
   });
 
@@ -2312,6 +2317,10 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const body = { ...req.body, companyId };
       if (!body.routeId || body.routeId === "") body.routeId = null;
+      if (body.frequency === "onetime") {
+        body.dayOfWeek = null;
+        body.routeId = null;
+      }
       const parsed = insertServicePlanSchema.parse(body);
 
       if (!parsed.routeId && parsed.dayOfWeek) {
@@ -2332,9 +2341,35 @@ export async function registerRoutes(
       }
 
       const plan = await storage.createServicePlan(parsed);
-      res.status(201).json(plan);
+
+      if (req.body.addOns && Array.isArray(req.body.addOns)) {
+        const validatedAddOns = await validateAndResolveAddOns(req.body.addOns, companyId);
+        const addOns = await storage.setServicePlanAddOns(plan.id, validatedAddOns);
+        return res.status(201).json({ ...plan, addOns });
+      }
+
+      res.status(201).json({ ...plan, addOns: [] });
     } catch (err) { handleError(res, err); }
   });
+
+  async function validateAndResolveAddOns(addOns: any[], companyId: string) {
+    if (!Array.isArray(addOns)) return [];
+    const pricingItems = await storage.getServicePricing(companyId);
+    const validAddOns: { servicePricingId: string; name: string; price: string }[] = [];
+    const seen = new Set<string>();
+    for (const addon of addOns) {
+      if (!addon.servicePricingId || seen.has(addon.servicePricingId)) continue;
+      const item = pricingItems.find(p => p.id === addon.servicePricingId && p.category === "add_on" && p.isActive);
+      if (!item) continue;
+      seen.add(addon.servicePricingId);
+      validAddOns.push({
+        servicePricingId: item.id,
+        name: item.name,
+        price: item.basePrice,
+      });
+    }
+    return validAddOns;
+  }
 
   app.patch("/api/service-plans/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -2351,6 +2386,11 @@ export async function registerRoutes(
       }
       const body = { ...req.body };
       if (body.routeId === "" || body.routeId === undefined) body.routeId = null;
+      const effectiveFreq = body.frequency || existing.frequency;
+      if (effectiveFreq === "onetime") {
+        body.dayOfWeek = null;
+        body.routeId = null;
+      }
 
       const dayChanged = body.dayOfWeek && body.dayOfWeek !== existing.dayOfWeek;
       if (dayChanged && !body.routeId) {
@@ -2370,8 +2410,17 @@ export async function registerRoutes(
         }
       }
 
-      const plan = await storage.updateServicePlan(req.params.id, body);
-      res.json(plan);
+      const { addOns: addOnsData, ...updateBody } = body;
+      const plan = await storage.updateServicePlan(req.params.id, updateBody);
+
+      if (addOnsData && Array.isArray(addOnsData)) {
+        const validatedAddOns = await validateAndResolveAddOns(addOnsData, companyId);
+        const addOns = await storage.setServicePlanAddOns(req.params.id, validatedAddOns);
+        return res.json({ ...plan, addOns });
+      }
+
+      const addOns = await storage.getServicePlanAddOns(req.params.id);
+      res.json({ ...plan, addOns });
     } catch (err) { handleError(res, err); }
   });
 
@@ -2495,7 +2544,17 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const today = new Date().toISOString().split("T")[0];
       const visitsList = await storage.getVisits(companyId, { date: today });
-      res.json(visitsList);
+      const enriched = await Promise.all(visitsList.map(async (v) => {
+        if (!v.servicePlanId) return { ...v, servicePlanName: null, addOns: [] };
+        const plan = await storage.getServicePlan(v.servicePlanId, companyId);
+        const addOns = plan ? await storage.getServicePlanAddOns(plan.id) : [];
+        return {
+          ...v,
+          servicePlanName: plan?.frequency ? `${plan.frequency} service` : null,
+          addOns: addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })),
+        };
+      }));
+      res.json(enriched);
     } catch (err) { handleError(res, err); }
   });
 

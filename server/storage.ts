@@ -18,6 +18,8 @@ import {
   type Property, type InsertProperty,
   type Route, type InsertRoute,
   type ServicePlan, type InsertServicePlan,
+  type ServicePlanAddOn, type InsertServicePlanAddOn,
+  servicePlanAddOns,
   type VacationHold, type InsertVacationHold,
   type Visit, type InsertVisit,
   type Invoice, type InsertInvoice,
@@ -115,6 +117,8 @@ export interface IStorage {
   createServicePlan(data: InsertServicePlan): Promise<ServicePlan>;
   updateServicePlan(id: string, data: Partial<InsertServicePlan>): Promise<ServicePlan>;
   deleteServicePlan(id: string): Promise<void>;
+  getServicePlanAddOns(servicePlanId: string): Promise<ServicePlanAddOn[]>;
+  setServicePlanAddOns(servicePlanId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<ServicePlanAddOn[]>;
 
   // Unassign all stops from a route
   unassignAllStops(routeId: string): Promise<number>;
@@ -566,6 +570,22 @@ export class DatabaseStorage implements IStorage {
 
   async deleteServicePlan(id: string): Promise<void> {
     await db.delete(servicePlans).where(eq(servicePlans.id, id));
+  }
+
+  async getServicePlanAddOns(servicePlanId: string): Promise<ServicePlanAddOn[]> {
+    return db.select().from(servicePlanAddOns).where(eq(servicePlanAddOns.servicePlanId, servicePlanId));
+  }
+
+  async setServicePlanAddOns(servicePlanId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<ServicePlanAddOn[]> {
+    await db.delete(servicePlanAddOns).where(eq(servicePlanAddOns.servicePlanId, servicePlanId));
+    if (addOns.length === 0) return [];
+    const rows = addOns.map(a => ({
+      servicePlanId,
+      servicePricingId: a.servicePricingId,
+      name: a.name,
+      price: a.price,
+    }));
+    return db.insert(servicePlanAddOns).values(rows).returning();
   }
 
   async unassignAllStops(routeId: string): Promise<number> {

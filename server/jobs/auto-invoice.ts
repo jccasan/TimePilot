@@ -80,18 +80,34 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string) {
 
       const planMap = new Map(contactPlans.map(p => [p.id, p]));
 
-      const lineItems = uninvoicedVisits.map(visit => {
+      const planAddOnsMap = new Map<string, { name: string; price: string }[]>();
+      for (const plan of contactPlans) {
+        const addOns = await storage.getServicePlanAddOns(plan.id);
+        planAddOnsMap.set(plan.id, addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })));
+      }
+
+      const lineItems: { visitId: string; description: string; quantity: number; unitPrice: string; total: string }[] = [];
+      for (const visit of uninvoicedVisits) {
         const plan = planMap.get(visit.servicePlanId);
         const unitPrice = plan ? plan.pricePerVisit : "0";
-        const total = unitPrice;
-        return {
+        lineItems.push({
           visitId: visit.id,
           description: `Service on ${visit.scheduledDate}`,
           quantity: 1,
           unitPrice: unitPrice.toString(),
-          total: total.toString(),
-        };
-      });
+          total: unitPrice.toString(),
+        });
+        const addOns = planAddOnsMap.get(visit.servicePlanId) || [];
+        for (const addon of addOns) {
+          lineItems.push({
+            visitId: visit.id,
+            description: `${addon.name} on ${visit.scheduledDate}`,
+            quantity: 1,
+            unitPrice: addon.price,
+            total: addon.price,
+          });
+        }
+      }
 
       const subtotal = lineItems.reduce((sum, item) => sum + parseFloat(item.total), 0);
       if (subtotal <= 0) continue;

@@ -285,6 +285,18 @@ export const servicePlans = pgTable("service_plans", {
   index("idx_sp_property").on(table.propertyId),
 ]);
 
+export const servicePlanAddOns = pgTable("service_plan_add_ons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  servicePlanId: varchar("service_plan_id").notNull().references(() => servicePlans.id, { onDelete: "cascade" }),
+  servicePricingId: varchar("service_pricing_id").notNull().references(() => servicePricing.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_spa_plan").on(table.servicePlanId),
+]);
+
 export const vacationHolds = pgTable("vacation_holds", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   servicePlanId: varchar("service_plan_id").notNull().references(() => servicePlans.id, { onDelete: "cascade" }),
@@ -578,6 +590,12 @@ export const servicePlanRelations = relations(servicePlans, ({ one, many }) => (
   route: one(routes, { fields: [servicePlans.routeId], references: [routes.id] }),
   visits: many(visits),
   vacationHolds: many(vacationHolds),
+  addOns: many(servicePlanAddOns),
+}));
+
+export const servicePlanAddOnRelations = relations(servicePlanAddOns, ({ one }) => ({
+  servicePlan: one(servicePlans, { fields: [servicePlanAddOns.servicePlanId], references: [servicePlans.id] }),
+  servicePricing: one(servicePricing, { fields: [servicePlanAddOns.servicePricingId], references: [servicePricing.id] }),
 }));
 
 export const vacationHoldRelations = relations(vacationHolds, ({ one }) => ({
@@ -610,6 +628,7 @@ export const insertLeadSourceSchema = createInsertSchema(leadSources).omit({ id:
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertRouteSchema = createInsertSchema(routes).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServicePlanSchema = createInsertSchema(servicePlans).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertServicePlanAddOnSchema = createInsertSchema(servicePlanAddOns).omit({ id: true, createdAt: true });
 export const insertVacationHoldSchema = createInsertSchema(vacationHolds).omit({ id: true, createdAt: true });
 export const insertVisitSchema = createInsertSchema(visits).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true });
@@ -635,6 +654,8 @@ export type Route = typeof routes.$inferSelect;
 export type InsertRoute = z.infer<typeof insertRouteSchema>;
 export type ServicePlan = typeof servicePlans.$inferSelect;
 export type InsertServicePlan = z.infer<typeof insertServicePlanSchema>;
+export type ServicePlanAddOn = typeof servicePlanAddOns.$inferSelect;
+export type InsertServicePlanAddOn = z.infer<typeof insertServicePlanAddOnSchema>;
 export type VacationHold = typeof vacationHolds.$inferSelect;
 export type InsertVacationHold = z.infer<typeof insertVacationHoldSchema>;
 export type Visit = typeof visits.$inferSelect;
