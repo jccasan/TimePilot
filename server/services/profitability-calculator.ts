@@ -117,6 +117,10 @@ export async function calculateCustomerProfitability(
 
     const dogCount = property.numberOfDogs ?? 1;
 
+    const planAddOns = await storage.getServicePlanAddOns(plan.id);
+    const addOnsCents = planAddOns.filter(a => a.isActive).reduce((s, a) => s + Math.round((parseFloat(a.price) || 0) * 100), 0);
+    const totalPerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100) + addOnsCents;
+
     const inputs: PriceCalculatorInputs = {
       yardSizeAcres,
       dogCount,
@@ -124,12 +128,12 @@ export async function calculateCustomerProfitability(
       yardDifficulty: (property.yardDifficulty ?? "flat") as "flat" | "moderate" | "difficult",
       distanceFromNearestStopMiles: effectiveConfig.distanceFromNearestStopMiles ?? 1.0,
       routeStopsPerMile: effectiveConfig.routeStopsPerMile,
-      currentPriceCents: Math.round(parseFloat(plan.pricePerVisit) * 100),
+      currentPriceCents: totalPerVisitCents,
     };
 
     const result = calculatePrice(inputs, pricingConfig, overrideOverhead);
 
-    const revenuePerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100);
+    const revenuePerVisitCents = totalPerVisitCents;
     const costPerVisitCents = result.minimumPriceCents;
     const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;
     const profitMarginPct = revenuePerVisitCents > 0

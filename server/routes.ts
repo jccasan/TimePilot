@@ -931,7 +931,6 @@ export async function registerRoutes(
 
       const tier = company.subscriptionTier as keyof typeof TIER_CONFIG;
       const tierInfo = TIER_CONFIG[tier];
-      const mrr = tierInfo?.price ?? 0;
 
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
@@ -953,6 +952,26 @@ export async function registerRoutes(
       const completedToday = todaysVisitsList.filter(v => v.status === "completed").length;
       const scheduledToday = todaysVisitsList.filter(v => v.status === "scheduled").length;
       const inProgressToday = todaysVisitsList.filter(v => v.status === "in_progress").length;
+
+      const activePlans = await storage.getServicePlans(companyId, { isActive: true });
+      let mrr = 0;
+      for (const plan of activePlans) {
+        const basePrice = parseFloat(plan.pricePerVisit) || 0;
+        const addOns = await storage.getServicePlanAddOns(plan.id);
+        const addOnsTotal = addOns.filter(a => a.isActive).reduce((sum, a) => sum + (parseFloat(a.price) || 0), 0);
+        const perVisit = basePrice + addOnsTotal;
+
+        let visitsPerMonth = 0;
+        switch (plan.frequency) {
+          case "weekly": visitsPerMonth = 4.33; break;
+          case "biweekly": visitsPerMonth = 2.17; break;
+          case "monthly": visitsPerMonth = 1; break;
+          case "onetime": visitsPerMonth = 0; break;
+          default: visitsPerMonth = 4.33;
+        }
+        mrr += perVisit * visitsPerMonth;
+      }
+      mrr = Math.round(mrr * 100) / 100;
 
       res.json({
         mrr,
@@ -1060,9 +1079,12 @@ export async function registerRoutes(
         let monthlyBookedEstimate = 0;
         for (const plan of activePlans) {
           const price = parseFloat(plan.pricePerVisit || "0");
-          if (plan.frequency === "weekly") monthlyBookedEstimate += price * 4.33;
-          else if (plan.frequency === "biweekly") monthlyBookedEstimate += price * 2.17;
-          else if (plan.frequency === "monthly") monthlyBookedEstimate += price;
+          const planAddOns = await storage.getServicePlanAddOns(plan.id);
+          const addOnsPrice = planAddOns.filter(a => a.isActive).reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+          const perVisit = price + addOnsPrice;
+          if (plan.frequency === "weekly") monthlyBookedEstimate += perVisit * 4.33;
+          else if (plan.frequency === "biweekly") monthlyBookedEstimate += perVisit * 2.17;
+          else if (plan.frequency === "monthly") monthlyBookedEstimate += perVisit;
         }
 
         const recentAvg = revenueValues.length > 0
@@ -1097,9 +1119,12 @@ export async function registerRoutes(
         const activePlans = await storage.getServicePlans(companyId, { isActive: true });
         for (const plan of activePlans) {
           const price = parseFloat(plan.pricePerVisit || "0");
-          if (plan.frequency === "weekly") booked += price * 4.33;
-          else if (plan.frequency === "biweekly") booked += price * 2.17;
-          else if (plan.frequency === "monthly") booked += price;
+          const planAddOns = await storage.getServicePlanAddOns(plan.id);
+          const addOnsPrice = planAddOns.filter(a => a.isActive).reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+          const perVisit = price + addOnsPrice;
+          if (plan.frequency === "weekly") booked += perVisit * 4.33;
+          else if (plan.frequency === "biweekly") booked += perVisit * 2.17;
+          else if (plan.frequency === "monthly") booked += perVisit;
         }
         return Math.round(booked * 100) / 100;
       })();
