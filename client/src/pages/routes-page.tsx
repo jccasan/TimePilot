@@ -77,10 +77,10 @@ type OptimizeResult = {
   creditsUsed: number; creditsRemaining: number; message?: string;
 };
 
-function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, isUpdatingVisit }: {
+function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId }: {
   stop: ServicePlan; contacts: Contact[]; properties: Property[];
   visit?: Visit | null; onVisitStatusChange?: (visitId: string, status: string) => void;
-  isUpdatingVisit?: boolean;
+  updatingVisitId?: string | null;
 }) {
   const contact = contacts.find(c => c.id === stop.contactId);
   const property = properties.find(p => p.id === stop.propertyId);
@@ -127,7 +127,7 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
               {visit && onVisitStatusChange && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isUpdatingVisit} data-testid={`button-visit-menu-${stop.id}`}>
+                    <Button variant="ghost" size="icon" className="h-5 w-5" disabled={updatingVisitId === visit?.id} data-testid={`button-visit-menu-${stop.id}`}>
                       <MoreVertical className="h-3 w-3" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -207,7 +207,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
   onEdit, onDelete, onOptimize, onDispatch, onUnassignAll, isOptimizing, isDispatching, isUnassigning,
-  visitsByPlan, onVisitStatusChange, isUpdatingVisit }: {
+  visitsByPlan, onVisitStatusChange, updatingVisitId }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
@@ -217,7 +217,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   isOptimizing: boolean; isDispatching: boolean; isUnassigning: boolean;
   visitsByPlan?: Record<string, Visit>;
   onVisitStatusChange?: (visitId: string, status: string) => void;
-  isUpdatingVisit?: boolean;
+  updatingVisitId?: string | null;
 }) {
   const tech = team.find(t => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
@@ -321,7 +321,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
               <DraggableStop key={stop.id} stop={stop} contacts={contacts} properties={properties}
                 visit={visitsByPlan?.[stop.id] || null}
                 onVisitStatusChange={onVisitStatusChange}
-                isUpdatingVisit={isUpdatingVisit}
+                updatingVisitId={updatingVisitId}
               />
             ))
           ) : (
@@ -956,7 +956,7 @@ export default function RoutesPage() {
                         isDispatching={dispatchingRouteId === route.id}
                         visitsByPlan={visitsByPlan}
                         onVisitStatusChange={handleVisitStatusChange}
-                        isUpdatingVisit={visitStatusMutation.isPending}
+                        updatingVisitId={updatingVisitId}
                         isUnassigning={unassigningRouteId === route.id}
                       />
                     ))}
