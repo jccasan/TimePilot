@@ -81,11 +81,18 @@ function DraggableStop({ stop, contacts, properties }: {
             <span className="font-medium text-sm truncate" data-testid={`text-stop-name-${stop.id}`}>
               {contact ? `${contact.firstName} ${contact.lastName}` : "Unknown"}
             </span>
-            {stop.stopOrder > 0 && (
-              <Badge variant="outline" className="text-[10px] shrink-0" data-testid={`badge-stop-order-${stop.id}`}>
-                #{stop.stopOrder}
-              </Badge>
-            )}
+            <div className="flex items-center gap-1 shrink-0">
+              {stop.frequency === "onetime" && (
+                <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid={`badge-onetime-${stop.id}`}>
+                  One-Time
+                </Badge>
+              )}
+              {stop.stopOrder > 0 && (
+                <Badge variant="outline" className="text-[10px]" data-testid={`badge-stop-order-${stop.id}`}>
+                  #{stop.stopOrder}
+                </Badge>
+              )}
+            </div>
           </div>
           {property && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -112,7 +119,12 @@ function StopOverlay({ stop, contacts, properties }: {
   const property = properties.find(p => p.id === stop.propertyId);
   return (
     <div className="border rounded-md p-2.5 bg-background shadow-lg opacity-90 max-w-xs space-y-1">
-      <p className="font-medium text-sm">{contact ? `${contact.firstName} ${contact.lastName}` : "Unknown"}</p>
+      <div className="flex items-center gap-2">
+        <p className="font-medium text-sm">{contact ? `${contact.firstName} ${contact.lastName}` : "Unknown"}</p>
+        {stop.frequency === "onetime" && (
+          <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">One-Time</Badge>
+        )}
+      </div>
       {property?.streetAddress && <p className="text-xs text-muted-foreground truncate">{property.streetAddress}</p>}
     </div>
   );
@@ -465,17 +477,38 @@ export default function RoutesPage() {
     return counts;
   }, [allRoutes]);
 
+  const currentWeekRange = useMemo(() => {
+    const now = new Date();
+    const dayIdx = (now.getDay() + 6) % 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - dayIdx);
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+    return { start: monday, end: sunday };
+  }, []);
+
+  const isOnetimeInCurrentWeek = useCallback((sp: ServicePlan) => {
+    if (sp.frequency !== "onetime") return true;
+    if (!sp.startDate) return false;
+    const d = new Date(sp.startDate + "T12:00:00");
+    return d >= currentWeekRange.start && d <= currentWeekRange.end;
+  }, [currentWeekRange]);
+
+  const visiblePlans = useMemo(() => servicePlans.filter(isOnetimeInCurrentWeek), [servicePlans, isOnetimeInCurrentWeek]);
+
   const stopsByRoute = useMemo(() => {
     const map: Record<string, ServicePlan[]> = {};
     for (const r of allRoutes) map[r.id] = [];
-    for (const sp of servicePlans) {
+    for (const sp of visiblePlans) {
       if (sp.routeId && map[sp.routeId]) map[sp.routeId].push(sp);
     }
     return map;
-  }, [allRoutes, servicePlans]);
+  }, [allRoutes, visiblePlans]);
 
   const unassignedPlans = useMemo(() => {
-    return servicePlans.filter(sp => !sp.routeId).filter(sp => {
+    return visiblePlans.filter(sp => !sp.routeId).filter(sp => {
       if (!unassignedSearch) return true;
       const contact = contacts.find(c => c.id === sp.contactId);
       const property = properties.find(p => p.id === sp.propertyId);
@@ -485,7 +518,7 @@ export default function RoutesPage() {
         (property && property.streetAddress?.toLowerCase().includes(search))
       );
     });
-  }, [servicePlans, unassignedSearch, contacts, properties]);
+  }, [visiblePlans, unassignedSearch, contacts, properties]);
 
   const activeDragStop = useMemo(() => {
     if (!activeDragId) return null;
@@ -518,10 +551,10 @@ export default function RoutesPage() {
     const counts: Record<string, number> = {};
     for (const d of DAYS) {
       const dayRouteIds = new Set(allRoutes.filter(r => r.dayOfWeek === d).map(r => r.id));
-      counts[d] = servicePlans.filter(sp => sp.routeId && dayRouteIds.has(sp.routeId)).length;
+      counts[d] = visiblePlans.filter(sp => sp.routeId && dayRouteIds.has(sp.routeId)).length;
     }
     return counts;
-  }, [allRoutes, servicePlans]);
+  }, [allRoutes, visiblePlans]);
 
   const createRouteMutation = useMutation({
     mutationFn: async (data: { name: string; dayOfWeek: string; technicianId: string | null; color: string }) => {

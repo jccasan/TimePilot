@@ -1725,8 +1725,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               <FormMessage />
             </FormItem>
           )} />
-          {freq !== "onetime" && (
-            <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
+          <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
               <FormItem>
                 <FormLabel>Day of Week</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
@@ -1740,7 +1739,6 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                 <FormMessage />
               </FormItem>
             )} />
-          )}
           {templates.length > 0 && (
             <div>
               <Label className="text-sm">Use Pricing Template</Label>
@@ -1826,8 +1824,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               <FormMessage />
             </FormItem>
           )} />
-          {freq !== "onetime" && (
-            <FormField control={form.control} name="routeId" render={({ field }) => (
+          <FormField control={form.control} name="routeId" render={({ field }) => (
               <FormItem>
                 <FormLabel>Route (optional)</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
@@ -1841,7 +1838,6 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                 <FormMessage />
               </FormItem>
             )} />
-          )}
           {isEdit && (
             <FormField control={form.control} name="isActive" render={({ field }) => (
               <FormItem className="flex items-center gap-2">
@@ -1906,7 +1902,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                         </p>
                       </div>
                     )}
-                    {plan.dayOfWeek && plan.frequency !== "onetime" && (
+                    {plan.dayOfWeek && (
                       <p className="text-xs text-muted-foreground capitalize">Day: {plan.dayOfWeek}</p>
                     )}
                     <p className="text-xs text-muted-foreground">Started: {plan.startDate}</p>

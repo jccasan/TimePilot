@@ -2342,10 +2342,6 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const body = { ...req.body, companyId };
       if (!body.routeId || body.routeId === "") body.routeId = null;
-      if (body.frequency === "onetime") {
-        body.dayOfWeek = null;
-        body.routeId = null;
-      }
       const parsed = insertServicePlanSchema.parse(body);
 
       if (!parsed.routeId && parsed.dayOfWeek) {
@@ -2411,11 +2407,6 @@ export async function registerRoutes(
       }
       const body = { ...req.body };
       if (body.routeId === "" || body.routeId === undefined) body.routeId = null;
-      const effectiveFreq = body.frequency || existing.frequency;
-      if (effectiveFreq === "onetime") {
-        body.dayOfWeek = null;
-        body.routeId = null;
-      }
 
       const dayChanged = body.dayOfWeek && body.dayOfWeek !== existing.dayOfWeek;
       if (dayChanged && !body.routeId) {
