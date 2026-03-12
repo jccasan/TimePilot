@@ -285,7 +285,10 @@ export default function TechMobile() {
 
   return (
     <div className="p-4 space-y-4 overflow-auto h-full max-w-lg mx-auto">
-      <h1 className="text-2xl font-bold" data-testid="text-tech-heading">Active Service</h1>
+      <div>
+        <h1 className="text-2xl font-bold" data-testid="text-tech-heading">Active Service</h1>
+        <p className="text-sm text-muted-foreground">Manage your current visits</p>
+      </div>
 
       <input
         type="file"
@@ -464,7 +467,7 @@ export default function TechMobile() {
                           data-testid={`button-photo-before-${visit.id}`}
                         >
                           {isUploadingBefore ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
-                          Before Photo
+                          Before
                         </Button>
                       )}
                       <Button
@@ -474,7 +477,7 @@ export default function TechMobile() {
                         data-testid={`button-photo-after-${visit.id}`}
                       >
                         {isUploadingAfter ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
-                        After Photo
+                        After
                       </Button>
                     </div>
                   </CardContent>
@@ -506,7 +509,8 @@ export default function TechMobile() {
 
           <div className="space-y-4">
             <div>
-              <p className="text-sm font-medium mb-2">Proof Photo (required)</p>
+              <p className="text-sm font-medium mb-1">Proof Photo (required)</p>
+              <p className="text-xs text-muted-foreground mb-2">Snap a photo to confirm service was completed</p>
               <input
                 type="file"
                 accept="image/*"

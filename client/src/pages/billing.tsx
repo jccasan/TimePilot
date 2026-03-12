@@ -3,7 +3,8 @@ import { TIER_CONFIG } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CreditCard, Users, CheckCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CreditCard, Users, CheckCircle, ArrowUpRight } from "lucide-react";
 
 type CompanyStats = {
   mrr: number;
@@ -94,10 +95,13 @@ export default function Billing() {
       </div>
 
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground" data-testid="text-stripe-note">
-            Payment processing is handled through Stripe. Contact support to change your subscription plan.
+            Need to upgrade or change your plan? Reach out and we will get you set up.
           </p>
+          <Button variant="outline" size="sm" onClick={() => window.open("mailto:support@scoopilot.com?subject=Plan Change Request", "_blank")} data-testid="button-change-plan">
+            <ArrowUpRight className="h-4 w-4 mr-1" /> Request Plan Change
+          </Button>
         </CardContent>
       </Card>
     </div>

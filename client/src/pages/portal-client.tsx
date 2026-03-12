@@ -888,7 +888,7 @@ export default function PortalClient() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="header-first-name" className="text-xs text-muted-foreground">First Name</Label>
+                <Label htmlFor="header-first-name" className="text-xs text-muted-foreground">Your First Name</Label>
                 <Input
                   id="header-first-name"
                   value={profileEdits.firstName}
@@ -899,7 +899,7 @@ export default function PortalClient() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="header-last-name" className="text-xs text-muted-foreground">Last Name</Label>
+                <Label htmlFor="header-last-name" className="text-xs text-muted-foreground">Your Last Name</Label>
                 <Input
                   id="header-last-name"
                   value={profileEdits.lastName}
@@ -910,7 +910,7 @@ export default function PortalClient() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="header-email" className="text-xs text-muted-foreground">Email</Label>
+                <Label htmlFor="header-email" className="text-xs text-muted-foreground">Your Email</Label>
                 <Input
                   id="header-email"
                   type="email"
@@ -922,7 +922,7 @@ export default function PortalClient() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="header-phone" className="text-xs text-muted-foreground">Phone</Label>
+                <Label htmlFor="header-phone" className="text-xs text-muted-foreground">Your Phone</Label>
                 <Input
                   id="header-phone"
                   type="tel"
@@ -1672,7 +1672,7 @@ export default function PortalClient() {
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Pay Invoice {tipDialogInvoice?.invoiceNumber}</DialogTitle>
-                  <DialogDescription>Add a tip to show your appreciation for your technician.</DialogDescription>
+                  <DialogDescription>Tips are appreciated but never expected. Add a tip to show your appreciation for your technician.</DialogDescription>
                 </DialogHeader>
                 {tipDialogInvoice && (
                   <div className="space-y-4">

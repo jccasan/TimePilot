@@ -261,7 +261,10 @@ export default function TechRoutes() {
   return (
     <div className="p-4 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-bold" data-testid="text-tech-routes-heading">Route Overview</h1>
+        <div>
+          <h1 className="text-xl font-bold" data-testid="text-tech-routes-heading">Route Overview</h1>
+          <p className="text-xs text-muted-foreground">Your stops for the day</p>
+        </div>
         {totalCount > 0 && (
           <span className="text-sm text-muted-foreground" data-testid="text-tech-progress">
             {completedCount} of {totalCount} completed

@@ -58,11 +58,16 @@ const menuSections = [
   {
     label: "Business",
     items: [
-      { title: "Price Calculator", url: "/pricing-calculator", icon: Calculator },
       { title: "Profitability", url: "/profitability", icon: TrendingUp },
       { title: "Route Profit Maps", url: "/route-profit-maps", icon: Map },
-      { title: "Pricing Simulator", url: "/ai-pricing-optimizer", icon: SlidersHorizontal },
       { title: "Expenses", url: "/overhead-costs", icon: DollarSign },
+    ],
+  },
+  {
+    label: "Pricing Tools",
+    items: [
+      { title: "Price Calculator", url: "/pricing-calculator", icon: Calculator },
+      { title: "Pricing Simulator", url: "/ai-pricing-optimizer", icon: SlidersHorizontal },
     ],
   },
   {
@@ -80,7 +85,6 @@ const menuSections = [
       { title: "Automation", url: "/automation", icon: Zap },
       { title: "API Keys", url: "/api-keys", icon: Key },
       { title: "Webhooks", url: "/webhooks", icon: Webhook },
-      { title: "Client Portal", url: "/portal", icon: ExternalLink },
       { title: "Data Migration", url: "/migration", icon: ArrowRightLeft },
     ],
   },
