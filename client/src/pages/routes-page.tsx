@@ -267,10 +267,10 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             {stopCount} of {stopCount <= 30 ? 30 : 60} stops
           </Badge>
           {isOverMax && <span className="text-xs text-destructive">Max 60 stops</span>}
-          {hasVisits && stopCount > 0 && (
-            <Badge variant="outline" className={`text-[10px] ${completedCount === stopCount ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : ""}`} data-testid={`badge-completion-${route.id}`}>
+          {hasVisits && routeVisitCount > 0 && (
+            <Badge variant="outline" className={`text-[10px] ${completedCount === routeVisitCount ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : ""}`} data-testid={`badge-completion-${route.id}`}>
               <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
-              {completedCount} of {stopCount} done
+              {completedCount} of {routeVisitCount} done
             </Badge>
           )}
         </div>
@@ -560,16 +560,7 @@ export default function RoutesPage() {
   const { data: dayVisits = [] } = useQuery<Visit[]>({
     queryKey: ["/api/visits/range", selectedDayDate],
     queryFn: async () => {
-      const res = await fetch(`/api/visits/range?start=${selectedDayDate}&end=${selectedDayDate}`, {
-        credentials: "include",
-        headers: (() => {
-          const h: Record<string, string> = {};
-          const token = localStorage.getItem("sessionToken");
-          if (token) h["Authorization"] = `Bearer ${token}`;
-          return h;
-        })(),
-      });
-      if (!res.ok) return [];
+      const res = await apiRequest("GET", `/api/visits/range?start=${selectedDayDate}&end=${selectedDayDate}`);
       return res.json();
     },
   });
