@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Route, ServicePlan, Contact, Property } from "@shared/schema";
+import type { Route, ServicePlan, Contact, Property, Visit } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,13 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   MapPin, Dog, GripVertical, Plus, Pencil, Trash2, Route as RouteIcon,
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
-  Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp
+  Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
+  CheckCircle, XCircle, SkipForward, MoreVertical
 } from "lucide-react";
 import RouteMapView, { type RouteStop } from "@/components/route-map-view";
 import { ServiceZoneMap, type ZoneEntry } from "@/components/service-zone-map";
@@ -41,6 +45,22 @@ const DAY_SHORT: Record<string, string> = {
   friday: "Fri", saturday: "Sat", sunday: "Sun", tbd: "TBD",
 };
 const UNASSIGNED_DROP = "__unassigned__";
+
+const visitStatusColors: Record<string, string> = {
+  scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  in_progress: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  skipped: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+};
+
+const visitStatusLabels: Record<string, string> = {
+  scheduled: "Scheduled",
+  in_progress: "In Progress",
+  completed: "Completed",
+  skipped: "Skipped",
+  cancelled: "Cancelled",
+};
 const ROUTE_COLORS = [
   "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6",
   "#ec4899", "#06b6d4", "#f97316", "#6366f1", "#14b8a6",
@@ -57,8 +77,10 @@ type OptimizeResult = {
   creditsUsed: number; creditsRemaining: number; message?: string;
 };
 
-function DraggableStop({ stop, contacts, properties }: {
+function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, isUpdatingVisit }: {
   stop: ServicePlan; contacts: Contact[]; properties: Property[];
+  visit?: Visit | null; onVisitStatusChange?: (visitId: string, status: string) => void;
+  isUpdatingVisit?: boolean;
 }) {
   const contact = contacts.find(c => c.id === stop.contactId);
   const property = properties.find(p => p.id === stop.propertyId);
@@ -66,10 +88,14 @@ function DraggableStop({ stop, contacts, properties }: {
     id: stop.id, data: { stop },
   });
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
+  const isCompleted = visit?.status === "completed";
+  const isSkipped = visit?.status === "skipped";
+  const isCancelled = visit?.status === "cancelled";
+  const isDone = isCompleted || isSkipped || isCancelled;
 
   return (
     <div ref={setNodeRef} style={style}
-      className={`border rounded-md p-2.5 bg-background transition-opacity ${isDragging ? "opacity-30" : ""}`}
+      className={`border rounded-md p-2.5 bg-background transition-all ${isDragging ? "opacity-30" : ""} ${isCompleted ? "border-green-300 dark:border-green-800 opacity-70" : ""} ${isSkipped ? "border-orange-300 dark:border-orange-800 opacity-60" : ""} ${isCancelled ? "border-red-300 dark:border-red-800 opacity-50" : ""}`}
       data-testid={`draggable-stop-${stop.id}`}
     >
       <div className="flex items-start gap-2">
@@ -78,10 +104,16 @@ function DraggableStop({ stop, contacts, properties }: {
         </div>
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center justify-between gap-1">
-            <span className="font-medium text-sm truncate" data-testid={`text-stop-name-${stop.id}`}>
+            <span className={`font-medium text-sm truncate ${isDone ? "line-through text-muted-foreground" : ""}`} data-testid={`text-stop-name-${stop.id}`}>
               {contact ? `${contact.firstName} ${contact.lastName}` : "Unknown"}
             </span>
             <div className="flex items-center gap-1 shrink-0">
+              {visit && (
+                <Badge variant="secondary" className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`} data-testid={`badge-visit-status-${stop.id}`}>
+                  {isCompleted && <CheckCircle className="h-2.5 w-2.5 mr-0.5" />}
+                  {visitStatusLabels[visit.status] || visit.status}
+                </Badge>
+              )}
               {stop.frequency === "onetime" && (
                 <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid={`badge-onetime-${stop.id}`}>
                   One-Time
@@ -91,6 +123,37 @@ function DraggableStop({ stop, contacts, properties }: {
                 <Badge variant="outline" className="text-[10px]" data-testid={`badge-stop-order-${stop.id}`}>
                   #{stop.stopOrder}
                 </Badge>
+              )}
+              {visit && onVisitStatusChange && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isUpdatingVisit} data-testid={`button-visit-menu-${stop.id}`}>
+                      <MoreVertical className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {visit.status !== "completed" && (
+                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "completed")} data-testid={`menu-complete-${stop.id}`}>
+                        <CheckCircle className="h-3.5 w-3.5 mr-2 text-green-600" /> Mark Completed
+                      </DropdownMenuItem>
+                    )}
+                    {visit.status !== "skipped" && (
+                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "skipped")} data-testid={`menu-skip-${stop.id}`}>
+                        <SkipForward className="h-3.5 w-3.5 mr-2 text-orange-600" /> Mark Skipped
+                      </DropdownMenuItem>
+                    )}
+                    {visit.status !== "cancelled" && (
+                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "cancelled")} data-testid={`menu-cancel-${stop.id}`}>
+                        <XCircle className="h-3.5 w-3.5 mr-2 text-red-600" /> Mark Cancelled
+                      </DropdownMenuItem>
+                    )}
+                    {visit.status !== "scheduled" && (
+                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "scheduled")} data-testid={`menu-revert-${stop.id}`}>
+                        <Clock className="h-3.5 w-3.5 mr-2 text-blue-600" /> Revert to Scheduled
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
           </div>
@@ -143,7 +206,8 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 }
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
-  onEdit, onDelete, onOptimize, onDispatch, onUnassignAll, isOptimizing, isDispatching, isUnassigning }: {
+  onEdit, onDelete, onOptimize, onDispatch, onUnassignAll, isOptimizing, isDispatching, isUnassigning,
+  visitsByPlan, onVisitStatusChange, isUpdatingVisit }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
@@ -151,11 +215,16 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   onDispatch: (routeId: string) => void;
   onUnassignAll: (routeId: string) => void;
   isOptimizing: boolean; isDispatching: boolean; isUnassigning: boolean;
+  visitsByPlan?: Record<string, Visit>;
+  onVisitStatusChange?: (visitId: string, status: string) => void;
+  isUpdatingVisit?: boolean;
 }) {
   const tech = team.find(t => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
   const totalRevenue = stops.reduce((sum, s) => sum + Number(s.pricePerVisit), 0);
   const stopCount = stops.length;
+  const completedCount = visitsByPlan ? sortedStops.filter(s => visitsByPlan[s.id]?.status === "completed").length : 0;
+  const hasVisits = visitsByPlan && Object.keys(visitsByPlan).length > 0;
   const creditsNeeded = stopCount <= 30 ? 1 : 2;
   const isOverLimit = stopCount > 30;
   const isOverMax = stopCount > 60;
@@ -197,6 +266,12 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             {stopCount} of {stopCount <= 30 ? 30 : 60} stops
           </Badge>
           {isOverMax && <span className="text-xs text-destructive">Max 60 stops</span>}
+          {hasVisits && stopCount > 0 && (
+            <Badge variant="outline" className={`text-[10px] ${completedCount === stopCount ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : ""}`} data-testid={`badge-completion-${route.id}`}>
+              <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
+              {completedCount} of {stopCount} done
+            </Badge>
+          )}
         </div>
 
         <div className="flex gap-1.5">
@@ -242,7 +317,11 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
         <DroppableZone id={`route-${route.id}`} isOver={isOverThis}>
           {sortedStops.length > 0 ? (
             sortedStops.map(stop => (
-              <DraggableStop key={stop.id} stop={stop} contacts={contacts} properties={properties} />
+              <DraggableStop key={stop.id} stop={stop} contacts={contacts} properties={properties}
+                visit={visitsByPlan?.[stop.id] || null}
+                onVisitStatusChange={onVisitStatusChange}
+                isUpdatingVisit={isUpdatingVisit}
+              />
             ))
           ) : (
             <p className="text-xs text-muted-foreground text-center py-4">Drag stops here</p>
@@ -466,6 +545,64 @@ export default function RoutesPage() {
   const { data: team = [] } = useQuery<TeamMember[]>({ queryKey: ["/api/company/team"] });
   const { data: creditData } = useQuery<{ credits: number }>({ queryKey: ["/api/route-credits"] });
   const credits = creditData?.credits ?? 0;
+
+  const selectedDayDate = useMemo(() => {
+    const now = new Date();
+    const todayIdx = (now.getDay() + 6) % 7;
+    const targetIdx = DAYS.indexOf(selectedDay);
+    const diff = targetIdx - todayIdx;
+    const target = new Date(now);
+    target.setDate(now.getDate() + diff);
+    return target.toISOString().split("T")[0];
+  }, [selectedDay]);
+
+  const { data: dayVisits = [] } = useQuery<Visit[]>({
+    queryKey: ["/api/visits/range", selectedDayDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/visits/range?start=${selectedDayDate}&end=${selectedDayDate}`, {
+        credentials: "include",
+        headers: (() => {
+          const h: Record<string, string> = {};
+          const token = localStorage.getItem("sessionToken");
+          if (token) h["Authorization"] = `Bearer ${token}`;
+          return h;
+        })(),
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const visitsByPlan = useMemo(() => {
+    const map: Record<string, Visit> = {};
+    for (const v of dayVisits) {
+      if (v.servicePlanId) map[v.servicePlanId] = v;
+    }
+    return map;
+  }, [dayVisits]);
+
+  const [updatingVisitId, setUpdatingVisitId] = useState<string | null>(null);
+  const visitStatusMutation = useMutation({
+    mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
+      setUpdatingVisitId(visitId);
+      const body: any = { status };
+      if (status === "completed") body.completedAt = new Date().toISOString();
+      const res = await apiRequest("PATCH", `/api/visits/${visitId}`, body);
+      return res.json();
+    },
+    onSuccess: () => {
+      setUpdatingVisitId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/range", selectedDayDate] });
+    },
+    onError: (err: Error) => {
+      setUpdatingVisitId(null);
+      toast({ title: "Error updating visit", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleVisitStatusChange = useCallback((visitId: string, status: string) => {
+    visitStatusMutation.mutate({ visitId, status });
+  }, [visitStatusMutation]);
 
   const isLoading = routesLoading || plansLoading;
 
@@ -820,6 +957,9 @@ export default function RoutesPage() {
                         onUnassignAll={(id) => setConfirmUnassignAll(id)}
                         isOptimizing={optimizingRouteId === route.id}
                         isDispatching={dispatchingRouteId === route.id}
+                        visitsByPlan={visitsByPlan}
+                        onVisitStatusChange={handleVisitStatusChange}
+                        isUpdatingVisit={visitStatusMutation.isPending}
                         isUnassigning={unassigningRouteId === route.id}
                       />
                     ))}
