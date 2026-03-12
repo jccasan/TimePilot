@@ -1562,7 +1562,7 @@ export default function PortalClient() {
                             </Button>
                             {inv.status !== "paid" && inv.status !== "voided" && (
                               <Button size="sm" onClick={() => handlePayInvoice(inv.id)} disabled={actionPending} data-testid={`button-portal-pay-${inv.id}`}>
-                                Pay
+                                Pay Invoice
                               </Button>
                             )}
                           </div>

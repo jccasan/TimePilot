@@ -175,6 +175,7 @@ function ContactRow({ contact, visitStatus, onStatusChange, isUpdating }: {
                   variant="outline"
                   onClick={(e) => { e.stopPropagation(); onStatusChange(contact.id, "scheduled"); }}
                   disabled={isUpdating}
+                  title="Return to scheduled"
                   data-testid={`button-mark-scheduled-${contact.id}`}
                 >
                   <Clock className="h-3.5 w-3.5 mr-1" />
@@ -263,7 +264,7 @@ export default function TechRoutes() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold" data-testid="text-tech-routes-heading">Route Overview</h1>
-          <p className="text-xs text-muted-foreground">Your stops for the day</p>
+          <p className="text-xs text-muted-foreground">Quick reference for your daily stops</p>
         </div>
         {totalCount > 0 && (
           <span className="text-sm text-muted-foreground" data-testid="text-tech-progress">

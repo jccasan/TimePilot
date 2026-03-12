@@ -287,7 +287,7 @@ export default function TechMobile() {
     <div className="p-4 space-y-4 overflow-auto h-full max-w-lg mx-auto">
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-tech-heading">Active Service</h1>
-        <p className="text-sm text-muted-foreground">Manage your current visits</p>
+        <p className="text-sm text-muted-foreground">Complete visits and capture proof of service</p>
       </div>
 
       <input
@@ -510,7 +510,7 @@ export default function TechMobile() {
           <div className="space-y-4">
             <div>
               <p className="text-sm font-medium mb-1">Proof Photo (required)</p>
-              <p className="text-xs text-muted-foreground mb-2">Snap a photo to confirm service was completed</p>
+              <p className="text-xs text-muted-foreground mb-2">Take a photo showing the service area is clean and secure</p>
               <input
                 type="file"
                 accept="image/*"

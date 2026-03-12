@@ -645,7 +645,7 @@ export default function ContactDetail() {
                         </>
                       ) : null}
                       {prop.lotSize && (
-                        <span className="text-sm text-muted-foreground">Lot: {prop.lotSize}</span>
+                        <span className="text-sm text-muted-foreground">Yard Size: {prop.lotSize}</span>
                       )}
                       {prop.yardDifficulty && prop.yardDifficulty !== "flat" && (
                         <Badge variant="outline" className="text-xs" data-testid={`badge-yard-difficulty-${prop.id}`}>
