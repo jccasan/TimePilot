@@ -102,7 +102,7 @@ const CONTACT_FIELDS = [
   { key: "city", label: "City" },
   { key: "state", label: "State" },
   { key: "zipCode", label: "Zip Code" },
-  { key: "numberOfDogs", label: "# Dogs" },
+  { key: "numberOfDogs", label: "Number of Dogs" },
   { key: "yardSize", label: "Yard Size" },
   { key: "serviceFrequency", label: "Frequency" },
   { key: "serviceDay", label: "Service Day" },
