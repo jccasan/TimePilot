@@ -24,6 +24,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -438,7 +439,7 @@ export default function Contacts() {
                       name="yardSize"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Lot Size</FormLabel>
+                          <FormLabel>Yard Size</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-yard-size">
@@ -462,7 +463,7 @@ export default function Contacts() {
                       name="numberOfDogs"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel># of Dogs</FormLabel>
+                          <FormLabel>Number of Dogs</FormLabel>
                           <FormControl>
                             <Input type="number" min="0" {...field} value={field.value ?? ""} data-testid="input-number-of-dogs" />
                           </FormControl>
@@ -522,8 +523,9 @@ export default function Contacts() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Referral Source</FormLabel>
+                        <FormDescription>Person who referred this customer</FormDescription>
                         <FormControl>
-                          <Input {...field} placeholder="e.g. John Smith, Google Ad" data-testid="input-referral-source" />
+                          <Input {...field} placeholder="e.g. John Smith" data-testid="input-referral-source" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

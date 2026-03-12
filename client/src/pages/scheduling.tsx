@@ -55,6 +55,14 @@ const visitStatusColors: Record<string, string> = {
   cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
+const visitStatusLabels: Record<string, string> = {
+  scheduled: "Scheduled",
+  in_progress: "In Progress",
+  completed: "Completed",
+  skipped: "Skipped",
+  cancelled: "Cancelled",
+};
+
 const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -257,14 +265,14 @@ export default function Scheduling() {
             <AlertDialogTrigger asChild>
               <Button variant="outline" disabled={generateMutation.isPending} data-testid="button-generate-visits">
                 <Wand2 className="mr-1 h-4 w-4" />
-                {generateMutation.isPending ? "Generating..." : "Generate Visits"}
+                {generateMutation.isPending ? "Creating..." : "Create Visits"}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Generate Visits</AlertDialogTitle>
+                <AlertDialogTitle>Create Visits</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will create scheduled visits for the current range ({dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}) based on all active service plans. Existing visits will not be duplicated.
+                  This will create visits for all active service plans in the selected date range ({dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}). Existing visits won't be duplicated.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -509,7 +517,7 @@ function VisitChip({ visit, contacts, properties, routes, compact }: {
       <div className="text-xs border rounded-md p-1.5 space-y-0.5" data-testid={`text-visit-${visit.id}`}>
         <div className="flex items-center justify-between gap-1">
           <Badge variant="secondary" className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`}>
-            {visit.status}
+            {visitStatusLabels[visit.status] || visit.status}
           </Badge>
           {route && <span className="text-[10px] text-muted-foreground truncate">{route.name}</span>}
         </div>
@@ -524,7 +532,7 @@ function VisitChip({ visit, contacts, properties, routes, compact }: {
       <CardContent className="p-3 space-y-1">
         <div className="flex items-center justify-between gap-2">
           <Badge variant="secondary" className={visitStatusColors[visit.status] || ""}>
-            {visit.status}
+            {visitStatusLabels[visit.status] || visit.status}
           </Badge>
           {route && <span className="text-xs text-muted-foreground">{route.name}</span>}
         </div>

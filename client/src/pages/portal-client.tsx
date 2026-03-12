@@ -210,6 +210,30 @@ const statusColors: Record<string, string> = {
   completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   skipped: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  in_progress: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+};
+
+const statusLabels: Record<string, string> = {
+  scheduled: "Scheduled",
+  completed: "Completed",
+  skipped: "Skipped",
+  cancelled: "Cancelled",
+  in_progress: "In Progress",
+};
+
+const invoiceStatusLabels: Record<string, string> = {
+  draft: "Draft",
+  pending: "Pending",
+  paid: "Paid",
+  voided: "Voided",
+  failed: "Failed",
+  refunded: "Refunded",
+};
+
+const changeRequestStatusLabels: Record<string, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  denied: "Denied",
 };
 
 const invoiceStatusColors: Record<string, string> = {
@@ -1013,14 +1037,14 @@ export default function PortalClient() {
               />
               <SummaryCard
                 icon={DollarSign}
-                label="Balance Due"
+                label="Amount Due"
                 value={balanceDue > 0 ? `$${balanceDue.toFixed(2)}` : "All clear"}
                 sublabel={balanceDue > 0 ? `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length > 1 ? "s" : ""}` : "No outstanding balance"}
                 accent={balanceDue > 0 ? "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400" : "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400"}
               />
               <SummaryCard
                 icon={Calendar}
-                label="Active Plan"
+                label="Your Service Plan"
                 value={activePlan ? (frequencyLabels[activePlan.frequency] || activePlan.frequency) : "No active plan"}
                 sublabel={activePlan ? `${activePlan.dayOfWeek ? activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1) + "s" : ""} - $${Number(activePlan.pricePerVisit).toFixed(2)}/visit` : undefined}
                 accent="bg-primary/10 text-primary"
@@ -1030,7 +1054,7 @@ export default function PortalClient() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {balanceDue > 0 && (
                 <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("billing")} data-testid="button-quick-pay">
-                  <CreditCard className="h-4 w-4" /> Pay Now
+                  <CreditCard className="h-4 w-4" /> Pay Invoice
                 </Button>
               )}
               <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("services")} data-testid="button-quick-services">
@@ -1104,7 +1128,7 @@ export default function PortalClient() {
                           </div>
                         </div>
                         <Badge variant="secondary" className={statusColors[visit.status] || ""}>
-                          {visit.status}
+                          {statusLabels[visit.status] || visit.status}
                         </Badge>
                       </div>
                     ))}
@@ -1203,7 +1227,7 @@ export default function PortalClient() {
                             {visit.propertyAddress && <p className="text-xs text-muted-foreground">{visit.propertyAddress}</p>}
                           </div>
                         </div>
-                        <Badge variant="secondary" className={statusColors[visit.status] || ""}>{visit.status}</Badge>
+                        <Badge variant="secondary" className={statusColors[visit.status] || ""}>{statusLabels[visit.status] || visit.status}</Badge>
                       </div>
                     ))}
                   </CardContent>
@@ -1247,7 +1271,7 @@ export default function PortalClient() {
                               <Camera className="h-3 w-3 mr-1" /> Photos
                             </Button>
                           )}
-                          <Badge variant="secondary" className={statusColors[visit.status] || ""}>{visit.status}</Badge>
+                          <Badge variant="secondary" className={statusColors[visit.status] || ""}>{statusLabels[visit.status] || visit.status}</Badge>
                         </div>
                       </div>
                     ))}
@@ -1296,7 +1320,7 @@ export default function PortalClient() {
             <Separator />
 
             <section>
-              <SectionHeader title="Request One-Time Cleanup" description="Need an extra visit? Submit a request below." />
+              <SectionHeader title="Request Extra Visit" description="Need an extra visit? Submit a request below." />
               <Card>
                 <CardContent className="pt-4">
                   <form onSubmit={handleRequestCleanup} className="space-y-4">
@@ -1333,7 +1357,7 @@ export default function PortalClient() {
             </section>
 
             <section>
-              <SectionHeader title="Request Service Change" description="Change frequency, service day, pause, or request same-day service" />
+              <SectionHeader title="Change Your Service" description="Change frequency, service day, pause, or request same-day service" />
               <Card>
                 <CardContent className="pt-4">
                   <form onSubmit={handleSubmitChangeRequest} className="space-y-4">
@@ -1427,7 +1451,7 @@ export default function PortalClient() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium">{changeRequestTypeLabels[cr.requestType] || cr.requestType}</p>
-                          <Badge variant="secondary" className={`text-xs ${changeRequestStatusColors[cr.status] || ""}`}>{cr.status}</Badge>
+                          <Badge variant="secondary" className={`text-xs ${changeRequestStatusColors[cr.status] || ""}`}>{changeRequestStatusLabels[cr.status] || cr.status}</Badge>
                         </div>
                         {cr.requestedValue && <p className="text-xs text-muted-foreground mt-1">Requested: {cr.requestedValue}</p>}
                         {cr.note && <p className="text-xs text-muted-foreground">{cr.note}</p>}
@@ -1531,7 +1555,7 @@ export default function PortalClient() {
                               {Number(inv.tipAmount) > 0 && (
                                 <p className="text-[10px] text-green-600 dark:text-green-400" data-testid={`text-invoice-tip-${inv.id}`}>+ ${Number(inv.tipAmount).toFixed(2)} tip</p>
                               )}
-                              <Badge variant="secondary" className={`text-[10px] ${invoiceStatusColors[inv.status] || ""}`}>{inv.status}</Badge>
+                              <Badge variant="secondary" className={`text-[10px] ${invoiceStatusColors[inv.status] || ""}`}>{invoiceStatusLabels[inv.status] || inv.status}</Badge>
                             </div>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownloadInvoicePdf(inv.id, inv.invoiceNumber)} data-testid={`button-download-invoice-${inv.id}`}>
                               <Download className="h-3.5 w-3.5" />
@@ -1581,7 +1605,7 @@ export default function PortalClient() {
             <Separator />
 
             <section>
-              <SectionHeader title="Payment Methods" description="Manage your cards on file" />
+              <SectionHeader title="Your Payment Method" description="Manage your cards on file" />
               <Card>
                 <CardContent className="pt-4 space-y-4">
                   {paymentMethods.length > 0 ? (
@@ -1635,7 +1659,7 @@ export default function PortalClient() {
                           <p className="text-xs text-muted-foreground">${(est.totalCents / 100).toFixed(2)}</p>
                         </div>
                         <Badge className={est.status === "approved" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"}>
-                          {est.status}
+                          {est.status.charAt(0).toUpperCase() + est.status.slice(1)}
                         </Badge>
                       </div>
                     ))}
@@ -1648,7 +1672,7 @@ export default function PortalClient() {
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Pay Invoice {tipDialogInvoice?.invoiceNumber}</DialogTitle>
-                  <DialogDescription>Would you like to add a tip for your technician?</DialogDescription>
+                  <DialogDescription>Add a tip to show your appreciation for your technician.</DialogDescription>
                 </DialogHeader>
                 {tipDialogInvoice && (
                   <div className="space-y-4">
@@ -1883,7 +1907,7 @@ export default function PortalClient() {
             <Separator />
 
             <section>
-              <SectionHeader title="Notification Preferences" description="Choose how you want to be notified" />
+              <SectionHeader title="How We Reach You" description="Choose how you want to be notified" />
               <Card>
                 <CardContent className="pt-4 space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1992,7 +2016,7 @@ export default function PortalClient() {
                         id="contact-message"
                         value={contactMessage}
                         onChange={(e) => setContactMessage(e.target.value)}
-                        placeholder="How can we help?"
+                        placeholder="Tell us how we can help..."
                         rows={4}
                         data-testid="input-contact-message"
                       />

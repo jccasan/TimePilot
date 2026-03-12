@@ -369,7 +369,7 @@ export default function ContactDetail() {
                   onValueChange={(v) => setEditForm({ ...editForm, yardSize: v })}
                 >
                   <SelectTrigger data-testid="select-edit-yard-size">
-                    <SelectValue placeholder="Lot Size" />
+                    <SelectValue placeholder="Yard Size" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="0.25_or_less">0.25 Acre or Less</SelectItem>
@@ -382,7 +382,7 @@ export default function ContactDetail() {
                 <Input
                   type="number"
                   min="0"
-                  placeholder="# of Dogs"
+                  placeholder="Number of Dogs"
                   value={editForm.numberOfDogs ?? ""}
                   onChange={(e) => setEditForm({ ...editForm, numberOfDogs: e.target.value ? parseInt(e.target.value) : null })}
                   data-testid="input-edit-number-of-dogs"
@@ -462,12 +462,12 @@ export default function ContactDetail() {
                 </p>
               )}
               {contact.yardSize && (
-                <p data-testid="text-contact-yard-size">Lot Size: {
+                <p data-testid="text-contact-yard-size">Yard Size: {
                   { "0.25_or_less": "0.25 Acre or Less", "0.26_0.5": ".26-.5 Acre", "0.51_0.75": ".51-.75 Acre", "0.75_1": ".75-1 Acre", "over_1": "Over 1 Acre" }[contact.yardSize] || contact.yardSize
                 }</p>
               )}
               {contact.numberOfDogs != null && (
-                <p data-testid="text-contact-dogs"># of Dogs: {contact.numberOfDogs}</p>
+                <p data-testid="text-contact-dogs">Number of Dogs: {contact.numberOfDogs}</p>
               )}
               {contact.serviceFrequency && (
                 <p data-testid="text-contact-frequency">Service Frequency: {
@@ -559,7 +559,7 @@ export default function ContactDetail() {
                     <FormItem><FormLabel>Gate Code</FormLabel><FormControl><Input {...field} data-testid="input-gate-code" /></FormControl><FormMessage /></FormItem>
                   )} />
                   <FormField control={propertyForm.control} name="lotSize" render={({ field }) => (
-                    <FormItem><FormLabel>Lot Size</FormLabel><FormControl><Input {...field} placeholder="e.g. 0.18 acres, 7,840 sqft" data-testid="input-lot-size" /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Yard Size</FormLabel><FormControl><Input {...field} placeholder="e.g. 0.18 acres, 7,840 sqft" data-testid="input-lot-size" /></FormControl><FormMessage /></FormItem>
                   )} />
                   <FormField control={propertyForm.control} name="specialInstructions" render={({ field }) => (
                     <FormItem><FormLabel>Special Instructions</FormLabel><FormControl><Textarea {...field} data-testid="input-special-instructions" /></FormControl><FormMessage /></FormItem>

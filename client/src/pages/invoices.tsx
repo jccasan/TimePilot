@@ -35,6 +35,15 @@ import {
 } from "@/components/ui/select";
 import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Ban } from "lucide-react";
 
+const invoiceStatusLabels: Record<string, string> = {
+  draft: "Draft",
+  pending: "Pending",
+  paid: "Paid",
+  voided: "Voided",
+  failed: "Failed",
+  refunded: "Refunded",
+};
+
 const invoiceStatusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   pending: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -449,12 +458,12 @@ export default function Invoices() {
           <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" data-testid="button-generate-invoice">
-                <Zap className="mr-1 h-4 w-4" /> Auto-Generate
+                <Zap className="mr-1 h-4 w-4" /> Generate from Visits
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Auto-Generate Invoice</DialogTitle>
+                <DialogTitle>Generate Invoice from Visits</DialogTitle>
                 <DialogDescription>Generate an invoice from visits in a date range for a specific client.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
@@ -546,7 +555,7 @@ export default function Invoices() {
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <Label className="text-sm font-medium">Line Items</Label>
                     <Button variant="outline" size="sm" onClick={addCustomLineItem} data-testid="button-add-custom-item">
-                      <Plus className="mr-1 h-3 w-3" /> Custom Item
+                      <Plus className="mr-1 h-3 w-3" /> Add Line Item
                     </Button>
                   </div>
 
@@ -743,7 +752,7 @@ export default function Invoices() {
                       ${Number(invoice.total).toFixed(2)}
                     </span>
                     <Badge variant="secondary" className={invoiceStatusColors[invoice.status] || ""} data-testid={`badge-invoice-status-${invoice.id}`}>
-                      {invoice.status}
+                      {invoiceStatusLabels[invoice.status] || invoice.status}
                     </Badge>
                     <Button
                       variant="ghost"
@@ -1164,7 +1173,7 @@ export default function Invoices() {
                 <div>
                   <span className="text-muted-foreground">Status: </span>
                   <Badge variant="secondary" className={invoiceStatusColors[selectedInvoice.status] || ""}>
-                    {selectedInvoice.status}
+                    {invoiceStatusLabels[selectedInvoice.status] || selectedInvoice.status}
                   </Badge>
                 </div>
                 <div>
@@ -1235,10 +1244,10 @@ export default function Invoices() {
                 {selectedInvoice.status !== "paid" && stripeConfig?.configured && (
                   <>
                     <Button size="sm" variant="outline" onClick={() => { chargeMutation.mutate(selectedInvoice.id); setDetailDialogOpen(false); }} disabled={chargeMutation.isPending}>
-                      <CreditCard className="mr-1 h-3 w-3" /> Charge Card
+                      <CreditCard className="mr-1 h-3 w-3" /> Charge Now
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => { checkoutMutation.mutate(selectedInvoice.id); }} disabled={checkoutMutation.isPending}>
-                      <ExternalLink className="mr-1 h-3 w-3" /> Checkout Link
+                      <ExternalLink className="mr-1 h-3 w-3" /> Payment Link
                     </Button>
                   </>
                 )}

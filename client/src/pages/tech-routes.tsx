@@ -20,12 +20,13 @@ const dayFullLabels: Record<string, string> = {
 };
 
 const frequencyLabels: Record<string, string> = {
-  "1_per_week": "1x/wk",
-  "2_per_week": "2x/wk",
-  "biweekly": "Bi-weekly",
-  "as_needed": "As needed",
+  "1_per_week": "Weekly",
+  "2_per_week": "Twice Weekly",
+  "biweekly": "Biweekly",
+  "as_needed": "As Needed",
   "weekly": "Weekly",
   "monthly": "Monthly",
+  "onetime": "One-Time",
 };
 
 type VisitStatus = "scheduled" | "completed" | "cancelled";
@@ -177,7 +178,7 @@ function ContactRow({ contact, visitStatus, onStatusChange, isUpdating }: {
                   data-testid={`button-mark-scheduled-${contact.id}`}
                 >
                   <Clock className="h-3.5 w-3.5 mr-1" />
-                  Reset
+                  Undo
                 </Button>
               )}
             </div>
@@ -260,10 +261,10 @@ export default function TechRoutes() {
   return (
     <div className="p-4 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-bold" data-testid="text-tech-routes-heading">My Route</h1>
+        <h1 className="text-xl font-bold" data-testid="text-tech-routes-heading">Route Overview</h1>
         {totalCount > 0 && (
           <span className="text-sm text-muted-foreground" data-testid="text-tech-progress">
-            {completedCount}/{totalCount} completed
+            {completedCount} of {totalCount} completed
           </span>
         )}
       </div>

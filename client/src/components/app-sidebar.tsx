@@ -41,7 +41,7 @@ const menuSections = [
     label: "Main",
     items: [
       { title: "Dashboard", url: "/", icon: LayoutDashboard },
-      { title: "CRM / Contacts", url: "/contacts", icon: Users },
+      { title: "Customers", url: "/contacts", icon: Users },
     ],
   },
   {
@@ -49,8 +49,8 @@ const menuSections = [
     items: [
       { title: "Scheduling", url: "/scheduling", icon: Calendar },
       { title: "Routes", url: "/routes", icon: MapPin },
-      { title: "Tech Mobile", url: "/m/today", icon: Smartphone },
-      { title: "Communications", url: "/communications", icon: MessageSquare },
+      { title: "Field View", url: "/m/today", icon: Smartphone },
+      { title: "Messages", url: "/communications", icon: MessageSquare },
       { title: "Reports", url: "/reports", icon: BarChart3 },
       { title: "Analytics", url: "/analytics", icon: TrendingUp },
     ],
@@ -59,10 +59,10 @@ const menuSections = [
     label: "Business",
     items: [
       { title: "Price Calculator", url: "/pricing-calculator", icon: Calculator },
-      { title: "Customer Profitability", url: "/profitability", icon: TrendingUp },
+      { title: "Profitability", url: "/profitability", icon: TrendingUp },
       { title: "Route Profit Maps", url: "/route-profit-maps", icon: Map },
       { title: "Pricing Simulator", url: "/ai-pricing-optimizer", icon: SlidersHorizontal },
-      { title: "Overhead Costs", url: "/overhead-costs", icon: DollarSign },
+      { title: "Expenses", url: "/overhead-costs", icon: DollarSign },
     ],
   },
   {
@@ -70,7 +70,7 @@ const menuSections = [
     items: [
       { title: "Pricing", url: "/pricing", icon: DollarSign },
       { title: "Invoices", url: "/invoices", icon: FileText },
-      { title: "Scoopilot Subscription", url: "/billing", icon: CreditCard },
+      { title: "Subscription", url: "/billing", icon: CreditCard },
     ],
   },
   {

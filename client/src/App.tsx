@@ -217,7 +217,7 @@ function TechnicianLayout() {
   }
 
   const techTabs = [
-    { label: "Route", href: "/", icon: MapPin },
+    { label: "Overview", href: "/", icon: MapPin },
     { label: "Clients", href: "/clients", icon: Users },
   ];
 

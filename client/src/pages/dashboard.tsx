@@ -65,14 +65,14 @@ type CompanyData = {
 };
 
 const ALL_WIDGETS = [
-  { id: "mrr", label: "MRR" },
-  { id: "month_revenue", label: "Month Revenue" },
+  { id: "mrr", label: "Monthly Revenue (MRR)" },
+  { id: "month_revenue", label: "Revenue This Month" },
   { id: "overdue_invoices", label: "Overdue Invoices" },
   { id: "todays_visits", label: "Today's Visits" },
   { id: "active_clients", label: "Active Clients" },
   { id: "service_plans", label: "Service Plans" },
   { id: "team_size", label: "Team Size" },
-  { id: "texts_sent", label: "Texts Sent" },
+  { id: "texts_sent", label: "SMS Sent" },
   { id: "emails_sent", label: "Emails Sent" },
   { id: "quick_actions", label: "Quick Actions" },
 ] as const;
@@ -169,7 +169,7 @@ export default function Dashboard() {
     mrr: () => (
       <Card key="mrr" data-testid="widget-mrr">
         <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">MRR</CardTitle>
+          <CardTitle className="text-sm font-medium">Monthly Revenue (MRR)</CardTitle>
           <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -186,7 +186,7 @@ export default function Dashboard() {
     month_revenue: () => (
       <Card key="month_revenue" data-testid="widget-month-revenue">
         <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Month Revenue</CardTitle>
+          <CardTitle className="text-sm font-medium">Revenue This Month</CardTitle>
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -308,7 +308,7 @@ export default function Dashboard() {
     texts_sent: () => (
       <Card key="texts_sent" data-testid="widget-texts-sent">
         <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Texts Sent</CardTitle>
+          <CardTitle className="text-sm font-medium">SMS Sent</CardTitle>
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -375,7 +375,7 @@ export default function Dashboard() {
           <Button asChild variant="outline" data-testid="button-quick-tech-mobile">
             <Link href="/m/today">
               <Clock className="mr-1 h-4 w-4" />
-              Tech View
+              Field View
             </Link>
           </Button>
         </CardContent>

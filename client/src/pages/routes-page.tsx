@@ -194,7 +194,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             className={isOverLimit && !isOverMax ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" : ""}
             data-testid={`badge-stop-counter-${route.id}`}
           >
-            Stops: {stopCount} / {stopCount <= 30 ? 30 : 60}
+            {stopCount} of {stopCount <= 30 ? 30 : 60} stops
           </Badge>
           {isOverMax && <span className="text-xs text-destructive">Max 60 stops</span>}
         </div>
@@ -220,7 +220,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             data-testid={`button-dispatch-${route.id}`}
           >
             {isDispatching ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
-            Dispatch to Tech
+            Send to Tech
           </Button>
         </div>
 
@@ -833,7 +833,7 @@ export default function RoutesPage() {
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
                         <AlertCircle className="h-4 w-4 text-orange-500" />
-                        Unassigned Jobs
+                        Unassigned Stops
                         <Badge variant="secondary" data-testid="badge-unassigned-count">{unassignedPlans.length}</Badge>
                       </CardTitle>
                     </div>
@@ -853,7 +853,7 @@ export default function RoutesPage() {
                           ))
                         ) : (
                           <p className="text-xs text-muted-foreground text-center py-6">
-                            {servicePlans.length === 0 ? "No service plans yet" : "All jobs assigned"}
+                            {servicePlans.length === 0 ? "No unassigned stops" : "All stops assigned"}
                           </p>
                         )}
                       </DroppableZone>

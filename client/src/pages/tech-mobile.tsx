@@ -58,6 +58,14 @@ const visitStatusColors: Record<string, string> = {
   cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
+const visitStatusLabels: Record<string, string> = {
+  scheduled: "Scheduled",
+  in_progress: "In Progress",
+  completed: "Completed",
+  skipped: "Skipped",
+  cancelled: "Cancelled",
+};
+
 type PhotoUploadType = "before" | "after";
 
 function PropertyImageSection({ visit }: { visit: TodayVisit }) {
@@ -277,7 +285,7 @@ export default function TechMobile() {
 
   return (
     <div className="p-4 space-y-4 overflow-auto h-full max-w-lg mx-auto">
-      <h1 className="text-2xl font-bold" data-testid="text-tech-heading">Today's Visits</h1>
+      <h1 className="text-2xl font-bold" data-testid="text-tech-heading">Active Service</h1>
 
       <input
         type="file"
@@ -351,7 +359,7 @@ export default function TechMobile() {
                         <ImageIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
                       )}
                       <Badge variant="secondary" className={visitStatusColors[visit.status] || ""} data-testid={`badge-visit-status-${visit.id}`}>
-                        {visit.status.replace("_", " ")}
+                        {visitStatusLabels[visit.status] || visit.status}
                       </Badge>
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </div>
@@ -403,7 +411,7 @@ export default function TechMobile() {
                           )}
                           {hasGate && (
                             <div data-testid={`photo-gate-container-${visit.id}`}>
-                              <p className="text-xs font-medium text-center mb-1">Gate Closed</p>
+                              <p className="text-xs font-medium text-center mb-1">Proof Photo</p>
                               <img
                                 src={visit.gateClosedPhoto!}
                                 alt="Gate closed"
@@ -498,7 +506,7 @@ export default function TechMobile() {
 
           <div className="space-y-4">
             <div>
-              <p className="text-sm font-medium mb-2">Gate Closed Photo (required)</p>
+              <p className="text-sm font-medium mb-2">Proof Photo (required)</p>
               <input
                 type="file"
                 accept="image/*"
@@ -534,7 +542,7 @@ export default function TechMobile() {
                   data-testid="button-capture-gate-photo"
                 >
                   <Camera className="mr-2 h-5 w-5" />
-                  Take Gate Closed Photo
+                  Take Proof Photo
                 </Button>
               )}
             </div>
@@ -608,7 +616,7 @@ export default function TechMobile() {
               ) : (
                 <Send className="mr-2 h-4 w-4" />
               )}
-              {isCompleting ? "Sending..." : "Send & Complete"}
+              {isCompleting ? "Completing..." : "Complete & Notify"}
             </Button>
           </DialogFooter>
         </DialogContent>
