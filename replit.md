@@ -50,6 +50,8 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Onboarding**: Guided 5-step onboarding flow: (1) Set up service zones with interactive map and zip code day assignments, (2) Add first customer, (3) Price property, (4) Create service plan, (5) Generate route. Service zones step is skippable. Service zones also manageable from Settings.
 - **Service Zones**: `service_zones` table stores zip code, day of week, and coordinates per company. Interactive Mapbox map with geocoded markers. CRUD + bulk API at `/api/service-zones`.
 - **Access Control**: Multi-tenant architecture with Owner, Admin, and Technician roles.
+- **Admin Security Center**: `/admin/security` — Admin accounts overview (password expiration status), active sessions with revoke, paginated audit log tracking logins (success/failure with IP), tier changes, session revocations, and pricing updates. Password policy: 16+ chars, mixed case/number/symbol, 90-day expiration, 10-password history, 8-hour session duration.
+- **Subscription Pricing Management**: `/admin/pricing` — DB-backed subscription tiers (auto-seeded from `TIER_CONFIG`). Admin can edit tier name, max users, price, and toggle active/inactive. Changes are audit-logged. Tables: `subscription_tiers`, `admin_audit_logs`.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

@@ -6,7 +6,7 @@ import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, isNotNull, like, or } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -6398,7 +6398,13 @@ export async function registerRoutes(
       if (!email || !password) return res.status(400).json({ error: "Email and password required" });
       const { loginAdmin } = await import("./services/admin-auth");
       const result = await loginAdmin(email, password);
-      if ("error" in result) return res.status(401).json({ error: result.error });
+      const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+      if ("error" in result) {
+        await db.insert(adminAuditLogs).values({ adminEmail: email, action: "login_failed", ipAddress: ip }).catch(() => {});
+        return res.status(401).json({ error: result.error });
+      }
+      const [adminUser] = await db.select({ id: adminUsers.id }).from(adminUsers).where(eq(adminUsers.email, email));
+      await db.insert(adminAuditLogs).values({ adminUserId: adminUser?.id, adminEmail: email, action: "login_success", ipAddress: ip }).catch(() => {});
       res.json(result);
     } catch (err) { handleError(res, err); }
   });
@@ -6610,6 +6616,7 @@ export async function registerRoutes(
       const validTiers = ["free_trial", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
       if (!tier || !validTiers.includes(tier)) return res.status(400).json({ error: "Invalid tier" });
       const updated = await storage.updateCompanySubscription(req.params.id, tier);
+      await logAdminAudit(req, "change_subscription", "company", req.params.id, { tier });
       res.json(updated);
     } catch (err) { handleError(res, err); }
   });
@@ -6907,6 +6914,118 @@ export async function registerRoutes(
       const { runAutoInvoice } = await import("./jobs/auto-invoice");
       const result = await runAutoInvoice();
       res.json({ ok: true, ...result });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Admin Security & Subscription Routes ================
+
+  async function logAdminAudit(req: Request, action: string, resourceType?: string, resourceId?: string, details?: any) {
+    const adminUser = (req as any).adminUser;
+    if (!adminUser) return;
+    const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+    await db.insert(adminAuditLogs).values({
+      adminUserId: adminUser.userId,
+      adminEmail: adminUser.email,
+      action,
+      resourceType: resourceType || null,
+      resourceId: resourceId || null,
+      details: details || null,
+      ipAddress: ip,
+    });
+  }
+
+  app.get("/api/admin/security/sessions", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const sessions = await db
+        .select({
+          id: adminSessions.id,
+          adminUserId: adminSessions.adminUserId,
+          adminEmail: adminUsers.email,
+          createdAt: adminSessions.createdAt,
+          expiresAt: adminSessions.expiresAt,
+        })
+        .from(adminSessions)
+        .innerJoin(adminUsers, eq(adminUsers.id, adminSessions.adminUserId))
+        .where(sql`${adminSessions.expiresAt} > NOW()`)
+        .orderBy(sql`${adminSessions.createdAt} DESC`);
+      res.json(sessions);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/admin/security/sessions/:sessionId", isAdmin, async (req: Request, res: Response) => {
+    try {
+      await db.delete(adminSessions).where(eq(adminSessions.id, req.params.sessionId));
+      await logAdminAudit(req, "revoke_session", "admin_session", req.params.sessionId);
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/admin/security/audit-log", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+      const logs = await db
+        .select()
+        .from(adminAuditLogs)
+        .orderBy(sql`${adminAuditLogs.createdAt} DESC`)
+        .limit(limit)
+        .offset(offset);
+      const [{ count: total }] = await db.select({ count: sql<number>`count(*)` }).from(adminAuditLogs);
+      res.json({ logs, total: Number(total) });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/admin/security/admin-users", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const usrs = await db
+        .select({
+          id: adminUsers.id,
+          email: adminUsers.email,
+          passwordChangedAt: adminUsers.passwordChangedAt,
+          createdAt: adminUsers.createdAt,
+        })
+        .from(adminUsers);
+      const enriched = usrs.map(u => {
+        const daysSinceChange = (Date.now() - new Date(u.passwordChangedAt).getTime()) / (1000 * 60 * 60 * 24);
+        return { ...u, passwordExpired: daysSinceChange >= 90, daysSincePasswordChange: Math.floor(daysSinceChange) };
+      });
+      res.json(enriched);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/admin/subscription-tiers", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const tiers = await db.select().from(subscriptionTiers).orderBy(sql`${subscriptionTiers.price} ASC`);
+      if (tiers.length === 0) {
+        const defaults = Object.entries(TIER_CONFIG).map(([key, cfg]) => ({
+          tierKey: key,
+          name: cfg.name,
+          maxUsers: cfg.maxUsers,
+          price: cfg.price.toFixed(2),
+          isActive: true,
+        }));
+        for (const d of defaults) {
+          await db.insert(subscriptionTiers).values(d).onConflictDoNothing();
+        }
+        const seeded = await db.select().from(subscriptionTiers).orderBy(sql`${subscriptionTiers.price} ASC`);
+        return res.json(seeded);
+      }
+      res.json(tiers);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/admin/subscription-tiers/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { name, maxUsers, price, isActive } = req.body;
+      const updates: any = { updatedAt: new Date() };
+      if (name !== undefined) updates.name = name;
+      if (maxUsers !== undefined) updates.maxUsers = parseInt(maxUsers);
+      if (price !== undefined) updates.price = parseFloat(price).toFixed(2);
+      if (isActive !== undefined) updates.isActive = isActive;
+      const [updated] = await db.update(subscriptionTiers).set(updates).where(eq(subscriptionTiers.id, req.params.id)).returning();
+      if (!updated) return res.status(404).json({ error: "Tier not found" });
+      await logAdminAudit(req, "update_subscription_tier", "subscription_tier", updated.tierKey, { name: updated.name, price: updated.price, maxUsers: updated.maxUsers });
+      res.json(updated);
     } catch (err) { handleError(res, err); }
   });
 

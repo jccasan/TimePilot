@@ -9,7 +9,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users } from "lucide-react";
+import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
 import RoverChatbot from "@/components/rover-chatbot";
@@ -41,6 +41,8 @@ import AdminCompanyDetail from "@/pages/admin-company-detail";
 import AdminAnalytics from "@/pages/admin-analytics";
 import AdminLogin from "@/pages/admin-login";
 import AdminChangePassword from "@/pages/admin-change-password";
+import AdminSecurity from "@/pages/admin-security";
+import AdminSubscriptionPricing from "@/pages/admin-subscription-pricing";
 import Settings from "@/pages/settings";
 import PricingCalculator from "@/pages/pricing-calculator";
 import Profitability from "@/pages/profitability";
@@ -329,6 +331,13 @@ function AdminLayout() {
             <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">Management</p>
             <div className="space-y-1">
               <AdminSidebarLink href="/admin/tenants" icon={Building2} label="Tenants" location={location} />
+              <AdminSidebarLink href="/admin/pricing" icon={CreditCard} label="Pricing" location={location} />
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">System</p>
+            <div className="space-y-1">
+              <AdminSidebarLink href="/admin/security" icon={Shield} label="Security" location={location} />
             </div>
           </div>
         </nav>
@@ -367,6 +376,8 @@ function AdminLayout() {
             <Route path="/admin" component={AdminDashboard} />
             <Route path="/admin/tenants" component={AdminTenants} />
             <Route path="/admin/analytics" component={AdminAnalytics} />
+            <Route path="/admin/security" component={AdminSecurity} />
+            <Route path="/admin/pricing" component={AdminSubscriptionPricing} />
             <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
             <Route path="/admin/login">{() => { window.location.href = "/admin"; return null; }}</Route>
             <Route component={NotFound} />

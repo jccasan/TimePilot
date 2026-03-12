@@ -807,6 +807,32 @@ export const adminSessions = pgTable("admin_sessions", {
 export type AdminUser = typeof adminUsers.$inferSelect;
 export type AdminSession = typeof adminSessions.$inferSelect;
 
+export const adminAuditLogs = pgTable("admin_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminUserId: varchar("admin_user_id").references(() => adminUsers.id, { onDelete: "set null" }),
+  adminEmail: varchar("admin_email", { length: 255 }).notNull(),
+  action: varchar("action", { length: 100 }).notNull(),
+  resourceType: varchar("resource_type", { length: 100 }),
+  resourceId: varchar("resource_id", { length: 255 }),
+  details: jsonb("details"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
+
+export const subscriptionTiers = pgTable("subscription_tiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tierKey: varchar("tier_key", { length: 50 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  maxUsers: integer("max_users").notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SubscriptionTier = typeof subscriptionTiers.$inferSelect;
+
 export const notificationTypeEnum = pgEnum("notification_type", [
   "invoice_paid", "invoice_overdue", "visit_completed", "new_lead",
   "payment_failed", "service_paused", "service_resumed", "portal_login",
