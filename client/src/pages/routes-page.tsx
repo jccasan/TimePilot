@@ -223,8 +223,9 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
   const totalRevenue = stops.reduce((sum, s) => sum + Number(s.pricePerVisit), 0);
   const stopCount = stops.length;
+  const routeVisitCount = visitsByPlan ? sortedStops.filter(s => visitsByPlan[s.id]).length : 0;
   const completedCount = visitsByPlan ? sortedStops.filter(s => visitsByPlan[s.id]?.status === "completed").length : 0;
-  const hasVisits = visitsByPlan && Object.keys(visitsByPlan).length > 0;
+  const hasVisits = routeVisitCount > 0;
   const creditsNeeded = stopCount <= 30 ? 1 : 2;
   const isOverLimit = stopCount > 30;
   const isOverMax = stopCount > 60;
@@ -585,7 +586,7 @@ export default function RoutesPage() {
   const visitStatusMutation = useMutation({
     mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
       setUpdatingVisitId(visitId);
-      const body: any = { status };
+      const body: { status: string; completedAt?: string } = { status };
       if (status === "completed") body.completedAt = new Date().toISOString();
       const res = await apiRequest("PATCH", `/api/visits/${visitId}`, body);
       return res.json();
