@@ -238,6 +238,7 @@ export default function Contacts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       toast({ title: "Contact created", description: "New contact added successfully." });
       setDialogOpen(false);
       form.reset();
@@ -964,6 +965,7 @@ export default function Contacts() {
                       const res = await apiRequest("POST", "/api/contacts/import/json", { rows: validRows });
                       const result = await res.json();
                       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
                       queryClient.invalidateQueries({ queryKey: ["/api/lead-sources"] });
                       let description = `${result.imported} contact${result.imported !== 1 ? "s" : ""} imported successfully.`;
                       if (result.addedLeadSources?.length) {

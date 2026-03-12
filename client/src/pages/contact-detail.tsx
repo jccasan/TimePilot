@@ -158,7 +158,7 @@ export default function ContactDetail() {
       await apiRequest("POST", "/api/properties", { ...data, contactId: id });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties" + `?contactId=${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       toast({ title: "Property added", description: "New property added." });
       setPropertyDialogOpen(false);
       propertyForm.reset();
@@ -170,7 +170,7 @@ export default function ContactDetail() {
       await apiRequest("DELETE", `/api/properties/${propertyId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties" + `?contactId=${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       toast({ title: "Property deleted", description: "Property removed successfully." });
     },
     onError: (error: Error) => {
@@ -186,7 +186,7 @@ export default function ContactDetail() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties" + `?contactId=${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       setMeasurePropertyId(null);
       toast({ title: "Measurement saved", description: "Yard area has been recorded." });
     },
