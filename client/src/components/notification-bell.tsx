@@ -85,12 +85,14 @@ export function NotificationBell() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative" data-testid="button-notification-bell">
           <Bell className="h-4 w-4" />
-          {unreadCount > 0 && (
+          {(clientRequestCount > 0 || unreadCount > 0) && (
             <span
               className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-medium"
               data-testid="badge-notification-count"
             >
-              {unreadCount > 9 ? "9+" : unreadCount}
+              {clientRequestCount > 0
+                ? (clientRequestCount > 9 ? "9+" : clientRequestCount)
+                : (unreadCount > 9 ? "9+" : unreadCount)}
             </span>
           )}
         </Button>
