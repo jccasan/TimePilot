@@ -58,6 +58,7 @@ type EnrichedVisit = {
 };
 
 type RouteGroup = {
+  routeId: string;
   routeName: string;
   routeColor: string | null;
   visits: EnrichedVisit[];
@@ -265,6 +266,7 @@ export default function TechRoutes() {
       const key = visit.routeId || "unassigned";
       if (!groups.has(key)) {
         groups.set(key, {
+          routeId: key,
           routeName: visit.routeName || "Unassigned",
           routeColor: visit.routeColor,
           visits: [],
@@ -374,7 +376,7 @@ export default function TechRoutes() {
       ) : visits && visits.length > 0 ? (
         <div className="space-y-4">
           {routeGroups.map((group) => (
-            <div key={group.routeName} className="space-y-2">
+            <div key={group.routeId} className="space-y-2">
               <div className="flex items-center justify-between" data-testid={`text-route-group-${group.routeName}`}>
                 <div className="flex items-center gap-2">
                   {group.routeColor && (

@@ -126,6 +126,7 @@ async function uploadFileDirect(file: File): Promise<string> {
 }
 
 type RouteGroup = {
+  routeId: string;
   routeName: string;
   routeColor: string | null;
   groups: PropertyGroup[];
@@ -166,6 +167,7 @@ export default function TechMobile() {
       const routeKey = visit.routeId || "unassigned";
       if (!routeMap.has(routeKey)) {
         routeMap.set(routeKey, {
+          routeId: routeKey,
           routeName: visit.routeName || "Unassigned",
           routeColor: visit.routeColor,
           groups: [],
@@ -366,7 +368,7 @@ export default function TechMobile() {
       ) : visits && visits.length > 0 ? (
         <div className="space-y-4">
           {routeGroupsWithProps.map((routeGroup) => (
-            <div key={routeGroup.routeName} className="space-y-3">
+            <div key={routeGroup.routeId} className="space-y-3">
               <div className="flex items-center justify-between px-1" data-testid={`text-mobile-route-group-${routeGroup.routeName}`}>
                 <div className="flex items-center gap-2">
                   {routeGroup.routeColor && (
