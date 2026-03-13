@@ -125,13 +125,13 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
               </div>
             )}
             {visit.servicePlanName && (
-              <p className="text-[10px] text-muted-foreground mt-0.5" data-testid={`text-tech-plan-${visit.id}`}>
+              <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-tech-plan-${visit.id}`}>
                 {visit.servicePlanName}
               </p>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Badge className={`text-[10px] ${config.color}`} data-testid={`badge-tech-status-${visit.id}`}>
+            <Badge className={`text-xs ${config.color}`} data-testid={`badge-tech-status-${visit.id}`}>
               <StatusIcon className="h-3 w-3 mr-1" />
               {config.label}
             </Badge>
@@ -147,7 +147,7 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 text-[10px] gap-1 px-1.5"
+                    className="h-8 text-xs gap-1 px-2 min-h-[44px]"
                     onClick={() => setShowSatellite(!showSatellite)}
                     data-testid={`button-toggle-route-view-${visit.id}`}
                   >
@@ -361,7 +361,7 @@ export default function TechRoutes() {
               size="sm"
               variant={isSelected ? "default" : "outline"}
               onClick={() => setSelectedDay(day)}
-              className="shrink-0 relative"
+              className="shrink-0 relative min-h-[44px]"
               data-testid={`button-tech-day-${day}`}
             >
               {dayFullLabels[day].slice(0, 3)}

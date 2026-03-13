@@ -424,7 +424,7 @@ export default function TechMobile() {
                       {(hasBefore || hasAfter || hasGate) && (
                         <ImageIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
                       )}
-                      <Badge variant="secondary" className={`text-[11px] ${visitStatusColors[visit.status] || ""}`} data-testid={`badge-visit-status-${visit.id}`}>
+                      <Badge variant="secondary" className={`text-xs ${visitStatusColors[visit.status] || ""}`} data-testid={`badge-visit-status-${visit.id}`}>
                         {visitStatusLabels[visit.status] || visit.status}
                       </Badge>
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

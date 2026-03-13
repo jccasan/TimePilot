@@ -1874,7 +1874,7 @@ export default function PortalClient() {
                       <span>Verification email sent to <strong>{profile.pendingEmail}</strong></span>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-3">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">First Name</Label>
                       <Input value={profileEdits.firstName} onChange={(e) => setProfileEdits((p) => ({ ...p, firstName: e.target.value }))} placeholder="First name" className="h-10" data-testid="input-mobile-first-name" />
@@ -1901,15 +1901,13 @@ export default function PortalClient() {
                       <Label className="text-xs text-muted-foreground">City</Label>
                       <Input value={profileEdits.city} onChange={(e) => setProfileEdits((p) => ({ ...p, city: e.target.value }))} placeholder="City" className="h-10" data-testid="input-mobile-city" />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">State</Label>
-                        <Input value={profileEdits.state} onChange={(e) => setProfileEdits((p) => ({ ...p, state: e.target.value }))} placeholder="ST" className="h-10" data-testid="input-mobile-state" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Zip</Label>
-                        <Input value={profileEdits.zipCode} onChange={(e) => setProfileEdits((p) => ({ ...p, zipCode: e.target.value }))} placeholder="Zip" className="h-10" data-testid="input-mobile-zip" />
-                      </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">State</Label>
+                      <Input value={profileEdits.state} onChange={(e) => setProfileEdits((p) => ({ ...p, state: e.target.value }))} placeholder="ST" className="h-10" data-testid="input-mobile-state" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Zip</Label>
+                      <Input value={profileEdits.zipCode} onChange={(e) => setProfileEdits((p) => ({ ...p, zipCode: e.target.value }))} placeholder="Zip" className="h-10" data-testid="input-mobile-zip" />
                     </div>
                   </div>
                   <Button onClick={handleSaveProfile} disabled={savingProfile} className="w-full min-h-[44px]" data-testid="button-save-profile-mobile">
