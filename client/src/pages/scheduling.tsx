@@ -668,7 +668,7 @@ function VisitDetailSheet({
                     {property.streetAddress}
                     {property.city ? `, ${property.city}` : ""}
                     {property.state ? ` ${property.state}` : ""}
-                    {property.zip ? ` ${property.zip}` : ""}
+                    {property.zipCode ? ` ${property.zipCode}` : ""}
                   </p>
                 </div>
               </div>
