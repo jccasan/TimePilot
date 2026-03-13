@@ -6528,13 +6528,13 @@ export async function registerRoutes(
         for (const plan of plans) {
           await storage.updateServicePlan(plan.id, { isActive: false });
         }
+      } else if (request.requestType === "cancel" && request.servicePlanId) {
+        await storage.updateServicePlan(request.servicePlanId, { isActive: false });
       } else if (request.servicePlanId && request.requestedValue) {
         if (request.requestType === "frequency_change") {
           await storage.updateServicePlan(request.servicePlanId, { frequency: request.requestedValue as any });
         } else if (request.requestType === "day_change") {
           await storage.updateServicePlan(request.servicePlanId, { dayOfWeek: request.requestedValue as any });
-        } else if (request.requestType === "cancel") {
-          await storage.updateServicePlan(request.servicePlanId, { isActive: false });
         }
       }
 
