@@ -229,7 +229,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
   onEdit, onDelete, onOptimize, onDispatch, onUnassignAll, isOptimizing, isDispatching, isUnassigning,
-  visitsByPlan, onVisitStatusChange, updatingVisitId }: {
+  visitsByPlan, onVisitStatusChange, updatingVisitId, metrics, metricsLoading }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
