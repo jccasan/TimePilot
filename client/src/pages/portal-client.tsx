@@ -1306,7 +1306,7 @@ export default function PortalClient() {
                         </div>
                         <div className="flex items-center gap-2">
                           {(visit.proofOfServicePhoto || visit.proofOfServicePhotoBefore) && (
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setVisitPhotoModal(visit)}>
+                            <Button variant="ghost" size="sm" className="min-h-[44px] px-2 text-xs" onClick={() => setVisitPhotoModal(visit)}>
                               <Camera className="h-3 w-3 mr-1" /> Photos
                             </Button>
                           )}
@@ -1521,7 +1521,7 @@ export default function PortalClient() {
                           <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">Pending</Badge>
                         </div>
                         {est.items && est.items.length > 0 && (
-                          <div className="rounded-lg border overflow-hidden">
+                          <div className="rounded-lg border overflow-x-auto">
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="bg-muted/50">
@@ -1592,11 +1592,11 @@ export default function PortalClient() {
                             <div className="text-right mr-1">
                               <p className="text-sm font-semibold" data-testid={`text-invoice-total-${inv.id}`}>${Number(inv.total).toFixed(2)}</p>
                               {Number(inv.tipAmount) > 0 && (
-                                <p className="text-[10px] text-green-600 dark:text-green-400" data-testid={`text-invoice-tip-${inv.id}`}>+ ${Number(inv.tipAmount).toFixed(2)} tip</p>
+                                <p className="text-xs text-green-600 dark:text-green-400" data-testid={`text-invoice-tip-${inv.id}`}>+ ${Number(inv.tipAmount).toFixed(2)} tip</p>
                               )}
-                              <Badge variant="secondary" className={`text-[10px] ${invoiceStatusColors[inv.status] || ""}`}>{invoiceStatusLabels[inv.status] || inv.status}</Badge>
+                              <Badge variant="secondary" className={`text-xs ${invoiceStatusColors[inv.status] || ""}`}>{invoiceStatusLabels[inv.status] || inv.status}</Badge>
                             </div>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownloadInvoicePdf(inv.id, inv.invoiceNumber)} data-testid={`button-download-invoice-${inv.id}`}>
+                            <Button variant="ghost" size="icon" className="h-10 w-10 min-h-[44px]" onClick={() => handleDownloadInvoicePdf(inv.id, inv.invoiceNumber)} data-testid={`button-download-invoice-${inv.id}`}>
                               <Download className="h-3.5 w-3.5" />
                             </Button>
                             {inv.status !== "paid" && inv.status !== "voided" && (
@@ -1660,7 +1660,7 @@ export default function PortalClient() {
                               <p className="text-xs text-muted-foreground">Expires {pm.expMonth}/{pm.expYear}</p>
                             </div>
                           </div>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveCard(pm.id)} data-testid={`button-remove-card-${pm.id}`}>
+                          <Button variant="ghost" size="icon" className="h-10 w-10 min-h-[44px] text-muted-foreground hover:text-destructive" onClick={() => handleRemoveCard(pm.id)} data-testid={`button-remove-card-${pm.id}`}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -2226,7 +2226,7 @@ export default function PortalClient() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-10 w-10 min-h-[44px]"
                   disabled={photoModalIndex === null || photoModalIndex <= 0}
                   onClick={() => setPhotoModalIndex((prev) => (prev !== null ? prev - 1 : null))}
                   data-testid="button-gallery-prev"
@@ -2239,7 +2239,7 @@ export default function PortalClient() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-10 w-10 min-h-[44px]"
                   disabled={photoModalIndex === null || photoModalIndex >= galleryPhotos.length - 1}
                   onClick={() => setPhotoModalIndex((prev) => (prev !== null ? prev + 1 : null))}
                   data-testid="button-gallery-next"

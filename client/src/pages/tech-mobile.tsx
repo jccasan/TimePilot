@@ -83,7 +83,7 @@ function PropertyImageSection({ visit }: { visit: TodayVisit }) {
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 text-xs gap-1 px-2"
+          className="h-10 min-h-[44px] text-xs gap-1 px-2"
           onClick={() => setShowSatellite(!showSatellite)}
           data-testid={`button-toggle-view-${visit.id}`}
         >
