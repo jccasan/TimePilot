@@ -196,6 +196,16 @@ function ClientRequestsCard() {
     },
   });
 
+  const acceptCleanupMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PATCH", `/api/notifications/${id}/read`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({ title: "Accepted", description: "Cleanup request accepted. Schedule the visit from your routes page." });
+    },
+  });
+
   const dismissCleanupMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("PATCH", `/api/notifications/${id}/read`);
@@ -344,8 +354,8 @@ function ClientRequestsCard() {
                     <Button
                       size="sm"
                       variant="default"
-                      onClick={() => dismissCleanupMutation.mutate(cu.id)}
-                      disabled={dismissCleanupMutation.isPending}
+                      onClick={() => acceptCleanupMutation.mutate(cu.id)}
+                      disabled={acceptCleanupMutation.isPending}
                       data-testid={`button-accept-cleanup-${cu.id}`}
                     >
                       <CheckCircle className="h-3.5 w-3.5 mr-1" />
