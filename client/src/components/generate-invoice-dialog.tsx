@@ -1,0 +1,310 @@
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Contact, Visit } from "@shared/schema";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FileText, CheckCircle, DollarSign, Calendar } from "lucide-react";
+
+type UninvoicedVisit = Visit & {
+  servicePlanName: string;
+  pricePerVisit: string;
+  propertyAddress: string;
+};
+
+type UninvoicedResult = {
+  visits: UninvoicedVisit[];
+  totalDollars: number;
+};
+
+interface GenerateInvoiceDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  contactId?: string;
+  showContactPicker?: boolean;
+}
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+export function GenerateInvoiceDialog({
+  open,
+  onOpenChange,
+  contactId: initialContactId,
+  showContactPicker = false,
+}: GenerateInvoiceDialogProps) {
+  const { toast } = useToast();
+  const [selectedContactId, setSelectedContactId] = useState(initialContactId || "");
+  const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split("T")[0];
+  });
+
+  const activeContactId = initialContactId || selectedContactId;
+
+  const { data: contacts } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+    enabled: showContactPicker && open,
+  });
+
+  const { data: uninvoicedData, isLoading, isError } = useQuery<UninvoicedResult>({
+    queryKey: ["/api/contacts", activeContactId, "uninvoiced-visits"],
+    enabled: !!activeContactId && open,
+  });
+
+  const visitsByPlan = useMemo(() => {
+    if (!uninvoicedData?.visits) return new Map<string, UninvoicedVisit[]>();
+    const map = new Map<string, UninvoicedVisit[]>();
+    for (const v of uninvoicedData.visits) {
+      const key = `${v.servicePlanName} - ${v.propertyAddress}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(v);
+    }
+    return map;
+  }, [uninvoicedData]);
+
+  const selectedTotal = useMemo(() => {
+    if (!uninvoicedData?.visits) return 0;
+    return uninvoicedData.visits
+      .filter(v => selectedVisitIds.has(v.id))
+      .reduce((sum, v) => sum + (parseFloat(v.pricePerVisit) || 0), 0);
+  }, [uninvoicedData, selectedVisitIds]);
+
+  const allSelected = uninvoicedData?.visits && uninvoicedData.visits.length > 0 &&
+    uninvoicedData.visits.every(v => selectedVisitIds.has(v.id));
+
+  const toggleAll = () => {
+    if (!uninvoicedData?.visits) return;
+    if (allSelected) {
+      setSelectedVisitIds(new Set());
+    } else {
+      setSelectedVisitIds(new Set(uninvoicedData.visits.map(v => v.id)));
+    }
+  };
+
+  const toggleVisit = (visitId: string) => {
+    setSelectedVisitIds(prev => {
+      const next = new Set(prev);
+      if (next.has(visitId)) next.delete(visitId);
+      else next.add(visitId);
+      return next;
+    });
+  };
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/invoices/from-visits", {
+        contactId: activeContactId,
+        visitIds: Array.from(selectedVisitIds),
+        dueDate,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ predicate: (query) => {
+        const key = query.queryKey[0] as string;
+        return key?.startsWith("/api/invoices") ||
+          key?.startsWith("/api/company/uninvoiced") ||
+          (key === "/api/contacts" && query.queryKey[2] === "uninvoiced-visits");
+      }});
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts", activeContactId, "uninvoiced-visits"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      toast({
+        title: "Invoice created",
+        description: `Invoice #${data.invoiceNumber} for $${parseFloat(data.total).toFixed(2)} created from ${selectedVisitIds.size} visit${selectedVisitIds.size > 1 ? "s" : ""}.`,
+      });
+      onOpenChange(false);
+      setSelectedVisitIds(new Set());
+      setSelectedContactId("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      setSelectedVisitIds(new Set());
+      if (showContactPicker) setSelectedContactId("");
+    } else if (initialContactId) {
+      setSelectedVisitIds(new Set());
+    }
+    onOpenChange(isOpen);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2" data-testid="text-generate-invoice-title">
+            <FileText className="h-5 w-5" />
+            Generate Invoice from Completed Work
+          </DialogTitle>
+          <DialogDescription>
+            Select completed visits to include in the invoice.
+          </DialogDescription>
+        </DialogHeader>
+
+        {showContactPicker && !initialContactId && (
+          <div data-testid="section-contact-picker">
+            <Label>Client</Label>
+            <Select value={selectedContactId} onValueChange={setSelectedContactId}>
+              <SelectTrigger data-testid="select-invoice-contact">
+                <SelectValue placeholder="Select a client" />
+              </SelectTrigger>
+              <SelectContent>
+                {contacts?.filter(c => c.status === "active").map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.firstName} {c.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {!activeContactId ? (
+          <div className="text-center py-8 text-muted-foreground" data-testid="text-select-client-prompt">
+            <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-40" />
+            <p>Select a client to see their uninvoiced completed work.</p>
+          </div>
+        ) : isError ? (
+          <div className="text-center py-8 text-destructive" data-testid="text-error-uninvoiced">
+            <p className="font-medium">Failed to load uninvoiced visits</p>
+            <p className="text-sm text-muted-foreground">Please try again later.</p>
+          </div>
+        ) : isLoading ? (
+          <div className="space-y-3" data-testid="loading-uninvoiced-visits">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        ) : !uninvoicedData?.visits || uninvoicedData.visits.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground" data-testid="text-no-uninvoiced">
+            <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500 opacity-60" />
+            <p className="font-medium">All caught up</p>
+            <p className="text-sm">No uninvoiced completed visits for this client.</p>
+          </div>
+        ) : (
+          <div className="space-y-4" data-testid="section-uninvoiced-visits">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={allSelected || false}
+                  onCheckedChange={toggleAll}
+                  data-testid="checkbox-select-all"
+                />
+                <span className="text-sm font-medium">
+                  Select All ({uninvoicedData.visits.length} visit{uninvoicedData.visits.length !== 1 ? "s" : ""})
+                </span>
+              </div>
+              <Badge variant="secondary" className="text-sm" data-testid="badge-total-uninvoiced">
+                ${uninvoicedData.totalDollars.toFixed(2)} total
+              </Badge>
+            </div>
+
+            <div className="space-y-3 border rounded-lg p-3">
+              {Array.from(visitsByPlan.entries()).map(([planKey, planVisits]) => (
+                <div key={planKey}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-medium text-muted-foreground">{planKey}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {planVisits.length} visit{planVisits.length !== 1 ? "s" : ""}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1 ml-1">
+                    {planVisits.map((visit) => (
+                      <label
+                        key={visit.id}
+                        className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-muted/50 cursor-pointer"
+                        data-testid={`row-visit-${visit.id}`}
+                      >
+                        <Checkbox
+                          checked={selectedVisitIds.has(visit.id)}
+                          onCheckedChange={() => toggleVisit(visit.id)}
+                          data-testid={`checkbox-visit-${visit.id}`}
+                        />
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="text-sm">{formatDate(visit.scheduledDate)}</span>
+                          {visit.completedAt && (
+                            <Badge variant="secondary" className="text-[10px] px-1 py-0 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                              Completed
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-sm font-medium tabular-nums" data-testid={`text-visit-price-${visit.id}`}>
+                          ${parseFloat(visit.pricePerVisit).toFixed(2)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t pt-3 space-y-3">
+              <div className="flex items-center gap-3">
+                <Label className="whitespace-nowrap">Due Date</Label>
+                <Input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="max-w-[200px]"
+                  data-testid="input-invoice-due-date"
+                />
+              </div>
+
+              <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedVisitIds.size} visit{selectedVisitIds.size !== 1 ? "s" : ""} selected
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold" data-testid="text-selected-total">
+                    ${selectedTotal.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                onClick={() => createMutation.mutate()}
+                disabled={selectedVisitIds.size === 0 || createMutation.isPending}
+                className="w-full"
+                data-testid="button-create-invoice-from-visits"
+              >
+                {createMutation.isPending
+                  ? "Creating Invoice..."
+                  : `Create Invoice ($${selectedTotal.toFixed(2)})`}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

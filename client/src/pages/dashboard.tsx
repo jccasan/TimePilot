@@ -67,6 +67,7 @@ type CompanyData = {
 const ALL_WIDGETS = [
   { id: "mrr", label: "Monthly Revenue (MRR)" },
   { id: "month_revenue", label: "Revenue This Month" },
+  { id: "requires_invoicing", label: "Requires Invoicing" },
   { id: "overdue_invoices", label: "Overdue Invoices" },
   { id: "todays_visits", label: "Today's Visits" },
   { id: "active_clients", label: "Active Clients" },
@@ -96,6 +97,10 @@ export default function Dashboard() {
 
   const { data: company } = useQuery<CompanyData>({
     queryKey: ["/api/company"],
+  });
+
+  const { data: uninvoicedSummary } = useQuery<{ count: number; totalDollars: number }>({
+    queryKey: ["/api/company/uninvoiced-summary"],
   });
 
   const saveMutation = useMutation({
@@ -199,6 +204,35 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+    ),
+    requires_invoicing: () => (
+      <Link href="/invoices" key="requires_invoicing">
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" data-testid="widget-requires-invoicing">
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Requires Invoicing</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {!uninvoicedSummary ? (
+              <Skeleton className="h-8 w-24" />
+            ) : uninvoicedSummary.count === 0 ? (
+              <div data-testid="text-requires-invoicing">
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400">0</div>
+                <p className="text-xs text-muted-foreground mt-1">All caught up</p>
+              </div>
+            ) : (
+              <div data-testid="text-requires-invoicing">
+                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                  {uninvoicedSummary.count}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  ${uninvoicedSummary.totalDollars.toFixed(2)} uninvoiced
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </Link>
     ),
     overdue_invoices: () => (
       <Card key="overdue_invoices" data-testid="widget-overdue-invoices">
@@ -383,7 +417,7 @@ export default function Dashboard() {
     ),
   };
 
-  const statWidgetIds = ["mrr", "month_revenue", "overdue_invoices", "todays_visits", "active_clients", "service_plans", "team_size", "texts_sent", "emails_sent"];
+  const statWidgetIds = ["mrr", "month_revenue", "requires_invoicing", "overdue_invoices", "todays_visits", "active_clients", "service_plans", "team_size", "texts_sent", "emails_sent"];
   const fullWidgetIds = ["quick_actions"];
 
   const activeStatWidgets = activeWidgets.filter((id) => statWidgetIds.includes(id));

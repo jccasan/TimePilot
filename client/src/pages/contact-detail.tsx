@@ -47,7 +47,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap } from "lucide-react";
+import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
@@ -494,6 +495,8 @@ export default function ContactDetail() {
       <PortalAccessCard contact={contact} contactId={id!} />
 
       <PaymentMethodsCard contact={contact} contactId={id!} />
+
+      <BillingHistoryCard contactId={id!} />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
@@ -2081,5 +2084,154 @@ function ActivitySection({ contactId }: { contactId: string }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+const invoiceStatusColors: Record<string, string> = {
+  draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+  sent: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  pending: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  paid: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  voided: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+  refunded: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+};
+
+function BillingHistoryCard({ contactId }: { contactId: string }) {
+  const [generateOpen, setGenerateOpen] = useState(false);
+
+  type UninvoicedResult = {
+    visits: any[];
+    totalDollars: number;
+  };
+
+  const { data: invoicesData } = useQuery<any[]>({
+    queryKey: ["/api/invoices", "contact", contactId],
+    queryFn: () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      return fetch(`/api/invoices?contactId=${contactId}`, { credentials: "include", headers }).then(r => {
+        if (!r.ok) throw new Error("Failed to fetch");
+        return r.json();
+      });
+    },
+  });
+
+  const { data: uninvoicedData } = useQuery<UninvoicedResult>({
+    queryKey: ["/api/contacts", contactId, "uninvoiced-visits"],
+  });
+
+  const totalOutstanding = useMemo(() => {
+    if (!invoicesData) return 0;
+    return invoicesData
+      .filter(inv => ["pending", "sent", "failed"].includes(inv.status))
+      .reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0);
+  }, [invoicesData]);
+
+  const totalPaid = useMemo(() => {
+    if (!invoicesData) return 0;
+    return invoicesData
+      .filter(inv => inv.status === "paid")
+      .reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0);
+  }, [invoicesData]);
+
+  const sortedInvoices = useMemo(() => {
+    if (!invoicesData) return [];
+    return [...invoicesData].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [invoicesData]);
+
+  return (
+    <>
+      <Card data-testid="card-billing-history">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Receipt className="h-5 w-5" />
+            Billing
+          </CardTitle>
+          <Button size="sm" onClick={() => setGenerateOpen(true)} data-testid="button-generate-invoice-contact">
+            <Zap className="mr-1 h-4 w-4" /> Generate Invoice
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="billing-uninvoiced">
+              <p className="text-xs text-muted-foreground mb-1">Uninvoiced</p>
+              <p className="text-lg font-bold text-orange-600 dark:text-orange-400">
+                ${(uninvoicedData?.totalDollars ?? 0).toFixed(2)}
+              </p>
+              <p className="text-[10px] text-muted-foreground">{uninvoicedData?.visits?.length ?? 0} visits</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="billing-outstanding">
+              <p className="text-xs text-muted-foreground mb-1">Outstanding</p>
+              <p className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                ${totalOutstanding.toFixed(2)}
+              </p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="billing-paid">
+              <p className="text-xs text-muted-foreground mb-1">Paid</p>
+              <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                ${totalPaid.toFixed(2)}
+              </p>
+            </div>
+          </div>
+
+          {uninvoicedData && uninvoicedData.visits.length > 0 && (
+            <div className="border border-orange-200 dark:border-orange-800 rounded-lg p-3 bg-orange-50 dark:bg-orange-950/30" data-testid="section-uninvoiced-alert">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                  <span className="text-sm font-medium">
+                    {uninvoicedData.visits.length} completed visit{uninvoicedData.visits.length !== 1 ? "s" : ""} need invoicing
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setGenerateOpen(true)}
+                  data-testid="button-invoice-uninvoiced-alert"
+                >
+                  Invoice Now
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {sortedInvoices.length > 0 ? (
+            <div className="space-y-2" data-testid="section-invoice-history">
+              <p className="text-sm font-medium text-muted-foreground">Recent Invoices</p>
+              {sortedInvoices.slice(0, 10).map((inv) => (
+                <div
+                  key={inv.id}
+                  className="flex items-center justify-between gap-2 py-2 border-b last:border-0"
+                  data-testid={`row-invoice-${inv.id}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className={`text-[10px] ${invoiceStatusColors[inv.status] || ""}`}>
+                      {inv.status}
+                    </Badge>
+                    <span className="text-sm">#{inv.invoiceNumber}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(inv.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                  <span className="text-sm font-medium tabular-nums">${parseFloat(inv.total).toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-3" data-testid="text-no-invoices">
+              No invoices yet
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <GenerateInvoiceDialog
+        open={generateOpen}
+        onOpenChange={setGenerateOpen}
+        contactId={contactId}
+      />
+    </>
   );
 }

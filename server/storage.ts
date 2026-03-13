@@ -157,6 +157,8 @@ export interface IStorage {
   getUninvoicedCompletedVisits(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]>;
   getScheduledVisitsForRange(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]>;
   createInvoiceWithLineItems(invoiceData: InsertInvoice, lineItems: Omit<InsertInvoiceLineItem, "invoiceId">[]): Promise<Invoice>;
+  getUninvoicedSummary(companyId: string): Promise<{ count: number; totalDollars: number; byContact: { contactId: string; contactName: string; count: number; totalDollars: number }[] }>;
+  getUninvoicedVisitsForContact(companyId: string, contactId: string): Promise<{ visits: (Visit & { servicePlanName: string; pricePerVisit: string; propertyAddress: string })[]; totalDollars: number }>;
 
   // Automation Rules
   getAutomationRules(companyId: string): Promise<AutomationRule[]>;
@@ -791,6 +793,101 @@ export class DatabaseStorage implements IStorage {
       await db.insert(invoiceLineItems).values({ ...item, invoiceId: invoice.id });
     }
     return invoice;
+  }
+
+  async getUninvoicedSummary(companyId: string): Promise<{ count: number; totalDollars: number; byContact: { contactId: string; contactName: string; count: number; totalDollars: number }[] }> {
+    const completedVisits = await db.select().from(visits).where(and(
+      eq(visits.companyId, companyId),
+      eq(visits.status, "completed"),
+    ));
+
+    const allLineItems = await db.select({ visitId: invoiceLineItems.visitId }).from(invoiceLineItems).where(
+      sql`${invoiceLineItems.visitId} IS NOT NULL`
+    );
+    const invoicedVisitIds = new Set(allLineItems.map(li => li.visitId));
+    const uninvoiced = completedVisits.filter(v => !invoicedVisitIds.has(v.id));
+
+    if (uninvoiced.length === 0) {
+      return { count: 0, totalDollars: 0, byContact: [] };
+    }
+
+    const planIds = [...new Set(uninvoiced.map(v => v.servicePlanId))];
+    const plans = planIds.length > 0 ? await db.select().from(servicePlans).where(inArray(servicePlans.id, planIds)) : [];
+    const planMap = new Map(plans.map(p => [p.id, p]));
+
+    const contactIds = [...new Set(plans.map(p => p.contactId))];
+    const contactsList = contactIds.length > 0 ? await db.select().from(contacts).where(inArray(contacts.id, contactIds)) : [];
+    const contactMap = new Map(contactsList.map(c => [c.id, c]));
+
+    const byContactMap = new Map<string, { contactId: string; contactName: string; count: number; totalDollars: number }>();
+    let totalDollars = 0;
+
+    for (const v of uninvoiced) {
+      const plan = planMap.get(v.servicePlanId);
+      if (!plan) continue;
+      const price = parseFloat(plan.pricePerVisit) || 0;
+      totalDollars += price;
+      const contact = contactMap.get(plan.contactId);
+      const contactName = contact ? `${contact.firstName} ${contact.lastName}` : "Unknown";
+      const existing = byContactMap.get(plan.contactId);
+      if (existing) {
+        existing.count++;
+        existing.totalDollars += price;
+      } else {
+        byContactMap.set(plan.contactId, { contactId: plan.contactId, contactName, count: 1, totalDollars: price });
+      }
+    }
+
+    return {
+      count: uninvoiced.length,
+      totalDollars: Math.round(totalDollars * 100) / 100,
+      byContact: Array.from(byContactMap.values()).sort((a, b) => b.totalDollars - a.totalDollars),
+    };
+  }
+
+  async getUninvoicedVisitsForContact(companyId: string, contactId: string): Promise<{ visits: (Visit & { servicePlanName: string; pricePerVisit: string; propertyAddress: string })[]; totalDollars: number }> {
+    const contactPlans = await db.select().from(servicePlans).where(and(
+      eq(servicePlans.companyId, companyId),
+      eq(servicePlans.contactId, contactId),
+    ));
+    if (contactPlans.length === 0) return { visits: [], totalDollars: 0 };
+
+    const planIds = contactPlans.map(p => p.id);
+    const completedVisits = await db.select().from(visits).where(and(
+      eq(visits.companyId, companyId),
+      eq(visits.status, "completed"),
+      inArray(visits.servicePlanId, planIds),
+    ));
+
+    if (completedVisits.length === 0) return { visits: [], totalDollars: 0 };
+
+    const allLineItems = await db.select({ visitId: invoiceLineItems.visitId }).from(invoiceLineItems).where(
+      inArray(invoiceLineItems.visitId!, completedVisits.map(v => v.id))
+    );
+    const invoicedVisitIds = new Set(allLineItems.map(li => li.visitId));
+    const uninvoiced = completedVisits.filter(v => !invoicedVisitIds.has(v.id));
+
+    const planMap = new Map(contactPlans.map(p => [p.id, p]));
+
+    const propertyIds = [...new Set(contactPlans.map(p => p.propertyId))];
+    const propsList = propertyIds.length > 0 ? await db.select().from(properties).where(inArray(properties.id, propertyIds)) : [];
+    const propMap = new Map(propsList.map(p => [p.id, p]));
+
+    let totalDollars = 0;
+    const enriched = uninvoiced.map(v => {
+      const plan = planMap.get(v.servicePlanId);
+      const prop = plan ? propMap.get(plan.propertyId) : undefined;
+      const price = parseFloat(plan?.pricePerVisit || "0");
+      totalDollars += price;
+      return {
+        ...v,
+        servicePlanName: plan?.frequency ? `${plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1)} Service` : "Service",
+        pricePerVisit: plan?.pricePerVisit || "0",
+        propertyAddress: prop ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}` : "Unknown",
+      };
+    }).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+
+    return { visits: enriched, totalDollars: Math.round(totalDollars * 100) / 100 };
   }
 
   // ================ Automation Rules ================

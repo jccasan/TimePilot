@@ -520,6 +520,9 @@ function VisitChip({ visit, contacts, properties, routes, compact }: {
           <Badge variant="secondary" className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`}>
             {visitStatusLabels[visit.status] || visit.status}
           </Badge>
+          {visit.status === "completed" && !visit.invoiceId && (
+            <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400" title="Needs invoicing" data-testid={`indicator-needs-invoice-${visit.id}`}>$</span>
+          )}
           {route && <span className="text-[10px] text-muted-foreground truncate">{route.name}</span>}
         </div>
         {contact && (
@@ -539,6 +542,9 @@ function VisitChip({ visit, contacts, properties, routes, compact }: {
           <Badge variant="secondary" className={visitStatusColors[visit.status] || ""}>
             {visitStatusLabels[visit.status] || visit.status}
           </Badge>
+          {visit.status === "completed" && !visit.invoiceId && (
+            <span className="text-xs font-bold text-orange-600 dark:text-orange-400" title="Needs invoicing" data-testid={`indicator-needs-invoice-${visit.id}`}>$</span>
+          )}
           {route && <span className="text-xs text-muted-foreground">{route.name}</span>}
         </div>
         {contact && (

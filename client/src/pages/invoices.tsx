@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Ban } from "lucide-react";
 import { ClientInfoPopover } from "@/components/client-info-popover";
+import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 
 const invoiceStatusLabels: Record<string, string> = {
   draft: "Draft",
@@ -189,10 +190,6 @@ export default function Invoices() {
   const [discountValue, setDiscountValue] = useState("0");
   const [invoiceStatus, setInvoiceStatus] = useState("pending");
 
-  const [genContactId, setGenContactId] = useState("");
-  const [genStartDate, setGenStartDate] = useState("");
-  const [genEndDate, setGenEndDate] = useState("");
-  const [genMode, setGenMode] = useState("completed");
 
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
@@ -350,30 +347,6 @@ export default function Invoices() {
     },
   });
 
-  const generateMutation = useMutation({
-    mutationFn: async () => {
-      if (!genContactId || !genStartDate || !genEndDate) throw new Error("All fields required");
-      const res = await apiRequest("POST", "/api/invoices/generate", {
-        contactId: genContactId,
-        startDate: genStartDate,
-        endDate: genEndDate,
-        mode: genMode,
-      });
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
-      if (data.invoice) {
-        toast({ title: "Invoice generated", description: `Invoice ${data.invoiceNumber || ""} created for the selected period.` });
-      } else {
-        toast({ title: "No billable visits", description: data.message || "No visits found for that period." });
-      }
-      setGenerateDialogOpen(false);
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
 
   const markPaidMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
@@ -463,55 +436,9 @@ export default function Invoices() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold" data-testid="text-invoices-heading">Invoices</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" data-testid="button-generate-invoice">
-                <Zap className="mr-1 h-4 w-4" /> Generate from Visits
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Generate Invoice from Visits</DialogTitle>
-                <DialogDescription>Generate an invoice from visits in a date range for a specific client.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Contact</Label>
-                  <Select value={genContactId} onValueChange={setGenContactId}>
-                    <SelectTrigger data-testid="select-gen-contact"><SelectValue placeholder="Select contact" /></SelectTrigger>
-                    <SelectContent>
-                      {contacts?.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Mode</Label>
-                  <Select value={genMode} onValueChange={setGenMode}>
-                    <SelectTrigger data-testid="select-gen-mode"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="completed">Completed visits</SelectItem>
-                      <SelectItem value="scheduled">Scheduled visits</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Start Date</Label>
-                    <Input type="date" value={genStartDate} onChange={e => setGenStartDate(e.target.value)} data-testid="input-gen-start-date" />
-                  </div>
-                  <div>
-                    <Label>End Date</Label>
-                    <Input type="date" value={genEndDate} onChange={e => setGenEndDate(e.target.value)} data-testid="input-gen-end-date" />
-                  </div>
-                </div>
-                <Button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending} data-testid="button-submit-generate">
-                  {generateMutation.isPending ? "Generating..." : "Generate Invoice"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" onClick={() => setGenerateDialogOpen(true)} data-testid="button-generate-invoice">
+            <Zap className="mr-1 h-4 w-4" /> Generate from Completed Work
+          </Button>
           <Button variant="outline" onClick={() => {
                 if (invoiceTheme) setEditTheme({ ...invoiceTheme });
                 setThemeDialogOpen(true);
@@ -1284,6 +1211,12 @@ export default function Invoices() {
           )}
         </DialogContent>
       </Dialog>
+
+      <GenerateInvoiceDialog
+        open={generateDialogOpen}
+        onOpenChange={setGenerateDialogOpen}
+        showContactPicker
+      />
     </div>
   );
 }
