@@ -2932,7 +2932,10 @@ export async function registerRoutes(
       const existing = await storage.getVisit(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Visit not found" });
 
-      if (role === "tech" && existing.routeId) {
+      if (role === "tech") {
+        if (!existing.routeId) {
+          return res.status(403).json({ error: "Visit has no assigned route" });
+        }
         const route = await storage.getRoute(existing.routeId, companyId);
         if (!route || route.technicianId !== userId) {
           return res.status(403).json({ error: "You are not assigned to this visit's route" });
@@ -3021,7 +3024,10 @@ export async function registerRoutes(
       const existing = await storage.getVisit(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Visit not found" });
 
-      if (role === "tech" && existing.routeId) {
+      if (role === "tech") {
+        if (!existing.routeId) {
+          return res.status(403).json({ error: "Visit has no assigned route" });
+        }
         const route = await storage.getRoute(existing.routeId, companyId);
         if (!route || route.technicianId !== userId) {
           return res.status(403).json({ error: "You are not assigned to this visit's route" });
