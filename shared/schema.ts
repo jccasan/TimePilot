@@ -192,6 +192,11 @@ export const contacts = pgTable("contacts", {
     invoiceDueReminder?: boolean;
     paymentConfirmation?: boolean;
   }>().default({ email: true, sms: false }),
+  pendingEmail: varchar("pending_email", { length: 255 }),
+  emailVerificationToken: varchar("email_verification_token", { length: 255 }),
+  emailVerificationExpiry: timestamp("email_verification_expiry"),
+  resetToken: varchar("reset_token", { length: 255 }),
+  resetTokenExpiry: timestamp("reset_token_expiry"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

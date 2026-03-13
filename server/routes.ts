@@ -5387,6 +5387,156 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  const resetRequestCounts = new Map<string, { count: number; resetAt: number }>();
+
+  app.post("/api/portal/forgot-password", async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ error: "Email is required" });
+
+      const normalizedEmail = String(email).trim().toLowerCase();
+
+      const rateKey = normalizedEmail;
+      const now = Date.now();
+      const rateEntry = resetRequestCounts.get(rateKey);
+      if (rateEntry && rateEntry.resetAt > now) {
+        if (rateEntry.count >= 3) {
+          return res.json({ success: true });
+        }
+        rateEntry.count++;
+      } else {
+        resetRequestCounts.set(rateKey, { count: 1, resetAt: now + 60 * 60 * 1000 });
+      }
+
+      const allCompanies = await storage.listCompanies();
+      let foundContact = null;
+      for (const company of allCompanies) {
+        const companyContacts = await storage.getContacts(company.id, { search: normalizedEmail });
+        const match = companyContacts.find(
+          (c) => c.email?.toLowerCase() === normalizedEmail && c.hasPortalAccess && c.portalPasswordHash
+        );
+        if (match) {
+          foundContact = match;
+          break;
+        }
+      }
+
+      if (!foundContact) {
+        return res.json({ success: true });
+      }
+
+      const resetTokenRaw = crypto.randomBytes(32).toString("hex");
+      const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
+      await storage.updateContact(foundContact.id, {
+        resetToken: resetTokenRaw,
+        resetTokenExpiry,
+      });
+
+      const baseUrl = getBaseUrl(req);
+      const resetLink = `${baseUrl}/portal/reset-password?token=${resetTokenRaw}`;
+      const company = await storage.getCompany(foundContact.companyId);
+      const companyName = company?.name || "Your Service Provider";
+
+      const { sendEmail } = await import("./services/email");
+      sendEmail({
+        to: foundContact.email!,
+        subject: `Reset your ${companyName} portal password`,
+        text: `Hi ${foundContact.firstName},\n\nWe received a request to reset your portal password.\n\nClick this link to set a new password (expires in 1 hour):\n${resetLink}\n\nIf you didn't request this, you can safely ignore this email.\n\n${companyName}`,
+        html: `
+          <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #1a7a4c; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 22px;">${companyName}</h1>
+            </div>
+            <div style="padding: 24px; background: #ffffff; border: 1px solid #e2e8f0; border-top: none;">
+              <p>Hi ${foundContact.firstName},</p>
+              <p>We received a request to reset your portal password.</p>
+              <div style="text-align: center; margin: 28px 0;">
+                <a href="${resetLink}" style="display: inline-block; background-color: #1a7a4c; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600;">Reset Password</a>
+              </div>
+              <p style="font-size: 13px; color: #6b7280;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+            </div>
+          </div>
+        `,
+      }).catch(console.error);
+
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/portal/reset-password", async (req: Request, res: Response) => {
+    try {
+      const { token, password } = req.body;
+      if (!token || !password) return res.status(400).json({ error: "Token and password are required" });
+      if (String(password).length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+
+      const allCompanies = await storage.listCompanies();
+      let foundContact = null;
+      for (const company of allCompanies) {
+        const contacts = await storage.getContacts(company.id, {});
+        const match = contacts.find(
+          (c) => c.resetToken === token && c.resetTokenExpiry && new Date(c.resetTokenExpiry) > new Date()
+        );
+        if (match) {
+          foundContact = match;
+          break;
+        }
+      }
+
+      if (!foundContact) {
+        return res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+      }
+
+      const salt = crypto.randomBytes(16).toString("hex");
+      const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+        crypto.scrypt(String(password), salt, 64, (err, key) => {
+          if (err) reject(err);
+          resolve(`${salt}:${key.toString("hex")}`);
+        });
+      });
+
+      await storage.updateContact(foundContact.id, {
+        portalPasswordHash,
+        resetToken: null,
+        resetTokenExpiry: null,
+      });
+
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/portal/verify-email", async (req: Request, res: Response) => {
+    try {
+      const token = String(req.query.token || "");
+      if (!token) return res.status(400).json({ error: "Verification token is required" });
+
+      const allCompanies = await storage.listCompanies();
+      let foundContact = null;
+      for (const company of allCompanies) {
+        const contacts = await storage.getContacts(company.id, {});
+        const match = contacts.find(
+          (c) => c.emailVerificationToken === token && c.emailVerificationExpiry && new Date(c.emailVerificationExpiry) > new Date()
+        );
+        if (match) {
+          foundContact = match;
+          break;
+        }
+      }
+
+      if (!foundContact || !foundContact.pendingEmail) {
+        return res.status(400).json({ error: "Invalid or expired verification link." });
+      }
+
+      await storage.updateContact(foundContact.id, {
+        email: foundContact.pendingEmail,
+        pendingEmail: null,
+        emailVerificationToken: null,
+        emailVerificationExpiry: null,
+      });
+
+      res.json({ success: true, email: foundContact.pendingEmail });
+    } catch (err) { handleError(res, err); }
+  });
+
   async function getPortalContext(req: Request) {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
@@ -5698,10 +5848,11 @@ export async function registerRoutes(
       if (req.body.city !== undefined) updates.city = String(req.body.city).trim();
       if (req.body.state !== undefined) updates.state = String(req.body.state).trim();
       if (req.body.zipCode !== undefined) updates.zipCode = String(req.body.zipCode).trim();
+      let pendingEmailChange: string | null = null;
       if (req.body.email !== undefined) {
         const newEmail = String(req.body.email).trim().toLowerCase();
         if (newEmail && newEmail !== contact.email) {
-          updates.email = newEmail;
+          pendingEmailChange = newEmail;
         }
       }
       if (Object.keys(updates).length > 0) {
@@ -5729,10 +5880,51 @@ export async function registerRoutes(
           }
         }
       }
+      let emailVerificationSent = false;
+      if (pendingEmailChange) {
+        const verificationToken = crypto.randomBytes(32).toString("hex");
+        const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await storage.updateContact(contactId, {
+          pendingEmail: pendingEmailChange,
+          emailVerificationToken: verificationToken,
+          emailVerificationExpiry: verificationExpiry,
+        });
+
+        const baseUrl = getBaseUrl(req);
+        const verifyLink = `${baseUrl}/portal/verify-email?token=${verificationToken}`;
+        const company = await storage.getCompany(companyId);
+        const companyName = company?.name || "Your Service Provider";
+
+        const { sendEmail } = await import("./services/email");
+        sendEmail({
+          to: pendingEmailChange,
+          subject: `Verify your new email address - ${companyName}`,
+          text: `Hi ${contact.firstName},\n\nYou requested to change your email address to ${pendingEmailChange}.\n\nClick this link to verify your new email (expires in 24 hours):\n${verifyLink}\n\nIf you didn't request this change, you can safely ignore this email.\n\n${companyName}`,
+          html: `
+            <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #1a7a4c; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 22px;">${companyName}</h1>
+              </div>
+              <div style="padding: 24px; background: #ffffff; border: 1px solid #e2e8f0; border-top: none;">
+                <p>Hi ${contact.firstName},</p>
+                <p>You requested to change your email address to <strong>${pendingEmailChange}</strong>.</p>
+                <div style="text-align: center; margin: 28px 0;">
+                  <a href="${verifyLink}" style="display: inline-block; background-color: #1a7a4c; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600;">Verify Email</a>
+                </div>
+                <p style="font-size: 13px; color: #6b7280;">This link expires in 24 hours. Your current email remains active until you verify the new one.</p>
+              </div>
+            </div>
+          `,
+        }).catch(console.error);
+        emailVerificationSent = true;
+      }
+
       const updatedContact = await storage.getContactById(contactId);
       const company = await storage.getCompany(companyId);
       res.json({
         success: true,
+        emailVerificationSent,
+        pendingEmail: pendingEmailChange || undefined,
         profile: {
           id: updatedContact!.id,
           firstName: updatedContact!.firstName,

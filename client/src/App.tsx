@@ -30,6 +30,8 @@ import ApiKeysPage from "@/pages/api-keys";
 import WebhooksPage from "@/pages/webhooks-page";
 import Portal from "@/pages/portal";
 import PortalLogin from "@/pages/portal-login";
+import PortalResetPassword from "@/pages/portal-reset-password";
+import PortalVerifyEmail from "@/pages/portal-verify-email";
 import PortalClient from "@/pages/portal-client";
 import Pricing from "@/pages/pricing";
 import Communications from "@/pages/communications";
@@ -392,6 +394,8 @@ function PortalRouter() {
   return (
     <Switch>
       <Route path="/portal/login" component={PortalLogin} />
+      <Route path="/portal/reset-password" component={PortalResetPassword} />
+      <Route path="/portal/verify-email" component={PortalVerifyEmail} />
       <Route path="/portal/client" component={PortalClient} />
       <Route>{() => { window.location.href = "/portal/login"; return null; }}</Route>
     </Switch>
@@ -400,10 +404,8 @@ function PortalRouter() {
 
 function AppContent() {
   const { isAuthenticated, isLoading, user } = useAuth();
-  const isPortalPath = typeof window !== "undefined" && (
-    window.location.pathname.startsWith("/portal/login") ||
-    window.location.pathname.startsWith("/portal/client")
-  );
+  const isPortalPath = typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/portal/");
   const isAdminPath = typeof window !== "undefined" &&
     window.location.pathname.startsWith("/admin");
   const isResetPasswordPath = typeof window !== "undefined" &&

@@ -607,7 +607,14 @@ export default function PortalClient() {
           zipCode: result.profile.zipCode || "",
         });
       }
-      toast({ title: "Saved", description: "Your information has been updated." });
+      if (result.emailVerificationSent) {
+        toast({
+          title: "Verification email sent",
+          description: `A verification link was sent to ${result.pendingEmail}. Your current email remains active until you verify the new one.`,
+        });
+      } else {
+        toast({ title: "Saved", description: "Your information has been updated." });
+      }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {

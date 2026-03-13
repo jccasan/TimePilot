@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { LogIn } from "lucide-react";
+import { LogIn, ArrowLeft, Mail } from "lucide-react";
 
 export default function PortalLogin() {
   const [, navigate] = useLocation();
@@ -13,6 +13,10 @@ export default function PortalLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +49,106 @@ export default function PortalLogin() {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) {
+      toast({ title: "Required", description: "Please enter your email address.", variant: "destructive" });
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      const res = await fetch("/api/portal/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Request failed");
+      }
+
+      setForgotSent(true);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  if (showForgotPassword) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl" data-testid="text-forgot-password-title">
+              {forgotSent ? "Check Your Email" : "Forgot Password"}
+            </CardTitle>
+            <CardDescription>
+              {forgotSent
+                ? `If an account exists for ${forgotEmail}, we've sent a password reset link. Check your inbox and spam folder.`
+                : "Enter your email address and we'll send you a link to reset your password."
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {forgotSent ? (
+              <div className="space-y-4">
+                <div className="flex justify-center">
+                  <Mail className="h-12 w-12 text-muted-foreground" />
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setForgotSent(false);
+                    setForgotEmail("");
+                  }}
+                  data-testid="button-back-to-login-from-forgot"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Sign In
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="forgotEmail">Email Address</Label>
+                  <Input
+                    id="forgotEmail"
+                    type="email"
+                    placeholder="your@email.com"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    data-testid="input-forgot-email"
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={forgotLoading} data-testid="button-send-reset-link">
+                  {forgotLoading ? "Sending..." : "Send Reset Link"}
+                </Button>
+                <div className="text-center">
+                  <button
+                    type="button"
+                    className="text-sm text-muted-foreground hover:text-primary underline"
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      setForgotEmail("");
+                    }}
+                    data-testid="link-back-to-login"
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
       <Card className="w-full max-w-md">
@@ -68,7 +172,17 @@ export default function PortalLogin() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-primary underline"
+                  onClick={() => setShowForgotPassword(true)}
+                  data-testid="link-forgot-password"
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <Input
                 id="password"
                 type="password"
