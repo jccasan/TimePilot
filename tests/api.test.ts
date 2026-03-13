@@ -955,6 +955,43 @@ async function runTests() {
     assert(res.data.message === "Unauthorized", `Expected 'Unauthorized' got '${res.data.message}'`);
   });
 
+  await test("Deleted API key returns invalid message", "ApiKeyAuth", async () => {
+    const createKeyRes = await req("POST", "/api/api-keys", {
+      name: "Delete Test Key",
+      scopes: ["contacts.read"],
+    });
+    assert(createKeyRes.status === 201, `Expected 201 got ${createKeyRes.status}`);
+    const rawKey = createKeyRes.data.rawKey;
+
+    await req("DELETE", `/api/api-keys/${createKeyRes.data.id}`);
+
+    const res = await req("GET", "/api/contacts", undefined, {
+      "X-API-Key": rawKey,
+      Authorization: "",
+    });
+    assert(res.status === 401, `Expected 401 got ${res.status}`);
+    assert(res.data.message === "Invalid API key", `Expected 'Invalid API key' got '${res.data.message}'`);
+  });
+
+  await test("Created lead is retrievable via API key", "ApiKeyAuth", async () => {
+    if (!createdContactId) return;
+    const createKeyRes = await req("POST", "/api/api-keys", {
+      name: "Retrieve Test Key",
+      scopes: ["contacts.read"],
+    });
+    const rawKey = createKeyRes.data.rawKey;
+
+    const contactRes = await req("GET", `/api/contacts/${createdContactId}`, undefined, {
+      "X-API-Key": rawKey,
+      Authorization: "",
+    });
+    assert(contactRes.status === 200, `Expected 200 got ${contactRes.status}`);
+    assert(contactRes.data.id === createdContactId, "Contact ID should match");
+    assert(contactRes.data.status === "lead", `Expected lead status got ${contactRes.data.status}`);
+
+    await req("DELETE", `/api/api-keys/${createKeyRes.data.id}`);
+  });
+
   if (createdContactId) {
     await req("DELETE", `/api/contacts/${createdContactId}`);
   }
