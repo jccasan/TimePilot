@@ -54,11 +54,21 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   ChevronLeft, ChevronRight, Plus, Wand2, Calendar, CalendarDays, CalendarRange,
-  CheckCircle, XCircle, Ban, Clock, MapPin, DollarSign, User, CalendarCheck, Loader2,
+  CheckCircle, XCircle, Ban, Clock, MapPin, DollarSign, User, CalendarCheck, Loader2, GripVertical,
 } from "lucide-react";
 import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
+import {
+  DndContext, DragOverlay, closestCenter, PointerSensor, TouchSensor,
+  useSensor, useSensors, useDroppable, useDraggable,
+  type DragStartEvent, type DragEndEvent, type DragOverEvent,
+} from "@dnd-kit/core";
 
 const visitStatusColors: Record<string, string> = {
   scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -223,6 +233,57 @@ export default function Scheduling() {
     },
     onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
   });
+
+  const [activeVisit, setActiveVisit] = useState<Visit | null>(null);
+  const [overDateKey, setOverDateKey] = useState<string | null>(null);
+
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 5 } });
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } });
+  const sensors = useSensors(pointerSensor, touchSensor);
+
+  const rescheduleMutation = useMutation({
+    mutationFn: async ({ visitId, scheduledDate }: { visitId: string; scheduledDate: string }) => {
+      await apiRequest("PATCH", `/api/visits/${visitId}`, { scheduledDate });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      toast({ title: "Visit rescheduled" });
+    },
+    onError: (err: Error) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      toast({ title: "Error rescheduling", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const visit = event.active.data.current?.visit as Visit | undefined;
+    if (visit) setActiveVisit(visit);
+  }, []);
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const overId = event.over?.id as string | undefined;
+    setOverDateKey(overId && overId.startsWith("drop-day-") ? overId.replace("drop-day-", "") : null);
+  }, []);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    setActiveVisit(null);
+    setOverDateKey(null);
+    const visit = event.active.data.current?.visit as Visit | undefined;
+    const overId = event.over?.id as string | undefined;
+    if (!visit || !overId || !overId.startsWith("drop-day-")) return;
+    const newDate = overId.replace("drop-day-", "");
+    if (newDate === visit.scheduledDate) return;
+    queryClient.setQueryData<Visit[]>(
+      [`/api/visits/range?start=${startStr}&end=${endStr}`],
+      (old) => old?.map((v) => v.id === visit.id ? { ...v, scheduledDate: newDate } : v)
+    );
+    rescheduleMutation.mutate({ visitId: visit.id, scheduledDate: newDate });
+  }, [startStr, endStr, rescheduleMutation]);
+
+  const handleDragCancel = useCallback(() => {
+    setActiveVisit(null);
+    setOverDateKey(null);
+  }, []);
 
   const visitsByDate = useMemo(() => {
     const map: Record<string, Visit[]> = {};
@@ -448,70 +509,109 @@ export default function Scheduling() {
           )}
 
           {viewMode === "week" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-              {weekDays.map((day, i) => {
-                const dateKey = formatDate(day);
-                const dayVisits = visitsByDate[dateKey] || [];
-                const isToday = dateKey === todayStr;
-                return (
-                  <Card key={dateKey} className={isToday ? "ring-2 ring-primary" : ""} data-testid={`card-day-${dayLabels[i]}`}>
-                    <CardHeader className="p-3 pb-1">
-                      <CardTitle className={`text-sm ${isToday ? "text-primary" : ""}`}>
-                        {dayLabels[i]} {day.getDate()}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-3 pt-0 space-y-1">
-                      {dayVisits.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No visits</p>
-                      ) : (
-                        dayVisits.map((v) => (
-                          <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={setSelectedVisit} />
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-
-          {viewMode === "month" && (
-            <div className="border rounded-lg overflow-hidden" data-testid="calendar-month">
-              <div className="grid grid-cols-7 bg-muted/50">
-                {dayLabels.map((d) => (
-                  <div key={d} className="px-2 py-2 text-xs font-medium text-muted-foreground text-center border-b">
-                    {d}
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-7">
-                {calendarDays.map((day) => {
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              onDragCancel={handleDragCancel}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+                {weekDays.map((day, i) => {
                   const dateKey = formatDate(day);
                   const dayVisits = visitsByDate[dateKey] || [];
                   const isToday = dateKey === todayStr;
-                  const isCurrentMonth = day.getMonth() === currentMonth;
                   return (
-                    <div
-                      key={dateKey}
-                      className={`min-h-[100px] border-b border-r p-1.5 ${!isCurrentMonth ? "bg-muted/30" : ""} ${isToday ? "bg-primary/5" : ""}`}
-                      data-testid={`cell-month-${dateKey}`}
-                    >
-                      <div className={`text-xs font-medium mb-1 ${isToday ? "bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center" : isCurrentMonth ? "text-foreground" : "text-muted-foreground"}`}>
-                        {day.getDate()}
-                      </div>
-                      <div className="space-y-0.5">
-                        {dayVisits.slice(0, 3).map((v) => (
-                          <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={setSelectedVisit} />
-                        ))}
-                        {dayVisits.length > 3 && (
-                          <p className="text-[10px] text-muted-foreground text-center">+{dayVisits.length - 3} more</p>
-                        )}
-                      </div>
-                    </div>
+                    <DroppableDayCell key={dateKey} dateKey={dateKey} isOver={overDateKey === dateKey}>
+                      <Card className={`h-full ${isToday ? "ring-2 ring-primary" : ""}`} data-testid={`card-day-${dayLabels[i]}`}>
+                        <CardHeader className="p-3 pb-1">
+                          <CardTitle className={`text-sm ${isToday ? "text-primary" : ""}`}>
+                            {dayLabels[i]} {day.getDate()}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-3 pt-0 space-y-1">
+                          {dayVisits.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No visits</p>
+                          ) : (
+                            dayVisits.map((v) => (
+                              <DraggableVisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={setSelectedVisit} />
+                            ))
+                          )}
+                        </CardContent>
+                      </Card>
+                    </DroppableDayCell>
                   );
                 })}
               </div>
-            </div>
+              <DragOverlay>
+                {activeVisit && (
+                  <VisitDragOverlay visit={activeVisit} contacts={contacts} properties={properties} servicePlans={servicePlans} />
+                )}
+              </DragOverlay>
+            </DndContext>
+          )}
+
+          {viewMode === "month" && (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              onDragCancel={handleDragCancel}
+            >
+              <div className="border rounded-lg overflow-hidden" data-testid="calendar-month">
+                <div className="grid grid-cols-7 bg-muted/50">
+                  {dayLabels.map((d) => (
+                    <div key={d} className="px-2 py-2 text-xs font-medium text-muted-foreground text-center border-b">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7">
+                  {calendarDays.map((day) => {
+                    const dateKey = formatDate(day);
+                    const dayVisits = visitsByDate[dateKey] || [];
+                    const isToday = dateKey === todayStr;
+                    const isCurrentMonth = day.getMonth() === currentMonth;
+                    return (
+                      <DroppableDayCell key={dateKey} dateKey={dateKey} isOver={overDateKey === dateKey}>
+                        <div
+                          className={`min-h-[100px] border-b border-r p-1.5 h-full ${!isCurrentMonth ? "bg-muted/30" : ""} ${isToday ? "bg-primary/5" : ""}`}
+                          data-testid={`cell-month-${dateKey}`}
+                        >
+                          <div className={`text-xs font-medium mb-1 ${isToday ? "bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center" : isCurrentMonth ? "text-foreground" : "text-muted-foreground"}`}>
+                            {day.getDate()}
+                          </div>
+                          <div className="space-y-0.5">
+                            {dayVisits.slice(0, 3).map((v) => (
+                              <DraggableVisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={setSelectedVisit} />
+                            ))}
+                            {dayVisits.length > 3 && (
+                              <OverflowVisitsPopover
+                                dayVisits={dayVisits}
+                                dateKey={dateKey}
+                                contacts={contacts}
+                                properties={properties}
+                                routes={routes}
+                                servicePlans={servicePlans}
+                                onVisitClick={setSelectedVisit}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </DroppableDayCell>
+                    );
+                  })}
+                </div>
+              </div>
+              <DragOverlay>
+                {activeVisit && (
+                  <VisitDragOverlay visit={activeVisit} contacts={contacts} properties={properties} servicePlans={servicePlans} />
+                )}
+              </DragOverlay>
+            </DndContext>
           )}
         </>
       )}
@@ -760,6 +860,113 @@ function VisitDetailSheet({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function DroppableDayCell({ dateKey, isOver, children }: {
+  dateKey: string;
+  isOver: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef } = useDroppable({ id: `drop-day-${dateKey}` });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`transition-all ${isOver ? "ring-2 ring-primary/50 bg-primary/5 rounded-lg" : ""}`}
+      data-testid={`drop-day-${dateKey}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function DraggableVisitChip({ visit, contacts, properties, routes, servicePlans, compact, onVisitClick }: {
+  visit: Visit;
+  contacts?: Contact[];
+  properties?: Property[];
+  routes?: Route[];
+  servicePlans?: ServicePlan[];
+  compact?: boolean;
+  onVisitClick?: (visit: Visit) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `visit-${visit.id}`,
+    data: { visit },
+  });
+  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
+
+  return (
+    <div ref={setNodeRef} style={style} className={isDragging ? "opacity-30" : ""}>
+      <div className="flex items-start gap-0.5">
+        <div
+          className="cursor-grab active:cursor-grabbing touch-none pt-0.5 shrink-0 p-0.5"
+          {...listeners}
+          {...attributes}
+          data-testid={`drag-handle-${visit.id}`}
+        >
+          <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <VisitChip visit={visit} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact={compact} onVisitClick={onVisitClick} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VisitDragOverlay({ visit, contacts, properties, servicePlans }: {
+  visit: Visit;
+  contacts?: Contact[];
+  properties?: Property[];
+  servicePlans?: ServicePlan[];
+}) {
+  const plan = servicePlans?.find((sp) => sp.id === visit.servicePlanId);
+  const contact = plan ? contacts?.find((c) => c.id === plan.contactId) : undefined;
+  const property = properties?.find((p) => p.id === visit.propertyId);
+  return (
+    <div className="border rounded-md p-2 bg-background shadow-lg opacity-90 max-w-xs space-y-0.5">
+      <div className="flex items-center gap-2">
+        <Badge variant="secondary" className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`}>
+          {visitStatusLabels[visit.status] || visit.status}
+        </Badge>
+      </div>
+      {contact && <p className="text-xs font-medium">{contact.firstName} {contact.lastName}</p>}
+      {property && <p className="text-[10px] text-muted-foreground truncate">{property.streetAddress}</p>}
+    </div>
+  );
+}
+
+function OverflowVisitsPopover({ dayVisits, dateKey, contacts, properties, routes, servicePlans, onVisitClick }: {
+  dayVisits: Visit[];
+  dateKey: string;
+  contacts?: Contact[];
+  properties?: Property[];
+  routes?: Route[];
+  servicePlans?: ServicePlan[];
+  onVisitClick?: (visit: Visit) => void;
+}) {
+  const overflowCount = dayVisits.length - 3;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          className="text-[10px] text-primary font-medium text-center w-full hover:underline cursor-pointer py-0.5"
+          data-testid={`button-more-visits-${dateKey}`}
+        >
+          +{overflowCount} more
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2 max-h-[300px] overflow-y-auto" align="start">
+        <p className="text-xs font-medium text-muted-foreground mb-2">
+          All visits ({dayVisits.length}) — {new Date(dateKey + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+        </p>
+        <div className="space-y-1">
+          {dayVisits.map((v) => (
+            <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={onVisitClick} />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
