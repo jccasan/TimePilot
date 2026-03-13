@@ -815,11 +815,15 @@ export async function registerRoutes(
       const { companyId, role, userId } = await getCompanyContext(req);
       requireRole(role);
       const existing = await storage.getCompany(companyId);
+      const validTimezones = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
       const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
-        "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout"];
+        "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "timezone"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
+      }
+      if (updates.timezone && !validTimezones.includes(updates.timezone)) {
+        return res.status(400).json({ error: "Invalid timezone" });
       }
       const company = await storage.updateCompany(companyId, updates);
       auditLog(companyId, userId, "company", companyId, "update", { old: existing, new: company }, req.ip);
@@ -2625,6 +2629,11 @@ export async function registerRoutes(
 
       const plan = await storage.createServicePlan(parsed);
 
+      const contact = await storage.getContact(parsed.contactId, companyId);
+      if (contact && (contact.status === "lead" || contact.status === "estimate")) {
+        await storage.updateContact(parsed.contactId, { status: "active" });
+      }
+
       if (req.body.addOns && Array.isArray(req.body.addOns)) {
         const validatedAddOns = await validateAndResolveAddOns(req.body.addOns, companyId);
         const addOns = await storage.setServicePlanAddOns(plan.id, validatedAddOns);
@@ -3138,11 +3147,21 @@ export async function registerRoutes(
         return res.status(400).json({ error: "startDate and endDate are required" });
       }
 
-      const plans = await storage.getServicePlans(companyId, { isActive: true });
+      const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+      const plans = allPlans.filter(p => !p.pausedAt);
       const existingVisits = await storage.getVisitsForDateRange(companyId, startDate, endDate);
       const existingKeys = new Set(
         existingVisits.map((v) => `${v.servicePlanId}_${v.scheduledDate}`)
       );
+
+      const planIds = plans.map(p => p.id);
+      const allHolds = await storage.getVacationHoldsForPlans(planIds);
+      const holdsByPlan = new Map<string, typeof allHolds>();
+      for (const hold of allHolds) {
+        const existing = holdsByPlan.get(hold.servicePlanId) || [];
+        existing.push(hold);
+        holdsByPlan.set(hold.servicePlanId, existing);
+      }
 
       const dayMap: Record<string, number> = {
         monday: 1, tuesday: 2, wednesday: 3, thursday: 4,
@@ -3163,13 +3182,17 @@ export async function registerRoutes(
         const effectiveStart = planStart > start ? planStart : start;
         const effectiveEnd = planEnd < end ? planEnd : end;
 
+        const planHolds = holdsByPlan.get(plan.id) || [];
+
         const current = new Date(effectiveStart);
         while (current <= effectiveEnd) {
           if (current.getUTCDay() === targetDay) {
             const dateStr = current.toISOString().split("T")[0];
             const key = `${plan.id}_${dateStr}`;
 
-            if (!existingKeys.has(key)) {
+            const inVacation = planHolds.some(h => dateStr >= h.startDate && dateStr <= h.endDate);
+
+            if (!existingKeys.has(key) && !inVacation) {
               let shouldGenerate = true;
 
               if (plan.frequency === "biweekly") {

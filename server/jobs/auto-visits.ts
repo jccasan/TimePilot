@@ -1,4 +1,6 @@
 import { storage } from "../storage";
+import { getCompanyToday } from "../utils/company-date";
+import type { VacationHold } from "@shared/schema";
 
 export async function runAutoVisits() {
   console.log("[auto-visits] Starting auto visit generation...");
@@ -8,19 +10,19 @@ export async function runAutoVisits() {
   let companiesProcessed = 0;
   let errors = 0;
 
-  const now = new Date();
-  const startDate = new Date(now);
-  startDate.setDate(startDate.getDate() + 1);
-  const endDate = new Date(now);
-  endDate.setDate(endDate.getDate() + 7);
-
-  const startStr = startDate.toISOString().split("T")[0];
-  const endStr = endDate.toISOString().split("T")[0];
-
   for (const company of allCompanies) {
     if (!company.autoVisitsEnabled) continue;
 
     try {
+      const companyToday = getCompanyToday(company.timezone || "America/New_York");
+      const startDate = new Date(companyToday + "T00:00:00Z");
+      startDate.setUTCDate(startDate.getUTCDate() + 1);
+      const endDate = new Date(companyToday + "T00:00:00Z");
+      endDate.setUTCDate(endDate.getUTCDate() + 7);
+
+      const startStr = startDate.toISOString().split("T")[0];
+      const endStr = endDate.toISOString().split("T")[0];
+
       const created = await generateVisitsForCompany(company.id, startStr, endStr);
       totalCreated += created;
       companiesProcessed++;
@@ -47,14 +49,24 @@ export async function runAutoVisits() {
 
 export async function generateVisitsForPlans(companyId: string, planIds: string[], startDate: string, endDate: string): Promise<number> {
   const allPlans = await storage.getServicePlans(companyId, { isActive: true });
-  const plans = allPlans.filter(p => planIds.includes(p.id));
+  const plans = allPlans.filter(p => planIds.includes(p.id) && !p.pausedAt);
   if (plans.length === 0) return 0;
   return generateVisitsFromPlans(companyId, plans, startDate, endDate, true);
 }
 
 export async function generateVisitsForCompany(companyId: string, startDate: string, endDate: string): Promise<number> {
-  const plans = await storage.getServicePlans(companyId, { isActive: true });
+  const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+  const plans = allPlans.filter(p => !p.pausedAt);
   return generateVisitsFromPlans(companyId, plans, startDate, endDate, false);
+}
+
+function isDateInVacationHold(dateStr: string, planId: string, holdsByPlan: Map<string, VacationHold[]>): boolean {
+  const holds = holdsByPlan.get(planId);
+  if (!holds || holds.length === 0) return false;
+  for (const hold of holds) {
+    if (dateStr >= hold.startDate && dateStr <= hold.endDate) return true;
+  }
+  return false;
 }
 
 async function generateVisitsFromPlans(companyId: string, plans: Awaited<ReturnType<typeof storage.getServicePlans>>, startDate: string, endDate: string, ignoreCancelled: boolean): Promise<number> {
@@ -64,6 +76,15 @@ async function generateVisitsFromPlans(companyId: string, plans: Awaited<ReturnT
       .filter((v) => !ignoreCancelled || v.status !== "cancelled")
       .map((v) => `${v.servicePlanId}_${v.scheduledDate}`)
   );
+
+  const planIds = plans.map(p => p.id);
+  const allHolds = await storage.getVacationHoldsForPlans(planIds);
+  const holdsByPlan = new Map<string, VacationHold[]>();
+  for (const hold of allHolds) {
+    const existing = holdsByPlan.get(hold.servicePlanId) || [];
+    existing.push(hold);
+    holdsByPlan.set(hold.servicePlanId, existing);
+  }
 
   const dayMap: Record<string, number> = {
     monday: 1, tuesday: 2, wednesday: 3, thursday: 4,
@@ -90,7 +111,7 @@ async function generateVisitsFromPlans(companyId: string, plans: Awaited<ReturnT
         const dateStr = current.toISOString().split("T")[0];
         const key = `${plan.id}_${dateStr}`;
 
-        if (!existingKeys.has(key)) {
+        if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, plan.id, holdsByPlan)) {
           let shouldGenerate = true;
 
           if (plan.frequency === "biweekly") {

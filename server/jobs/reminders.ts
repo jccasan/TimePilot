@@ -4,6 +4,7 @@ import { contacts, visits, invoices, servicePlans, properties } from "@shared/sc
 import { storage } from "../storage";
 import { sendEmail } from "../services/email";
 import { sendSms, isTwilioConfigured } from "../services/sms";
+import { getCompanyToday } from "../utils/company-date";
 
 export async function runReminders() {
   const now = new Date();
@@ -18,10 +19,11 @@ export async function runReminders() {
     if (!company.remindersEnabled) continue;
 
     try {
-      const serviceCount = await sendServiceReminders(company.id, company.name);
+      const tz = company.timezone || "America/New_York";
+      const serviceCount = await sendServiceReminders(company.id, company.name, tz);
       totalServiceReminders += serviceCount;
 
-      const invoiceCount = await sendInvoiceReminders(company.id, company.name);
+      const invoiceCount = await sendInvoiceReminders(company.id, company.name, tz);
       totalInvoiceReminders += invoiceCount;
     } catch (err) {
       errors++;
@@ -34,9 +36,10 @@ export async function runReminders() {
   );
 }
 
-async function sendServiceReminders(companyId: string, companyName: string): Promise<number> {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
+async function sendServiceReminders(companyId: string, companyName: string, timezone: string): Promise<number> {
+  const todayStr = getCompanyToday(timezone);
+  const tomorrow = new Date(todayStr + "T00:00:00Z");
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
   const tomorrowVisits = await db
@@ -170,12 +173,11 @@ function shouldSendReminder(dueDate: string, lastReminderSentAt: Date | null, to
   return true;
 }
 
-async function sendInvoiceReminders(companyId: string, companyName: string): Promise<number> {
-  const now = new Date();
-  const todayStr = now.toISOString().split("T")[0];
+async function sendInvoiceReminders(companyId: string, companyName: string, timezone: string): Promise<number> {
+  const todayStr = getCompanyToday(timezone);
 
-  const eightDaysFromNow = new Date();
-  eightDaysFromNow.setDate(eightDaysFromNow.getDate() + 8);
+  const eightDaysFromNow = new Date(todayStr + "T00:00:00Z");
+  eightDaysFromNow.setUTCDate(eightDaysFromNow.getUTCDate() + 8);
   const eightDaysStr = eightDaysFromNow.toISOString().split("T")[0];
 
   const pendingInvoices = await db

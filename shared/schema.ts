@@ -135,6 +135,8 @@ export const companies = pgTable("companies", {
   voiceAgentPolicies: text("voice_agent_policies"),
   voiceAgentSpecialLines: text("voice_agent_special_lines"),
   voiceAgentGreeting: text("voice_agent_greeting"),
+  timezone: varchar("timezone", { length: 100 }).notNull().default("America/New_York"),
+  lastAutoInvoiceRun: date("last_auto_invoice_run"),
   canceledAt: timestamp("canceled_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
   churnNotes: text("churn_notes"),

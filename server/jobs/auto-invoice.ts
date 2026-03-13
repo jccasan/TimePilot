@@ -7,12 +7,10 @@ import {
   chargeInvoiceAutomatically,
   createStripeCustomer,
 } from "../services/stripe";
+import { getCompanyToday, getCompanyDayOfWeek, getCompanyDayOfMonth } from "../utils/company-date";
 
 export async function runAutoInvoice() {
-  const now = new Date();
-  const todayStr = now.toISOString().split("T")[0];
-
-  console.log(`[auto-invoice] Starting auto-invoice run for ${todayStr}`);
+  console.log(`[auto-invoice] Starting auto-invoice run`);
 
   const allCompanies = await storage.getAllCompanies();
   let totalInvoicesCreated = 0;
@@ -22,10 +20,20 @@ export async function runAutoInvoice() {
 
   for (const company of allCompanies) {
     try {
-      const result = await processCompanyAutoInvoice(company.id, todayStr);
-      totalInvoicesCreated += result.invoicesCreated;
-      totalChargesAttempted += result.chargesAttempted;
-      totalChargesSucceeded += result.chargesSucceeded;
+      const tz = company.timezone || "America/New_York";
+      const companyToday = getCompanyToday(tz);
+
+      const missedDates = getMissedDates(company.lastAutoInvoiceRun, companyToday);
+      const datesToProcess = missedDates.length > 0 ? missedDates : [companyToday];
+
+      for (const dateStr of datesToProcess) {
+        const result = await processCompanyAutoInvoice(company.id, dateStr, tz);
+        totalInvoicesCreated += result.invoicesCreated;
+        totalChargesAttempted += result.chargesAttempted;
+        totalChargesSucceeded += result.chargesSucceeded;
+      }
+
+      await storage.updateCompany(company.id, { lastAutoInvoiceRun: companyToday });
     } catch (err) {
       errors++;
       console.error(`[auto-invoice] Error processing company ${company.id}:`, err);
@@ -41,16 +49,38 @@ export async function runAutoInvoice() {
   return { totalInvoicesCreated, totalChargesAttempted, totalChargesSucceeded, errors };
 }
 
-async function processCompanyAutoInvoice(companyId: string, todayStr: string) {
+function getMissedDates(lastRun: string | null | undefined, today: string): string[] {
+  if (!lastRun) return [today];
+  const dates: string[] = [];
+  const current = new Date(lastRun + "T00:00:00Z");
+  current.setUTCDate(current.getUTCDate() + 1);
+  const end = new Date(today + "T00:00:00Z");
+
+  while (current <= end) {
+    dates.push(current.toISOString().split("T")[0]);
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  if (dates.length > 31) {
+    console.warn(`[auto-invoice] Large catch-up window: ${dates.length} missed days, processing all`);
+  }
+
+  return dates;
+}
+
+async function processCompanyAutoInvoice(companyId: string, todayStr: string, timezone: string) {
   let invoicesCreated = 0;
   let chargesAttempted = 0;
   let chargesSucceeded = 0;
 
-  const activeServicePlans = await storage.getServicePlans(companyId, { isActive: true });
+  const allActiveServicePlans = await storage.getServicePlans(companyId, { isActive: true });
+  const activeServicePlans = allActiveServicePlans.filter(sp => !sp.pausedAt);
   if (activeServicePlans.length === 0) return { invoicesCreated, chargesAttempted, chargesSucceeded };
 
   const contactIdSet = new Set(activeServicePlans.map(sp => sp.contactId));
   const contactIds = Array.from(contactIdSet);
+
+  const company = await storage.getCompany(companyId);
 
   for (const contactId of contactIds) {
     try {
@@ -62,12 +92,15 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string) {
 
       const lookbackStartDate = getLookbackStartDate(todayStr, contact.invoiceFrequency || "per_service");
 
-      const uninvoicedVisits = await storage.getUninvoicedCompletedVisits(
+      const allUninvoicedVisits = await storage.getUninvoicedCompletedVisits(
         companyId,
         contactId,
         lookbackStartDate,
         todayStr
       );
+
+      const activePlanIds = new Set(contactPlans.map(p => p.id));
+      const uninvoicedVisits = allUninvoicedVisits.filter(v => activePlanIds.has(v.servicePlanId));
 
       if (uninvoicedVisits.length === 0) continue;
 
@@ -182,7 +215,7 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string) {
             amount: subtotal,
             invoiceId: invoice.id,
             invoiceNumber,
-            stripeConnectAccountId: company.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
+            stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
           });
 
           if (result.status === "succeeded") {
@@ -267,17 +300,15 @@ function shouldGenerateInvoice(
     return true;
   }
 
+  const today = new Date(todayStr + "T00:00:00Z");
+
   switch (frequency) {
     case "per_service":
       return true;
-    case "per_week": {
-      const today = new Date(todayStr);
-      return today.getDay() === 0;
-    }
-    case "per_month": {
-      const today = new Date(todayStr);
-      return today.getDate() === 1;
-    }
+    case "per_week":
+      return today.getUTCDay() === 0;
+    case "per_month":
+      return today.getUTCDate() === 1;
     default:
       return true;
   }

@@ -127,6 +127,7 @@ export interface IStorage {
 
   // Vacation Holds
   getVacationHolds(servicePlanId: string): Promise<VacationHold[]>;
+  getVacationHoldsForPlans(planIds: string[]): Promise<VacationHold[]>;
   createVacationHold(data: InsertVacationHold): Promise<VacationHold>;
   deleteVacationHold(id: string): Promise<void>;
 
@@ -617,6 +618,11 @@ export class DatabaseStorage implements IStorage {
   // ================ Vacation Holds ================
   async getVacationHolds(servicePlanId: string): Promise<VacationHold[]> {
     return db.select().from(vacationHolds).where(eq(vacationHolds.servicePlanId, servicePlanId));
+  }
+
+  async getVacationHoldsForPlans(planIds: string[]): Promise<VacationHold[]> {
+    if (planIds.length === 0) return [];
+    return db.select().from(vacationHolds).where(inArray(vacationHolds.servicePlanId, planIds));
   }
 
   async createVacationHold(data: InsertVacationHold): Promise<VacationHold> {

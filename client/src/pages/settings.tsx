@@ -56,6 +56,7 @@ type Company = {
   subscriptionStatus: string;
   autoVisitsEnabled: boolean;
   remindersEnabled: boolean;
+  timezone: string;
 };
 
 type TeamMember = {
@@ -916,6 +917,36 @@ export default function Settings() {
                     }}
                     data-testid="switch-reminders-enabled"
                   />
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t pt-3">
+                  <div>
+                    <p className="text-sm font-medium">Company Timezone</p>
+                    <p className="text-xs text-muted-foreground">
+                      Controls when reminders, invoices, and visit schedules are calculated
+                    </p>
+                  </div>
+                  <select
+                    className="border rounded px-2 py-1 text-sm bg-background"
+                    value={company?.timezone ?? "America/New_York"}
+                    onChange={(e) => {
+                      apiRequest("PATCH", "/api/company", { timezone: e.target.value })
+                        .then(() => {
+                          queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+                          toast({ title: "Timezone updated" });
+                        })
+                        .catch(() => {
+                          toast({ title: "Error", description: "Failed to update timezone.", variant: "destructive" });
+                        });
+                    }}
+                    data-testid="select-timezone"
+                  >
+                    <option value="America/New_York">Eastern (ET)</option>
+                    <option value="America/Chicago">Central (CT)</option>
+                    <option value="America/Denver">Mountain (MT)</option>
+                    <option value="America/Los_Angeles">Pacific (PT)</option>
+                    <option value="America/Anchorage">Alaska (AKT)</option>
+                    <option value="Pacific/Honolulu">Hawaii (HT)</option>
+                  </select>
                 </div>
                 <div className="text-xs text-muted-foreground space-y-1 border-t pt-3">
                   <p>Reminder types:</p>
