@@ -198,7 +198,7 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
                   Start
                 </Button>
               )}
-              {(status === "scheduled" || status === "in_progress") && (
+              {status === "in_progress" && (
                 <Button
                   size="sm"
                   onClick={(e) => { e.stopPropagation(); onStatusChange(visit.id, "completed"); }}
@@ -231,19 +231,6 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
                 >
                   <XCircle className="h-3.5 w-3.5 mr-1" />
                   Cancel
-                </Button>
-              )}
-              {(status === "skipped" || status === "cancelled") && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={(e) => { e.stopPropagation(); onStatusChange(visit.id, "scheduled"); }}
-                  disabled={isUpdating}
-                  title="Return to scheduled"
-                  data-testid={`button-mark-scheduled-${visit.id}`}
-                >
-                  <Clock className="h-3.5 w-3.5 mr-1" />
-                  Undo
                 </Button>
               )}
             </div>

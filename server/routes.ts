@@ -2944,11 +2944,11 @@ export async function registerRoutes(
         return res.status(400).json({ error: `Invalid status. Must be one of: ${validVisitStatuses.join(", ")}` });
       }
       const allowedTransitions: Record<string, string[]> = {
-        scheduled: ["in_progress", "completed", "skipped", "cancelled"],
+        scheduled: ["in_progress", "skipped", "cancelled"],
         in_progress: ["completed", "skipped", "cancelled"],
         completed: [],
-        skipped: ["scheduled"],
-        cancelled: ["scheduled"],
+        skipped: [],
+        cancelled: [],
       };
       if (req.body.status && req.body.status !== existing.status) {
         const allowed = allowedTransitions[existing.status] || [];

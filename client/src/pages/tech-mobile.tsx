@@ -513,7 +513,7 @@ export default function TechMobile() {
                           <Play className="mr-1 h-4 w-4" /> Start
                         </Button>
                       )}
-                      {(visit.status === "scheduled" || visit.status === "in_progress") && (
+                      {visit.status === "in_progress" && (
                         <Button
                           onClick={() => openCompleteDialog(visit)}
                           variant="outline"
