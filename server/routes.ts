@@ -74,7 +74,10 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
   }
   if (!userId) {
     const apiKeyHeader = req.headers["x-api-key"] as string | undefined;
-    if (apiKeyHeader && apiKeyHeader.length >= 8) {
+    if (apiKeyHeader) {
+      if (apiKeyHeader.length < 8) {
+        return res.status(401).json({ message: "Invalid API key" });
+      }
       const prefix = apiKeyHeader.substring(0, 8);
       const keyHash = crypto.createHash("sha256").update(apiKeyHeader).digest("hex");
       const apiKey = await storage.getApiKeyByPrefix(prefix);
@@ -95,7 +98,7 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
           authMethod = "api-key";
           storage.updateApiKeyLastUsed(apiKey.id).catch(console.error);
         }
-      } else if (apiKeyHeader) {
+      } else {
         return res.status(401).json({ message: "Invalid API key" });
       }
     }
