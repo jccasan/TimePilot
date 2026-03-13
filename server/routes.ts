@@ -5568,6 +5568,7 @@ export async function registerRoutes(
         state: contact.state || "",
         zipCode: contact.zipCode || "",
         companyName: company?.name || "",
+        pendingEmail: contact.pendingEmail || null,
       });
     } catch (err) { handleError(res, err); }
   });
@@ -5937,6 +5938,7 @@ export async function registerRoutes(
           zipCode: updatedContact!.zipCode || "",
           companyName: company?.name || "",
           numberOfDogs: updatedContact!.numberOfDogs,
+          pendingEmail: updatedContact!.pendingEmail || null,
         },
       });
     } catch (err) { handleError(res, err); }

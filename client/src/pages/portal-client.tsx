@@ -65,6 +65,7 @@ interface PortalProfile {
   zipCode: string;
   companyName: string;
   numberOfDogs?: number;
+  pendingEmail?: string | null;
 }
 
 interface PortalProperty {
@@ -893,6 +894,12 @@ export default function PortalClient() {
                 {savingProfile ? "Saving..." : "Save"}
               </Button>
             </div>
+            {profile?.pendingEmail && (
+              <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-700 px-3 py-2 text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2" data-testid="banner-pending-email">
+                <Mail className="h-4 w-4 flex-shrink-0" />
+                <span>Verification email sent to <strong>{profile.pendingEmail}</strong> — check your inbox to confirm the change.</span>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="header-first-name" className="text-xs text-muted-foreground">Your First Name</Label>

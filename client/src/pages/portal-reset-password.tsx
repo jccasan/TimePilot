@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, CheckCircle2 } from "lucide-react";
+import { KeyRound } from "lucide-react";
 
 export default function PortalResetPassword() {
   const [, navigate] = useLocation();
@@ -13,7 +13,6 @@ export default function PortalResetPassword() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [token, setToken] = useState("");
 
   useEffect(() => {
@@ -54,36 +53,14 @@ export default function PortalResetPassword() {
         throw new Error(data.error || "Reset failed");
       }
 
-      setSuccess(true);
+      toast({ title: "Password updated", description: "Your password has been reset. You can now sign in with your new password." });
+      navigate("/portal/login");
     } catch (err: any) {
       toast({ title: "Reset failed", description: err.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
-
-  if (success) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="flex justify-center mb-4">
-              <CheckCircle2 className="h-12 w-12 text-green-600" />
-            </div>
-            <CardTitle className="text-2xl" data-testid="text-reset-success-title">Password Updated</CardTitle>
-            <CardDescription>
-              Your password has been reset successfully. You can now sign in with your new password.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button className="w-full" onClick={() => navigate("/portal/login")} data-testid="button-back-to-login">
-              Go to Sign In
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
