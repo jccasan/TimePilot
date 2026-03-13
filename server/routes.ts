@@ -4796,7 +4796,22 @@ export async function registerRoutes(
       if (req.query.channel) filters.channel = req.query.channel as string;
       if (req.query.direction) filters.direction = req.query.direction as string;
       const msgs = await storage.getMessages(companyId, filters);
-      res.json(msgs);
+
+      const contactCache = new Map<string, string>();
+      const enriched = await Promise.all(msgs.map(async (m) => {
+        let contactName = "";
+        if (m.contactId) {
+          if (contactCache.has(m.contactId)) {
+            contactName = contactCache.get(m.contactId)!;
+          } else {
+            const contact = await storage.getContactById(m.contactId);
+            contactName = contact ? `${contact.firstName} ${contact.lastName}` : "";
+            contactCache.set(m.contactId, contactName);
+          }
+        }
+        return { ...m, contactName };
+      }));
+      res.json(enriched);
     } catch (err) { handleError(res, err); }
   });
 

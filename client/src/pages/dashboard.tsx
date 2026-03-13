@@ -26,6 +26,8 @@ import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import GuidedSetup from "@/components/guided-setup";
+import { Textarea } from "@/components/ui/textarea";
+import { Inbox, ArrowRight } from "lucide-react";
 
 type OnboardingStatus = {
   isComplete: boolean;
@@ -94,6 +96,221 @@ type PipelineData = {
   monthRevenue: number;
   upcomingThisWeek: { count: number; totalDollars: number };
 };
+
+type ChangeRequest = {
+  id: string;
+  contactId: string;
+  contactName: string;
+  requestType: string;
+  currentValue: string | null;
+  requestedValue: string | null;
+  note: string | null;
+  status: string;
+  createdAt: string;
+};
+
+type PortalMessage = {
+  id: string;
+  contactId: string;
+  contactName?: string;
+  subject: string;
+  body: string;
+  channel: string;
+  direction: string;
+  createdAt: string;
+};
+
+const REQUEST_TYPE_LABELS: Record<string, string> = {
+  frequency_change: "Frequency Change",
+  day_change: "Day Change",
+  cancel: "Cancellation",
+  pause: "Pause Service",
+  same_day_service: "Same-Day Service",
+  other: "Other Request",
+};
+
+function ClientRequestsCard() {
+  const { toast } = useToast();
+
+  const { data: changeRequests = [], isLoading: crLoading } = useQuery<ChangeRequest[]>({
+    queryKey: ["/api/service-change-requests", "pending"],
+    queryFn: async () => {
+      const res = await fetch("/api/service-change-requests?status=pending", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load");
+      return res.json();
+    },
+  });
+
+  const { data: portalMessages = [], isLoading: msgLoading } = useQuery<PortalMessage[]>({
+    queryKey: ["/api/messages", "inbound"],
+    queryFn: async () => {
+      const res = await fetch("/api/messages?direction=inbound", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load");
+      return res.json();
+    },
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async ({ id, adminNote }: { id: string; adminNote?: string }) => {
+      await apiRequest("POST", `/api/service-change-requests/${id}/approve`, { adminNote });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-change-requests"] });
+      toast({ title: "Approved", description: "Service change request approved." });
+    },
+  });
+
+  const denyMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason?: string }) => {
+      await apiRequest("POST", `/api/service-change-requests/${id}/deny`, { reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-change-requests"] });
+      toast({ title: "Denied", description: "Service change request denied." });
+    },
+  });
+
+  const recentMessages = portalMessages.slice(0, 5);
+  const totalPending = changeRequests.length + recentMessages.length;
+
+  if (crLoading || msgLoading) {
+    return (
+      <Card data-testid="widget-client-requests">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Inbox className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Client Requests</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (totalPending === 0) {
+    return (
+      <Card data-testid="widget-client-requests">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Inbox className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Client Requests</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-requests">
+            No pending requests. You're all caught up.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card data-testid="widget-client-requests">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Inbox className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Client Requests</CardTitle>
+            <Badge variant="secondary" data-testid="badge-request-count">{totalPending}</Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {changeRequests.map((req) => (
+            <div key={req.id} className="border rounded-lg p-3 space-y-2" data-testid={`request-change-${req.id}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sliders className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{REQUEST_TYPE_LABELS[req.requestType] || req.requestType}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(req.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+              <div className="text-sm">
+                <Link href={`/contacts/${req.contactId}`}>
+                  <span className="font-medium text-primary hover:underline cursor-pointer">{req.contactName}</span>
+                </Link>
+                {req.currentValue && req.requestedValue && (
+                  <span className="text-muted-foreground ml-1">
+                    {req.currentValue} <ArrowRight className="h-3 w-3 inline" /> {req.requestedValue}
+                  </span>
+                )}
+              </div>
+              {req.note && (
+                <p className="text-xs text-muted-foreground italic">"{req.note}"</p>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => approveMutation.mutate({ id: req.id })}
+                  disabled={approveMutation.isPending}
+                  data-testid={`button-approve-${req.id}`}
+                >
+                  <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => denyMutation.mutate({ id: req.id })}
+                  disabled={denyMutation.isPending}
+                  data-testid={`button-deny-${req.id}`}
+                >
+                  <XCircle className="h-3.5 w-3.5 mr-1" />
+                  Deny
+                </Button>
+              </div>
+            </div>
+          ))}
+
+          {recentMessages.map((msg) => (
+            <div key={msg.id} className="border rounded-lg p-3 space-y-2" data-testid={`request-message-${msg.id}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Portal Message</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(msg.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+              <div className="text-sm">
+                {msg.contactId ? (
+                  <Link href={`/contacts/${msg.contactId}`}>
+                    <span className="font-medium text-primary hover:underline cursor-pointer">
+                      {msg.contactName || "Client"}
+                    </span>
+                  </Link>
+                ) : (
+                  <span className="font-medium">{msg.contactName || "Client"}</span>
+                )}
+                {msg.subject && <span className="text-muted-foreground ml-1">-- {msg.subject}</span>}
+              </div>
+              {msg.body && (
+                <p className="text-xs text-muted-foreground line-clamp-2">{msg.body}</p>
+              )}
+              <Link href="/communications">
+                <Button size="sm" variant="outline" data-testid={`button-reply-${msg.id}`}>
+                  <Mail className="h-3.5 w-3.5 mr-1" />
+                  View & Reply
+                </Button>
+              </Link>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 const ALL_WIDGETS = [
   { id: "mrr", label: "Monthly Revenue (MRR)" },
@@ -837,6 +1054,8 @@ export default function Dashboard() {
       ) : pipeline ? (
         <PipelineBar data={pipeline} />
       ) : null}
+
+      <ClientRequestsCard />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
