@@ -7000,8 +7000,16 @@ export async function registerRoutes(
   app.get("/api/notifications/unread-count", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const count = await storage.getUnreadNotificationCount(companyId);
-      res.json({ count });
+      const totalCount = await storage.getUnreadNotificationCount(companyId);
+      const allNotifs = await storage.getNotifications(companyId, 100);
+      const clientRequestCount = allNotifs.filter((n) =>
+        !n.isRead && (
+          n.type === "portal_message" ||
+          n.title.includes("Service Change Request") ||
+          n.title === "One-Time Cleanup Request"
+        )
+      ).length;
+      res.json({ count: totalCount, clientRequestCount });
     } catch (err) { handleError(res, err); }
   });
 

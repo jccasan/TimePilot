@@ -37,7 +37,7 @@ const typeColors: Record<string, string> = {
 export function NotificationBell() {
   const [, navigate] = useLocation();
 
-  const { data: countData } = useQuery<{ count: number }>({
+  const { data: countData } = useQuery<{ count: number; clientRequestCount: number }>({
     queryKey: ["/api/notifications/unread-count"],
     refetchInterval: 30000,
   });
@@ -68,6 +68,7 @@ export function NotificationBell() {
   });
 
   const unreadCount = countData?.count || 0;
+  const clientRequestCount = countData?.clientRequestCount || 0;
   const recentNotifications = (notifications || []).slice(0, 10);
 
   const handleClick = (notif: Notification) => {
@@ -111,6 +112,18 @@ export function NotificationBell() {
             </Button>
           )}
         </DropdownMenuLabel>
+        {clientRequestCount > 0 && (
+          <>
+            <DropdownMenuItem
+              className="flex items-center gap-2 p-2 text-xs cursor-pointer bg-muted/50"
+              onClick={() => navigate("/#client-requests")}
+              data-testid="link-client-requests"
+            >
+              <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+              <span className="font-medium">{clientRequestCount} client request{clientRequestCount !== 1 ? "s" : ""} pending</span>
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         {recentNotifications.length === 0 ? (
           <div className="p-4 text-center text-sm text-muted-foreground" data-testid="text-no-notifications">
