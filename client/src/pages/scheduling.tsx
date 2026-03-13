@@ -1,17 +1,25 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Visit, Contact, Property, Route, ServicePricingItem } from "@shared/schema";
+import type { Visit, Contact, Property, Route, ServicePricingItem, ServicePlan } from "@shared/schema";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -45,7 +53,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { ChevronLeft, ChevronRight, Plus, Wand2, Calendar, CalendarDays, CalendarRange } from "lucide-react";
+import {
+  ChevronLeft, ChevronRight, Plus, Wand2, Calendar, CalendarDays, CalendarRange,
+  CheckCircle, XCircle, Ban, Clock, MapPin, DollarSign, User, CalendarCheck, Loader2,
+} from "lucide-react";
+import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 
 const visitStatusColors: Record<string, string> = {
@@ -147,7 +159,10 @@ export default function Scheduling() {
   const { data: contacts } = useQuery<Contact[]>({ queryKey: ["/api/contacts"] });
   const { data: properties } = useQuery<Property[]>({ queryKey: ["/api/properties"] });
   const { data: routes } = useQuery<Route[]>({ queryKey: ["/api/routes"] });
+  const { data: servicePlans } = useQuery<ServicePlan[]>({ queryKey: ["/api/service-plans"] });
   const { data: pricingItems } = useQuery<ServicePricingItem[]>({ queryKey: ["/api/pricing"] });
+
+  const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
 
   const recurringPricing = useMemo(() => {
     if (!pricingItems) return [];
@@ -427,6 +442,8 @@ export default function Scheduling() {
               contacts={contacts}
               properties={properties}
               routes={routes}
+              servicePlans={servicePlans}
+              onVisitClick={setSelectedVisit}
             />
           )}
 
@@ -448,7 +465,7 @@ export default function Scheduling() {
                         <p className="text-xs text-muted-foreground">No visits</p>
                       ) : (
                         dayVisits.map((v) => (
-                          <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} compact />
+                          <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={setSelectedVisit} />
                         ))
                       )}
                     </CardContent>
@@ -484,7 +501,7 @@ export default function Scheduling() {
                       </div>
                       <div className="space-y-0.5">
                         {dayVisits.slice(0, 3).map((v) => (
-                          <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} compact />
+                          <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={setSelectedVisit} />
                         ))}
                         {dayVisits.length > 3 && (
                           <p className="text-[10px] text-muted-foreground text-center">+{dayVisits.length - 3} more</p>
@@ -498,24 +515,282 @@ export default function Scheduling() {
           )}
         </>
       )}
+
+      <VisitDetailSheet
+        visit={selectedVisit}
+        open={!!selectedVisit}
+        onOpenChange={(open) => { if (!open) setSelectedVisit(null); }}
+        contacts={contacts}
+        properties={properties}
+        routes={routes}
+        servicePlans={servicePlans}
+        startStr={startStr}
+        endStr={endStr}
+      />
     </div>
   );
 }
 
-function VisitChip({ visit, contacts, properties, routes, compact }: {
+function VisitDetailSheet({
+  visit,
+  open,
+  onOpenChange,
+  contacts,
+  properties,
+  routes,
+  servicePlans,
+  startStr,
+  endStr,
+}: {
+  visit: Visit | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  contacts?: Contact[];
+  properties?: Property[];
+  routes?: Route[];
+  servicePlans?: ServicePlan[];
+  startStr: string;
+  endStr: string;
+}) {
+  const { toast } = useToast();
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
+      setUpdatingStatus(status);
+      const body: Record<string, unknown> = { status };
+      if (status === "completed") body.completedAt = new Date().toISOString();
+      if (status === "scheduled") {
+        body.completedAt = null;
+        body.startedAt = null;
+      }
+      await apiRequest("PATCH", `/api/visits/${visitId}`, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      toast({ title: "Visit updated" });
+      onOpenChange(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => setUpdatingStatus(null),
+  });
+
+  if (!visit) return null;
+
+  const plan = servicePlans?.find((sp) => sp.id === visit.servicePlanId);
+  const contact = plan ? contacts?.find((c) => c.id === plan.contactId) : undefined;
+  const property = properties?.find((p) => p.id === visit.propertyId);
+  const route = routes?.find((r) => r.id === visit.routeId);
+  const frequencyLabel = plan ? plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1) : "";
+  const pricePerVisit = plan ? parseFloat(plan.pricePerVisit) || 0 : 0;
+
+  const statusActions: { status: string; label: string; icon: typeof CheckCircle; color: string; show: boolean }[] = [
+    {
+      status: "completed",
+      label: "Mark Complete",
+      icon: CheckCircle,
+      color: "text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 border-green-200 dark:border-green-800",
+      show: visit.status !== "completed",
+    },
+    {
+      status: "skipped",
+      label: "Skip Visit",
+      icon: XCircle,
+      color: "text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-amber-200 dark:border-amber-800",
+      show: visit.status !== "skipped" && visit.status !== "completed",
+    },
+    {
+      status: "cancelled",
+      label: "Cancel Visit",
+      icon: Ban,
+      color: "text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-800",
+      show: visit.status !== "cancelled" && visit.status !== "completed",
+    },
+    {
+      status: "scheduled",
+      label: "Revert to Scheduled",
+      icon: Clock,
+      color: "text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 border-blue-200 dark:border-blue-800",
+      show: visit.status !== "scheduled",
+    },
+  ];
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto" data-testid="sheet-visit-detail">
+        <SheetHeader className="pb-4">
+          <SheetTitle className="text-lg" data-testid="text-sheet-title">Visit Details</SheetTitle>
+          <SheetDescription>
+            {visit.scheduledDate ? new Date(visit.scheduledDate + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : ""}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="space-y-5">
+          <div className="flex items-center gap-2">
+            <Badge className={`${visitStatusColors[visit.status] || ""}`} data-testid="badge-visit-status">
+              {visitStatusLabels[visit.status] || visit.status}
+            </Badge>
+            {visit.status === "completed" && !visit.invoiceId && (
+              <Badge variant="outline" className="text-orange-600 border-orange-300 dark:border-orange-700" data-testid="badge-needs-invoice">
+                <DollarSign className="h-3 w-3 mr-0.5" />Needs Invoice
+              </Badge>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            {contact && (
+              <div className="flex items-start gap-3">
+                <User className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Client</p>
+                  <Link href={`/contacts/${contact.id}`}>
+                    <span className="text-sm font-medium hover:underline cursor-pointer" data-testid="link-visit-contact">
+                      {contact.firstName} {contact.lastName}
+                    </span>
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {property && (
+              <div className="flex items-start gap-3">
+                <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Property</p>
+                  <p className="text-sm" data-testid="text-visit-address">
+                    {property.streetAddress}
+                    {property.city ? `, ${property.city}` : ""}
+                    {property.state ? ` ${property.state}` : ""}
+                    {property.zip ? ` ${property.zip}` : ""}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {plan && (
+              <div className="flex items-start gap-3">
+                <CalendarCheck className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Service</p>
+                  <p className="text-sm" data-testid="text-visit-service">{frequencyLabel} Cleanup</p>
+                </div>
+              </div>
+            )}
+
+            {route && (
+              <div className="flex items-start gap-3">
+                <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Route</p>
+                  <p className="text-sm" data-testid="text-visit-route">{route.name}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-start gap-3">
+              <DollarSign className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-xs text-muted-foreground">Amount</p>
+                <p className="text-sm font-medium" data-testid="text-visit-amount">${pricePerVisit.toFixed(2)}</p>
+              </div>
+            </div>
+
+            {visit.startedAt && (
+              <div className="flex items-start gap-3">
+                <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Started</p>
+                  <p className="text-sm">{new Date(visit.startedAt).toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+
+            {visit.completedAt && (
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-4 w-4 mt-0.5 text-green-600 shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Completed</p>
+                  <p className="text-sm">{new Date(visit.completedAt).toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+
+            {visit.technicianNotes && (
+              <div className="flex items-start gap-3">
+                <CalendarDays className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Technician Notes</p>
+                  <p className="text-sm italic" data-testid="text-visit-notes">{visit.technicianNotes}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</p>
+            <div className="grid grid-cols-1 gap-2">
+              {statusActions.filter(a => a.show).map((action) => {
+                const Icon = action.icon;
+                const isUpdating = updatingStatus === action.status;
+                return (
+                  <Button
+                    key={action.status}
+                    variant="outline"
+                    className={`justify-start gap-2 ${action.color}`}
+                    onClick={() => statusMutation.mutate({ visitId: visit.id, status: action.status })}
+                    disabled={statusMutation.isPending}
+                    data-testid={`button-action-${action.status}`}
+                  >
+                    {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+                    {action.label}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function VisitChip({ visit, contacts, properties, routes, servicePlans, compact, onVisitClick }: {
   visit: Visit;
   contacts?: Contact[];
   properties?: Property[];
   routes?: Route[];
+  servicePlans?: ServicePlan[];
   compact?: boolean;
+  onVisitClick?: (visit: Visit) => void;
 }) {
-  const contact = contacts?.find((c) => c.id === visit.contactId);
+  const plan = servicePlans?.find((sp) => sp.id === visit.servicePlanId);
+  const contact = plan ? contacts?.find((c) => c.id === plan.contactId) : undefined;
   const property = properties?.find((p) => p.id === visit.propertyId);
   const route = routes?.find((r) => r.id === visit.routeId);
 
+  const handleClick = () => {
+    if (onVisitClick) onVisitClick(visit);
+  };
+
   if (compact) {
     return (
-      <div className="text-xs border rounded-md p-1.5 space-y-0.5" data-testid={`text-visit-${visit.id}`}>
+      <div
+        className="text-xs border rounded-md p-1.5 space-y-0.5 cursor-pointer hover:bg-muted/50 hover:shadow-sm transition-all"
+        data-testid={`text-visit-${visit.id}`}
+        onClick={handleClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(); } }}
+      >
         <div className="flex items-center justify-between gap-1">
           <Badge variant="secondary" className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`}>
             {visitStatusLabels[visit.status] || visit.status}
@@ -526,9 +801,7 @@ function VisitChip({ visit, contacts, properties, routes, compact }: {
           {route && <span className="text-[10px] text-muted-foreground truncate">{route.name}</span>}
         </div>
         {contact && (
-          <ClientInfoPopover contactId={contact.id}>
-            <p className="truncate text-[11px] font-medium">{contact.firstName} {contact.lastName}</p>
-          </ClientInfoPopover>
+          <p className="truncate text-[11px] font-medium">{contact.firstName} {contact.lastName}</p>
         )}
         {property && <p className="truncate text-[10px] text-muted-foreground">{property.streetAddress}</p>}
       </div>
@@ -536,7 +809,14 @@ function VisitChip({ visit, contacts, properties, routes, compact }: {
   }
 
   return (
-    <Card className="mb-2" data-testid={`card-visit-${visit.id}`}>
+    <Card
+      className="mb-2 cursor-pointer hover:bg-muted/30 hover:shadow-sm transition-all"
+      data-testid={`card-visit-${visit.id}`}
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(); } }}
+    >
       <CardContent className="p-3 space-y-1">
         <div className="flex items-center justify-between gap-2">
           <Badge variant="secondary" className={visitStatusColors[visit.status] || ""}>
@@ -548,23 +828,23 @@ function VisitChip({ visit, contacts, properties, routes, compact }: {
           {route && <span className="text-xs text-muted-foreground">{route.name}</span>}
         </div>
         {contact && (
-          <ClientInfoPopover contactId={contact.id}>
-            <p className="text-sm font-medium">{contact.firstName} {contact.lastName}</p>
-          </ClientInfoPopover>
+          <p className="text-sm font-medium">{contact.firstName} {contact.lastName}</p>
         )}
         {property && <p className="text-xs text-muted-foreground">{property.streetAddress}{property.city ? `, ${property.city}` : ""}</p>}
-        {visit.notes && <p className="text-xs text-muted-foreground italic">{visit.notes}</p>}
+        {visit.technicianNotes && <p className="text-xs text-muted-foreground italic">{visit.technicianNotes}</p>}
       </CardContent>
     </Card>
   );
 }
 
-function DayView({ date, visits, contacts, properties, routes }: {
+function DayView({ date, visits, contacts, properties, routes, servicePlans, onVisitClick }: {
   date: Date;
   visits: Visit[];
   contacts?: Contact[];
   properties?: Property[];
   routes?: Route[];
+  servicePlans?: ServicePlan[];
+  onVisitClick?: (visit: Visit) => void;
 }) {
   const statusGroups = useMemo(() => {
     const groups: Record<string, Visit[]> = { scheduled: [], in_progress: [], completed: [], skipped: [], cancelled: [] };
@@ -603,7 +883,7 @@ function DayView({ date, visits, contacts, properties, routes }: {
                   <span className="text-xs text-muted-foreground">({groupVisits.length})</span>
                 </div>
                 {groupVisits.map((v) => (
-                  <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} />
+                  <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} onVisitClick={onVisitClick} />
                 ))}
               </div>
             );
