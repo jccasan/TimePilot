@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, Route, ActivityLog } from "@shared/schema";
+import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, Route, ActivityLog, Invoice } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2097,15 +2097,24 @@ const invoiceStatusColors: Record<string, string> = {
   refunded: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
 };
 
+type UninvoicedVisitRow = {
+  id: string;
+  scheduledDate: string;
+  servicePlanName: string;
+  pricePerVisit: string;
+  propertyAddress: string;
+  completedAt: string | null;
+};
+
+type UninvoicedResult = {
+  visits: UninvoicedVisitRow[];
+  totalDollars: number;
+};
+
 function BillingHistoryCard({ contactId }: { contactId: string }) {
   const [generateOpen, setGenerateOpen] = useState(false);
 
-  type UninvoicedResult = {
-    visits: any[];
-    totalDollars: number;
-  };
-
-  const { data: invoicesData } = useQuery<any[]>({
+  const { data: invoicesData } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices", "contact", contactId],
     queryFn: () => {
       const token = localStorage.getItem("sessionToken");
@@ -2195,7 +2204,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
                 </Button>
               </div>
               <div className="space-y-1 mt-1" data-testid="list-uninvoiced-visits">
-                {uninvoicedData.visits.map((v: any) => (
+                {uninvoicedData.visits.map((v) => (
                   <div key={v.id} className="flex items-center justify-between gap-2 text-sm py-1 px-2 rounded bg-white/60 dark:bg-black/20" data-testid={`uninvoiced-visit-${v.id}`}>
                     <div className="flex items-center gap-2 min-w-0">
                       <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />

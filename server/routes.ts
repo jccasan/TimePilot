@@ -6,7 +6,7 @@ import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, isNotNull, like, or } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -3181,7 +3181,7 @@ export async function registerRoutes(
       const planMap = new Map(plans.map(p => [p.id, p]));
       const contactPlanIds = new Set(plans.map(p => p.id));
 
-      const allVisits: any[] = [];
+      const allVisits: Visit[] = [];
       for (const vid of visitIds) {
         const v = await storage.getVisit(vid, companyId);
         if (!v) return res.status(400).json({ error: `Visit ${vid} not found` });

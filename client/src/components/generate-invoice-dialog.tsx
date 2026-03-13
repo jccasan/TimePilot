@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Contact, Visit } from "@shared/schema";
+import type { Contact, Visit, Invoice, InvoiceLineItem } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -128,7 +128,7 @@ export function GenerateInvoiceDialog({
       });
       return res.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: Invoice & { lineItems: InvoiceLineItem[] }) => {
       queryClient.invalidateQueries({ predicate: (query) => {
         const key = query.queryKey[0] as string;
         return key?.startsWith("/api/invoices") ||
