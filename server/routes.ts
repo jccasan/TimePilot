@@ -2871,6 +2871,12 @@ export async function registerRoutes(
         "proofOfServicePhoto", "proofOfServicePhotoBefore", "gateClosedPhoto", "extraPhotos", "technicianNotes"];
       const updates: any = {};
       for (const key of allowed) { if (req.body[key] !== undefined) updates[key] = req.body[key]; }
+      const timestampFields = ["startedAt", "completedAt"];
+      for (const field of timestampFields) {
+        if (field in updates && updates[field] !== null) {
+          updates[field] = new Date(updates[field]);
+        }
+      }
       const visit = await storage.updateVisit(req.params.id, updates);
 
       if (req.body.status === "completed" && existing.status !== "completed") {
