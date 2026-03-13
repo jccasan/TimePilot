@@ -142,7 +142,7 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string) {
 
       storage.createNotification({
         companyId,
-        type: "general",
+        type: "invoice_paid",
         title: "Auto-Invoice Created",
         message: `Invoice ${invoiceNumber} for $${subtotal.toFixed(2)} was auto-generated for ${contact.firstName} ${contact.lastName}`,
         isRead: false,

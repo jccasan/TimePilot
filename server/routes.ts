@@ -5682,7 +5682,7 @@ export async function registerRoutes(
           if (prop.id) {
             const existing = await storage.getProperty(prop.id, companyId);
             if (!existing || existing.contactId !== contactId) {
-              continue;
+              return res.status(403).json({ error: "Not authorized to update this property" });
             }
             if (existing) {
               const propUpdates: any = {};
