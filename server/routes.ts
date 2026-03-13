@@ -1012,12 +1012,21 @@ export async function registerRoutes(
         uninvoicedSummary,
         todaysVisitsList,
         monthRevenue,
+        allVisitsForOverdue,
       ] = await Promise.all([
         storage.getServicePlans(companyId, { isActive: true }),
         storage.getUninvoicedSummary(companyId),
         storage.getTodaysVisits(companyId),
         storage.getRevenueForPeriod(companyId, monthStart, monthEnd),
+        storage.getVisits(companyId, {}),
       ]);
+
+      const overdueVisits = allVisitsForOverdue.filter(v =>
+        v.scheduledDate < today &&
+        (v.status === "scheduled" || v.status === "in_progress")
+      );
+
+      const dashboardVisits = [...overdueVisits, ...todaysVisitsList];
 
       let activePlansMonthlyValue = 0;
       for (const plan of activePlans) {
@@ -1032,8 +1041,7 @@ export async function registerRoutes(
         activePlansMonthlyValue += basePrice * visitsPerMonth;
       }
 
-      const allVisits = await storage.getVisits(companyId, {});
-      const scheduledThisWeek = allVisits.filter(v =>
+      const scheduledThisWeek = allVisitsForOverdue.filter(v =>
         v.scheduledDate >= weekStartStr && v.scheduledDate <= weekEndStr &&
         (v.status === "scheduled" || v.status === "in_progress")
       ).length;
@@ -1069,7 +1077,7 @@ export async function registerRoutes(
 
       const contactIds = new Set<string>();
       const propertyIds = new Set<string>();
-      for (const v of todaysVisitsList) {
+      for (const v of dashboardVisits) {
         const plan = planMap.get(v.servicePlanId);
         if (plan) contactIds.add(plan.contactId);
         propertyIds.add(v.propertyId);
@@ -1087,7 +1095,7 @@ export async function registerRoutes(
         if (p) propertyCache.set(pId, p.streetAddress);
       }
 
-      const todaysVisitsDetailed: {
+      const dashboardVisitsDetailed: {
         id: string;
         status: string;
         scheduledDate: string;
@@ -1095,12 +1103,13 @@ export async function registerRoutes(
         contactId: string;
         propertyAddress: string;
         servicePlanName: string;
+        serviceType: string;
         amount: number;
         completedAt: string | null;
         startedAt: string | null;
       }[] = [];
 
-      for (const v of todaysVisitsList) {
+      for (const v of dashboardVisits) {
         const plan = planMap.get(v.servicePlanId);
         let contactName = "Unknown";
         let contactId = "";
@@ -1109,21 +1118,23 @@ export async function registerRoutes(
           const cached = contactCache.get(plan.contactId);
           if (cached) contactName = `${cached.firstName} ${cached.lastName}`;
         }
-        todaysVisitsDetailed.push({
+        const frequencyLabel = plan ? plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1) : "";
+        dashboardVisitsDetailed.push({
           id: v.id,
           status: v.status,
           scheduledDate: v.scheduledDate,
           contactName,
           contactId,
           propertyAddress: propertyCache.get(v.propertyId) || "",
-          servicePlanName: plan ? `${plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1)} Service` : "Service",
+          servicePlanName: plan ? `${frequencyLabel} Service` : "Service",
+          serviceType: plan ? `${frequencyLabel} Cleanup` : "Cleanup",
           amount: plan ? parseFloat(plan.pricePerVisit) || 0 : 0,
           completedAt: v.completedAt ? v.completedAt.toISOString() : null,
           startedAt: v.startedAt ? v.startedAt.toISOString() : null,
         });
       }
 
-      const upcomingThisWeek = allVisits.filter(v =>
+      const upcomingThisWeek = allVisitsForOverdue.filter(v =>
         v.scheduledDate >= today && v.scheduledDate <= weekEndStr &&
         (v.status === "scheduled" || v.status === "in_progress")
       );
@@ -1149,7 +1160,7 @@ export async function registerRoutes(
           count: awaitingPayment.length,
           totalDollars: Math.round(awaitingPaymentTotal * 100) / 100,
         },
-        todaysVisits: todaysVisitsDetailed,
+        todaysVisits: dashboardVisitsDetailed,
         receivables: {
           total: Math.round(awaitingPaymentTotal * 100) / 100,
           overdueCount: overdueInvoices.length,

@@ -73,6 +73,7 @@ type PipelineVisit = {
   contactId: string;
   propertyAddress: string;
   servicePlanName: string;
+  serviceType: string;
   amount: number;
   completedAt: string | null;
   startedAt: string | null;
@@ -332,7 +333,9 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
                       <MapPin className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{visit.propertyAddress || visit.servicePlanName}</span>
+                      <span className="truncate">{visit.propertyAddress}</span>
+                      <span className="shrink-0">&middot;</span>
+                      <span className="shrink-0">{visit.serviceType}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
