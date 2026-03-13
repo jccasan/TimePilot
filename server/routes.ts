@@ -2981,7 +2981,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: `Invalid status. Must be one of: ${validVisitStatuses.join(", ")}` });
       }
       const allowedTransitions: Record<string, string[]> = {
-        scheduled: ["in_progress", "skipped", "cancelled"],
+        scheduled: ["in_progress", "completed", "skipped", "cancelled"],
         in_progress: ["completed", "skipped", "cancelled"],
         completed: [],
         skipped: [],

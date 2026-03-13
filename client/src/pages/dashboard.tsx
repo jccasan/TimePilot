@@ -562,8 +562,12 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
 
   const markVisitMutation = useMutation({
     mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
+      const now = new Date().toISOString();
       const body: Record<string, unknown> = { status };
-      if (status === "completed") body.completedAt = new Date().toISOString();
+      if (status === "completed") {
+        body.completedAt = now;
+        body.startedAt = now;
+      }
       await apiRequest("PATCH", `/api/visits/${visitId}`, body);
     },
     onSuccess: () => {
