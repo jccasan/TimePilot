@@ -396,13 +396,13 @@ export default function TechMobile() {
                   className="p-4 pb-2 cursor-pointer"
                   onClick={() => setExpandedId(isExpanded ? null : visit.id)}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <CardTitle className="text-base" data-testid={`text-visit-address-${visit.id}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <CardTitle className="text-base truncate" data-testid={`text-visit-address-${visit.id}`}>
                         {visit.property?.streetAddress || "Unknown address"}
                         {isMulti && <span className="text-xs font-normal text-muted-foreground ml-2">({group.visits.length} services)</span>}
                       </CardTitle>
-                      <p className="text-sm text-muted-foreground" data-testid={`text-visit-contact-${visit.id}`}>
+                      <p className="text-sm text-muted-foreground truncate" data-testid={`text-visit-contact-${visit.id}`}>
                         {visit.contact ? `${visit.contact.firstName} ${visit.contact.lastName}` : "Unknown"}
                       </p>
                       {(visit.servicePlanName || (visit.addOns && visit.addOns.length > 0)) && (
@@ -420,11 +420,11 @@ export default function TechMobile() {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {(hasBefore || hasAfter || hasGate) && (
                         <ImageIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
                       )}
-                      <Badge variant="secondary" className={visitStatusColors[visit.status] || ""} data-testid={`badge-visit-status-${visit.id}`}>
+                      <Badge variant="secondary" className={`text-[11px] ${visitStatusColors[visit.status] || ""}`} data-testid={`badge-visit-status-${visit.id}`}>
                         {visitStatusLabels[visit.status] || visit.status}
                       </Badge>
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -459,7 +459,7 @@ export default function TechMobile() {
                               <img
                                 src={visit.proofOfServicePhotoBefore!}
                                 alt="Before service"
-                                className="rounded-md max-h-48 w-full object-cover"
+                                className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
                                 data-testid={`img-proof-before-${visit.id}`}
                               />
                             </div>
@@ -470,7 +470,7 @@ export default function TechMobile() {
                               <img
                                 src={visit.proofOfServicePhoto!}
                                 alt="After service"
-                                className="rounded-md max-h-48 w-full object-cover"
+                                className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
                                 data-testid={`img-proof-after-${visit.id}`}
                               />
                             </div>
@@ -481,7 +481,7 @@ export default function TechMobile() {
                               <img
                                 src={visit.gateClosedPhoto!}
                                 alt="Gate closed"
-                                className="rounded-md max-h-48 w-full object-cover"
+                                className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
                                 data-testid={`img-gate-closed-${visit.id}`}
                               />
                             </div>
@@ -506,7 +506,7 @@ export default function TechMobile() {
                         <Button
                           onClick={() => startMutation.mutate(visit.id)}
                           disabled={startMutation.isPending}
-                          className="flex-1"
+                          className="flex-1 min-h-[44px]"
                           data-testid={`button-start-${visit.id}`}
                         >
                           <Play className="mr-1 h-4 w-4" /> Start
@@ -516,7 +516,7 @@ export default function TechMobile() {
                         <Button
                           onClick={() => openCompleteDialog(visit)}
                           variant="outline"
-                          className="flex-1"
+                          className="flex-1 min-h-[44px]"
                           data-testid={`button-complete-${visit.id}`}
                         >
                           <CheckCircle className="mr-1 h-4 w-4" /> Complete
@@ -527,6 +527,7 @@ export default function TechMobile() {
                           variant="outline"
                           onClick={() => handlePhotoClick(visit.id, "before")}
                           disabled={isUploadingBefore}
+                          className="min-h-[44px]"
                           data-testid={`button-photo-before-${visit.id}`}
                         >
                           {isUploadingBefore ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
@@ -537,6 +538,7 @@ export default function TechMobile() {
                         variant="outline"
                         onClick={() => handlePhotoClick(visit.id, "after")}
                         disabled={isUploadingAfter}
+                        className="min-h-[44px]"
                         data-testid={`button-photo-after-${visit.id}`}
                       >
                         {isUploadingAfter ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
@@ -562,7 +564,7 @@ export default function TechMobile() {
       )}
 
       <Dialog open={!!completeDialogVisit} onOpenChange={(open) => { if (!open) setCompleteDialogVisit(null); }}>
-        <DialogContent className="sm:max-w-md" data-testid="dialog-complete-visit">
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto" data-testid="dialog-complete-visit">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DoorClosed className="h-5 w-5" />
@@ -591,7 +593,7 @@ export default function TechMobile() {
                   <img
                     src={gatePhotoPreview}
                     alt="Gate closed"
-                    className="rounded-md max-h-48 w-full object-cover"
+                    className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
                     data-testid="img-gate-preview"
                   />
                   <Button

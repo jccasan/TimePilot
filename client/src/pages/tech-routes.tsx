@@ -193,6 +193,7 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
                   variant="outline"
                   onClick={(e) => { e.stopPropagation(); onStatusChange(visit.id, "in_progress"); }}
                   disabled={isUpdating}
+                  className="min-h-[44px]"
                   data-testid={`button-mark-in-progress-${visit.id}`}
                 >
                   <Play className="h-3.5 w-3.5 mr-1" />
@@ -204,6 +205,7 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
                   size="sm"
                   onClick={(e) => { e.stopPropagation(); onStatusChange(visit.id, "completed"); }}
                   disabled={isUpdating}
+                  className="min-h-[44px]"
                   data-testid={`button-mark-complete-${visit.id}`}
                 >
                   <CheckCircle className="h-3.5 w-3.5 mr-1" />
@@ -216,6 +218,7 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
                   variant="outline"
                   onClick={(e) => { e.stopPropagation(); onStatusChange(visit.id, "skipped"); }}
                   disabled={isUpdating}
+                  className="min-h-[44px]"
                   data-testid={`button-mark-skip-${visit.id}`}
                 >
                   <SkipForward className="h-3.5 w-3.5 mr-1" />
@@ -228,6 +231,7 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
                   variant="outline"
                   onClick={(e) => { e.stopPropagation(); onStatusChange(visit.id, "cancelled"); }}
                   disabled={isUpdating}
+                  className="min-h-[44px]"
                   data-testid={`button-mark-cancel-${visit.id}`}
                 >
                   <XCircle className="h-3.5 w-3.5 mr-1" />

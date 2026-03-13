@@ -903,7 +903,7 @@ export default function PortalClient() {
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 pt-4">
+      <div className="max-w-4xl mx-auto px-4 pt-4 hidden sm:block">
         <Card>
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center justify-between mb-3">
@@ -1021,31 +1021,31 @@ export default function PortalClient() {
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="w-full grid grid-cols-5 mb-6" data-testid="tabs-portal-nav">
-            <TabsTrigger value="overview" className="gap-1.5" data-testid="tab-overview">
-              <LayoutDashboard className="h-4 w-4 hidden sm:block" />
-              Overview
+          <TabsList className="w-full grid grid-cols-5 mb-6 h-auto min-h-[44px]" data-testid="tabs-portal-nav">
+            <TabsTrigger value="overview" className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm" data-testid="tab-overview">
+              <LayoutDashboard className="h-5 w-5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Overview</span>
             </TabsTrigger>
-            <TabsTrigger value="services" className="gap-1.5" data-testid="tab-services">
-              <Wrench className="h-4 w-4 hidden sm:block" />
-              Services
+            <TabsTrigger value="services" className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm" data-testid="tab-services">
+              <Wrench className="h-5 w-5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Services</span>
             </TabsTrigger>
-            <TabsTrigger value="billing" className="gap-1.5 relative" data-testid="tab-billing">
-              <Receipt className="h-4 w-4 hidden sm:block" />
-              Billing
+            <TabsTrigger value="billing" className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm relative" data-testid="tab-billing">
+              <Receipt className="h-5 w-5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Billing</span>
               {unpaidInvoices.length > 0 && (
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold">
+                <span className="absolute -top-0.5 right-0 sm:-top-1 sm:-right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold">
                   {unpaidInvoices.length}
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="messages" className="gap-1.5" data-testid="tab-messages">
-              <MessageSquare className="h-4 w-4 hidden sm:block" />
-              Messages
+            <TabsTrigger value="messages" className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm" data-testid="tab-messages">
+              <MessageSquare className="h-5 w-5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Messages</span>
             </TabsTrigger>
-            <TabsTrigger value="account" className="gap-1.5" data-testid="tab-account">
-              <Settings className="h-4 w-4 hidden sm:block" />
-              Account
+            <TabsTrigger value="account" className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm" data-testid="tab-account">
+              <Settings className="h-5 w-5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Account</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1708,7 +1708,7 @@ export default function PortalClient() {
             )}
 
             <Dialog open={!!tipDialogInvoice} onOpenChange={(open) => { if (!open) setTipDialogInvoice(null); }}>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Pay Invoice {tipDialogInvoice?.invoiceNumber}</DialogTitle>
                   <DialogDescription>Tips are appreciated but never expected. Add a tip to show your appreciation for your technician.</DialogDescription>
@@ -1809,7 +1809,7 @@ export default function PortalClient() {
                                   {msg.subject}
                                 </p>
                               )}
-                              <p className="text-sm whitespace-pre-wrap">{msg.body}</p>
+                              <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>
                               <div className={`flex items-center gap-1.5 mt-1.5 ${isCustomer ? "justify-end" : "justify-start"}`}>
                                 <span className={`text-[10px] ${isCustomer ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                                   {new Date(msg.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
@@ -1864,6 +1864,60 @@ export default function PortalClient() {
 
           {/* ==================== ACCOUNT TAB ==================== */}
           <TabsContent value="account" className="space-y-6">
+            <section className="sm:hidden">
+              <SectionHeader title="Your Information" />
+              <Card>
+                <CardContent className="pt-4 pb-4 space-y-3">
+                  {profile?.pendingEmail && (
+                    <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-700 px-3 py-2 text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2" data-testid="banner-pending-email-mobile">
+                      <Mail className="h-4 w-4 flex-shrink-0" />
+                      <span>Verification email sent to <strong>{profile.pendingEmail}</strong></span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">First Name</Label>
+                      <Input value={profileEdits.firstName} onChange={(e) => setProfileEdits((p) => ({ ...p, firstName: e.target.value }))} placeholder="First name" className="h-10" data-testid="input-mobile-first-name" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Last Name</Label>
+                      <Input value={profileEdits.lastName} onChange={(e) => setProfileEdits((p) => ({ ...p, lastName: e.target.value }))} placeholder="Last name" className="h-10" data-testid="input-mobile-last-name" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Email</Label>
+                    <Input type="email" value={profileEdits.email} onChange={(e) => setProfileEdits((p) => ({ ...p, email: e.target.value }))} placeholder="Email" className="h-10" data-testid="input-mobile-email" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Phone</Label>
+                    <Input type="tel" value={profileEdits.phone} onChange={(e) => setProfileEdits((p) => ({ ...p, phone: e.target.value }))} placeholder="Phone" className="h-10" data-testid="input-mobile-phone" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Street Address</Label>
+                    <Input value={profileEdits.streetAddress} onChange={(e) => setProfileEdits((p) => ({ ...p, streetAddress: e.target.value }))} placeholder="Street address" className="h-10" data-testid="input-mobile-street" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">City</Label>
+                      <Input value={profileEdits.city} onChange={(e) => setProfileEdits((p) => ({ ...p, city: e.target.value }))} placeholder="City" className="h-10" data-testid="input-mobile-city" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">State</Label>
+                      <Input value={profileEdits.state} onChange={(e) => setProfileEdits((p) => ({ ...p, state: e.target.value }))} placeholder="ST" className="h-10" data-testid="input-mobile-state" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Zip</Label>
+                      <Input value={profileEdits.zipCode} onChange={(e) => setProfileEdits((p) => ({ ...p, zipCode: e.target.value }))} placeholder="Zip" className="h-10" data-testid="input-mobile-zip" />
+                    </div>
+                  </div>
+                  <Button onClick={handleSaveProfile} disabled={savingProfile} className="w-full min-h-[44px]" data-testid="button-save-profile-mobile">
+                    <Save className="mr-1.5 h-4 w-4" />
+                    {savingProfile ? "Saving..." : "Save Profile"}
+                  </Button>
+                </CardContent>
+              </Card>
+            </section>
+
             <section>
               <SectionHeader title="Pet Information" />
               <Card>
@@ -1919,7 +1973,7 @@ export default function PortalClient() {
                             {prop.streetAddress ? `${prop.streetAddress}, ${prop.city}, ${prop.state} ${prop.zipCode}` : "No address on file"}
                           </p>
                         </div>
-                        <div className="pl-12 space-y-3">
+                        <div className="pl-0 sm:pl-12 space-y-3">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5 sm:col-span-2">
                               <Label htmlFor={`street-${prop.id}`} className="text-xs">Street Address</Label>
@@ -2130,7 +2184,7 @@ export default function PortalClient() {
 
       {/* Visit Photo Dialog */}
       <Dialog open={!!visitPhotoModal} onOpenChange={(open) => !open && setVisitPhotoModal(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Service Photos</DialogTitle>
             <DialogDescription>{visitPhotoModal?.scheduledDate} {visitPhotoModal?.propertyAddress && `- ${visitPhotoModal.propertyAddress}`}</DialogDescription>
@@ -2142,7 +2196,7 @@ export default function PortalClient() {
                 <img
                   src={visitPhotoModal.proofOfServicePhotoBefore}
                   alt="Before service"
-                  className="w-full rounded-lg border"
+                  className="w-full rounded-lg border max-h-48 sm:max-h-[60vh] object-contain"
                   data-testid="img-visit-before"
                 />
               </div>
@@ -2153,7 +2207,7 @@ export default function PortalClient() {
                 <img
                   src={visitPhotoModal.proofOfServicePhoto}
                   alt="After service"
-                  className="w-full rounded-lg border"
+                  className="w-full rounded-lg border max-h-48 sm:max-h-[60vh] object-contain"
                   data-testid="img-visit-after"
                 />
               </div>
@@ -2164,7 +2218,7 @@ export default function PortalClient() {
 
       {/* Gallery Photo Dialog */}
       <Dialog open={photoModalIndex !== null} onOpenChange={(open) => !open && setPhotoModalIndex(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <span>{photoModalIndex !== null && galleryPhotos[photoModalIndex]?.scheduledDate}</span>
@@ -2206,7 +2260,7 @@ export default function PortalClient() {
                   <img
                     src={galleryPhotos[photoModalIndex].proofOfServicePhotoBefore!}
                     alt="Before service"
-                    className="w-full rounded-lg border"
+                    className="w-full rounded-lg border max-h-48 sm:max-h-[60vh] object-contain"
                     data-testid="img-gallery-before"
                   />
                 </div>
@@ -2217,7 +2271,7 @@ export default function PortalClient() {
                   <img
                     src={galleryPhotos[photoModalIndex].proofOfServicePhoto!}
                     alt="After service"
-                    className="w-full rounded-lg border"
+                    className="w-full rounded-lg border max-h-48 sm:max-h-[60vh] object-contain"
                     data-testid="img-gallery-after"
                   />
                 </div>
