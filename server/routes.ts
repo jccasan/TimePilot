@@ -2820,16 +2820,34 @@ export async function registerRoutes(
   app.get("/api/visits/today", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const today = new Date().toISOString().split("T")[0];
-      const visitsList = await storage.getVisits(companyId, { date: today });
+      const dateParam = req.query.date as string | undefined;
+      const targetDate = dateParam || new Date().toISOString().split("T")[0];
+      const visitsList = await storage.getVisits(companyId, { date: targetDate });
       const enriched = await Promise.all(visitsList.map(async (v) => {
-        if (!v.servicePlanId) return { ...v, servicePlanName: null, addOns: [] };
-        const plan = await storage.getServicePlan(v.servicePlanId, companyId);
+        const plan = v.servicePlanId ? await storage.getServicePlan(v.servicePlanId, companyId) : null;
         const addOns = plan ? await storage.getServicePlanAddOns(plan.id) : [];
+        const prop = await storage.getProperty(v.propertyId, companyId);
+        const contact = plan ? await storage.getContact(plan.contactId, companyId) : null;
         return {
           ...v,
           servicePlanName: plan?.frequency ? `${plan.frequency} service` : null,
           addOns: addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })),
+          property: prop ? {
+            streetAddress: prop.streetAddress,
+            city: prop.city,
+            state: prop.state,
+            gateCode: prop.gateCode,
+            specialInstructions: prop.specialInstructions,
+            measuredYardSqft: prop.measuredYardSqft,
+            lotSize: prop.lotSize,
+            numberOfDogs: prop.numberOfDogs,
+          } : null,
+          contact: contact ? {
+            id: contact.id,
+            firstName: contact.firstName,
+            lastName: contact.lastName,
+            phone: contact.phone,
+          } : null,
         };
       }));
       res.json(enriched);
@@ -3364,6 +3382,18 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const summary = await storage.getUninvoicedSummary(companyId);
       res.json(summary);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/contacts/:id/visits", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
+      const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+      const result = await storage.getVisitsForContact(companyId, req.params.id, limit, offset);
+      res.json(result);
     } catch (err) { handleError(res, err); }
   });
 

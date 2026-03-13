@@ -32,7 +32,7 @@ import {
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
   Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
-  CalendarDays, DollarSign
+  CalendarDays, DollarSign, Play
 } from "lucide-react";
 import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
@@ -445,6 +445,7 @@ function RouteVisitDetailSheet({
     mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
       setUpdatingStatus(status);
       const body: Record<string, unknown> = { status };
+      if (status === "in_progress") body.startedAt = new Date().toISOString();
       if (status === "completed") body.completedAt = new Date().toISOString();
       if (status === "scheduled") {
         body.completedAt = null;
@@ -475,6 +476,13 @@ function RouteVisitDetailSheet({
   const pricePerVisit = parseFloat(servicePlan.pricePerVisit) || 0;
 
   const statusActions: { status: string; label: string; icon: typeof CheckCircle; color: string; show: boolean }[] = [
+    {
+      status: "in_progress",
+      label: "Mark In Progress",
+      icon: Play,
+      color: "text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800",
+      show: visit.status === "scheduled",
+    },
     {
       status: "completed",
       label: "Mark Complete",
@@ -900,7 +908,9 @@ export default function RoutesPage() {
     mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
       setUpdatingVisitId(visitId);
       const body: { status: string; completedAt?: string | null; startedAt?: string | null } = { status };
-      if (status === "completed") {
+      if (status === "in_progress") {
+        body.startedAt = new Date().toISOString();
+      } else if (status === "completed") {
         body.completedAt = new Date().toISOString();
       } else if (status === "scheduled") {
         body.completedAt = null;

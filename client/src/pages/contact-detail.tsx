@@ -47,7 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown } from "lucide-react";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { StreetViewImage } from "@/components/street-view-image";
@@ -497,6 +497,8 @@ export default function ContactDetail() {
       <PaymentMethodsCard contact={contact} contactId={id!} />
 
       <BillingHistoryCard contactId={id!} />
+
+      <VisitHistoryCard contactId={id!} />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
@@ -2096,6 +2098,145 @@ const invoiceStatusColors: Record<string, string> = {
   voided: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
   refunded: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
 };
+
+const visitStatusColors: Record<string, string> = {
+  scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  in_progress: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  skipped: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+};
+
+const visitStatusLabels: Record<string, string> = {
+  scheduled: "Scheduled",
+  in_progress: "In Progress",
+  completed: "Completed",
+  skipped: "Skipped",
+  cancelled: "Cancelled",
+};
+
+type VisitHistoryRow = {
+  id: string;
+  scheduledDate: string;
+  status: string;
+  servicePlanName: string;
+  propertyAddress: string;
+  completedAt: string | null;
+  startedAt: string | null;
+};
+
+type VisitHistoryResult = {
+  visits: VisitHistoryRow[];
+  total: number;
+};
+
+function VisitHistoryCard({ contactId }: { contactId: string }) {
+  const [limit, setLimit] = useState(10);
+
+  const { data, isLoading, isError } = useQuery<VisitHistoryResult>({
+    queryKey: ["/api/contacts", contactId, "visits", limit],
+    queryFn: async () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`/api/contacts/${contactId}/visits?limit=${limit}`, { credentials: "include", headers });
+      if (!res.ok) throw new Error("Failed to fetch visits");
+      return res.json();
+    },
+  });
+
+  const visits = data?.visits ?? [];
+  const total = data?.total ?? 0;
+  const hasMore = visits.length < total;
+
+  return (
+    <Card data-testid="card-visit-history">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Clock className="h-5 w-5" />
+          Visit History
+          {total > 0 && (
+            <Badge variant="secondary" className="ml-auto text-xs" data-testid="badge-visit-count">
+              {total} total
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {isError ? (
+          <p className="text-sm text-destructive text-center py-3" data-testid="text-visits-error">
+            Failed to load visit history
+          </p>
+        ) : isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-12 bg-muted/50 rounded animate-pulse" />
+            ))}
+          </div>
+        ) : visits.length > 0 ? (
+          <>
+            <div className="space-y-2" data-testid="list-visit-history">
+              {visits.map((v) => (
+                <div
+                  key={v.id}
+                  className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg border"
+                  data-testid={`row-visit-${v.id}`}
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium" data-testid={`text-visit-date-${v.id}`}>
+                          {new Date(v.scheduledDate + "T00:00:00").toLocaleDateString("en-US", {
+                            month: "short", day: "numeric", year: "numeric",
+                          })}
+                        </span>
+                        <Badge
+                          variant="secondary"
+                          className={`text-[10px] ${visitStatusColors[v.status] || ""}`}
+                          data-testid={`badge-visit-status-${v.id}`}
+                        >
+                          {visitStatusLabels[v.status] || v.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-muted-foreground" data-testid={`text-visit-plan-${v.id}`}>
+                          {v.servicePlanName}
+                        </span>
+                        {v.propertyAddress && v.propertyAddress !== "Unknown" && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {v.propertyAddress}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {hasMore && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => setLimit(prev => prev + 20)}
+                data-testid="button-show-more-visits"
+              >
+                <ChevronDown className="h-4 w-4 mr-1" />
+                Show More ({total - visits.length} remaining)
+              </Button>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-3" data-testid="text-no-visits">
+            No visit history yet
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 type UninvoicedVisitRow = {
   id: string;
