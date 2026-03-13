@@ -3138,6 +3138,10 @@ export async function registerRoutes(
         paymentAttempts: 0,
       }, lineItems);
 
+      for (const v of billableVisits) {
+        await storage.updateVisit(v.id, { invoiceId: invoice.id });
+      }
+
       const items = await storage.getInvoiceLineItems(invoice.id);
       res.status(201).json({ ...invoice, lineItems: items });
     } catch (err) { handleError(res, err); }
@@ -3173,11 +3177,13 @@ export async function registerRoutes(
 
       const plans = await storage.getServicePlans(companyId, { contactId });
       const planMap = new Map(plans.map(p => [p.id, p]));
+      const contactPlanIds = new Set(plans.map(p => p.id));
+
       const allVisits: any[] = [];
       for (const vid of visitIds) {
         const v = await storage.getVisit(vid, companyId);
         if (!v) return res.status(400).json({ error: `Visit ${vid} not found` });
-        if (v.contactId !== contactId) return res.status(400).json({ error: `Visit ${vid} does not belong to this contact` });
+        if (!contactPlanIds.has(v.servicePlanId)) return res.status(400).json({ error: `Visit ${vid} does not belong to this contact` });
         if (v.status !== "completed") return res.status(400).json({ error: `Visit ${vid} is not completed` });
         if (v.invoiceId) return res.status(400).json({ error: `Visit on ${v.scheduledDate} has already been invoiced` });
         allVisits.push(v);

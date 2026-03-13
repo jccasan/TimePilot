@@ -2177,7 +2177,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
           </div>
 
           {uninvoicedData && uninvoicedData.visits.length > 0 && (
-            <div className="border border-orange-200 dark:border-orange-800 rounded-lg p-3 bg-orange-50 dark:bg-orange-950/30" data-testid="section-uninvoiced-alert">
+            <div className="border border-orange-200 dark:border-orange-800 rounded-lg p-3 bg-orange-50 dark:bg-orange-950/30 space-y-2" data-testid="section-uninvoiced-alert">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-4 w-4 text-orange-600 dark:text-orange-400" />
@@ -2193,6 +2193,20 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
                 >
                   Invoice Now
                 </Button>
+              </div>
+              <div className="space-y-1 mt-1" data-testid="list-uninvoiced-visits">
+                {uninvoicedData.visits.map((v: any) => (
+                  <div key={v.id} className="flex items-center justify-between gap-2 text-sm py-1 px-2 rounded bg-white/60 dark:bg-black/20" data-testid={`uninvoiced-visit-${v.id}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="truncate">
+                        {new Date(v.scheduledDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                      <span className="text-xs text-muted-foreground truncate">{v.servicePlanName}</span>
+                    </div>
+                    <span className="font-medium tabular-nums">${parseFloat(v.pricePerVisit).toFixed(2)}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
