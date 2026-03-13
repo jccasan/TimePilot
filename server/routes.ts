@@ -3029,6 +3029,9 @@ export async function registerRoutes(
       }
 
       if (existing.status === "completed") return res.json({ visit: existing, completionSms: null, etaSms: null, alreadyCompleted: true });
+      if (existing.status !== "in_progress") {
+        return res.status(400).json({ error: `Cannot complete visit from '${existing.status}' status. Visit must be started first.` });
+      }
 
       const { gateClosedPhoto, extraPhotos, technicianNotes } = req.body;
       if (!gateClosedPhoto || typeof gateClosedPhoto !== "string") {
@@ -3123,13 +3126,23 @@ export async function registerRoutes(
           const sorted = allPlansOnRoute.sort((a, b) => a.stopOrder - b.stopOrder);
           const currentIdx = sorted.findIndex(sp => sp.id === visit.servicePlanId);
 
-          if (currentIdx >= 0 && currentIdx < sorted.length - 1) {
-            const nextPlan = sorted[currentIdx + 1];
+          if (currentIdx >= 0) {
             const today = new Date().toISOString().split("T")[0];
             const todayVisits = await storage.getVisits(companyId, { date: today });
-            const nextVisit = todayVisits.find(v => v.servicePlanId === nextPlan.id && v.status !== "completed" && v.status !== "cancelled" && v.status !== "skipped");
 
-            if (nextVisit) {
+            let nextPlan = null;
+            let nextVisit = null;
+            for (let i = currentIdx + 1; i < sorted.length; i++) {
+              const candidatePlan = sorted[i];
+              const candidateVisit = todayVisits.find(v => v.servicePlanId === candidatePlan.id && (v.status === "scheduled" || v.status === "in_progress"));
+              if (candidateVisit) {
+                nextPlan = candidatePlan;
+                nextVisit = candidateVisit;
+                break;
+              }
+            }
+
+            if (nextVisit && nextPlan) {
               const nextContact = await storage.getContact(nextPlan.contactId, companyId);
               const currentProperty = await storage.getProperty(visit.propertyId, companyId);
               const nextProperty = await storage.getProperty(nextVisit.propertyId, companyId);
