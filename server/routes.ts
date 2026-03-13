@@ -1909,24 +1909,43 @@ export async function registerRoutes(
       const parsed = insertContactSchema.parse({ ...req.body, companyId });
       const contact = await storage.createContact(parsed);
 
-      if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
+      let propertyCreated = false;
+      const hasFullAddress = !!(contact.streetAddress && contact.city && contact.state && contact.zipCode);
+      const hasPartialAddress = !!(contact.streetAddress) && !hasFullAddress;
+
+      if (hasFullAddress) {
         await createPropertyWithGeocode({
           companyId,
           contactId: contact.id,
-          streetAddress: contact.streetAddress,
+          streetAddress: contact.streetAddress!,
           city: contact.city,
           state: contact.state,
           zipCode: contact.zipCode,
           numberOfDogs: contact.numberOfDogs ?? 1,
           yardSize: contact.yardSize ?? null,
         });
+        propertyCreated = true;
+      }
+
+      if (contact.email && isStripeConfigured()) {
+        try {
+          const stripeCustomerId = await createStripeCustomer({
+            email: contact.email,
+            name: `${contact.firstName} ${contact.lastName}`.trim(),
+            phone: contact.phone || undefined,
+            metadata: { contactId: contact.id, companyId },
+          });
+          await storage.updateContact(contact.id, { stripeCustomerId });
+        } catch (stripeErr) {
+          console.error("[auto-stripe] Customer creation failed:", stripeErr);
+        }
       }
 
       if (contact.status === "lead") {
         notify(companyId, "new_lead", "New Lead", `${contact.firstName} ${contact.lastName} was added as a new lead.`, `/contacts/${contact.id}`);
       }
 
-      res.status(201).json(contact);
+      res.status(201).json({ ...contact, _meta: { propertyCreated, hasPartialAddress } });
     } catch (err) { handleError(res, err); }
   });
 
@@ -5662,6 +5681,9 @@ export async function registerRoutes(
         for (const prop of req.body.properties) {
           if (prop.id) {
             const existing = await storage.getProperty(prop.id, companyId);
+            if (!existing || existing.contactId !== contactId) {
+              continue;
+            }
             if (existing) {
               const propUpdates: any = {};
               if (prop.gateCode !== undefined) propUpdates.gateCode = prop.gateCode;
@@ -5706,7 +5728,7 @@ export async function registerRoutes(
       const { preferredDate, notes } = req.body;
       await storage.createNotification({
         companyId,
-        type: "cleanup_request",
+        type: "general",
         title: "One-Time Cleanup Request",
         message: `${contact.firstName} ${contact.lastName} requested a cleanup${preferredDate ? ` on ${preferredDate}` : ""}${notes ? `: ${notes}` : ""}`,
         data: { contactId, preferredDate, notes },

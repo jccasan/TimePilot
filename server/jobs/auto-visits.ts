@@ -28,7 +28,7 @@ export async function runAutoVisits() {
       if (created > 0) {
         storage.createNotification({
           companyId: company.id,
-          type: "info" as any,
+          type: "general",
           title: "Visits Auto-Generated",
           message: `${created} visit${created !== 1 ? "s" : ""} created for the next 7 days (${startStr} to ${endStr}).`,
           isRead: false,

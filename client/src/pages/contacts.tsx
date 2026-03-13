@@ -235,12 +235,18 @@ export default function Contacts() {
 
   const createMutation = useMutation({
     mutationFn: async (data: ContactFormValues) => {
-      await apiRequest("POST", "/api/contacts", data);
+      const res = await apiRequest("POST", "/api/contacts", data);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (result: Record<string, unknown>) => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
-      toast({ title: "Contact created", description: "New contact added successfully." });
+      const meta = result._meta as { propertyCreated?: boolean; hasPartialAddress?: boolean } | undefined;
+      if (meta?.hasPartialAddress && !meta?.propertyCreated) {
+        toast({ title: "Contact created", description: "Address is incomplete — a service property was not created automatically. Please add one manually from the contact page." });
+      } else {
+        toast({ title: "Contact created", description: "New contact added successfully." });
+      }
       setDialogOpen(false);
       form.reset();
     },

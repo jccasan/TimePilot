@@ -5,6 +5,7 @@ import { storage } from "../storage";
 import {
   isStripeConfigured,
   chargeInvoiceAutomatically,
+  createStripeCustomer,
 } from "../services/stripe";
 
 export async function runAutoInvoice() {
@@ -141,12 +142,33 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string) {
 
       storage.createNotification({
         companyId,
-        type: "invoice" as any,
+        type: "general",
         title: "Auto-Invoice Created",
         message: `Invoice ${invoiceNumber} for $${subtotal.toFixed(2)} was auto-generated for ${contact.firstName} ${contact.lastName}`,
         isRead: false,
         linkUrl: `/invoices`,
       }).catch(console.error);
+
+      if (
+        contact.autoPayEnabled &&
+        !contact.stripeCustomerId &&
+        contact.email &&
+        isStripeConfigured()
+      ) {
+        try {
+          const stripeId = await createStripeCustomer({
+            email: contact.email,
+            name: `${contact.firstName} ${contact.lastName}`.trim(),
+            phone: contact.phone || undefined,
+            metadata: { contactId, companyId },
+          });
+          await storage.updateContact(contactId, { stripeCustomerId: stripeId });
+          contact.stripeCustomerId = stripeId;
+          console.log(`[auto-invoice] Created Stripe customer for ${contact.email}`);
+        } catch (stripeErr) {
+          console.error(`[auto-invoice] Failed to create Stripe customer for ${contactId}:`, stripeErr);
+        }
+      }
 
       if (
         contact.autoPayEnabled &&
@@ -175,7 +197,7 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string) {
 
             storage.createNotification({
               companyId,
-              type: "payment" as any,
+              type: "invoice_paid",
               title: "Auto-Payment Successful",
               message: `$${subtotal.toFixed(2)} charged to ${contact.firstName} ${contact.lastName} for invoice ${invoiceNumber}`,
               isRead: false,
@@ -190,7 +212,7 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string) {
 
             storage.createNotification({
               companyId,
-              type: "alert" as any,
+              type: "payment_failed",
               title: "Auto-Payment Failed",
               message: `Payment of $${subtotal.toFixed(2)} failed for ${contact.firstName} ${contact.lastName}: ${result.error || "Unknown error"}`,
               isRead: false,

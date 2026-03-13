@@ -912,6 +912,9 @@ export default function RoutesPage() {
     onSuccess: () => {
       setUpdatingVisitId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/visits/range", selectedDayDate] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
     },
     onError: (err: Error) => {
       setUpdatingVisitId(null);
