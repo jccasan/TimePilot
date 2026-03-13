@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Ban } from "lucide-react";
+import { ClientInfoPopover } from "@/components/client-info-popover";
 
 const invoiceStatusLabels: Record<string, string> = {
   draft: "Draft",
@@ -747,7 +748,11 @@ export default function Invoices() {
                         {invoice.invoiceNumber}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {contact ? `${contact.firstName} ${contact.lastName}` : "Unknown"} -- Due: {invoice.dueDate}
+                        {contact ? (
+                          <ClientInfoPopover contactId={contact.id}>
+                            <span className="inline">{contact.firstName} {contact.lastName}</span>
+                          </ClientInfoPopover>
+                        ) : "Unknown"} -- Due: {invoice.dueDate}
                       </p>
                     </div>
                   </div>
@@ -1173,9 +1178,15 @@ export default function Invoices() {
           {selectedInvoice && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
+                <div className="flex items-center gap-1">
                   <span className="text-muted-foreground">Contact: </span>
-                  <span>{contactMap[selectedInvoice.contactId]?.firstName} {contactMap[selectedInvoice.contactId]?.lastName}</span>
+                  {contactMap[selectedInvoice.contactId] ? (
+                    <ClientInfoPopover contactId={selectedInvoice.contactId}>
+                      <span>{contactMap[selectedInvoice.contactId].firstName} {contactMap[selectedInvoice.contactId].lastName}</span>
+                    </ClientInfoPopover>
+                  ) : (
+                    <span>Unknown</span>
+                  )}
                 </div>
                 <div>
                   <span className="text-muted-foreground">Status: </span>

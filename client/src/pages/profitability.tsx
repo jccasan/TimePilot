@@ -41,6 +41,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import { ClientInfoPopover } from "@/components/client-info-popover";
 
 interface CustomerPropertyProfitability {
   propertyId: string;
@@ -551,7 +552,9 @@ export default function Profitability() {
                               >
                                 <TableCell></TableCell>
                                 <TableCell className="pl-8 text-sm" data-testid={`text-route-customer-name-${customer.contactId}`}>
-                                  {customer.firstName} {customer.lastName}
+                                  <ClientInfoPopover contactId={customer.contactId}>
+                                    <span>{customer.firstName} {customer.lastName}</span>
+                                  </ClientInfoPopover>
                                 </TableCell>
                                 <TableCell></TableCell>
                                 <TableCell></TableCell>
@@ -672,7 +675,9 @@ export default function Profitability() {
                         data-testid={`row-customer-${customer.contactId}`}
                       >
                         <TableCell className="font-medium" data-testid={`text-customer-name-${customer.contactId}`}>
-                          {customer.contactName}
+                          <ClientInfoPopover contactId={customer.contactId}>
+                            <span>{customer.contactName}</span>
+                          </ClientInfoPopover>
                         </TableCell>
                         <TableCell className="text-center" data-testid={`text-property-count-${customer.contactId}`}>
                           {customer.propertyCount}
@@ -731,7 +736,11 @@ export default function Profitability() {
                 <TableBody>
                   {recommendations.map((rec, idx) => (
                     <TableRow key={`${rec.contactId}-${rec.propertyId}-${idx}`} data-testid={`row-recommendation-${idx}`}>
-                      <TableCell className="font-medium" data-testid={`text-rec-customer-${idx}`}>{rec.contactName}</TableCell>
+                      <TableCell className="font-medium" data-testid={`text-rec-customer-${idx}`}>
+                        <ClientInfoPopover contactId={rec.contactId}>
+                          <span>{rec.contactName}</span>
+                        </ClientInfoPopover>
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-48 truncate" data-testid={`text-rec-address-${idx}`}>{rec.propertyAddress}</TableCell>
                       <TableCell data-testid={`text-rec-current-${idx}`}>{formatDollars(rec.currentPriceCents)}</TableCell>
                       <TableCell data-testid={`text-rec-recommended-${idx}`}>

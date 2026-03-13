@@ -46,6 +46,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ChevronLeft, ChevronRight, Plus, Wand2, Calendar, CalendarDays, CalendarRange } from "lucide-react";
+import { ClientInfoPopover } from "@/components/client-info-popover";
 
 const visitStatusColors: Record<string, string> = {
   scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -521,7 +522,11 @@ function VisitChip({ visit, contacts, properties, routes, compact }: {
           </Badge>
           {route && <span className="text-[10px] text-muted-foreground truncate">{route.name}</span>}
         </div>
-        {contact && <p className="truncate text-[11px] font-medium">{contact.firstName} {contact.lastName}</p>}
+        {contact && (
+          <ClientInfoPopover contactId={contact.id}>
+            <p className="truncate text-[11px] font-medium">{contact.firstName} {contact.lastName}</p>
+          </ClientInfoPopover>
+        )}
         {property && <p className="truncate text-[10px] text-muted-foreground">{property.streetAddress}</p>}
       </div>
     );
@@ -536,7 +541,11 @@ function VisitChip({ visit, contacts, properties, routes, compact }: {
           </Badge>
           {route && <span className="text-xs text-muted-foreground">{route.name}</span>}
         </div>
-        {contact && <p className="text-sm font-medium">{contact.firstName} {contact.lastName}</p>}
+        {contact && (
+          <ClientInfoPopover contactId={contact.id}>
+            <p className="text-sm font-medium">{contact.firstName} {contact.lastName}</p>
+          </ClientInfoPopover>
+        )}
         {property && <p className="text-xs text-muted-foreground">{property.streetAddress}{property.city ? `, ${property.city}` : ""}</p>}
         {visit.notes && <p className="text-xs text-muted-foreground italic">{visit.notes}</p>}
       </CardContent>

@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Mail, MessageSquare, Send, ArrowUpRight, ArrowDownLeft, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ClientInfoPopover } from "@/components/client-info-popover";
 
 const emailFormSchema = z.object({
   contactId: z.string().optional(),
@@ -350,8 +351,10 @@ export default function Communications() {
                               {msg.channel}
                             </Badge>
                             <StatusBadge status={msg.status} />
-                            {msg.contactId && (
-                              <span className="text-sm text-muted-foreground">{getContactName(msg.contactId)}</span>
+                            {msg.contactId && getContactName(msg.contactId) && (
+                              <ClientInfoPopover contactId={msg.contactId}>
+                                <span className="text-sm text-muted-foreground">{getContactName(msg.contactId)}</span>
+                              </ClientInfoPopover>
                             )}
                           </div>
                           <div className="mt-1 text-sm">

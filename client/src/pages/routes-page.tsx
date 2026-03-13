@@ -26,6 +26,7 @@ import {
   Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
   CheckCircle, XCircle, SkipForward, MoreVertical, Car
 } from "lucide-react";
+import { ClientInfoPopover } from "@/components/client-info-popover";
 import RouteMapView, { type RouteStop } from "@/components/route-map-view";
 import { ServiceZoneMap, type ZoneEntry } from "@/components/service-zone-map";
 import {
@@ -126,9 +127,15 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
         </div>
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center justify-between gap-1">
-            <span className={`font-medium text-sm truncate ${isDone ? "line-through text-muted-foreground" : ""}`} data-testid={`text-stop-name-${stop.id}`}>
-              {contact ? `${contact.firstName} ${contact.lastName}` : "Unknown"}
-            </span>
+            {contact ? (
+              <ClientInfoPopover contactId={contact.id}>
+                <span className={`font-medium text-sm truncate ${isDone ? "line-through text-muted-foreground" : ""}`} data-testid={`text-stop-name-${stop.id}`}>
+                  {contact.firstName} {contact.lastName}
+                </span>
+              </ClientInfoPopover>
+            ) : (
+              <span className="font-medium text-sm truncate text-muted-foreground" data-testid={`text-stop-name-${stop.id}`}>Unknown</span>
+            )}
             <div className="flex items-center gap-1 shrink-0">
               {visit && (
                 <Badge variant="secondary" className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`} data-testid={`badge-visit-status-${stop.id}`}>
