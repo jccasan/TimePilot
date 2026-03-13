@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -34,6 +34,10 @@ type EnrichedVisit = {
   status: VisitStatus;
   startedAt: string | null;
   completedAt: string | null;
+  stopOrder: number;
+  routeId: string | null;
+  routeName: string | null;
+  routeColor: string | null;
   servicePlanName: string | null;
   property: {
     streetAddress: string;
@@ -51,6 +55,14 @@ type EnrichedVisit = {
     lastName: string;
     phone: string | null;
   } | null;
+};
+
+type RouteGroup = {
+  routeName: string;
+  routeColor: string | null;
+  visits: EnrichedVisit[];
+  completedCount: number;
+  totalCount: number;
 };
 
 function getDateForDay(dayName: string): string {
@@ -72,12 +84,13 @@ function getTodayDayName(): string {
   return days[new Date().getDay()];
 }
 
-function VisitRow({ visit, onStatusChange, isUpdating }: {
+function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpand }: {
   visit: EnrichedVisit;
   onStatusChange: (visitId: string, status: VisitStatus) => void;
   isUpdating: boolean;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [showSatellite, setShowSatellite] = useState(false);
   const status = visit.status as VisitStatus;
   const config = visitStatusConfig[status] || visitStatusConfig.scheduled;
@@ -87,12 +100,14 @@ function VisitRow({ visit, onStatusChange, isUpdating }: {
     ? `${visit.property.streetAddress}${visit.property.city ? `, ${visit.property.city}` : ""}${visit.property.state ? `, ${visit.property.state}` : ""}`
     : null;
 
+  const isTerminal = status === "completed" || status === "skipped" || status === "cancelled";
+
   return (
     <Card data-testid={`card-tech-visit-${visit.id}`}>
       <CardContent className="p-3 space-y-2">
         <div
           className="flex items-start justify-between gap-2 cursor-pointer"
-          onClick={() => setExpanded(!expanded)}
+          onClick={onToggleExpand}
           data-testid={`button-expand-${visit.id}`}
         >
           <div className="flex-1 min-w-0">
@@ -119,11 +134,11 @@ function VisitRow({ visit, onStatusChange, isUpdating }: {
               <StatusIcon className="h-3 w-3 mr-1" />
               {config.label}
             </Badge>
-            {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
           </div>
         </div>
 
-        {expanded && (
+        {isExpanded && (
           <div className="space-y-3 pt-2 border-t">
             {address && (
               <div className="space-y-1">
@@ -218,7 +233,7 @@ function VisitRow({ visit, onStatusChange, isUpdating }: {
                   Cancel
                 </Button>
               )}
-              {(status === "completed" || status === "skipped" || status === "cancelled") && (
+              {(status === "skipped" || status === "cancelled") && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -243,6 +258,8 @@ export default function TechRoutes() {
   const { toast } = useToast();
   const [selectedDay, setSelectedDay] = useState<string>(getTodayDayName());
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [pendingAdvanceAfter, setPendingAdvanceAfter] = useState<string | null>(null);
 
   const selectedDate = useMemo(() => getDateForDay(selectedDay), [selectedDay]);
 
@@ -253,6 +270,46 @@ export default function TechRoutes() {
       return res.json();
     },
   });
+
+  const routeGroups = useMemo<RouteGroup[]>(() => {
+    if (!visits) return [];
+    const groups = new Map<string, RouteGroup>();
+    for (const visit of visits) {
+      const key = visit.routeId || "unassigned";
+      if (!groups.has(key)) {
+        groups.set(key, {
+          routeName: visit.routeName || "Unassigned",
+          routeColor: visit.routeColor,
+          visits: [],
+          completedCount: 0,
+          totalCount: 0,
+        });
+      }
+      const group = groups.get(key)!;
+      group.visits.push(visit);
+      group.totalCount++;
+      if (visit.status === "completed" || visit.status === "skipped" || visit.status === "cancelled") {
+        group.completedCount++;
+      }
+    }
+    return Array.from(groups.values());
+  }, [visits]);
+
+  useEffect(() => {
+    if (pendingAdvanceAfter && visits) {
+      const allVisitsList = routeGroups.flatMap(g => g.visits);
+      const completedIdx = allVisitsList.findIndex(v => v.id === pendingAdvanceAfter);
+      if (completedIdx >= 0) {
+        const nextIncomplete = allVisitsList.slice(completedIdx + 1).find(
+          v => v.status === "scheduled" || v.status === "in_progress"
+        );
+        if (nextIncomplete) {
+          setExpandedId(nextIncomplete.id);
+        }
+      }
+      setPendingAdvanceAfter(null);
+    }
+  }, [visits, pendingAdvanceAfter, routeGroups]);
 
   const statusMutation = useMutation({
     mutationFn: async ({ visitId, status }: { visitId: string; status: VisitStatus }) => {
@@ -265,8 +322,12 @@ export default function TechRoutes() {
         body.startedAt = null;
       }
       await apiRequest("PATCH", `/api/visits/${visitId}`, body);
+      return { visitId, status };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data.status === "completed" || data.status === "skipped") {
+        setPendingAdvanceAfter(data.visitId);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today", selectedDate] });
       toast({ title: "Visit updated" });
     },
@@ -282,6 +343,7 @@ export default function TechRoutes() {
 
   const completedCount = visits?.filter(v => v.status === "completed").length ?? 0;
   const totalCount = visits?.length ?? 0;
+  const hasMultipleRoutes = routeGroups.length > 1;
 
   return (
     <div className="p-4 space-y-4 overflow-auto h-full">
@@ -324,14 +386,33 @@ export default function TechRoutes() {
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
         </div>
       ) : visits && visits.length > 0 ? (
-        <div className="space-y-2">
-          {visits.map((visit) => (
-            <VisitRow
-              key={visit.id}
-              visit={visit}
-              onStatusChange={handleStatusChange}
-              isUpdating={updatingId === visit.id}
-            />
+        <div className="space-y-4">
+          {routeGroups.map((group) => (
+            <div key={group.routeName} className="space-y-2">
+              {hasMultipleRoutes && (
+                <div className="flex items-center justify-between" data-testid={`text-route-group-${group.routeName}`}>
+                  <div className="flex items-center gap-2">
+                    {group.routeColor && (
+                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: group.routeColor }} />
+                    )}
+                    <h2 className="text-sm font-semibold">{group.routeName}</h2>
+                  </div>
+                  <span className="text-xs text-muted-foreground" data-testid={`text-route-progress-${group.routeName}`}>
+                    {group.completedCount} of {group.totalCount} done
+                  </span>
+                </div>
+              )}
+              {group.visits.map((visit) => (
+                <VisitRow
+                  key={visit.id}
+                  visit={visit}
+                  onStatusChange={handleStatusChange}
+                  isUpdating={updatingId === visit.id}
+                  isExpanded={expandedId === visit.id}
+                  onToggleExpand={() => setExpandedId(expandedId === visit.id ? null : visit.id)}
+                />
+              ))}
+            </div>
           ))}
         </div>
       ) : (

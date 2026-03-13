@@ -2828,17 +2828,31 @@ export async function registerRoutes(
 
   app.get("/api/visits/today", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, role, userId } = await getCompanyContext(req);
       const dateParam = req.query.date as string | undefined;
       const targetDate = dateParam || new Date().toISOString().split("T")[0];
-      const visitsList = await storage.getVisits(companyId, { date: targetDate });
+      let visitsList = await storage.getVisits(companyId, { date: targetDate });
+
+      const isTech = role === "tech";
+      const companyRoutes = await storage.getRoutes(companyId);
+      const routeMap = new Map(companyRoutes.map(r => [r.id, r]));
+
+      if (isTech) {
+        const techRouteIds = new Set(companyRoutes.filter(r => r.technicianId === userId).map(r => r.id));
+        visitsList = visitsList.filter(v => v.routeId && techRouteIds.has(v.routeId));
+      }
+
       const enriched = await Promise.all(visitsList.map(async (v) => {
         const plan = v.servicePlanId ? await storage.getServicePlan(v.servicePlanId, companyId) : null;
         const addOns = plan ? await storage.getServicePlanAddOns(plan.id) : [];
         const prop = await storage.getProperty(v.propertyId, companyId);
         const contact = plan ? await storage.getContact(plan.contactId, companyId) : null;
+        const route = v.routeId ? routeMap.get(v.routeId) : null;
         return {
           ...v,
+          stopOrder: plan?.stopOrder ?? 999,
+          routeName: route?.name ?? null,
+          routeColor: route?.color ?? null,
           servicePlanName: plan?.frequency ? `${plan.frequency} service` : null,
           addOns: addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })),
           property: prop ? {
@@ -2859,6 +2873,14 @@ export async function registerRoutes(
           } : null,
         };
       }));
+
+      enriched.sort((a, b) => {
+        const routeA = a.routeName ?? "";
+        const routeB = b.routeName ?? "";
+        if (routeA !== routeB) return routeA.localeCompare(routeB);
+        return (a.stopOrder ?? 999) - (b.stopOrder ?? 999);
+      });
+
       res.json(enriched);
     } catch (err) { handleError(res, err); }
   });
@@ -2906,17 +2928,41 @@ export async function registerRoutes(
 
   app.patch("/api/visits/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, userId, role } = await getCompanyContext(req);
       const existing = await storage.getVisit(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Visit not found" });
+
+      if (role === "tech" && existing.routeId) {
+        const route = await storage.getRoute(existing.routeId, companyId);
+        if (!route || route.technicianId !== userId) {
+          return res.status(403).json({ error: "You are not assigned to this visit's route" });
+        }
+      }
+
       const validVisitStatuses = ["scheduled", "in_progress", "completed", "skipped", "cancelled"];
       if (req.body.status && !validVisitStatuses.includes(req.body.status)) {
         return res.status(400).json({ error: `Invalid status. Must be one of: ${validVisitStatuses.join(", ")}` });
       }
-      const allowed = ["status", "scheduledDate", "routeId", "startedAt", "completedAt", "completedBy",
+      const allowedTransitions: Record<string, string[]> = {
+        scheduled: ["in_progress", "completed", "skipped", "cancelled"],
+        in_progress: ["completed", "skipped", "cancelled"],
+        completed: [],
+        skipped: ["scheduled"],
+        cancelled: ["scheduled"],
+      };
+      if (req.body.status && req.body.status !== existing.status) {
+        const allowed = allowedTransitions[existing.status] || [];
+        if (!allowed.includes(req.body.status)) {
+          return res.status(400).json({ error: `Cannot transition from '${existing.status}' to '${req.body.status}'` });
+        }
+      }
+      const allowedFields = ["status", "scheduledDate", "routeId", "startedAt", "completedAt",
         "proofOfServicePhoto", "proofOfServicePhotoBefore", "gateClosedPhoto", "extraPhotos", "technicianNotes"];
       const updates: any = {};
-      for (const key of allowed) { if (req.body[key] !== undefined) updates[key] = req.body[key]; }
+      for (const key of allowedFields) { if (req.body[key] !== undefined) updates[key] = req.body[key]; }
+      if (req.body.status === "completed") {
+        updates.completedBy = userId;
+      }
       const timestampFields = ["startedAt", "completedAt"];
       for (const field of timestampFields) {
         if (field in updates && updates[field] !== null) {
@@ -2971,9 +3017,17 @@ export async function registerRoutes(
 
   app.post("/api/visits/:id/complete-notify", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, userId, role } = await getCompanyContext(req);
       const existing = await storage.getVisit(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Visit not found" });
+
+      if (role === "tech" && existing.routeId) {
+        const route = await storage.getRoute(existing.routeId, companyId);
+        if (!route || route.technicianId !== userId) {
+          return res.status(403).json({ error: "You are not assigned to this visit's route" });
+        }
+      }
+
       if (existing.status === "completed") return res.json({ visit: existing, completionSms: null, etaSms: null, alreadyCompleted: true });
 
       const { gateClosedPhoto, extraPhotos, technicianNotes } = req.body;
@@ -2987,6 +3041,7 @@ export async function registerRoutes(
       const visit = await storage.updateVisit(req.params.id, {
         status: "completed",
         completedAt: new Date(),
+        completedBy: userId,
         gateClosedPhoto: gateClosedPhoto || null,
         extraPhotos: extraPhotos || null,
         proofOfServicePhoto: gateClosedPhoto || existing.proofOfServicePhoto,

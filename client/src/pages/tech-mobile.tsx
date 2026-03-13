@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -25,6 +25,9 @@ type TodayVisit = {
   gateClosedPhoto: string | null;
   servicePlanId: string;
   routeId: string | null;
+  stopOrder: number;
+  routeName: string | null;
+  routeColor: string | null;
   servicePlanName?: string | null;
   addOns?: { name: string; price: string }[];
   property?: {
@@ -122,6 +125,14 @@ async function uploadFileDirect(file: File): Promise<string> {
   return data.objectPath;
 }
 
+type RouteGroup = {
+  routeName: string;
+  routeColor: string | null;
+  groups: PropertyGroup[];
+  completedCount: number;
+  totalCount: number;
+};
+
 export default function TechMobile() {
   const { toast } = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -132,6 +143,7 @@ export default function TechMobile() {
   const afterFileInputRef = useRef<HTMLInputElement>(null);
   const pendingVisitIdRef = useRef<string | null>(null);
   const pendingUploadTypeRef = useRef<PhotoUploadType | null>(null);
+  const [pendingAdvanceAfter, setPendingAdvanceAfter] = useState<string | null>(null);
 
   const [completeDialogVisit, setCompleteDialogVisit] = useState<TodayVisit | null>(null);
   const [gatePhoto, setGatePhoto] = useState<File | null>(null);
@@ -147,24 +159,60 @@ export default function TechMobile() {
     queryKey: ["/api/visits/today"],
   });
 
-  const propertyGroups = useMemo<PropertyGroup[]>(() => {
+  const routeGroupsWithProps = useMemo<RouteGroup[]>(() => {
     if (!visits) return [];
-    const groups = new Map<string, PropertyGroup>();
+    const routeMap = new Map<string, RouteGroup>();
     for (const visit of visits) {
+      const routeKey = visit.routeId || "unassigned";
+      if (!routeMap.has(routeKey)) {
+        routeMap.set(routeKey, {
+          routeName: visit.routeName || "Unassigned",
+          routeColor: visit.routeColor,
+          groups: [],
+          completedCount: 0,
+          totalCount: 0,
+        });
+      }
+      const rg = routeMap.get(routeKey)!;
+      rg.totalCount++;
+      if (visit.status === "completed" || visit.status === "skipped" || visit.status === "cancelled") {
+        rg.completedCount++;
+      }
+
       const key = visit.property?.streetAddress || visit.id;
-      if (!groups.has(key)) {
-        groups.set(key, {
+      let propGroup = rg.groups.find(g => g.propertyKey === key);
+      if (!propGroup) {
+        propGroup = {
           propertyKey: key,
           visits: [],
           address: visit.property?.streetAddress || "Unknown address",
           contact: visit.contact,
           property: visit.property,
-        });
+        };
+        rg.groups.push(propGroup);
       }
-      groups.get(key)!.visits.push(visit);
+      propGroup.visits.push(visit);
     }
-    return Array.from(groups.values());
+    return Array.from(routeMap.values());
   }, [visits]);
+
+  const allVisitsFlat = useMemo(() => visits || [], [visits]);
+  const hasMultipleRoutes = routeGroupsWithProps.length > 1;
+
+  useEffect(() => {
+    if (pendingAdvanceAfter && visits) {
+      const completedIdx = allVisitsFlat.findIndex(v => v.id === pendingAdvanceAfter);
+      if (completedIdx >= 0) {
+        const nextIncomplete = allVisitsFlat.slice(completedIdx + 1).find(
+          v => v.status === "scheduled" || v.status === "in_progress"
+        );
+        if (nextIncomplete) {
+          setExpandedId(nextIncomplete.id);
+        }
+      }
+      setPendingAdvanceAfter(null);
+    }
+  }, [visits, pendingAdvanceAfter, allVisitsFlat]);
 
   const startMutation = useMutation({
     mutationFn: async (visitId: string) => {
@@ -269,6 +317,7 @@ export default function TechMobile() {
         technicianNotes: notes[completeDialogVisit.id] || undefined,
       });
 
+      setPendingAdvanceAfter(completeDialogVisit.id);
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
       setCompleteDialogVisit(null);
       toast({ title: "Visit completed", description: "Customer has been notified." });
@@ -317,7 +366,22 @@ export default function TechMobile() {
         </div>
       ) : visits && visits.length > 0 ? (
         <div className="space-y-4">
-          {propertyGroups.flatMap((group) => {
+          {routeGroupsWithProps.map((routeGroup) => (
+            <div key={routeGroup.routeName} className="space-y-3">
+              {hasMultipleRoutes && (
+                <div className="flex items-center justify-between px-1" data-testid={`text-mobile-route-group-${routeGroup.routeName}`}>
+                  <div className="flex items-center gap-2">
+                    {routeGroup.routeColor && (
+                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: routeGroup.routeColor }} />
+                    )}
+                    <h2 className="text-sm font-semibold">{routeGroup.routeName}</h2>
+                  </div>
+                  <span className="text-xs text-muted-foreground" data-testid={`text-mobile-route-progress-${routeGroup.routeName}`}>
+                    {routeGroup.completedCount} of {routeGroup.totalCount} done
+                  </span>
+                </div>
+              )}
+          {routeGroup.groups.flatMap((group) => {
             const isMulti = group.visits.length > 1;
             return group.visits.map((visit) => {
             const isExpanded = expandedId === visit.id;
@@ -485,7 +549,10 @@ export default function TechMobile() {
               </Card>
             );
             });
-          })}
+          })
+          }
+            </div>
+          ))}
         </div>
       ) : (
         <Card>
