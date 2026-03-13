@@ -182,7 +182,7 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
             {visit.property?.specialInstructions && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-0.5">Notes</p>
-                <p className="text-xs" data-testid={`text-tech-notes-${visit.id}`}>{visit.property.specialInstructions}</p>
+                <p className="text-xs break-words" data-testid={`text-tech-notes-${visit.id}`}>{visit.property.specialInstructions}</p>
               </div>
             )}
 
@@ -338,7 +338,7 @@ export default function TechRoutes() {
   const totalCount = visits?.length ?? 0;
 
   return (
-    <div className="p-4 space-y-4 overflow-auto h-full">
+    <div className="p-4 space-y-4 overflow-auto h-full max-w-2xl mx-auto">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold" data-testid="text-tech-routes-heading">Route Overview</h1>
