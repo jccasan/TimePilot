@@ -4601,12 +4601,42 @@ export async function registerRoutes(
       const { companyId, userId } = await getCompanyContext(req);
       const invoice = await storage.getInvoice(req.params.id, companyId);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+      if (invoice.status === "paid") return res.status(400).json({ error: "Invoice is already paid" });
 
       const contact = await storage.getContact(invoice.contactId, companyId);
       if (!contact?.email) return res.status(400).json({ error: "Contact has no email address" });
 
       const company = await storage.getCompany(companyId);
       const lineItems = await storage.getInvoiceLineItems(invoice.id);
+
+      let paymentUrl: string | undefined;
+      if (isStripeConfigured() && parseFloat(invoice.total) > 0) {
+        try {
+          let stripeCustomerId = contact.stripeCustomerId;
+          if (!stripeCustomerId) {
+            stripeCustomerId = await createStripeCustomer({
+              email: contact.email || undefined,
+              name: `${contact.firstName} ${contact.lastName}`.trim(),
+              metadata: { contactId: contact.id, companyId },
+            });
+            await storage.updateContact(contact.id, { stripeCustomerId });
+          }
+
+          const baseUrl = getBaseUrl(req);
+          const checkoutResult = await createCheckoutSession({
+            customerId: stripeCustomerId,
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            amount: parseFloat(invoice.total),
+            successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
+            cancelUrl: `${baseUrl}/portal`,
+            stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
+          });
+          paymentUrl = checkoutResult.url;
+        } catch (stripeErr) {
+          console.log("[send-email] Could not generate Stripe checkout URL, sending without payment link:", stripeErr);
+        }
+      }
 
       const emailContent = generateInvoiceEmailHtml({
         companyName: company?.name || "ScooPilot",
@@ -4620,6 +4650,7 @@ export async function registerRoutes(
           unitPrice: li.unitPrice,
           total: li.total,
         })),
+        paymentUrl,
       });
 
       const fromAddress = company?.email || "noreply@scoopilot.com";
@@ -4649,7 +4680,10 @@ export async function registerRoutes(
 
       if (result.success) {
         await storage.updateMessageStatus(msg.id, "sent");
-        res.json({ success: true, messageId: msg.id });
+        if (invoice.status === "pending" || invoice.status === "draft") {
+          await storage.updateInvoice(invoice.id, { status: "sent" });
+        }
+        res.json({ success: true, messageId: msg.id, paymentUrl: paymentUrl || null });
       } else {
         await storage.updateMessageStatus(msg.id, "failed", result.error);
         res.status(500).json({ error: result.error });

@@ -58,55 +58,72 @@ export function generateInvoiceEmailHtml(data: {
   dueDate: string;
   total: string;
   lineItems: { description: string; quantity: number; unitPrice: string; total: string }[];
+  paymentUrl?: string;
 }): { subject: string; text: string; html: string } {
   const subject = `Invoice ${data.invoiceNumber} from ${data.companyName}`;
 
-  const text = `Hi ${data.contactName},\n\nYou have a new invoice from ${data.companyName}.\n\nInvoice #: ${data.invoiceNumber}\nDue Date: ${data.dueDate}\nTotal: $${data.total}\n\nItems:\n${data.lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}\n\nThank you for your business!`;
+  const paymentLine = data.paymentUrl ? `\nPay online: ${data.paymentUrl}\n` : "";
+  const text = `Hi ${data.contactName},\n\nYou have a new invoice from ${data.companyName}.\n\nInvoice #: ${data.invoiceNumber}\nDue Date: ${data.dueDate}\nTotal: $${data.total}\n\nItems:\n${data.lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentLine}\nThank you for your business!`;
+
+  const payNowButton = data.paymentUrl ? `
+        <div style="text-align: center; margin: 28px 0 20px;">
+          <a href="${data.paymentUrl}" style="display: inline-block; background-color: #1a7a4c; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Pay Now — $${data.total}</a>
+          <p style="margin-top: 10px; font-size: 12px; color: #6b7280;">Pay securely with credit card or Venmo</p>
+        </div>
+  ` : "";
 
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0;">${data.companyName}</h1>
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8fafc;">
+      <div style="background-color: #1a7a4c; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 22px; letter-spacing: 0.5px;">${data.companyName}</h1>
       </div>
-      <div style="padding: 20px; border: 1px solid #e5e7eb;">
-        <p>Hi ${data.contactName},</p>
-        <p>You have a new invoice.</p>
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-          <tr style="background-color: #f3f4f6;">
-            <td style="padding: 10px; font-weight: bold;">Invoice #</td>
-            <td style="padding: 10px;">${data.invoiceNumber}</td>
+      <div style="padding: 24px; background: #ffffff; border: 1px solid #e2e8f0; border-top: none;">
+        <p style="margin: 0 0 4px; font-size: 14px; color: #64748b;">Hi ${data.contactName},</p>
+        <p style="margin: 0 0 20px; font-size: 14px; color: #1e293b;">Here is your invoice.</p>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
+          <tr>
+            <td style="padding: 10px 12px; background-color: #f8fafc; font-weight: 600; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Invoice #</td>
+            <td style="padding: 10px 12px; background-color: #f8fafc; font-weight: 600; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; text-align: right;">Due Date</td>
           </tr>
           <tr>
-            <td style="padding: 10px; font-weight: bold;">Due Date</td>
-            <td style="padding: 10px;">${data.dueDate}</td>
-          </tr>
-          <tr style="background-color: #f3f4f6;">
-            <td style="padding: 10px; font-weight: bold;">Total</td>
-            <td style="padding: 10px; font-weight: bold; color: #2d8a5e;">$${data.total}</td>
+            <td style="padding: 10px 12px; font-weight: 500;">${data.invoiceNumber}</td>
+            <td style="padding: 10px 12px; text-align: right;">${data.dueDate}</td>
           </tr>
         </table>
-        <h3 style="margin-top: 20px;">Items</h3>
-        <table style="width: 100%; border-collapse: collapse;">
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
           <thead>
-            <tr style="background-color: #2d8a5e; color: white;">
-              <th style="padding: 8px; text-align: left;">Description</th>
-              <th style="padding: 8px; text-align: right;">Qty</th>
-              <th style="padding: 8px; text-align: right;">Price</th>
-              <th style="padding: 8px; text-align: right;">Total</th>
+            <tr style="background-color: #1a7a4c;">
+              <th style="padding: 10px 12px; text-align: left; color: white; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Description</th>
+              <th style="padding: 10px 12px; text-align: center; color: white; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Qty</th>
+              <th style="padding: 10px 12px; text-align: right; color: white; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Price</th>
+              <th style="padding: 10px 12px; text-align: right; color: white; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Total</th>
             </tr>
           </thead>
           <tbody>
             ${data.lineItems.map((li, i) => `
-              <tr style="background-color: ${i % 2 === 0 ? "#f9fafb" : "white"};">
-                <td style="padding: 8px;">${li.description}</td>
-                <td style="padding: 8px; text-align: right;">${li.quantity}</td>
-                <td style="padding: 8px; text-align: right;">$${li.unitPrice}</td>
-                <td style="padding: 8px; text-align: right;">$${li.total}</td>
+              <tr style="background-color: ${i % 2 === 0 ? "#f8fafc" : "#ffffff"};">
+                <td style="padding: 10px 12px; border-bottom: 1px solid #e2e8f0;">${li.description}</td>
+                <td style="padding: 10px 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">${li.quantity}</td>
+                <td style="padding: 10px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">$${li.unitPrice}</td>
+                <td style="padding: 10px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">$${li.total}</td>
               </tr>
             `).join("")}
           </tbody>
         </table>
-        <p style="margin-top: 20px; color: #6b7280; font-size: 14px;">Thank you for your business!</p>
+
+        <div style="text-align: right; margin-top: 16px; padding: 12px 0; border-top: 2px solid #1a7a4c;">
+          <span style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Amount Due</span>
+          <p style="margin: 4px 0 0; font-size: 24px; font-weight: 700; color: #1a7a4c;">$${data.total}</p>
+        </div>
+
+        ${payNowButton}
+
+        <p style="margin: 20px 0 0; color: #64748b; font-size: 13px; font-style: italic; text-align: center;">Thank you for your business!</p>
+      </div>
+      <div style="padding: 16px; text-align: center; font-size: 11px; color: #94a3b8; border-radius: 0 0 8px 8px;">
+        ${data.companyName}
       </div>
     </div>
   `;

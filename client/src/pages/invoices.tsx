@@ -37,6 +37,7 @@ import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLi
 
 const invoiceStatusLabels: Record<string, string> = {
   draft: "Draft",
+  sent: "Sent",
   pending: "Pending",
   paid: "Paid",
   voided: "Voided",
@@ -46,7 +47,8 @@ const invoiceStatusLabels: Record<string, string> = {
 
 const invoiceStatusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-  pending: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  sent: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  pending: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   voided: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
   paid: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
@@ -267,10 +269,15 @@ export default function Invoices() {
 
   const sendEmailMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
-      await apiRequest("POST", `/api/invoices/${invoiceId}/send-email`);
+      const res = await apiRequest("POST", `/api/invoices/${invoiceId}/send-email`);
+      return res.json();
     },
-    onSuccess: () => {
-      toast({ title: "Invoice emailed", description: "Invoice sent to the client's email." });
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      const desc = data?.paymentUrl
+        ? "Invoice emailed with a payment link."
+        : "Invoice emailed to the client.";
+      toast({ title: "Invoice sent", description: desc });
     },
     onError: (error: Error) => {
       toast({ title: "Failed to send", description: error.message, variant: "destructive" });
@@ -1256,9 +1263,11 @@ export default function Invoices() {
                     Mark as Paid
                   </Button>
                 )}
-                <Button size="sm" variant="outline" onClick={() => sendEmailMutation.mutate(selectedInvoice.id)} disabled={sendEmailMutation.isPending}>
-                  <Mail className="mr-1 h-3 w-3" /> Send to Client
-                </Button>
+                {selectedInvoice.status !== "paid" && (
+                  <Button size="sm" variant="outline" onClick={() => sendEmailMutation.mutate(selectedInvoice.id)} disabled={sendEmailMutation.isPending} data-testid="button-send-invoice-email">
+                    <Mail className="mr-1 h-3 w-3" /> Send to Client
+                  </Button>
+                )}
               </div>
             </div>
           )}

@@ -191,7 +191,6 @@ export async function createCheckoutSession(params: {
 
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     customer: params.customerId,
-    payment_method_types: ["card"],
     mode: "payment",
     line_items: [
       {
@@ -215,6 +214,7 @@ export async function createCheckoutSession(params: {
   };
 
   if (params.stripeConnectAccountId) {
+    sessionParams.payment_method_types = ["card"];
     sessionParams.payment_intent_data = {
       transfer_data: { destination: params.stripeConnectAccountId },
       application_fee_amount: computeApplicationFee(amountCents),
