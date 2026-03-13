@@ -217,7 +217,7 @@ export default function Scheduling() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
-      toast({ title: `${data.generated} visit${data.generated === 1 ? "" : "s"} generated`, description: data.generated > 0 ? "Visits created from active service plans." : "No new visits needed." });
+      toast({ title: `${data.generated} visit${data.generated === 1 ? "" : "s"} generated`, description: data.generated > 0 ? "Visits created from active scheduled services." : "No new visits needed." });
     },
     onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
   });
@@ -227,7 +227,7 @@ export default function Scheduling() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/visits"] });
-      toast({ title: "Service plan created", description: "New service plan added successfully." });
+      toast({ title: "Service scheduled", description: "New scheduled service added successfully." });
       setDialogOpen(false);
       form.reset();
     },
@@ -349,7 +349,7 @@ export default function Scheduling() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Create Visits</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will create visits for all active service plans in the selected date range ({dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}). Existing visits won't be duplicated.
+                  This will create visits for all active scheduled services in the selected date range ({dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}). Existing visits won't be duplicated.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -360,10 +360,10 @@ export default function Scheduling() {
           </AlertDialog>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Create Service Plan</Button>
+              <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Schedule Service</Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Create Service Plan</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Schedule Service</DialogTitle></DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
                   <FormField control={form.control} name="contactId" render={({ field }) => (
@@ -446,7 +446,7 @@ export default function Scheduling() {
                     </FormItem>
                   )} />
                   <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-service-plan">
-                    {createMutation.isPending ? "Creating..." : "Create Service Plan"}
+                    {createMutation.isPending ? "Creating..." : "Schedule Service"}
                   </Button>
                 </form>
               </Form>

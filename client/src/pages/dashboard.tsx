@@ -425,7 +425,7 @@ const ALL_WIDGETS = [
   { id: "overdue_invoices", label: "Overdue Invoices" },
   { id: "todays_visits", label: "Today's Visits" },
   { id: "active_clients", label: "Active Clients" },
-  { id: "service_plans", label: "Service Plans" },
+  { id: "service_plans", label: "Scheduled Services" },
   { id: "team_size", label: "Team Size" },
   { id: "texts_sent", label: "SMS Sent" },
   { id: "emails_sent", label: "Emails Sent" },
@@ -1003,7 +1003,7 @@ export default function Dashboard() {
     service_plans: () => (
       <Card key="service_plans" data-testid="widget-service-plans">
         <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Service Plans</CardTitle>
+          <CardTitle className="text-sm font-medium">Scheduled Services</CardTitle>
           <ClipboardList className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>

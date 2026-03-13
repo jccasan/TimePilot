@@ -461,7 +461,7 @@ export default function AIPricingOptimizer() {
                         {allProperties.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                              No properties to simulate. Add customers with active service plans first.
+                              No properties to simulate. Add customers with active scheduled services first.
                             </TableCell>
                           </TableRow>
                         ) : (

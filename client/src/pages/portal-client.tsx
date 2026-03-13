@@ -1083,7 +1083,7 @@ export default function PortalClient() {
               />
               <SummaryCard
                 icon={Calendar}
-                label="Your Service Plan"
+                label="Your Scheduled Service"
                 value={activePlan ? (frequencyLabels[activePlan.frequency] || activePlan.frequency) : "No active plan"}
                 sublabel={activePlan ? `${activePlan.dayOfWeek ? activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1) + "s" : ""} - $${Number(activePlan.pricePerVisit).toFixed(2)}/visit` : undefined}
                 accent="bg-primary/10 text-primary"
@@ -1108,7 +1108,7 @@ export default function PortalClient() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-primary" /> Service Plans
+                    <Calendar className="h-4 w-4 text-primary" /> Scheduled Services
                   </CardTitle>
                   {hasActivePlans ? (
                     <Button size="sm" variant="outline" onClick={() => handlePauseResume("pause")} disabled={actionPending} data-testid="button-portal-pause">
@@ -1141,7 +1141,7 @@ export default function PortalClient() {
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-plans">No service plans found.</p>
+                  <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-plans">No scheduled services found.</p>
                 )}
               </CardContent>
             </Card>
@@ -1215,8 +1215,8 @@ export default function PortalClient() {
             {schedule?.servicePlans && schedule.servicePlans.length > 0 && (
               <section>
                 <SectionHeader
-                  title="Service Plans"
-                  description="Your active service plans and scheduling"
+                  title="Scheduled Services"
+                  description="Your active scheduled services"
                   action={
                     hasActivePlans ? (
                       <Button size="sm" variant="outline" onClick={() => handlePauseResume("pause")} disabled={actionPending} data-testid="button-portal-pause-svc">
@@ -1403,7 +1403,7 @@ export default function PortalClient() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {schedule?.servicePlans && schedule.servicePlans.length > 1 && (
                         <div className="space-y-1.5">
-                          <Label>Service Plan</Label>
+                          <Label>Scheduled Service</Label>
                           <Select value={changePlanId} onValueChange={setChangePlanId}>
                             <SelectTrigger data-testid="select-change-plan">
                               <SelectValue placeholder="Select a plan..." />

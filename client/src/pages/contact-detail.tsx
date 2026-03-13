@@ -640,7 +640,7 @@ export default function ContactDetail() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete Property</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to delete {prop.streetAddress}? This action cannot be undone. Any service plans linked to this property will also be affected.
+                              Are you sure you want to delete {prop.streetAddress}? This action cannot be undone. Any scheduled services linked to this property will also be affected.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -1633,7 +1633,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
-      toast({ title: "Service plan created" });
+      toast({ title: "Service scheduled" });
       setCreateDialogOpen(false);
       createForm.reset();
       setCreateSelectedAddOns([]);
@@ -1652,7 +1652,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
-      toast({ title: "Service plan updated" });
+      toast({ title: "Scheduled service updated" });
       setEditingPlan(null);
       setEditSelectedAddOns([]);
     },
@@ -1667,7 +1667,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
-      toast({ title: "Service plan deleted" });
+      toast({ title: "Scheduled service deleted" });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1888,7 +1888,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-        <CardTitle className="text-lg">Service Plans</CardTitle>
+        <CardTitle className="text-lg">Scheduled Services</CardTitle>
         <Dialog open={createDialogOpen} onOpenChange={(open) => {
           setCreateDialogOpen(open);
           if (!open) createForm.reset();
@@ -1900,9 +1900,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Create Service Plan</DialogTitle>
+              <DialogTitle>Schedule Service</DialogTitle>
             </DialogHeader>
-            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Service Plan", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns)}
+            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Schedule Service", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns)}
           </DialogContent>
         </Dialog>
       </CardHeader>
@@ -1950,9 +1950,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Service Plan</AlertDialogTitle>
+                          <AlertDialogTitle>Delete Scheduled Service</AlertDialogTitle>
                           <AlertDialogDescription>
-                            This will permanently delete this service plan and all associated visits. This action cannot be undone.
+                            This will permanently delete this scheduled service and all associated visits. This action cannot be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -1972,13 +1972,13 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No service plans yet.</p>
+          <p className="text-sm text-muted-foreground">No scheduled services yet.</p>
         )}
 
         <Dialog open={!!editingPlan} onOpenChange={(open) => { if (!open) setEditingPlan(null); }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Service Plan</DialogTitle>
+              <DialogTitle>Edit Scheduled Service</DialogTitle>
             </DialogHeader>
             {editingPlan && renderPlanForm(
               editForm,

@@ -294,7 +294,7 @@ function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contac
           <Button variant="outline" size="sm" asChild data-testid={`button-edit-plan-${prop.propertyId}`}>
             <Link href={`/contacts/${contactId}`}>
               <Edit2 className="h-3.5 w-3.5 mr-1" />
-              Edit Service Plan
+              Edit Scheduled Service
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild data-testid={`button-calculator-${prop.propertyId}`}>
@@ -425,7 +425,7 @@ export default function ProfitabilityDetail() {
         <Card>
           <CardContent className="p-6">
             <p className="text-muted-foreground" data-testid="text-no-data">
-              No profitability data available for this customer. They may not have active service plans.
+              No profitability data available for this customer. They may not have active scheduled services.
             </p>
           </CardContent>
         </Card>

@@ -709,7 +709,7 @@ export async function registerRoutes(
         { key: "service_zones", label: "Set up your service zones", completed: hasServiceZones },
         { key: "add_customer", label: "Add your first customer", completed: hasContacts },
         { key: "price_property", label: "Price your first property", completed: hasPriceRecommendation || hasServicePlans },
-        { key: "create_service_plan", label: "Create your first service plan", completed: hasServicePlans },
+        { key: "create_service_plan", label: "Schedule your first service", completed: hasServicePlans },
         { key: "generate_route", label: "Generate your first route", completed: hasRoutes },
       ];
 
@@ -2631,7 +2631,7 @@ export async function registerRoutes(
     try {
       const { companyId } = await getCompanyContext(req);
       const plan = await storage.getServicePlan(req.params.id, companyId);
-      if (!plan) return res.status(404).json({ error: "Service plan not found" });
+      if (!plan) return res.status(404).json({ error: "Scheduled service not found" });
       const addOns = await storage.getServicePlanAddOns(plan.id);
       res.json({ ...plan, addOns });
     } catch (err) { handleError(res, err); }
@@ -2701,7 +2701,7 @@ export async function registerRoutes(
     try {
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getServicePlan(req.params.id, companyId);
-      if (!existing) return res.status(404).json({ error: "Service plan not found" });
+      if (!existing) return res.status(404).json({ error: "Scheduled service not found" });
       const validFrequencies = ["weekly", "biweekly", "monthly", "onetime"];
       if (req.body.frequency && !validFrequencies.includes(req.body.frequency)) {
         return res.status(400).json({ error: `Invalid frequency. Must be one of: ${validFrequencies.join(", ")}` });
@@ -2749,7 +2749,7 @@ export async function registerRoutes(
     try {
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getServicePlan(req.params.id, companyId);
-      if (!existing) return res.status(404).json({ error: "Service plan not found" });
+      if (!existing) return res.status(404).json({ error: "Scheduled service not found" });
       await storage.deleteServicePlan(req.params.id);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
@@ -8439,10 +8439,10 @@ export async function registerRoutes(
   // ================ Rover Chatbot Routes ================
   const ROVER_KNOWLEDGE_BASE: { keywords: string[]; answer: string }[] = [
     { keywords: ["dashboard", "overview", "home", "main"], answer: "The Dashboard is your home screen showing key metrics like active clients, scheduled visits, revenue, and recent activity. It gives you a quick snapshot of your business operations." },
-    { keywords: ["contact", "client", "crm", "lead", "customer"], answer: "The Contacts section is your CRM hub. You can add and manage clients, track their status (lead, estimate, active, paused, cancelled), assign properties, add tags, and manage their service plans. Use the search bar to find contacts quickly." },
+    { keywords: ["contact", "client", "crm", "lead", "customer"], answer: "The Contacts section is your CRM hub. You can add and manage clients, track their status (lead, estimate, active, paused, cancelled), assign properties, add tags, and manage their scheduled services. Use the search bar to find contacts quickly." },
     { keywords: ["property", "address", "yard", "dog", "location"], answer: "Properties are service locations tied to contacts. Each property can have details like address, gate code, yard size, number of dogs, and special instructions. Properties are geocoded automatically for route optimization." },
     { keywords: ["route", "routing", "optimize", "optimization", "dispatch"], answer: "Routes let you organize daily service stops. Use the Route Builder to drag-and-drop visits, optimize the order using our route optimization algorithm, and dispatch routes to technicians. You can optimize routes using credits from your account." },
-    { keywords: ["schedule", "service plan", "recurring", "visit", "appointment"], answer: "Service Plans set up recurring schedules for your clients (weekly, biweekly, monthly, or one-time). Each plan auto-generates visits that appear on routes. Plans auto-assign to the least-loaded route for their day." },
+    { keywords: ["schedule", "service plan", "recurring", "visit", "appointment"], answer: "Scheduled Services set up recurring schedules for your clients (weekly, biweekly, monthly, or one-time). Each service auto-generates visits that appear on routes and auto-assigns to the least-loaded route for their day." },
     { keywords: ["invoice", "billing", "payment", "charge", "stripe"], answer: "The Invoicing section lets you create and manage invoices with line items, tax, and discounts. Invoices can be sent to clients and paid via Stripe. You can also void invoices and track payment status." },
     { keywords: ["technician", "tech", "field", "mobile", "crew"], answer: "Technicians use a simplified mobile view showing only their assigned routes and client info. They can mark visits as complete, add notes, and upload proof-of-service photos. Invite technicians from the Settings page." },
     { keywords: ["portal", "client portal", "self-service"], answer: "The Client Portal gives your customers a self-service view where they can see their schedule, past visits, invoices, pause/resume service, and send messages to you. Enable portal access from a contact's detail page." },

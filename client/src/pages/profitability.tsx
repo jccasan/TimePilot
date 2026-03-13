@@ -657,7 +657,7 @@ export default function Profitability() {
                 {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                      {(customers ?? []).length === 0 ? "No active customers with service plans found." : "No customers match your filters."}
+                      {(customers ?? []).length === 0 ? "No active customers with scheduled services found." : "No customers match your filters."}
                     </TableCell>
                   </TableRow>
                 ) : (
