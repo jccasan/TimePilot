@@ -2700,7 +2700,7 @@ export async function registerRoutes(
                 const pricePerVisit = parseFloat(plan.pricePerVisit);
                 const subtotal = pricePerVisit;
                 const total = subtotal;
-                await storage.createInvoiceWithLineItems({
+                const autoInvoice = await storage.createInvoiceWithLineItems({
                   companyId,
                   contactId: plan.contactId,
                   invoiceNumber,
@@ -2718,6 +2718,7 @@ export async function registerRoutes(
                   unitPrice: pricePerVisit.toFixed(2),
                   total: pricePerVisit.toFixed(2),
                 }]);
+                await storage.updateVisit(visit.id, { invoiceId: autoInvoice.id });
               }
             }
           }
@@ -2768,7 +2769,7 @@ export async function registerRoutes(
           if (!alreadyInvoiced) {
             const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
             const pricePerVisit = parseFloat(plan.pricePerVisit);
-            await storage.createInvoiceWithLineItems({
+            const autoInv = await storage.createInvoiceWithLineItems({
               companyId,
               contactId: plan.contactId,
               invoiceNumber,
@@ -2786,6 +2787,7 @@ export async function registerRoutes(
               unitPrice: pricePerVisit.toFixed(2),
               total: pricePerVisit.toFixed(2),
             }]);
+            await storage.updateVisit(visit.id, { invoiceId: autoInv.id });
           }
         } catch (autoErr) {
           console.error("Auto-invoice generation failed:", autoErr);

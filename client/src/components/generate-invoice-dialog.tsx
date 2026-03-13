@@ -65,6 +65,11 @@ export function GenerateInvoiceDialog({
 
   const activeContactId = initialContactId || selectedContactId;
 
+  const handleContactChange = (newContactId: string) => {
+    setSelectedContactId(newContactId);
+    setSelectedVisitIds(new Set());
+  };
+
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
     enabled: showContactPicker && open,
@@ -171,7 +176,7 @@ export function GenerateInvoiceDialog({
         {showContactPicker && !initialContactId && (
           <div data-testid="section-contact-picker">
             <Label>Client</Label>
-            <Select value={selectedContactId} onValueChange={setSelectedContactId}>
+            <Select value={selectedContactId} onValueChange={handleContactChange}>
               <SelectTrigger data-testid="select-invoice-contact">
                 <SelectValue placeholder="Select a client" />
               </SelectTrigger>
