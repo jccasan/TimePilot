@@ -330,7 +330,6 @@ export default function TechRoutes() {
 
   const completedCount = visits?.filter(v => v.status === "completed").length ?? 0;
   const totalCount = visits?.length ?? 0;
-  const hasMultipleRoutes = routeGroups.length > 1;
 
   return (
     <div className="p-4 space-y-4 overflow-auto h-full">
@@ -376,19 +375,17 @@ export default function TechRoutes() {
         <div className="space-y-4">
           {routeGroups.map((group) => (
             <div key={group.routeName} className="space-y-2">
-              {hasMultipleRoutes && (
-                <div className="flex items-center justify-between" data-testid={`text-route-group-${group.routeName}`}>
-                  <div className="flex items-center gap-2">
-                    {group.routeColor && (
-                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: group.routeColor }} />
-                    )}
-                    <h2 className="text-sm font-semibold">{group.routeName}</h2>
-                  </div>
-                  <span className="text-xs text-muted-foreground" data-testid={`text-route-progress-${group.routeName}`}>
-                    {group.completedCount} of {group.totalCount} done
-                  </span>
+              <div className="flex items-center justify-between" data-testid={`text-route-group-${group.routeName}`}>
+                <div className="flex items-center gap-2">
+                  {group.routeColor && (
+                    <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: group.routeColor }} />
+                  )}
+                  <h2 className="text-sm font-semibold">{group.routeName}</h2>
                 </div>
-              )}
+                <span className="text-xs text-muted-foreground" data-testid={`text-route-progress-${group.routeName}`}>
+                  {group.completedCount} of {group.totalCount} done
+                </span>
+              </div>
               {group.visits.map((visit) => (
                 <VisitRow
                   key={visit.id}

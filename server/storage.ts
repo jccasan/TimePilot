@@ -133,7 +133,7 @@ export interface IStorage {
 
   // Visits
   getVisit(id: string, companyId: string): Promise<Visit | undefined>;
-  getVisits(companyId: string, filters?: { date?: string; routeId?: string; status?: string; technicianId?: string }): Promise<Visit[]>;
+  getVisits(companyId: string, filters?: { date?: string; routeId?: string; status?: string }): Promise<Visit[]>;
   getVisitsForDateRange(companyId: string, startDate: string, endDate: string): Promise<Visit[]>;
   createVisit(data: InsertVisit): Promise<Visit>;
   updateVisit(id: string, data: Partial<InsertVisit>): Promise<Visit>;
@@ -640,7 +640,7 @@ export class DatabaseStorage implements IStorage {
     return visit;
   }
 
-  async getVisits(companyId: string, filters?: { date?: string; routeId?: string; status?: string; technicianId?: string }): Promise<Visit[]> {
+  async getVisits(companyId: string, filters?: { date?: string; routeId?: string; status?: string }): Promise<Visit[]> {
     const conditions = [eq(visits.companyId, companyId)];
     if (filters?.date) conditions.push(eq(visits.scheduledDate, filters.date));
     if (filters?.routeId) conditions.push(eq(visits.routeId, filters.routeId));

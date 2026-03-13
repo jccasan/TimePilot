@@ -197,7 +197,6 @@ export default function TechMobile() {
   }, [visits]);
 
   const allVisitsFlat = useMemo(() => visits || [], [visits]);
-  const hasMultipleRoutes = routeGroupsWithProps.length > 1;
 
   useEffect(() => {
     if (pendingAdvanceAfter && visits) {
@@ -368,19 +367,17 @@ export default function TechMobile() {
         <div className="space-y-4">
           {routeGroupsWithProps.map((routeGroup) => (
             <div key={routeGroup.routeName} className="space-y-3">
-              {hasMultipleRoutes && (
-                <div className="flex items-center justify-between px-1" data-testid={`text-mobile-route-group-${routeGroup.routeName}`}>
-                  <div className="flex items-center gap-2">
-                    {routeGroup.routeColor && (
-                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: routeGroup.routeColor }} />
-                    )}
-                    <h2 className="text-sm font-semibold">{routeGroup.routeName}</h2>
-                  </div>
-                  <span className="text-xs text-muted-foreground" data-testid={`text-mobile-route-progress-${routeGroup.routeName}`}>
-                    {routeGroup.completedCount} of {routeGroup.totalCount} done
-                  </span>
+              <div className="flex items-center justify-between px-1" data-testid={`text-mobile-route-group-${routeGroup.routeName}`}>
+                <div className="flex items-center gap-2">
+                  {routeGroup.routeColor && (
+                    <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: routeGroup.routeColor }} />
+                  )}
+                  <h2 className="text-sm font-semibold">{routeGroup.routeName}</h2>
                 </div>
-              )}
+                <span className="text-xs text-muted-foreground" data-testid={`text-mobile-route-progress-${routeGroup.routeName}`}>
+                  {routeGroup.completedCount} of {routeGroup.totalCount} done
+                </span>
+              </div>
           {routeGroup.groups.flatMap((group) => {
             const isMulti = group.visits.length > 1;
             return group.visits.map((visit) => {
