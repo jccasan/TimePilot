@@ -49,19 +49,19 @@ export async function generateVisitsForPlans(companyId: string, planIds: string[
   const allPlans = await storage.getServicePlans(companyId, { isActive: true });
   const plans = allPlans.filter(p => planIds.includes(p.id));
   if (plans.length === 0) return 0;
-  return generateVisitsFromPlans(companyId, plans, startDate, endDate);
+  return generateVisitsFromPlans(companyId, plans, startDate, endDate, true);
 }
 
 export async function generateVisitsForCompany(companyId: string, startDate: string, endDate: string): Promise<number> {
   const plans = await storage.getServicePlans(companyId, { isActive: true });
-  return generateVisitsFromPlans(companyId, plans, startDate, endDate);
+  return generateVisitsFromPlans(companyId, plans, startDate, endDate, false);
 }
 
-async function generateVisitsFromPlans(companyId: string, plans: Awaited<ReturnType<typeof storage.getServicePlans>>, startDate: string, endDate: string): Promise<number> {
+async function generateVisitsFromPlans(companyId: string, plans: Awaited<ReturnType<typeof storage.getServicePlans>>, startDate: string, endDate: string, ignoreCancelled: boolean): Promise<number> {
   const existingVisits = await storage.getVisitsForDateRange(companyId, startDate, endDate);
   const existingKeys = new Set(
     existingVisits
-      .filter((v) => v.status !== "cancelled")
+      .filter((v) => !ignoreCancelled || v.status !== "cancelled")
       .map((v) => `${v.servicePlanId}_${v.scheduledDate}`)
   );
 
