@@ -3695,6 +3695,27 @@ export async function registerRoutes(
         invoiceUpdates.discountValue = discountVal.toFixed(2);
         invoiceUpdates.discountAmount = discountAmount.toFixed(2);
         invoiceUpdates.total = total.toFixed(2);
+      } else if ("taxRate" in invoiceUpdates || "discountType" in invoiceUpdates || "discountValue" in invoiceUpdates) {
+        const subtotal = parseFloat(existing.subtotal ?? "0");
+        const taxRate = parseFloat(invoiceUpdates.taxRate ?? existing.taxRate ?? "0");
+        const discountType = invoiceUpdates.discountType ?? existing.discountType;
+        const discountVal = parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0");
+        let discountAmount = 0;
+        if (discountType === "percent") {
+          discountAmount = subtotal * (discountVal / 100);
+        } else if (discountType === "amount") {
+          discountAmount = discountVal;
+        }
+        const afterDiscount = Math.max(0, subtotal - discountAmount);
+        const taxAmount = afterDiscount * (taxRate / 100);
+        const total = afterDiscount + taxAmount;
+
+        invoiceUpdates.taxRate = taxRate.toFixed(2);
+        invoiceUpdates.tax = taxAmount.toFixed(2);
+        invoiceUpdates.discountType = discountType || null;
+        invoiceUpdates.discountValue = discountVal.toFixed(2);
+        invoiceUpdates.discountAmount = discountAmount.toFixed(2);
+        invoiceUpdates.total = total.toFixed(2);
       }
 
       const invoice = await storage.updateInvoice(req.params.id, invoiceUpdates);

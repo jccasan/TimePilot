@@ -648,8 +648,8 @@ export default function Invoices() {
                   </div>
                   <div>
                     <Label>Discount Type</Label>
-                    <Select value={discountType} onValueChange={setDiscountType}>
-                      <SelectTrigger data-testid="select-discount-type"><SelectValue placeholder="None" /></SelectTrigger>
+                    <Select value={discountType || "none"} onValueChange={v => setDiscountType(v === "none" ? "" : v)}>
+                      <SelectTrigger data-testid="select-discount-type"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>
                         <SelectItem value="percent">Percent (%)</SelectItem>
@@ -665,7 +665,7 @@ export default function Invoices() {
                       min="0"
                       value={discountValue}
                       onChange={e => setDiscountValue(e.target.value)}
-                      disabled={!discountType || discountType === "none"}
+                      disabled={!discountType}
                       data-testid="input-discount-value"
                     />
                   </div>
