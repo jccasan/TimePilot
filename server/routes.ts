@@ -3185,7 +3185,7 @@ export async function registerRoutes(
         if (!v) return res.status(400).json({ error: `Visit ${vid} not found` });
         if (!contactPlanIds.has(v.servicePlanId)) return res.status(400).json({ error: `Visit ${vid} does not belong to this contact` });
         if (v.status !== "completed") return res.status(400).json({ error: `Visit ${vid} is not completed` });
-        if (v.invoiceId) return res.status(400).json({ error: `Visit on ${v.scheduledDate} has already been invoiced` });
+        if (v.invoiceId || await storage.isVisitInvoiced(v.id)) return res.status(400).json({ error: `Visit on ${v.scheduledDate} has already been invoiced` });
         allVisits.push(v);
       }
 
