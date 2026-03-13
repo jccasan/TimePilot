@@ -1895,7 +1895,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
         }}>
           <DialogTrigger asChild>
             <Button size="sm" data-testid="button-add-service-plan">
-              <Plus className="mr-1 h-4 w-4" /> Add Plan
+              <Plus className="mr-1 h-4 w-4" /> Schedule Service
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
