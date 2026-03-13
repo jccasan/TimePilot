@@ -21,11 +21,20 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import {
   MapPin, Dog, GripVertical, Plus, Pencil, Trash2, Route as RouteIcon,
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
   Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
-  CheckCircle, XCircle, SkipForward, MoreVertical, Car
+  CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
+  CalendarDays, DollarSign
 } from "lucide-react";
+import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import RouteMapView, { type RouteStop } from "@/components/route-map-view";
 import { ServiceZoneMap, type ZoneEntry } from "@/components/service-zone-map";
@@ -100,10 +109,11 @@ function LegSeparator({ distance, duration }: { distance: number; duration: numb
   );
 }
 
-function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId }: {
+function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, onStopClick }: {
   stop: ServicePlan; contacts: Contact[]; properties: Property[];
   visit?: Visit | null; onVisitStatusChange?: (visitId: string, status: string) => void;
   updatingVisitId?: string | null;
+  onStopClick?: (stop: ServicePlan, visit: Visit) => void;
 }) {
   const contact = contacts.find(c => c.id === stop.contactId);
   const property = properties.find(p => p.id === stop.propertyId);
@@ -128,11 +138,16 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center justify-between gap-1">
             {contact ? (
-              <ClientInfoPopover contactId={contact.id}>
-                <span className={`font-medium text-sm truncate ${isDone ? "line-through text-muted-foreground" : ""}`} data-testid={`text-stop-name-${stop.id}`}>
-                  {contact.firstName} {contact.lastName}
-                </span>
-              </ClientInfoPopover>
+              <span
+                className={`font-medium text-sm truncate ${isDone ? "line-through text-muted-foreground" : ""} ${visit && onStopClick ? "cursor-pointer hover:underline" : ""}`}
+                role={visit && onStopClick ? "button" : undefined}
+                tabIndex={visit && onStopClick ? 0 : undefined}
+                onClick={() => { if (visit && onStopClick) onStopClick(stop, visit); }}
+                onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && visit && onStopClick) { e.preventDefault(); onStopClick(stop, visit); } }}
+                data-testid={`text-stop-name-${stop.id}`}
+              >
+                {contact.firstName} {contact.lastName}
+              </span>
             ) : (
               <span className="font-medium text-sm truncate text-muted-foreground" data-testid={`text-stop-name-${stop.id}`}>Unknown</span>
             )}
@@ -152,6 +167,19 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
                 <Badge variant="outline" className="text-[10px]" data-testid={`badge-stop-order-${stop.id}`}>
                   #{stop.stopOrder}
                 </Badge>
+              )}
+              {visit && onVisitStatusChange && visit.status !== "completed" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 hover:text-green-700"
+                  onClick={(e) => { e.stopPropagation(); onVisitStatusChange(visit.id, "completed"); }}
+                  disabled={updatingVisitId === visit.id}
+                  data-testid={`button-complete-${stop.id}`}
+                  title="Mark Completed"
+                >
+                  {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                </Button>
               )}
               {visit && onVisitStatusChange && (
                 <DropdownMenu>
@@ -187,7 +215,14 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
             </div>
           </div>
           {property && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <div
+              className={`flex items-center gap-1 text-xs text-muted-foreground ${visit && onStopClick ? "cursor-pointer hover:text-foreground" : ""}`}
+              role={visit && onStopClick ? "button" : undefined}
+              tabIndex={visit && onStopClick ? 0 : undefined}
+              onClick={() => { if (visit && onStopClick) onStopClick(stop, visit); }}
+              onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && visit && onStopClick) { e.preventDefault(); onStopClick(stop, visit); } }}
+              data-testid={`clickable-address-${stop.id}`}
+            >
               <MapPin className="h-3 w-3 shrink-0" />
               <span className="truncate">{property.streetAddress}{property.city ? `, ${property.city}` : ""}</span>
             </div>
@@ -236,7 +271,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
   onEdit, onDelete, onOptimize, onDispatch, onUnassignAll, isOptimizing, isDispatching, isUnassigning,
-  visitsByPlan, onVisitStatusChange, updatingVisitId, metrics, metricsLoading }: {
+  visitsByPlan, onVisitStatusChange, updatingVisitId, metrics, metricsLoading, onStopClick }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
@@ -249,6 +284,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   updatingVisitId?: string | null;
   metrics?: RouteMetrics | null;
   metricsLoading?: boolean;
+  onStopClick?: (stop: ServicePlan, visit: Visit) => void;
 }) {
   const tech = team.find(t => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
@@ -376,6 +412,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
                     visit={visitsByPlan?.[stop.id] || null}
                     onVisitStatusChange={onVisitStatusChange}
                     updatingVisitId={updatingVisitId}
+                    onStopClick={onStopClick}
                   />
                 </div>
               );
@@ -386,6 +423,226 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
         </DroppableZone>
       </CardContent>
     </Card>
+  );
+}
+
+function RouteVisitDetailSheet({
+  visit, servicePlan, open, onOpenChange, contacts, properties, routes, selectedDayDate,
+}: {
+  visit: Visit | null;
+  servicePlan: ServicePlan | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  contacts: Contact[];
+  properties: Property[];
+  routes: Route[];
+  selectedDayDate: string;
+}) {
+  const { toast } = useToast();
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
+      setUpdatingStatus(status);
+      const body: Record<string, unknown> = { status };
+      if (status === "completed") body.completedAt = new Date().toISOString();
+      if (status === "scheduled") {
+        body.completedAt = null;
+        body.startedAt = null;
+      }
+      await apiRequest("PATCH", `/api/visits/${visitId}`, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/range", selectedDayDate] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      toast({ title: "Visit updated" });
+      onOpenChange(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => setUpdatingStatus(null),
+  });
+
+  if (!visit || !servicePlan) return null;
+
+  const contact = contacts.find((c) => c.id === servicePlan.contactId);
+  const property = properties.find((p) => p.id === visit.propertyId);
+  const route = routes.find((r) => r.id === visit.routeId);
+  const frequencyLabel = servicePlan.frequency.charAt(0).toUpperCase() + servicePlan.frequency.slice(1);
+  const pricePerVisit = parseFloat(servicePlan.pricePerVisit) || 0;
+
+  const statusActions: { status: string; label: string; icon: typeof CheckCircle; color: string; show: boolean }[] = [
+    {
+      status: "completed",
+      label: "Mark Complete",
+      icon: CheckCircle,
+      color: "text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 border-green-200 dark:border-green-800",
+      show: visit.status !== "completed",
+    },
+    {
+      status: "skipped",
+      label: "Skip Visit",
+      icon: XCircle,
+      color: "text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-amber-200 dark:border-amber-800",
+      show: visit.status !== "skipped" && visit.status !== "completed",
+    },
+    {
+      status: "cancelled",
+      label: "Cancel Visit",
+      icon: Ban,
+      color: "text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-800",
+      show: visit.status !== "cancelled" && visit.status !== "completed",
+    },
+    {
+      status: "scheduled",
+      label: "Revert to Scheduled",
+      icon: Clock,
+      color: "text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 border-blue-200 dark:border-blue-800",
+      show: visit.status !== "scheduled",
+    },
+  ];
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto" data-testid="sheet-route-visit-detail">
+        <SheetHeader className="pb-4">
+          <SheetTitle className="text-lg" data-testid="text-route-sheet-title">Visit Details</SheetTitle>
+          <SheetDescription>
+            {visit.scheduledDate ? new Date(visit.scheduledDate + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : ""}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="space-y-5">
+          <div className="flex items-center gap-2">
+            <Badge className={`${visitStatusColors[visit.status] || ""}`} data-testid="badge-route-visit-status">
+              {visitStatusLabels[visit.status] || visit.status}
+            </Badge>
+            {visit.status === "completed" && !visit.invoiceId && (
+              <Badge variant="outline" className="text-orange-600 border-orange-300 dark:border-orange-700" data-testid="badge-route-needs-invoice">
+                <DollarSign className="h-3 w-3 mr-0.5" />Needs Invoice
+              </Badge>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            {contact && (
+              <div className="flex items-start gap-3">
+                <User className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Client</p>
+                  <Link href={`/contacts/${contact.id}`}>
+                    <span className="text-sm font-medium hover:underline cursor-pointer" data-testid="link-route-visit-contact">
+                      {contact.firstName} {contact.lastName}
+                    </span>
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {property && (
+              <div className="flex items-start gap-3">
+                <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Property</p>
+                  <p className="text-sm" data-testid="text-route-visit-address">
+                    {property.streetAddress}
+                    {property.city ? `, ${property.city}` : ""}
+                    {property.state ? ` ${property.state}` : ""}
+                    {property.zipCode ? ` ${property.zipCode}` : ""}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-start gap-3">
+              <CalendarCheck className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-xs text-muted-foreground">Service</p>
+                <p className="text-sm" data-testid="text-route-visit-service">{frequencyLabel} Cleanup</p>
+              </div>
+            </div>
+
+            {route && (
+              <div className="flex items-start gap-3">
+                <RouteIcon className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Route</p>
+                  <p className="text-sm" data-testid="text-route-visit-route">{route.name}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-start gap-3">
+              <DollarSign className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-xs text-muted-foreground">Amount</p>
+                <p className="text-sm font-medium" data-testid="text-route-visit-amount">${pricePerVisit.toFixed(2)}</p>
+              </div>
+            </div>
+
+            {visit.startedAt && (
+              <div className="flex items-start gap-3">
+                <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Started</p>
+                  <p className="text-sm">{new Date(visit.startedAt).toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+
+            {visit.completedAt && (
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-4 w-4 mt-0.5 text-green-600 shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Completed</p>
+                  <p className="text-sm">{new Date(visit.completedAt).toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+
+            {visit.technicianNotes && (
+              <div className="flex items-start gap-3">
+                <CalendarDays className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Technician Notes</p>
+                  <p className="text-sm italic" data-testid="text-route-visit-notes">{visit.technicianNotes}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</p>
+            <div className="grid grid-cols-1 gap-2">
+              {statusActions.filter(a => a.show).map((action) => {
+                const Icon = action.icon;
+                const isUpdating = updatingStatus === action.status;
+                return (
+                  <Button
+                    key={action.status}
+                    variant="outline"
+                    className={`justify-start gap-2 ${action.color}`}
+                    onClick={() => statusMutation.mutate({ visitId: visit.id, status: action.status })}
+                    disabled={statusMutation.isPending}
+                    data-testid={`button-route-action-${action.status}`}
+                  >
+                    {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+                    {action.label}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -630,6 +887,15 @@ export default function RoutesPage() {
   }, [dayVisits]);
 
   const [updatingVisitId, setUpdatingVisitId] = useState<string | null>(null);
+  const [detailSheetOpen, setDetailSheetOpen] = useState(false);
+  const [detailVisit, setDetailVisit] = useState<Visit | null>(null);
+  const [detailPlan, setDetailPlan] = useState<ServicePlan | null>(null);
+
+  const handleStopClick = useCallback((stop: ServicePlan, visit: Visit) => {
+    setDetailPlan(stop);
+    setDetailVisit(visit);
+    setDetailSheetOpen(true);
+  }, []);
   const visitStatusMutation = useMutation({
     mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
       setUpdatingVisitId(visitId);
@@ -1045,6 +1311,7 @@ export default function RoutesPage() {
                         metrics={routeMetrics[route.id] || null}
                         metricsLoading={metricsLoadingRoutes.has(route.id)}
                         isUnassigning={unassigningRouteId === route.id}
+                        onStopClick={handleStopClick}
                       />
                     ))}
                   </div>
@@ -1143,6 +1410,17 @@ export default function RoutesPage() {
       <PurchaseCreditsDialog open={showPurchase} onOpenChange={setShowPurchase}
         onPurchase={(amount) => purchaseCreditsMutation.mutate(amount)}
         isPurchasing={purchaseCreditsMutation.isPending} />
+
+      <RouteVisitDetailSheet
+        visit={detailVisit}
+        servicePlan={detailPlan}
+        open={detailSheetOpen}
+        onOpenChange={setDetailSheetOpen}
+        contacts={contacts}
+        properties={properties}
+        routes={allRoutes}
+        selectedDayDate={selectedDayDate}
+      />
     </div>
   );
 }
