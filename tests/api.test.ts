@@ -884,6 +884,85 @@ async function runTests() {
   });
 
   // ==========================================
+  // API KEY AUTHENTICATION TESTS
+  // ==========================================
+
+  const crypto = await import("crypto");
+  const testApiKeyRaw = crypto.randomBytes(32).toString("hex");
+  const testApiKeyHash = crypto.createHash("sha256").update(testApiKeyRaw).digest("hex");
+  const testApiKeyPrefix = testApiKeyRaw.substring(0, 8);
+  let testApiKeyId = "";
+
+  await test("Create API key for testing", "ApiKeyAuth", async () => {
+    const createRes = await req("POST", "/api/api-keys", {
+      name: "Integration Test Key",
+      scopes: ["contacts.write"],
+    });
+    assert(createRes.status === 201, `Expected 201 got ${createRes.status}`);
+    assert(!!createRes.data.rawKey, "Expected rawKey in response");
+    assert(!!createRes.data.id, "Expected id in response");
+    testApiKeyId = createRes.data.id;
+  });
+
+  let createdContactId = "";
+
+  await test("API key auth creates lead with correct company", "ApiKeyAuth", async () => {
+    const createKeyRes = await req("POST", "/api/api-keys", {
+      name: "E2E Test Key",
+      scopes: ["contacts.write"],
+    });
+    assert(createKeyRes.status === 201, `Expected 201 got ${createKeyRes.status}`);
+    const rawKey = createKeyRes.data.rawKey;
+
+    const contactRes = await req("POST", "/api/contacts", {
+      firstName: "ApiKeyTest",
+      lastName: `Lead_${Date.now()}`,
+      email: `apikey-e2e-${Date.now()}@test.com`,
+      status: "lead",
+    }, { "X-API-Key": rawKey, Authorization: "" });
+    assert(contactRes.status === 201, `Expected 201 got ${contactRes.status}: ${JSON.stringify(contactRes.data)}`);
+    assert(contactRes.data.status === "lead", `Expected status 'lead' got '${contactRes.data.status}'`);
+    assert(!!contactRes.data.companyId, "Expected companyId in response");
+    assert(!!contactRes.data.id, "Expected id in response");
+    createdContactId = contactRes.data.id;
+
+    await req("DELETE", `/api/api-keys/${createKeyRes.data.id}`);
+  });
+
+  await test("Invalid API key returns 401 with clear message", "ApiKeyAuth", async () => {
+    const res = await req("GET", "/api/contacts", undefined, {
+      "X-API-Key": "invalid_key_that_does_not_exist_0000000000000000000000000000",
+      Authorization: "",
+    });
+    assert(res.status === 401, `Expected 401 got ${res.status}`);
+    assert(res.data.message === "Invalid API key", `Expected 'Invalid API key' got '${res.data.message}'`);
+  });
+
+  await test("Malformed short API key returns 401", "ApiKeyAuth", async () => {
+    const res = await req("GET", "/api/contacts", undefined, {
+      "X-API-Key": "short",
+      Authorization: "",
+    });
+    assert(res.status === 401, `Expected 401 got ${res.status}`);
+    assert(res.data.message === "Invalid API key", `Expected 'Invalid API key' got '${res.data.message}'`);
+  });
+
+  await test("No auth returns generic Unauthorized", "ApiKeyAuth", async () => {
+    const res = await req("GET", "/api/contacts", undefined, {
+      Authorization: "",
+    });
+    assert(res.status === 401, `Expected 401 got ${res.status}`);
+    assert(res.data.message === "Unauthorized", `Expected 'Unauthorized' got '${res.data.message}'`);
+  });
+
+  if (createdContactId) {
+    await req("DELETE", `/api/contacts/${createdContactId}`);
+  }
+  if (testApiKeyId) {
+    await req("DELETE", `/api/api-keys/${testApiKeyId}`);
+  }
+
+  // ==========================================
   // REPORT
   // ==========================================
 

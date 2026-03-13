@@ -92,9 +92,7 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
         const ownerOrAdmin = companyUsers_.find(cu => cu.role === "owner" && cu.isActive !== false) || companyUsers_.find(cu => cu.role === "admin" && cu.isActive !== false);
         if (ownerOrAdmin) {
           userId = ownerOrAdmin.userId;
-          (req as any)._apiKeyCompanyId = apiKey.companyId;
-          (req.session as any).userId = userId;
-          req.session.save = (cb?: (err?: any) => void) => { if (cb) cb(); };
+          (req as any)._apiKeyAuth = { userId: ownerOrAdmin.userId, companyId: apiKey.companyId, role: ownerOrAdmin.role };
           authMethod = "api-key";
           storage.updateApiKeyLastUsed(apiKey.id).catch(console.error);
         }
@@ -110,7 +108,7 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
     console.log(`[auth] 401 on ${req.method} ${req.path} | cookie=${hasCookie} bearer=${hasBearer} apiKey=${hasApiKey} method=${authMethod} ua=${(req.headers["user-agent"] || "").substring(0, 80)}`);
     return res.status(401).json({ message: "Unauthorized" });
   }
-  if (!CHANGE_PASSWORD_EXEMPT_PATHS.includes(req.path)) {
+  if (authMethod !== "api-key" && !CHANGE_PASSWORD_EXEMPT_PATHS.includes(req.path)) {
     const user = await getUserById(userId);
     if (user?.mustChangePassword) {
       return res.status(403).json({ error: "Password change required", mustChangePassword: true });
@@ -120,17 +118,13 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
 };
 
 async function getCompanyContext(req: Request) {
+  const apiKeyAuth = (req as any)._apiKeyAuth as { userId: string; companyId: string; role: string } | undefined;
+  if (apiKeyAuth) {
+    return { userId: apiKeyAuth.userId, companyId: apiKeyAuth.companyId, role: apiKeyAuth.role };
+  }
   const userId = (req.session as any)?.userId;
   if (!userId) {
     throw { status: 401, message: "Not authenticated" };
-  }
-  const apiKeyCompanyId = (req as any)._apiKeyCompanyId as string | undefined;
-  if (apiKeyCompanyId) {
-    const membership = await storage.getCompanyUser(apiKeyCompanyId, userId);
-    if (!membership) {
-      throw { status: 403, message: "No company membership found for API key" };
-    }
-    return { userId, companyId: apiKeyCompanyId, role: membership.role };
   }
   const memberships = await storage.getCompaniesForUser(userId);
   if (!memberships.length) {
