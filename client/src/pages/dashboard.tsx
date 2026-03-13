@@ -172,7 +172,7 @@ function ClientRequestsCard() {
       const res = await fetch("/api/notifications?unread=true", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load");
       const all: CleanupNotification[] = await res.json();
-      return all.filter((n) => n.title === "One-Time Cleanup Request");
+      return all.filter((n) => n.title.includes("One-Time Cleanup Request"));
     },
   });
 

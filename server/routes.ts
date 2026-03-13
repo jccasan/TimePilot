@@ -5998,7 +5998,7 @@ export async function registerRoutes(
       await storage.createNotification({
         companyId,
         type: "general",
-        title: "One-Time Cleanup Request",
+        title: `${contact.firstName} ${contact.lastName} -- One-Time Cleanup Request`,
         message: `${contact.firstName} ${contact.lastName} requested a cleanup${preferredDate ? ` on ${preferredDate}` : ""}${notes ? `: ${notes}` : ""}`,
         linkUrl: "/#client-requests",
       });
@@ -7006,7 +7006,7 @@ export async function registerRoutes(
         !n.isRead && (
           n.type === "portal_message" ||
           n.title.includes("Service Change Request") ||
-          n.title === "One-Time Cleanup Request"
+          n.title.includes("One-Time Cleanup Request")
         )
       ).length;
       res.json({ count: totalCount, clientRequestCount });
