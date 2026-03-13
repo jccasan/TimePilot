@@ -24,7 +24,7 @@ import {
   MapPin, Dog, GripVertical, Plus, Pencil, Trash2, Route as RouteIcon,
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
   Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
-  CheckCircle, XCircle, SkipForward, MoreVertical
+  CheckCircle, XCircle, SkipForward, MoreVertical, Car
 } from "lucide-react";
 import RouteMapView, { type RouteStop } from "@/components/route-map-view";
 import { ServiceZoneMap, type ZoneEntry } from "@/components/service-zone-map";
@@ -76,6 +76,28 @@ type OptimizeResult = {
   milesSaved: number; minutesSaved: number; stopCount: number;
   creditsUsed: number; creditsRemaining: number; message?: string;
 };
+
+type RouteMetrics = {
+  totalDistance: number;
+  totalDuration: number;
+  legs: { fromId: string | null; toId: string; distance: number; duration: number }[];
+  stopCount: number;
+  missingCoords?: string[];
+  error?: string;
+};
+
+function LegSeparator({ distance, duration }: { distance: number; duration: number }) {
+  return (
+    <div className="flex items-center gap-1.5 py-0.5 px-2 text-[10px] text-muted-foreground" data-testid="leg-separator">
+      <div className="flex-1 border-t border-dashed border-muted-foreground/30" />
+      <Car className="h-2.5 w-2.5" />
+      <span>{distance < 0.1 ? "<0.1" : distance.toFixed(1)} mi</span>
+      <span className="text-muted-foreground/50">|</span>
+      <span>{duration < 1 ? "<1" : Math.round(duration)} min</span>
+      <div className="flex-1 border-t border-dashed border-muted-foreground/30" />
+    </div>
+  );
+}
 
 function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId }: {
   stop: ServicePlan; contacts: Contact[]; properties: Property[];
@@ -133,23 +155,23 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {visit.status !== "completed" && (
-                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "completed")} data-testid={`menu-complete-${stop.id}`}>
-                        <CheckCircle className="h-3.5 w-3.5 mr-2 text-green-600" /> Mark Completed
+                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "completed")} disabled={updatingVisitId === visit.id} data-testid={`menu-complete-${stop.id}`}>
+                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5 mr-2 text-green-600" />} Mark Completed
                       </DropdownMenuItem>
                     )}
                     {visit.status !== "skipped" && (
-                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "skipped")} data-testid={`menu-skip-${stop.id}`}>
-                        <SkipForward className="h-3.5 w-3.5 mr-2 text-orange-600" /> Mark Skipped
+                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "skipped")} disabled={updatingVisitId === visit.id} data-testid={`menu-skip-${stop.id}`}>
+                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <SkipForward className="h-3.5 w-3.5 mr-2 text-orange-600" />} Mark Skipped
                       </DropdownMenuItem>
                     )}
                     {visit.status !== "cancelled" && (
-                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "cancelled")} data-testid={`menu-cancel-${stop.id}`}>
-                        <XCircle className="h-3.5 w-3.5 mr-2 text-red-600" /> Mark Cancelled
+                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "cancelled")} disabled={updatingVisitId === visit.id} data-testid={`menu-cancel-${stop.id}`}>
+                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <XCircle className="h-3.5 w-3.5 mr-2 text-red-600" />} Mark Cancelled
                       </DropdownMenuItem>
                     )}
                     {visit.status !== "scheduled" && (
-                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "scheduled")} data-testid={`menu-revert-${stop.id}`}>
-                        <Clock className="h-3.5 w-3.5 mr-2 text-blue-600" /> Revert to Scheduled
+                      <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "scheduled")} disabled={updatingVisitId === visit.id} data-testid={`menu-revert-${stop.id}`}>
+                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Clock className="h-3.5 w-3.5 mr-2 text-blue-600" />} Revert to Scheduled
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
@@ -218,13 +240,18 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   visitsByPlan?: Record<string, Visit>;
   onVisitStatusChange?: (visitId: string, status: string) => void;
   updatingVisitId?: string | null;
+  metrics?: RouteMetrics | null;
+  metricsLoading?: boolean;
 }) {
   const tech = team.find(t => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
   const totalRevenue = stops.reduce((sum, s) => sum + Number(s.pricePerVisit), 0);
   const stopCount = stops.length;
   const routeVisitCount = visitsByPlan ? sortedStops.filter(s => visitsByPlan[s.id]).length : 0;
-  const completedCount = visitsByPlan ? sortedStops.filter(s => visitsByPlan[s.id]?.status === "completed").length : 0;
+  const processedCount = visitsByPlan ? sortedStops.filter(s => {
+    const st = visitsByPlan[s.id]?.status;
+    return st === "completed" || st === "skipped" || st === "cancelled";
+  }).length : 0;
   const hasVisits = routeVisitCount > 0;
   const creditsNeeded = stopCount <= 30 ? 1 : 2;
   const isOverLimit = stopCount > 30;
@@ -257,6 +284,17 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             </span>
           )}
           <span>${totalRevenue.toFixed(2)}</span>
+          {metricsLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+          {metrics && metrics.totalDistance > 0 && (
+            <span className="flex items-center gap-1" data-testid={`text-route-metrics-${route.id}`}>
+              <Car className="h-3 w-3" />
+              {metrics.totalDistance} mi
+              <span className="text-muted-foreground/50">|</span>
+              {metrics.totalDuration >= 60
+                ? `${Math.floor(metrics.totalDuration / 60)}h ${metrics.totalDuration % 60}m`
+                : `${metrics.totalDuration} min`}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -268,9 +306,9 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
           </Badge>
           {isOverMax && <span className="text-xs text-destructive">Max 60 stops</span>}
           {hasVisits && routeVisitCount > 0 && (
-            <Badge variant="outline" className={`text-[10px] ${completedCount === routeVisitCount ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : ""}`} data-testid={`badge-completion-${route.id}`}>
+            <Badge variant="outline" className={`text-[10px] ${processedCount === routeVisitCount ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : ""}`} data-testid={`badge-completion-${route.id}`}>
               <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
-              {completedCount} of {routeVisitCount} done
+              {processedCount} of {routeVisitCount} processed
             </Badge>
           )}
         </div>
@@ -317,13 +355,24 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
       <CardContent className="p-2 pt-0 flex-1">
         <DroppableZone id={`route-${route.id}`} isOver={isOverThis}>
           {sortedStops.length > 0 ? (
-            sortedStops.map(stop => (
-              <DraggableStop key={stop.id} stop={stop} contacts={contacts} properties={properties}
-                visit={visitsByPlan?.[stop.id] || null}
-                onVisitStatusChange={onVisitStatusChange}
-                updatingVisitId={updatingVisitId}
-              />
-            ))
+            sortedStops.map((stop, idx) => {
+              const leg = metrics?.legs?.find(l => l.toId === stop.id);
+              return (
+                <div key={stop.id}>
+                  {idx > 0 && leg && (
+                    <LegSeparator distance={leg.distance} duration={leg.duration} />
+                  )}
+                  {idx === 0 && metrics?.legs?.[0]?.fromId === null && metrics.legs[0]?.toId === stop.id && (
+                    <LegSeparator distance={metrics.legs[0].distance} duration={metrics.legs[0].duration} />
+                  )}
+                  <DraggableStop stop={stop} contacts={contacts} properties={properties}
+                    visit={visitsByPlan?.[stop.id] || null}
+                    onVisitStatusChange={onVisitStatusChange}
+                    updatingVisitId={updatingVisitId}
+                  />
+                </div>
+              );
+            })
           ) : (
             <p className="text-xs text-muted-foreground text-center py-4">Drag stops here</p>
           )}
@@ -601,6 +650,9 @@ export default function RoutesPage() {
     visitStatusMutation.mutate({ visitId, status });
   }, [visitStatusMutation]);
 
+  const [routeMetrics, setRouteMetrics] = useState<Record<string, RouteMetrics>>({});
+  const [metricsLoadingRoutes, setMetricsLoadingRoutes] = useState<Set<string>>(new Set());
+
   const isLoading = routesLoading || plansLoading;
 
   const routesForDay = useMemo(() => allRoutes.filter(r => r.dayOfWeek === selectedDay), [allRoutes, selectedDay]);
@@ -640,6 +692,28 @@ export default function RoutesPage() {
     }
     return map;
   }, [allRoutes, visiblePlans]);
+
+  const fetchRouteMetrics = useCallback(async (routeId: string) => {
+    try {
+      setMetricsLoadingRoutes(prev => new Set(prev).add(routeId));
+      const res = await apiRequest("GET", `/api/routes/${routeId}/metrics`);
+      const data: RouteMetrics = await res.json();
+      setRouteMetrics(prev => ({ ...prev, [routeId]: data }));
+    } catch {
+      setRouteMetrics(prev => ({ ...prev, [routeId]: { totalDistance: 0, totalDuration: 0, legs: [], stopCount: 0, error: "Failed to load" } }));
+    } finally {
+      setMetricsLoadingRoutes(prev => { const s = new Set(prev); s.delete(routeId); return s; });
+    }
+  }, []);
+
+  useEffect(() => {
+    for (const route of routesForDay) {
+      const stops = stopsByRoute[route.id] || [];
+      if (stops.length >= 2 && !routeMetrics[route.id]) {
+        fetchRouteMetrics(route.id);
+      }
+    }
+  }, [routesForDay, stopsByRoute, routeMetrics, fetchRouteMetrics]);
 
   const unassignedPlans = useMemo(() => {
     return visiblePlans.filter(sp => !sp.routeId).filter(sp => {
@@ -716,7 +790,10 @@ export default function RoutesPage() {
     mutationFn: async ({ stopId, routeId }: { stopId: string; routeId: string | null }) => {
       await apiRequest("PATCH", `/api/service-plans/${stopId}`, { routeId });
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+      setRouteMetrics({});
+    },
     onError: (err: Error) => toast({ title: "Error moving stop", description: err.message, variant: "destructive" }),
   });
 
@@ -726,10 +803,11 @@ export default function RoutesPage() {
       const res = await apiRequest("POST", `/api/routes/${routeId}/optimize`);
       return res.json() as Promise<OptimizeResult>;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, routeId) => {
       setOptimizingRouteId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
+      setRouteMetrics(prev => { const next = { ...prev }; delete next[routeId]; return next; });
       if (data.optimized) {
         setSavingsResult(data);
         setShowSavings(true);
@@ -957,6 +1035,8 @@ export default function RoutesPage() {
                         visitsByPlan={visitsByPlan}
                         onVisitStatusChange={handleVisitStatusChange}
                         updatingVisitId={updatingVisitId}
+                        metrics={routeMetrics[route.id] || null}
+                        metricsLoading={metricsLoadingRoutes.has(route.id)}
                         isUnassigning={unassigningRouteId === route.id}
                       />
                     ))}

@@ -29,7 +29,7 @@ import {
   getConnectAccountStatus,
   createConnectLoginLink,
 } from "./services/stripe";
-import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections } from "./services/route-optimizer";
+import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress } from "./services/geocode";
 import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
@@ -2198,6 +2198,64 @@ export async function registerRoutes(
         creditsUsed: creditsRequired,
         creditsRemaining: currentCredits - creditsRequired,
         routingEngine: optimizedMapbox ? "mapbox" : "haversine",
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/routes/:id/metrics", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const route = await storage.getRoute(req.params.id, companyId);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+
+      const plans = await storage.getServicePlans(companyId, { isActive: true });
+      const routePlans = plans.filter(sp => sp.routeId === route.id).sort((a, b) => a.stopOrder - b.stopOrder);
+
+      if (routePlans.length < 2) {
+        return res.json({ totalDistance: 0, totalDuration: 0, legs: [], stopCount: routePlans.length });
+      }
+
+      const allProperties = await storage.getProperties(companyId);
+      const propMap = new Map(allProperties.map(p => [p.id, p]));
+
+      const stops: { id: string; latitude: number; longitude: number }[] = [];
+      const missingCoords: string[] = [];
+
+      for (const sp of routePlans) {
+        const prop = propMap.get(sp.propertyId);
+        if (prop?.latitude && prop?.longitude) {
+          stops.push({ id: sp.id, latitude: Number(prop.latitude), longitude: Number(prop.longitude) });
+        } else {
+          missingCoords.push(sp.id);
+        }
+      }
+
+      if (stops.length < 2) {
+        return res.json({ totalDistance: 0, totalDuration: 0, legs: [], stopCount: routePlans.length, missingCoords });
+      }
+
+      const company = await storage.getCompany(companyId);
+      const startPoint = company?.startLatitude && company?.startLongitude
+        ? { latitude: Number(company.startLatitude), longitude: Number(company.startLongitude) }
+        : undefined;
+
+      const metrics = await getRouteMetricsWithLegs(stops, startPoint);
+
+      if (!metrics) {
+        return res.json({ totalDistance: 0, totalDuration: 0, legs: [], stopCount: routePlans.length, missingCoords, error: "Unable to calculate driving metrics" });
+      }
+
+      res.json({
+        totalDistance: Math.round(metrics.totalDistance * 10) / 10,
+        totalDuration: Math.round(metrics.totalDuration),
+        legs: metrics.legs.map(l => ({
+          fromId: l.fromId,
+          toId: l.toId,
+          distance: Math.round(l.distance * 10) / 10,
+          duration: Math.round(l.duration),
+        })),
+        stopCount: routePlans.length,
+        missingCoords: missingCoords.length > 0 ? missingCoords : undefined,
       });
     } catch (err) { handleError(res, err); }
   });
