@@ -5995,6 +5995,22 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/portal/messages", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const msgs = await storage.getMessages(companyId, { contactId });
+      res.json(msgs.map((m) => ({
+        id: m.id,
+        direction: m.direction,
+        channel: m.channel,
+        subject: m.subject,
+        body: m.body,
+        status: m.status,
+        createdAt: m.createdAt,
+      })));
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/portal/logout", async (req: Request, res: Response) => {
     try {
       const { sessionId } = await getPortalContext(req);

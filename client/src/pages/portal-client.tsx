@@ -51,6 +51,7 @@ import {
   Shield,
   User,
   Phone,
+  MessageSquare,
 } from "lucide-react";
 
 interface PortalProfile {
@@ -132,6 +133,16 @@ interface Estimate {
   sentAt: string | null;
   respondedAt: string | null;
   responseNote: string | null;
+  createdAt: string;
+}
+
+interface PortalMessage {
+  id: string;
+  direction: string;
+  channel: string;
+  subject: string | null;
+  body: string;
+  status: string;
   createdAt: string;
 }
 
@@ -369,6 +380,8 @@ export default function PortalClient() {
   const [visitPhotoModal, setVisitPhotoModal] = useState<PastVisit | null>(null);
   const [billingStartDate, setBillingStartDate] = useState("");
   const [billingEndDate, setBillingEndDate] = useState("");
+  const [portalMessages, setPortalMessages] = useState<PortalMessage[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(true);
   const [downloadingStatement, setDownloadingStatement] = useState(false);
 
   const params = new URLSearchParams(window.location.search);
@@ -430,13 +443,14 @@ export default function PortalClient() {
 
         await loadVisitHistory(1);
 
-        const [pmData, referralData, estimatesData, notifsData, changesData, photosData] = await Promise.all([
+        const [pmData, referralData, estimatesData, notifsData, changesData, photosData, messagesData] = await Promise.all([
           portalFetch("/api/portal/payment-methods").catch(() => ({ methods: [], autoPayEnabled: false })),
           portalFetch("/api/portal/referral").catch(() => ({ referralCode: null, referralCount: 0 })),
           portalFetch("/api/portal/estimates").catch(() => []),
           portalFetch("/api/portal/notifications").catch(() => ({ email: true, sms: false })),
           portalFetch("/api/portal/service-changes").catch(() => []),
           portalFetch("/api/portal/photos").catch(() => []),
+          portalFetch("/api/portal/messages").catch(() => []),
         ]);
 
         setPaymentMethods(pmData.methods || []);
@@ -455,12 +469,15 @@ export default function PortalClient() {
         });
         setChangeRequests(changesData);
         setGalleryPhotos(photosData);
+        setPortalMessages(messagesData);
+        setLoadingMessages(false);
       } catch (err: any) {
         if (err.message !== "Not authenticated" && err.message !== "Session expired") {
           toast({ title: "Error", description: err.message, variant: "destructive" });
         }
       } finally {
         setLoading(false);
+        setLoadingMessages(false);
       }
     };
 
@@ -546,6 +563,10 @@ export default function PortalClient() {
       toast({ title: "Message sent", description: "Your message has been sent to the service provider." });
       setContactSubject("");
       setContactMessage("");
+      try {
+        const updatedMessages = await portalFetch("/api/portal/messages");
+        setPortalMessages(updatedMessages);
+      } catch {}
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -1000,7 +1021,7 @@ export default function PortalClient() {
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="w-full grid grid-cols-4 mb-6" data-testid="tabs-portal-nav">
+          <TabsList className="w-full grid grid-cols-5 mb-6" data-testid="tabs-portal-nav">
             <TabsTrigger value="overview" className="gap-1.5" data-testid="tab-overview">
               <LayoutDashboard className="h-4 w-4 hidden sm:block" />
               Overview
@@ -1017,6 +1038,10 @@ export default function PortalClient() {
                   {unpaidInvoices.length}
                 </span>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="messages" className="gap-1.5" data-testid="tab-messages">
+              <MessageSquare className="h-4 w-4 hidden sm:block" />
+              Messages
             </TabsTrigger>
             <TabsTrigger value="account" className="gap-1.5" data-testid="tab-account">
               <Settings className="h-4 w-4 hidden sm:block" />
@@ -1074,8 +1099,8 @@ export default function PortalClient() {
               <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("services")} data-testid="button-quick-services">
                 <ArrowRightLeft className="h-4 w-4" /> Manage Services
               </Button>
-              <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("account")} data-testid="button-quick-contact">
-                <Mail className="h-4 w-4" /> Contact Us
+              <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("messages")} data-testid="button-quick-contact">
+                <MessageSquare className="h-4 w-4" /> Messages
               </Button>
             </div>
 
@@ -1750,6 +1775,93 @@ export default function PortalClient() {
             </Dialog>
           </TabsContent>
 
+          {/* ==================== MESSAGES TAB ==================== */}
+          <TabsContent value="messages" className="space-y-6">
+            <section>
+              <SectionHeader title="Messages" description="Your conversation history with your service provider" />
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto mb-4" data-testid="messages-thread">
+                    {loadingMessages ? (
+                      <div className="space-y-3">
+                        <Skeleton className="h-16 w-3/4 ml-auto" />
+                        <Skeleton className="h-16 w-3/4" />
+                        <Skeleton className="h-16 w-3/4 ml-auto" />
+                      </div>
+                    ) : portalMessages.length > 0 ? (
+                      [...portalMessages].reverse().map((msg) => {
+                        const isCustomer = msg.direction === "inbound";
+                        return (
+                          <div
+                            key={msg.id}
+                            className={`flex ${isCustomer ? "justify-end" : "justify-start"}`}
+                            data-testid={`message-bubble-${msg.id}`}
+                          >
+                            <div
+                              className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                                isCustomer
+                                  ? "bg-primary text-primary-foreground rounded-br-md"
+                                  : "bg-muted text-foreground rounded-bl-md"
+                              }`}
+                            >
+                              {msg.subject && (
+                                <p className={`text-xs font-semibold mb-1 ${isCustomer ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                                  {msg.subject}
+                                </p>
+                              )}
+                              <p className="text-sm whitespace-pre-wrap">{msg.body}</p>
+                              <div className={`flex items-center gap-1.5 mt-1.5 ${isCustomer ? "justify-end" : "justify-start"}`}>
+                                <span className={`text-[10px] ${isCustomer ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                                  {new Date(msg.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                                </span>
+                                <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 ${isCustomer ? "border-primary-foreground/30 text-primary-foreground/60" : ""}`}>
+                                  {msg.channel === "email" ? <Mail className="h-2.5 w-2.5 mr-0.5" /> : <MessageSquare className="h-2.5 w-2.5 mr-0.5" />}
+                                  {msg.channel}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <EmptyState icon={MessageSquare} title="No messages yet" description="Send a message to start a conversation with your service provider." />
+                    )}
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  <form onSubmit={handleSendMessage} className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="msg-subject">Subject (optional)</Label>
+                      <Input
+                        id="msg-subject"
+                        value={contactSubject}
+                        onChange={(e) => setContactSubject(e.target.value)}
+                        placeholder="What is this about?"
+                        data-testid="input-message-subject"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="msg-body">Message</Label>
+                      <Textarea
+                        id="msg-body"
+                        value={contactMessage}
+                        onChange={(e) => setContactMessage(e.target.value)}
+                        placeholder="Type your message..."
+                        rows={3}
+                        data-testid="input-message-body"
+                      />
+                    </div>
+                    <Button type="submit" disabled={sendingMessage} className="gap-1.5" data-testid="button-send-message">
+                      <Send className="h-4 w-4" />
+                      {sendingMessage ? "Sending..." : "Send Message"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </section>
+          </TabsContent>
+
           {/* ==================== ACCOUNT TAB ==================== */}
           <TabsContent value="account" className="space-y-6">
             <section>
@@ -2003,43 +2115,6 @@ export default function PortalClient() {
                       </Button>
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            </section>
-
-            <Separator />
-
-            <section>
-              <SectionHeader title="Contact Us" description="Send a message to your service provider" />
-              <Card>
-                <CardContent className="pt-4">
-                  <form onSubmit={handleSendMessage} className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="contact-subject">Subject (optional)</Label>
-                      <Input
-                        id="contact-subject"
-                        value={contactSubject}
-                        onChange={(e) => setContactSubject(e.target.value)}
-                        placeholder="What is this about?"
-                        data-testid="input-contact-subject"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="contact-message">Message</Label>
-                      <Textarea
-                        id="contact-message"
-                        value={contactMessage}
-                        onChange={(e) => setContactMessage(e.target.value)}
-                        placeholder="Tell us how we can help..."
-                        rows={4}
-                        data-testid="input-contact-message"
-                      />
-                    </div>
-                    <Button type="submit" disabled={sendingMessage} className="gap-1.5" data-testid="button-send-message">
-                      <Send className="h-4 w-4" />
-                      {sendingMessage ? "Sending..." : "Send Message"}
-                    </Button>
-                  </form>
                 </CardContent>
               </Card>
             </section>
