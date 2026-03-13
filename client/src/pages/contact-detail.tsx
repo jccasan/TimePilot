@@ -122,9 +122,12 @@ export default function ContactDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", id] });
-      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${id}`] });
       toast({ title: "Updated", description: "Contact updated successfully." });
       setEditing(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -135,6 +138,9 @@ export default function ContactDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", id] });
       toast({ title: "Updated", description: "Notes saved." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -159,10 +165,13 @@ export default function ContactDetail() {
       await apiRequest("POST", "/api/properties", { ...data, contactId: id });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${id}`] });
       toast({ title: "Property added", description: "New property added." });
       setPropertyDialogOpen(false);
       propertyForm.reset();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error adding property", description: error.message, variant: "destructive" });
     },
   });
 
@@ -171,7 +180,7 @@ export default function ContactDetail() {
       await apiRequest("DELETE", `/api/properties/${propertyId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${id}`] });
       toast({ title: "Property deleted", description: "Property removed successfully." });
     },
     onError: (error: Error) => {
@@ -187,7 +196,7 @@ export default function ContactDetail() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${id}`] });
       setMeasurePropertyId(null);
       toast({ title: "Measurement saved", description: "Yard area has been recorded." });
     },
@@ -204,6 +213,9 @@ export default function ContactDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", id, "tags"] });
       toast({ title: "Tag added" });
     },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const removeTagMutation = useMutation({
@@ -213,6 +225,9 @@ export default function ContactDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", id, "tags"] });
       toast({ title: "Tag removed" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -225,6 +240,9 @@ export default function ContactDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/tags"] });
       addTagMutation.mutate(tag.id);
       setNewTagName("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
