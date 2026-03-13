@@ -126,9 +126,9 @@ function PipelineBar({ data }: { data: PipelineData }) {
       count: data.scheduledVisits.count,
       value: `${data.scheduledVisits.count} visits`,
       href: "/scheduling",
-      color: "bg-blue-600 dark:bg-blue-700",
-      textColor: "text-blue-700 dark:text-blue-400",
-      bgColor: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800",
+      color: "bg-emerald-600 dark:bg-emerald-700",
+      textColor: "text-emerald-700 dark:text-emerald-400",
+      bgColor: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800",
     },
     {
       label: "Requires Invoicing",
@@ -169,7 +169,7 @@ function PipelineBar({ data }: { data: PipelineData }) {
           </Link>
         ))}
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
         {stages.map((stage, i) => (
           <Link key={i} href={stage.href}>
             <div
@@ -190,29 +190,48 @@ function PipelineBar({ data }: { data: PipelineData }) {
   );
 }
 
-const visitStatusOrder: Record<string, number> = {
-  in_progress: 0,
-  scheduled: 1,
-  completed: 2,
-  skipped: 3,
-  cancelled: 4,
-};
+type OperationalGroup = "overdue" | "active" | "remaining" | "completed" | "skipped";
 
-const visitStatusLabels: Record<string, string> = {
-  in_progress: "Active",
-  scheduled: "Remaining",
+const groupOrder: OperationalGroup[] = ["overdue", "active", "remaining", "completed", "skipped"];
+
+const groupLabels: Record<OperationalGroup, string> = {
+  overdue: "Overdue",
+  active: "Active",
+  remaining: "Remaining",
   completed: "Completed",
   skipped: "Skipped",
-  cancelled: "Cancelled",
 };
 
-const visitStatusColors: Record<string, string> = {
-  in_progress: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  scheduled: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+const groupColors: Record<OperationalGroup, string> = {
+  overdue: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  active: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+  remaining: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
   completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   skipped: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-  cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
+
+function deriveGroup(visit: PipelineVisit): OperationalGroup {
+  if (visit.status === "completed") return "completed";
+  if (visit.status === "skipped" || visit.status === "cancelled") return "skipped";
+  if (visit.status === "in_progress") return "active";
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+  if (visit.scheduledDate < today) return "overdue";
+  if (visit.scheduledDate === today && now.getHours() >= 17) return "overdue";
+  return "remaining";
+}
+
+function formatVisitTime(visit: PipelineVisit): string {
+  if (visit.startedAt) {
+    const d = new Date(visit.startedAt);
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+  if (visit.completedAt) {
+    const d = new Date(visit.completedAt);
+    return `Done ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  }
+  return "Scheduled";
+}
 
 function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
   const { toast } = useToast();
@@ -235,16 +254,17 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
   });
 
   const grouped = useMemo(() => {
-    const groups = new Map<string, PipelineVisit[]>();
-    const sorted = [...visits].sort((a, b) =>
-      (visitStatusOrder[a.status] ?? 9) - (visitStatusOrder[b.status] ?? 9)
-    );
-    for (const v of sorted) {
-      const key = v.status;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(v);
+    const groups = new Map<OperationalGroup, PipelineVisit[]>();
+    for (const v of visits) {
+      const group = deriveGroup(v);
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group)!.push(v);
     }
-    return groups;
+    const sorted = new Map<OperationalGroup, PipelineVisit[]>();
+    for (const g of groupOrder) {
+      if (groups.has(g)) sorted.set(g, groups.get(g)!);
+    }
+    return sorted;
   }, [visits]);
 
   if (visits.length === 0) {
@@ -284,16 +304,16 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
         <Progress value={progress} className="h-2 mt-2" />
       </CardHeader>
       <CardContent className="space-y-3">
-        {Array.from(grouped.entries()).map(([status, statusVisits]) => (
-          <div key={status} data-testid={`group-${status}`}>
+        {Array.from(grouped.entries()).map(([group, groupVisits]) => (
+          <div key={group} data-testid={`group-${group}`}>
             <div className="flex items-center gap-2 mb-1.5">
-              <Badge variant="secondary" className={`text-[10px] ${visitStatusColors[status] || ""}`}>
-                {visitStatusLabels[status] || status}
+              <Badge variant="secondary" className={`text-[10px] ${groupColors[group]}`}>
+                {groupLabels[group]}
               </Badge>
-              <span className="text-xs text-muted-foreground">({statusVisits.length})</span>
+              <span className="text-xs text-muted-foreground">({groupVisits.length})</span>
             </div>
             <div className="space-y-1">
-              {statusVisits.map((visit) => (
+              {groupVisits.map((visit) => (
                 <div
                   key={visit.id}
                   className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
@@ -306,6 +326,9 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
                           {visit.contactName}
                         </span>
                       </Link>
+                      <span className="text-xs text-muted-foreground" data-testid={`text-visit-time-${visit.id}`}>
+                        {formatVisitTime(visit)}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
                       <MapPin className="h-3 w-3 shrink-0" />
@@ -798,7 +821,7 @@ export default function Dashboard() {
       {pipelineLoading ? (
         <div className="space-y-2" data-testid="loading-pipeline">
           <Skeleton className="h-3 w-full rounded-lg" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
             {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20" />)}
           </div>
         </div>
