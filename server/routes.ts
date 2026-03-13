@@ -3013,7 +3013,7 @@ export async function registerRoutes(
           const plan = await storage.getServicePlan(visit.servicePlanId, companyId);
           if (plan) {
             const contact = await storage.getContact(plan.contactId, companyId);
-            if (contact && contact.invoiceTiming === "after_service" && contact.invoiceFrequency === "per_service") {
+            if (contact && contact.autoInvoiceEnabled !== false && contact.invoiceTiming === "after_service" && contact.invoiceFrequency === "per_service") {
               const alreadyInvoiced = await storage.isVisitInvoiced(visit.id);
               if (!alreadyInvoiced) {
                 const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
@@ -3098,7 +3098,7 @@ export async function registerRoutes(
       const company = await storage.getCompany(companyId);
       if (!contact || !company) return res.json({ visit, completionSms: null, etaSms: null });
 
-      if (contact.invoiceTiming === "after_service" && contact.invoiceFrequency === "per_service") {
+      if (contact.autoInvoiceEnabled !== false && contact.invoiceTiming === "after_service" && contact.invoiceFrequency === "per_service") {
         try {
           const alreadyInvoiced = await storage.isVisitInvoiced(visit.id);
           if (!alreadyInvoiced) {
@@ -3615,7 +3615,7 @@ export async function registerRoutes(
       const contact = await storage.getContact(req.params.id, companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      const { invoiceTiming, invoiceFrequency } = req.body;
+      const { invoiceTiming, invoiceFrequency, autoInvoiceEnabled } = req.body;
       const validTimings = ["before_service", "after_service"];
       const validFrequencies = ["per_service", "per_week", "per_month"];
       if (invoiceTiming && !validTimings.includes(invoiceTiming)) {
@@ -3628,6 +3628,7 @@ export async function registerRoutes(
       const updated = await storage.updateContact(req.params.id, {
         ...(invoiceTiming && { invoiceTiming }),
         ...(invoiceFrequency && { invoiceFrequency }),
+        ...(typeof autoInvoiceEnabled === "boolean" && { autoInvoiceEnabled }),
       });
       res.json(updated);
     } catch (err) { handleError(res, err); }
@@ -3638,8 +3639,59 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getInvoice(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Invoice not found" });
-      const invoice = await storage.updateInvoice(req.params.id, req.body);
-      res.json(invoice);
+
+      const { lineItems, ...invoiceUpdates } = req.body;
+
+      if (lineItems && Array.isArray(lineItems)) {
+        const editableStatuses = ["draft", "sent", "pending"];
+        if (!editableStatuses.includes(existing.status)) {
+          return res.status(400).json({ error: "Cannot edit line items on a paid, voided, or failed invoice" });
+        }
+
+        await storage.deleteInvoiceLineItems(req.params.id);
+
+        let subtotal = 0;
+        for (const item of lineItems) {
+          const qty = parseInt(item.quantity) || 1;
+          const unitPrice = parseFloat(item.unitPrice) || 0;
+          const lineTotal = qty * unitPrice;
+          subtotal += lineTotal;
+          await storage.createInvoiceLineItem({
+            invoiceId: req.params.id,
+            description: item.description || "Service",
+            quantity: qty,
+            unitPrice: unitPrice.toFixed(2),
+            total: lineTotal.toFixed(2),
+            visitId: item.visitId || null,
+            servicePricingId: item.servicePricingId || null,
+          });
+        }
+
+        const taxRate = parseFloat(invoiceUpdates.taxRate ?? existing.taxRate ?? "0");
+        const discountType = invoiceUpdates.discountType ?? existing.discountType;
+        const discountVal = parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0");
+        let discountAmount = 0;
+        if (discountType === "percent") {
+          discountAmount = subtotal * (discountVal / 100);
+        } else if (discountType === "amount") {
+          discountAmount = discountVal;
+        }
+        const afterDiscount = Math.max(0, subtotal - discountAmount);
+        const taxAmount = afterDiscount * (taxRate / 100);
+        const total = afterDiscount + taxAmount;
+
+        invoiceUpdates.subtotal = subtotal.toFixed(2);
+        invoiceUpdates.taxRate = taxRate.toFixed(2);
+        invoiceUpdates.tax = taxAmount.toFixed(2);
+        invoiceUpdates.discountType = discountType || null;
+        invoiceUpdates.discountValue = discountVal.toFixed(2);
+        invoiceUpdates.discountAmount = discountAmount.toFixed(2);
+        invoiceUpdates.total = total.toFixed(2);
+      }
+
+      const invoice = await storage.updateInvoice(req.params.id, invoiceUpdates);
+      const updatedLineItems = await storage.getInvoiceLineItems(req.params.id);
+      res.json({ ...invoice, lineItems: updatedLineItems });
     } catch (err) { handleError(res, err); }
   });
 

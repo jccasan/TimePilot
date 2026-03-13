@@ -33,7 +33,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Ban } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Eye, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Ban, Pencil, Save } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 
@@ -190,6 +191,14 @@ export default function Invoices() {
   const [discountValue, setDiscountValue] = useState("0");
   const [invoiceStatus, setInvoiceStatus] = useState("pending");
 
+
+  const [editMode, setEditMode] = useState(false);
+  const [editLineItems, setEditLineItems] = useState<LineItem[]>([]);
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editTaxRate, setEditTaxRate] = useState("0");
+  const [editDiscountType, setEditDiscountType] = useState<string>("");
+  const [editDiscountValue, setEditDiscountValue] = useState("0");
+  const [editNotes, setEditNotes] = useState("");
 
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
@@ -368,6 +377,62 @@ export default function Invoices() {
     onSuccess: () => {
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
       toast({ title: "Invoice voided", description: "Invoice has been voided." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const editSubtotal = useMemo(() => editLineItems.reduce((sum, li) => sum + (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0), 0), [editLineItems]);
+  const editParsedDiscountValue = parseFloat(editDiscountValue) || 0;
+  const editDiscountAmount = editDiscountType === "percent" ? editSubtotal * (editParsedDiscountValue / 100) : editDiscountType === "amount" ? editParsedDiscountValue : 0;
+  const editAfterDiscount = Math.max(0, editSubtotal - editDiscountAmount);
+  const editParsedTaxRate = parseFloat(editTaxRate) || 0;
+  const editTaxAmount = editAfterDiscount * (editParsedTaxRate / 100);
+  const editTotal = editAfterDiscount + editTaxAmount;
+
+  function enterEditMode() {
+    if (!selectedInvoice) return;
+    setEditLineItems((selectedInvoice.lineItems || []).map((li: any) => ({
+      description: li.description || "",
+      quantity: String(li.quantity || 1),
+      unitPrice: String(li.unitPrice || "0"),
+      servicePricingId: li.servicePricingId || undefined,
+      visitId: li.visitId || undefined,
+    })));
+    setEditDueDate(selectedInvoice.dueDate || "");
+    setEditTaxRate(String(selectedInvoice.taxRate || "0"));
+    setEditDiscountType(selectedInvoice.discountType || "");
+    setEditDiscountValue(String(selectedInvoice.discountValue || "0"));
+    setEditNotes(selectedInvoice.notes || "");
+    setEditMode(true);
+  }
+
+  const updateInvoiceMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedInvoice) throw new Error("No invoice selected");
+      const body: Record<string, unknown> = {
+        dueDate: editDueDate,
+        taxRate: editTaxRate,
+        discountType: editDiscountType || null,
+        discountValue: editDiscountValue,
+        notes: editNotes || null,
+        lineItems: editLineItems.map(li => ({
+          description: li.description,
+          quantity: parseInt(li.quantity) || 1,
+          unitPrice: li.unitPrice,
+          servicePricingId: li.servicePricingId || null,
+          visitId: li.visitId || null,
+        })),
+      };
+      const res = await apiRequest("PATCH", `/api/invoices/${selectedInvoice.id}`, body);
+      return res.json();
+    },
+    onSuccess: (data: InvoiceWithLineItems) => {
+      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      setSelectedInvoice(data);
+      setEditMode(false);
+      toast({ title: "Invoice updated", description: "Changes saved successfully." });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1094,7 +1159,7 @@ export default function Invoices() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+      <Dialog open={detailDialogOpen} onOpenChange={(open) => { setDetailDialogOpen(open); if (!open) setEditMode(false); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex flex-wrap items-center gap-2">
@@ -1103,7 +1168,9 @@ export default function Invoices() {
                 <Badge variant="secondary" data-testid="badge-imported-invoice">Imported</Badge>
               )}
             </DialogTitle>
-            <DialogDescription>Invoice details and line items</DialogDescription>
+            <DialogDescription>
+              {editMode ? "Edit invoice details, line items, and pricing" : "Invoice details and line items"}
+            </DialogDescription>
           </DialogHeader>
           {selectedInvoice && (
             <div className="space-y-3">
@@ -1125,8 +1192,17 @@ export default function Invoices() {
                   </Badge>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Due: </span>
-                  <span>{selectedInvoice.dueDate}</span>
+                  {editMode ? (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Due Date</Label>
+                      <Input type="date" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} data-testid="input-edit-due-date" />
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-muted-foreground">Due: </span>
+                      <span>{selectedInvoice.dueDate}</span>
+                    </>
+                  )}
                 </div>
                 {selectedInvoice.autoGenerated && (
                   <div>
@@ -1135,81 +1211,226 @@ export default function Invoices() {
                 )}
               </div>
 
-              {selectedInvoice.lineItems && selectedInvoice.lineItems.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-sm mb-2">Line Items</h4>
-                  <div className="space-y-1">
-                    {selectedInvoice.lineItems.map((li: any, idx: number) => (
-                      <div key={idx} className="flex flex-wrap justify-between gap-2 text-sm py-1 border-b last:border-0">
-                        <span>{li.description}</span>
-                        <span>{li.quantity} x ${Number(li.unitPrice).toFixed(2)} = ${Number(li.total).toFixed(2)}</span>
+              {editMode ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label className="text-sm font-medium">Line Items</Label>
+                    <div className="flex gap-1">
+                      {activePricing.length > 0 && (
+                        <Select onValueChange={(pId) => {
+                          const p = activePricing.find(x => x.id === pId);
+                          if (p) setEditLineItems([...editLineItems, { description: p.name, quantity: "1", unitPrice: p.basePrice, servicePricingId: p.id }]);
+                        }}>
+                          <SelectTrigger className="w-auto h-8 text-xs" data-testid="select-edit-add-service">
+                            <SelectValue placeholder="Add service" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {activePricing.map(p => (
+                              <SelectItem key={p.id} value={p.id}>{p.name} (${parseFloat(p.basePrice).toFixed(2)})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => setEditLineItems([...editLineItems, { description: "", quantity: "1", unitPrice: "0" }])} data-testid="button-edit-add-line">
+                        <Plus className="mr-1 h-3 w-3" /> Line Item
+                      </Button>
+                    </div>
+                  </div>
+                  {editLineItems.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-3">No line items. Add services or custom items above.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {editLineItems.map((li, idx) => (
+                        <div key={idx} className="flex flex-wrap items-end gap-2 p-2 border rounded-lg">
+                          <div className="flex-1 min-w-[120px]">
+                            <Label className="text-xs">Description</Label>
+                            <Input
+                              value={li.description}
+                              onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], description: e.target.value }; setEditLineItems(u); }}
+                              placeholder="Description"
+                              data-testid={`input-edit-line-desc-${idx}`}
+                            />
+                          </div>
+                          <div className="w-20">
+                            <Label className="text-xs">Qty</Label>
+                            <Input
+                              type="number" min="1"
+                              value={li.quantity}
+                              onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], quantity: e.target.value }; setEditLineItems(u); }}
+                              data-testid={`input-edit-line-qty-${idx}`}
+                            />
+                          </div>
+                          <div className="w-28">
+                            <Label className="text-xs">Price</Label>
+                            <Input
+                              type="number" step="0.01"
+                              value={li.unitPrice}
+                              onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], unitPrice: e.target.value }; setEditLineItems(u); }}
+                              data-testid={`input-edit-line-price-${idx}`}
+                            />
+                          </div>
+                          <div className="w-20 text-right">
+                            <Label className="text-xs">Total</Label>
+                            <p className="font-medium text-sm leading-9">${((parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0)).toFixed(2)}</p>
+                          </div>
+                          <Button variant="ghost" size="icon" onClick={() => setEditLineItems(editLineItems.filter((_, i) => i !== idx))} data-testid={`button-edit-remove-line-${idx}`}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label className="text-xs">Tax Rate (%)</Label>
+                      <Input type="number" step="0.01" min="0" value={editTaxRate} onChange={e => setEditTaxRate(e.target.value)} data-testid="input-edit-tax-rate" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Discount Type</Label>
+                      <Select value={editDiscountType || "none"} onValueChange={v => setEditDiscountType(v === "none" ? "" : v)}>
+                        <SelectTrigger data-testid="select-edit-discount-type"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="percent">Percent (%)</SelectItem>
+                          <SelectItem value="amount">Amount ($)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Discount Value</Label>
+                      <Input type="number" step="0.01" min="0" value={editDiscountValue} onChange={e => setEditDiscountValue(e.target.value)} disabled={!editDiscountType} data-testid="input-edit-discount-value" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs">Notes / Memo</Label>
+                    <Textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Add notes for this invoice..." rows={2} data-testid="input-edit-notes" />
+                  </div>
+
+                  <Card>
+                    <CardContent className="p-3 space-y-1 text-sm">
+                      <div className="flex flex-wrap justify-between gap-1">
+                        <span className="text-muted-foreground">Subtotal:</span>
+                        <span>${editSubtotal.toFixed(2)}</span>
                       </div>
-                    ))}
+                      {editDiscountAmount > 0 && (
+                        <div className="flex flex-wrap justify-between gap-1">
+                          <span className="text-muted-foreground">Discount:</span>
+                          <span className="text-red-600 dark:text-red-400">-${editDiscountAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {editTaxAmount > 0 && (
+                        <div className="flex flex-wrap justify-between gap-1">
+                          <span className="text-muted-foreground">Tax ({editParsedTaxRate}%):</span>
+                          <span>${editTaxAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap justify-between gap-1 font-semibold border-t pt-1">
+                        <span>Total:</span>
+                        <span>${editTotal.toFixed(2)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex gap-2">
+                    <Button onClick={() => updateInvoiceMutation.mutate()} disabled={updateInvoiceMutation.isPending || editLineItems.length === 0} className="flex-1" data-testid="button-save-invoice-edit">
+                      <Save className="mr-1 h-4 w-4" /> {updateInvoiceMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                    <Button variant="outline" onClick={() => setEditMode(false)} data-testid="button-cancel-edit">Cancel</Button>
                   </div>
                 </div>
+              ) : (
+                <>
+                  {selectedInvoice.lineItems && selectedInvoice.lineItems.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-sm mb-2">Line Items</h4>
+                      <div className="space-y-1">
+                        {selectedInvoice.lineItems.map((li: any, idx: number) => (
+                          <div key={idx} className="flex flex-wrap justify-between gap-2 text-sm py-1 border-b last:border-0">
+                            <span>{li.description}</span>
+                            <span>{li.quantity} x ${Number(li.unitPrice).toFixed(2)} = ${Number(li.total).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedInvoice.notes && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Notes: </span>
+                      <span>{selectedInvoice.notes}</span>
+                    </div>
+                  )}
+
+                  <Card>
+                    <CardContent className="p-3 space-y-1 text-sm">
+                      <div className="flex flex-wrap justify-between gap-1">
+                        <span className="text-muted-foreground">Subtotal:</span>
+                        <span>${Number(selectedInvoice.subtotal).toFixed(2)}</span>
+                      </div>
+                      {Number(selectedInvoice.discountAmount) > 0 && (
+                        <div className="flex flex-wrap justify-between gap-1">
+                          <span className="text-muted-foreground">
+                            Discount ({selectedInvoice.discountType === "percent" ? `${selectedInvoice.discountValue}%` : `$${Number(selectedInvoice.discountValue).toFixed(2)}`}):
+                          </span>
+                          <span className="text-red-600 dark:text-red-400">-${Number(selectedInvoice.discountAmount).toFixed(2)}</span>
+                        </div>
+                      )}
+                      {Number(selectedInvoice.tax) > 0 && (
+                        <div className="flex flex-wrap justify-between gap-1">
+                          <span className="text-muted-foreground">Tax ({selectedInvoice.taxRate}%):</span>
+                          <span>${Number(selectedInvoice.tax).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap justify-between gap-1 font-semibold border-t pt-1">
+                        <span>Total:</span>
+                        <span>${Number(selectedInvoice.total).toFixed(2)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <PaymentHistorySection
+                    invoiceId={selectedInvoice.id}
+                    invoiceTotal={Number(selectedInvoice.total)}
+                  />
+
+                  <div className="flex flex-wrap gap-2">
+                    {["draft", "sent", "pending"].includes(selectedInvoice.status) && (
+                      <Button size="sm" variant="outline" onClick={enterEditMode} data-testid="button-edit-invoice">
+                        <Pencil className="mr-1 h-3 w-3" /> Edit
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => {
+                      setDetailDialogOpen(false);
+                      setPreviewInvoiceId(selectedInvoice.id);
+                      setPreviewDialogOpen(true);
+                    }} data-testid="button-detail-preview">
+                      <Printer className="mr-1 h-3 w-3" /> Preview
+                    </Button>
+                    {selectedInvoice.status !== "paid" && stripeConfig?.configured && (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => { chargeMutation.mutate(selectedInvoice.id); setDetailDialogOpen(false); }} disabled={chargeMutation.isPending}>
+                          <CreditCard className="mr-1 h-3 w-3" /> Charge Now
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => { checkoutMutation.mutate(selectedInvoice.id); }} disabled={checkoutMutation.isPending}>
+                          <ExternalLink className="mr-1 h-3 w-3" /> Payment Link
+                        </Button>
+                      </>
+                    )}
+                    {selectedInvoice.status !== "paid" && (
+                      <Button size="sm" variant="outline" onClick={() => { markPaidMutation.mutate(selectedInvoice.id); setDetailDialogOpen(false); }}>
+                        Mark as Paid
+                      </Button>
+                    )}
+                    {selectedInvoice.status !== "paid" && (
+                      <Button size="sm" variant="outline" onClick={() => sendEmailMutation.mutate(selectedInvoice.id)} disabled={sendEmailMutation.isPending} data-testid="button-send-invoice-email">
+                        <Mail className="mr-1 h-3 w-3" /> Send to Client
+                      </Button>
+                    )}
+                  </div>
+                </>
               )}
-
-              <Card>
-                <CardContent className="p-3 space-y-1 text-sm">
-                  <div className="flex flex-wrap justify-between gap-1">
-                    <span className="text-muted-foreground">Subtotal:</span>
-                    <span>${Number(selectedInvoice.subtotal).toFixed(2)}</span>
-                  </div>
-                  {Number(selectedInvoice.discountAmount) > 0 && (
-                    <div className="flex flex-wrap justify-between gap-1">
-                      <span className="text-muted-foreground">
-                        Discount ({selectedInvoice.discountType === "percent" ? `${selectedInvoice.discountValue}%` : `$${Number(selectedInvoice.discountValue).toFixed(2)}`}):
-                      </span>
-                      <span className="text-red-600 dark:text-red-400">-${Number(selectedInvoice.discountAmount).toFixed(2)}</span>
-                    </div>
-                  )}
-                  {Number(selectedInvoice.tax) > 0 && (
-                    <div className="flex flex-wrap justify-between gap-1">
-                      <span className="text-muted-foreground">Tax ({selectedInvoice.taxRate}%):</span>
-                      <span>${Number(selectedInvoice.tax).toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap justify-between gap-1 font-semibold border-t pt-1">
-                    <span>Total:</span>
-                    <span>${Number(selectedInvoice.total).toFixed(2)}</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <PaymentHistorySection
-                invoiceId={selectedInvoice.id}
-                invoiceTotal={Number(selectedInvoice.total)}
-              />
-
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => {
-                  setDetailDialogOpen(false);
-                  setPreviewInvoiceId(selectedInvoice.id);
-                  setPreviewDialogOpen(true);
-                }} data-testid="button-detail-preview">
-                  <Printer className="mr-1 h-3 w-3" /> Preview
-                </Button>
-                {selectedInvoice.status !== "paid" && stripeConfig?.configured && (
-                  <>
-                    <Button size="sm" variant="outline" onClick={() => { chargeMutation.mutate(selectedInvoice.id); setDetailDialogOpen(false); }} disabled={chargeMutation.isPending}>
-                      <CreditCard className="mr-1 h-3 w-3" /> Charge Now
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => { checkoutMutation.mutate(selectedInvoice.id); }} disabled={checkoutMutation.isPending}>
-                      <ExternalLink className="mr-1 h-3 w-3" /> Payment Link
-                    </Button>
-                  </>
-                )}
-                {selectedInvoice.status !== "paid" && (
-                  <Button size="sm" variant="outline" onClick={() => { markPaidMutation.mutate(selectedInvoice.id); setDetailDialogOpen(false); }}>
-                    Mark as Paid
-                  </Button>
-                )}
-                {selectedInvoice.status !== "paid" && (
-                  <Button size="sm" variant="outline" onClick={() => sendEmailMutation.mutate(selectedInvoice.id)} disabled={sendEmailMutation.isPending} data-testid="button-send-invoice-email">
-                    <Mail className="mr-1 h-3 w-3" /> Send to Client
-                  </Button>
-                )}
-              </div>
             </div>
           )}
         </DialogContent>

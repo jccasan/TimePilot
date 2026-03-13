@@ -1208,17 +1208,20 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
   const { toast } = useToast();
   const [timing, setTiming] = useState<string>(contact.invoiceTiming || "after_service");
   const [frequency, setFrequency] = useState<string>(contact.invoiceFrequency || "per_service");
+  const [autoInvoice, setAutoInvoice] = useState<boolean>(contact.autoInvoiceEnabled !== false);
 
   useEffect(() => {
     setTiming(contact.invoiceTiming || "after_service");
     setFrequency(contact.invoiceFrequency || "per_service");
-  }, [contact.invoiceTiming, contact.invoiceFrequency]);
+    setAutoInvoice(contact.autoInvoiceEnabled !== false);
+  }, [contact.invoiceTiming, contact.invoiceFrequency, contact.autoInvoiceEnabled]);
 
   const updateBillingMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("PATCH", `/api/contacts/${contactId}/billing-preferences`, {
         invoiceTiming: timing,
         invoiceFrequency: frequency,
+        autoInvoiceEnabled: autoInvoice,
       });
     },
     onSuccess: () => {
@@ -1240,7 +1243,9 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
     per_month: "Per Month",
   };
 
-  const hasChanges = timing !== (contact.invoiceTiming || "after_service") || frequency !== (contact.invoiceFrequency || "per_service");
+  const hasChanges = timing !== (contact.invoiceTiming || "after_service") ||
+    frequency !== (contact.invoiceFrequency || "per_service") ||
+    autoInvoice !== (contact.autoInvoiceEnabled !== false);
 
   return (
     <Card>
@@ -1250,7 +1255,28 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="flex items-center justify-between p-3 rounded-lg border">
+          <div>
+            <p className="text-sm font-medium">Auto-Invoice</p>
+            <p className="text-xs text-muted-foreground">
+              {autoInvoice
+                ? "Invoices are created automatically based on the frequency below"
+                : "Invoices will not be created automatically -- use Generate from Completed Work instead"}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoInvoice}
+            onClick={() => setAutoInvoice(!autoInvoice)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors min-h-[44px] min-w-[44px] ${autoInvoice ? "bg-green-600" : "bg-gray-300 dark:bg-gray-600"}`}
+            data-testid="toggle-auto-invoice"
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoInvoice ? "translate-x-6" : "translate-x-1"}`} />
+          </button>
+        </div>
+
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${!autoInvoice ? "opacity-50 pointer-events-none" : ""}`}>
           <div>
             <Label className="text-sm text-muted-foreground">Invoice Timing</Label>
             <Select value={timing} onValueChange={setTiming}>
@@ -1275,15 +1301,15 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="per_service">Per Service</SelectItem>
-                <SelectItem value="per_week">Per Week</SelectItem>
-                <SelectItem value="per_month">Per Month</SelectItem>
+                <SelectItem value="per_service">Per Service (each visit)</SelectItem>
+                <SelectItem value="per_week">Weekly (one invoice per week)</SelectItem>
+                <SelectItem value="per_month">Monthly (one invoice per month)</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground mt-1">
-              {frequency === "per_service" && "One invoice generated per visit"}
-              {frequency === "per_week" && "One invoice per week covering all visits"}
-              {frequency === "per_month" && "One invoice per month covering all visits"}
+              {frequency === "per_service" && "One invoice generated per completed visit"}
+              {frequency === "per_week" && "All visits rolled into one weekly invoice"}
+              {frequency === "per_month" && "All visits rolled into one monthly invoice"}
             </p>
           </div>
         </div>
@@ -1299,7 +1325,7 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
           </Button>
         )}
         <p className="text-xs text-muted-foreground">
-          Current: {timingLabels[contact.invoiceTiming || "after_service"]} / {frequencyLabels[contact.invoiceFrequency || "per_service"]}
+          Current: {autoInvoice ? "Auto" : "Manual"} / {timingLabels[contact.invoiceTiming || "after_service"]} / {frequencyLabels[contact.invoiceFrequency || "per_service"]}
         </p>
       </CardContent>
     </Card>

@@ -87,6 +87,7 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, ti
       const contact = await storage.getContact(contactId, companyId);
       if (!contact) continue;
       if (contact.status !== "active") continue;
+      if (contact.autoInvoiceEnabled === false) continue;
 
       const contactPlans = activeServicePlans.filter(sp => sp.contactId === contactId);
 

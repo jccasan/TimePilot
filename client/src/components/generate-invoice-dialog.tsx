@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, CheckCircle, DollarSign, Calendar } from "lucide-react";
+import { FileText, CheckCircle, DollarSign, Calendar, Filter } from "lucide-react";
 
 type UninvoicedVisit = Visit & {
   servicePlanName: string;
@@ -48,6 +48,17 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function getMonthRange(monthsAgo: number): { start: string; end: string; label: string } {
+  const d = new Date();
+  d.setMonth(d.getMonth() - monthsAgo);
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const start = new Date(year, month, 1).toISOString().split("T")[0];
+  const end = new Date(year, month + 1, 0).toISOString().split("T")[0];
+  const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return { start, end, label };
+}
+
 export function GenerateInvoiceDialog({
   open,
   onOpenChange,
@@ -57,6 +68,9 @@ export function GenerateInvoiceDialog({
   const { toast } = useToast();
   const [selectedContactId, setSelectedContactId] = useState(initialContactId || "");
   const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
+  const [dateFilter, setDateFilter] = useState<string>("all");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
@@ -80,16 +94,44 @@ export function GenerateInvoiceDialog({
     enabled: !!activeContactId && open,
   });
 
+  const filteredVisits = useMemo(() => {
+    if (!uninvoicedData?.visits) return [];
+    let visits = uninvoicedData.visits;
+    let rangeStart = "";
+    let rangeEnd = "";
+
+    if (dateFilter === "custom") {
+      rangeStart = customStart;
+      rangeEnd = customEnd;
+    } else if (dateFilter !== "all") {
+      const monthsAgo = parseInt(dateFilter);
+      if (!isNaN(monthsAgo)) {
+        const range = getMonthRange(monthsAgo);
+        rangeStart = range.start;
+        rangeEnd = range.end;
+      }
+    }
+
+    if (rangeStart && rangeEnd) {
+      visits = visits.filter(v => v.scheduledDate >= rangeStart && v.scheduledDate <= rangeEnd);
+    } else if (rangeStart) {
+      visits = visits.filter(v => v.scheduledDate >= rangeStart);
+    } else if (rangeEnd) {
+      visits = visits.filter(v => v.scheduledDate <= rangeEnd);
+    }
+
+    return visits;
+  }, [uninvoicedData, dateFilter, customStart, customEnd]);
+
   const visitsByPlan = useMemo(() => {
-    if (!uninvoicedData?.visits) return new Map<string, UninvoicedVisit[]>();
     const map = new Map<string, UninvoicedVisit[]>();
-    for (const v of uninvoicedData.visits) {
+    for (const v of filteredVisits) {
       const key = `${v.servicePlanName} - ${v.propertyAddress}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(v);
     }
     return map;
-  }, [uninvoicedData]);
+  }, [filteredVisits]);
 
   const selectedTotal = useMemo(() => {
     if (!uninvoicedData?.visits) return 0;
@@ -98,15 +140,15 @@ export function GenerateInvoiceDialog({
       .reduce((sum, v) => sum + (parseFloat(v.pricePerVisit) || 0), 0);
   }, [uninvoicedData, selectedVisitIds]);
 
-  const allSelected = uninvoicedData?.visits && uninvoicedData.visits.length > 0 &&
-    uninvoicedData.visits.every(v => selectedVisitIds.has(v.id));
+  const allSelected = filteredVisits.length > 0 &&
+    filteredVisits.every(v => selectedVisitIds.has(v.id));
 
   const toggleAll = () => {
-    if (!uninvoicedData?.visits) return;
+    if (filteredVisits.length === 0) return;
     if (allSelected) {
       setSelectedVisitIds(new Set());
     } else {
-      setSelectedVisitIds(new Set(uninvoicedData.visits.map(v => v.id)));
+      setSelectedVisitIds(new Set(filteredVisits.map(v => v.id)));
     }
   };
 
@@ -153,9 +195,13 @@ export function GenerateInvoiceDialog({
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       setSelectedVisitIds(new Set());
+      setDateFilter("all");
+      setCustomStart("");
+      setCustomEnd("");
       if (showContactPicker) setSelectedContactId("");
     } else if (initialContactId) {
       setSelectedVisitIds(new Set());
+      setDateFilter("all");
     }
     onOpenChange(isOpen);
   };
@@ -191,6 +237,44 @@ export function GenerateInvoiceDialog({
           </div>
         )}
 
+        {activeContactId && uninvoicedData?.visits && uninvoicedData.visits.length > 0 && (
+          <div className="space-y-2" data-testid="section-date-filter">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">Filter by date range</Label>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <Button variant={dateFilter === "all" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("all"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-all">
+                All
+              </Button>
+              <Button variant={dateFilter === "0" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("0"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-this-month">
+                {getMonthRange(0).label}
+              </Button>
+              <Button variant={dateFilter === "1" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("1"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-last-month">
+                {getMonthRange(1).label}
+              </Button>
+              <Button variant={dateFilter === "2" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("2"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-2-months">
+                {getMonthRange(2).label}
+              </Button>
+              <Button variant={dateFilter === "custom" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("custom"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-custom">
+                Custom
+              </Button>
+            </div>
+            {dateFilter === "custom" && (
+              <div className="flex items-center gap-2">
+                <Input type="date" value={customStart} onChange={e => { setCustomStart(e.target.value); setSelectedVisitIds(new Set()); }} className="w-auto" data-testid="input-filter-start" />
+                <span className="text-sm text-muted-foreground">to</span>
+                <Input type="date" value={customEnd} onChange={e => { setCustomEnd(e.target.value); setSelectedVisitIds(new Set()); }} className="w-auto" data-testid="input-filter-end" />
+              </div>
+            )}
+            {dateFilter !== "all" && (
+              <p className="text-xs text-muted-foreground">
+                Showing {filteredVisits.length} of {uninvoicedData.visits.length} uninvoiced visits
+              </p>
+            )}
+          </div>
+        )}
+
         {!activeContactId ? (
           <div className="text-center py-8 text-muted-foreground" data-testid="text-select-client-prompt">
             <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-40" />
@@ -213,6 +297,12 @@ export function GenerateInvoiceDialog({
             <p className="font-medium">All caught up</p>
             <p className="text-sm">No uninvoiced completed visits for this client.</p>
           </div>
+        ) : filteredVisits.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground" data-testid="text-no-filtered-visits">
+            <Calendar className="h-8 w-8 mx-auto mb-2 opacity-40" />
+            <p className="font-medium">No visits in this date range</p>
+            <p className="text-sm">Try selecting a different date range above.</p>
+          </div>
         ) : (
           <div className="space-y-4" data-testid="section-uninvoiced-visits">
             <div className="flex items-center justify-between">
@@ -223,11 +313,11 @@ export function GenerateInvoiceDialog({
                   data-testid="checkbox-select-all"
                 />
                 <span className="text-sm font-medium">
-                  Select All ({uninvoicedData.visits.length} visit{uninvoicedData.visits.length !== 1 ? "s" : ""})
+                  Select All ({filteredVisits.length} visit{filteredVisits.length !== 1 ? "s" : ""})
                 </span>
               </div>
               <Badge variant="secondary" className="text-sm" data-testid="badge-total-uninvoiced">
-                ${uninvoicedData.totalDollars.toFixed(2)} total
+                ${filteredVisits.reduce((sum, v) => sum + (parseFloat(v.pricePerVisit) || 0), 0).toFixed(2)} total
               </Badge>
             </div>
 

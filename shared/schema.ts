@@ -184,6 +184,7 @@ export const contacts = pgTable("contacts", {
   referralSource: varchar("referral_source", { length: 255 }),
   portalPasswordHash: varchar("portal_password_hash", { length: 255 }),
   autoPayEnabled: boolean("auto_pay_enabled").notNull().default(false),
+  autoInvoiceEnabled: boolean("auto_invoice_enabled").notNull().default(true),
   referralCode: varchar("referral_code", { length: 20 }),
   reminderPreferences: jsonb("reminder_preferences").$type<{
     email: boolean;
