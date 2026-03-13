@@ -991,6 +991,180 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/company/pipeline", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+      const dayOfWeek = now.getDay();
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - dayOfWeek);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      const weekStartStr = weekStart.toISOString().split("T")[0];
+      const weekEndStr = weekEnd.toISOString().split("T")[0];
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+
+      const [
+        activePlans,
+        uninvoicedSummary,
+        todaysVisitsList,
+        monthRevenue,
+      ] = await Promise.all([
+        storage.getServicePlans(companyId, { isActive: true }),
+        storage.getUninvoicedSummary(companyId),
+        storage.getTodaysVisits(companyId),
+        storage.getRevenueForPeriod(companyId, monthStart, monthEnd),
+      ]);
+
+      let activePlansMonthlyValue = 0;
+      for (const plan of activePlans) {
+        const basePrice = parseFloat(plan.pricePerVisit) || 0;
+        let visitsPerMonth = 0;
+        switch (plan.frequency) {
+          case "weekly": visitsPerMonth = 4.33; break;
+          case "biweekly": visitsPerMonth = 2.17; break;
+          case "monthly": visitsPerMonth = 1; break;
+          default: visitsPerMonth = 0;
+        }
+        activePlansMonthlyValue += basePrice * visitsPerMonth;
+      }
+
+      const allVisits = await storage.getVisits(companyId, {});
+      const scheduledThisWeek = allVisits.filter(v =>
+        v.scheduledDate >= weekStartStr && v.scheduledDate <= weekEndStr &&
+        (v.status === "scheduled" || v.status === "in_progress")
+      ).length;
+
+      const allInvoices = await storage.getInvoices(companyId);
+      const awaitingPayment = allInvoices.filter(i => ["pending", "sent", "failed"].includes(i.status));
+      const awaitingPaymentTotal = awaitingPayment.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
+
+      const overdueInvoices = allInvoices.filter(i =>
+        ["pending", "sent", "failed"].includes(i.status) && i.dueDate < today
+      );
+      const overdueTotal = overdueInvoices.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
+
+      const receivablesByContact = new Map<string, { contactId: string; total: number }>();
+      for (const inv of awaitingPayment) {
+        const existing = receivablesByContact.get(inv.contactId) || { contactId: inv.contactId, total: 0 };
+        existing.total += parseFloat(inv.total) || 0;
+        receivablesByContact.set(inv.contactId, existing);
+      }
+      const topReceivables: { contactId: string; contactName: string; total: number }[] = [];
+      const sortedReceivables = Array.from(receivablesByContact.values()).sort((a, b) => b.total - a.total).slice(0, 5);
+      for (const r of sortedReceivables) {
+        const contact = await storage.getContact(r.contactId, companyId);
+        topReceivables.push({
+          contactId: r.contactId,
+          contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
+          total: Math.round(r.total * 100) / 100,
+        });
+      }
+
+      const allPlans = activePlans.length > 0 ? activePlans : await storage.getServicePlans(companyId, {});
+      const planMap = new Map(allPlans.map(p => [p.id, p]));
+
+      const contactIds = new Set<string>();
+      const propertyIds = new Set<string>();
+      for (const v of todaysVisitsList) {
+        const plan = planMap.get(v.servicePlanId);
+        if (plan) contactIds.add(plan.contactId);
+        propertyIds.add(v.propertyId);
+      }
+
+      const contactCache = new Map<string, { firstName: string; lastName: string }>();
+      for (const cId of contactIds) {
+        const c = await storage.getContact(cId, companyId);
+        if (c) contactCache.set(cId, { firstName: c.firstName, lastName: c.lastName });
+      }
+
+      const propertyCache = new Map<string, string>();
+      for (const pId of propertyIds) {
+        const p = await storage.getProperty(pId, companyId);
+        if (p) propertyCache.set(pId, p.streetAddress);
+      }
+
+      const todaysVisitsDetailed: {
+        id: string;
+        status: string;
+        scheduledDate: string;
+        contactName: string;
+        contactId: string;
+        propertyAddress: string;
+        servicePlanName: string;
+        amount: number;
+        completedAt: string | null;
+        startedAt: string | null;
+      }[] = [];
+
+      for (const v of todaysVisitsList) {
+        const plan = planMap.get(v.servicePlanId);
+        let contactName = "Unknown";
+        let contactId = "";
+        if (plan) {
+          contactId = plan.contactId;
+          const cached = contactCache.get(plan.contactId);
+          if (cached) contactName = `${cached.firstName} ${cached.lastName}`;
+        }
+        todaysVisitsDetailed.push({
+          id: v.id,
+          status: v.status,
+          scheduledDate: v.scheduledDate,
+          contactName,
+          contactId,
+          propertyAddress: propertyCache.get(v.propertyId) || "",
+          servicePlanName: plan ? `${plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1)} Service` : "Service",
+          amount: plan ? parseFloat(plan.pricePerVisit) || 0 : 0,
+          completedAt: v.completedAt ? v.completedAt.toISOString() : null,
+          startedAt: v.startedAt ? v.startedAt.toISOString() : null,
+        });
+      }
+
+      const upcomingThisWeek = allVisits.filter(v =>
+        v.scheduledDate >= today && v.scheduledDate <= weekEndStr &&
+        (v.status === "scheduled" || v.status === "in_progress")
+      );
+      let upcomingWeekValue = 0;
+      for (const v of upcomingThisWeek) {
+        const plan = planMap.get(v.servicePlanId);
+        upcomingWeekValue += plan ? (parseFloat(plan.pricePerVisit) || 0) : 0;
+      }
+
+      res.json({
+        activePlans: {
+          count: activePlans.length,
+          monthlyValue: Math.round(activePlansMonthlyValue * 100) / 100,
+        },
+        scheduledVisits: {
+          count: scheduledThisWeek,
+        },
+        requiresInvoicing: {
+          count: uninvoicedSummary.count,
+          totalDollars: uninvoicedSummary.totalDollars,
+        },
+        awaitingPayment: {
+          count: awaitingPayment.length,
+          totalDollars: Math.round(awaitingPaymentTotal * 100) / 100,
+        },
+        todaysVisits: todaysVisitsDetailed,
+        receivables: {
+          total: Math.round(awaitingPaymentTotal * 100) / 100,
+          overdueCount: overdueInvoices.length,
+          overdueTotal: Math.round(overdueTotal * 100) / 100,
+          topClients: topReceivables,
+        },
+        monthRevenue,
+        upcomingThisWeek: {
+          count: upcomingThisWeek.length,
+          totalDollars: Math.round(upcomingWeekValue * 100) / 100,
+        },
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/reports/summary", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);

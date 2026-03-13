@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -18,8 +18,9 @@ import {
 import {
   DollarSign, CalendarCheck, AlertTriangle, UserCheck,
   Plus, Eye, Users, ClipboardList, TrendingUp,
-  FileText, Clock, CheckCircle2, Circle, ArrowRight,
+  FileText, Clock,
   MessageSquare, Mail, Sliders, ChevronUp, ChevronDown,
+  CheckCircle, XCircle, MapPin,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -61,7 +62,36 @@ type CompanyStats = {
 type CompanyData = {
   id: string;
   dashboardLayout?: string[] | null;
-  [key: string]: any;
+  [key: string]: unknown;
+};
+
+type PipelineVisit = {
+  id: string;
+  status: string;
+  scheduledDate: string;
+  contactName: string;
+  contactId: string;
+  propertyAddress: string;
+  servicePlanName: string;
+  amount: number;
+  completedAt: string | null;
+  startedAt: string | null;
+};
+
+type PipelineData = {
+  activePlans: { count: number; monthlyValue: number };
+  scheduledVisits: { count: number };
+  requiresInvoicing: { count: number; totalDollars: number };
+  awaitingPayment: { count: number; totalDollars: number };
+  todaysVisits: PipelineVisit[];
+  receivables: {
+    total: number;
+    overdueCount: number;
+    overdueTotal: number;
+    topClients: { contactId: string; contactName: string; total: number }[];
+  };
+  monthRevenue: number;
+  upcomingThisWeek: { count: number; totalDollars: number };
 };
 
 const ALL_WIDGETS = [
@@ -79,6 +109,323 @@ const ALL_WIDGETS = [
 ] as const;
 
 const DEFAULT_ORDER = ALL_WIDGETS.map((w) => w.id);
+
+function PipelineBar({ data }: { data: PipelineData }) {
+  const stages = [
+    {
+      label: "Active Plans",
+      count: data.activePlans.count,
+      value: `$${data.activePlans.monthlyValue.toFixed(0)}/mo`,
+      href: "/contacts",
+      color: "bg-green-600 dark:bg-green-700",
+      textColor: "text-green-700 dark:text-green-400",
+      bgColor: "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800",
+    },
+    {
+      label: "Scheduled This Week",
+      count: data.scheduledVisits.count,
+      value: `${data.scheduledVisits.count} visits`,
+      href: "/scheduling",
+      color: "bg-blue-600 dark:bg-blue-700",
+      textColor: "text-blue-700 dark:text-blue-400",
+      bgColor: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800",
+    },
+    {
+      label: "Requires Invoicing",
+      count: data.requiresInvoicing.count,
+      value: data.requiresInvoicing.count > 0 ? `$${data.requiresInvoicing.totalDollars.toFixed(2)}` : "All clear",
+      href: "/invoices",
+      color: data.requiresInvoicing.count > 0 ? "bg-orange-500 dark:bg-orange-600" : "bg-green-600 dark:bg-green-700",
+      textColor: data.requiresInvoicing.count > 0 ? "text-orange-700 dark:text-orange-400" : "text-green-700 dark:text-green-400",
+      bgColor: data.requiresInvoicing.count > 0
+        ? "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800"
+        : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800",
+    },
+    {
+      label: "Awaiting Payment",
+      count: data.awaitingPayment.count,
+      value: data.awaitingPayment.count > 0 ? `$${data.awaitingPayment.totalDollars.toFixed(2)}` : "None",
+      href: "/invoices",
+      color: data.awaitingPayment.count > 0 ? "bg-amber-500 dark:bg-amber-600" : "bg-green-600 dark:bg-green-700",
+      textColor: data.awaitingPayment.count > 0 ? "text-amber-700 dark:text-amber-400" : "text-green-700 dark:text-green-400",
+      bgColor: data.awaitingPayment.count > 0
+        ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+        : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800",
+    },
+  ];
+
+  const total = stages.reduce((s, st) => s + Math.max(st.count, 1), 0);
+
+  return (
+    <div data-testid="pipeline-bar" className="space-y-2">
+      <div className="flex rounded-lg overflow-hidden h-3 bg-muted">
+        {stages.map((stage, i) => (
+          <Link key={i} href={stage.href}>
+            <div
+              className={`h-full ${stage.color} transition-all hover:opacity-80 cursor-pointer`}
+              style={{ width: `${Math.max((Math.max(stage.count, 1) / total) * 100, 10)}%` }}
+              title={`${stage.label}: ${stage.count}`}
+            />
+          </Link>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {stages.map((stage, i) => (
+          <Link key={i} href={stage.href}>
+            <div
+              className={`p-3 rounded-lg border cursor-pointer hover:shadow-sm transition-shadow ${stage.bgColor}`}
+              data-testid={`pipeline-stage-${i}`}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className={`w-2 h-2 rounded-full ${stage.color}`} />
+                <span className="text-xs font-medium text-muted-foreground">{stage.label}</span>
+              </div>
+              <div className={`text-lg font-bold ${stage.textColor}`}>{stage.count}</div>
+              <div className="text-xs text-muted-foreground">{stage.value}</div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const visitStatusOrder: Record<string, number> = {
+  in_progress: 0,
+  scheduled: 1,
+  completed: 2,
+  skipped: 3,
+  cancelled: 4,
+};
+
+const visitStatusLabels: Record<string, string> = {
+  in_progress: "Active",
+  scheduled: "Remaining",
+  completed: "Completed",
+  skipped: "Skipped",
+  cancelled: "Cancelled",
+};
+
+const visitStatusColors: Record<string, string> = {
+  in_progress: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  scheduled: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  skipped: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+};
+
+function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
+  const { toast } = useToast();
+
+  const markVisitMutation = useMutation({
+    mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
+      const body: Record<string, unknown> = { status };
+      if (status === "completed") body.completedAt = new Date().toISOString();
+      await apiRequest("PATCH", `/api/visits/${visitId}`, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      toast({ title: "Visit updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const grouped = useMemo(() => {
+    const groups = new Map<string, PipelineVisit[]>();
+    const sorted = [...visits].sort((a, b) =>
+      (visitStatusOrder[a.status] ?? 9) - (visitStatusOrder[b.status] ?? 9)
+    );
+    for (const v of sorted) {
+      const key = v.status;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(v);
+    }
+    return groups;
+  }, [visits]);
+
+  if (visits.length === 0) {
+    return (
+      <Card data-testid="card-todays-appointments">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <CalendarCheck className="h-5 w-5" />
+            Today's Appointments
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-6 text-muted-foreground" data-testid="text-no-appointments">
+            <CalendarCheck className="h-8 w-8 mx-auto mb-2 opacity-40" />
+            <p>No visits scheduled for today</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const completedCount = visits.filter(v => v.status === "completed").length;
+  const progress = Math.round((completedCount / visits.length) * 100);
+
+  return (
+    <Card data-testid="card-todays-appointments">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <CalendarCheck className="h-5 w-5" />
+            Today's Appointments
+          </CardTitle>
+          <Badge variant="secondary" className="text-xs" data-testid="badge-visit-progress">
+            {completedCount}/{visits.length} done
+          </Badge>
+        </div>
+        <Progress value={progress} className="h-2 mt-2" />
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {Array.from(grouped.entries()).map(([status, statusVisits]) => (
+          <div key={status} data-testid={`group-${status}`}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <Badge variant="secondary" className={`text-[10px] ${visitStatusColors[status] || ""}`}>
+                {visitStatusLabels[status] || status}
+              </Badge>
+              <span className="text-xs text-muted-foreground">({statusVisits.length})</span>
+            </div>
+            <div className="space-y-1">
+              {statusVisits.map((visit) => (
+                <div
+                  key={visit.id}
+                  className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                  data-testid={`visit-row-${visit.id}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <Link href={`/contacts/${visit.contactId}`}>
+                        <span className="text-sm font-medium hover:underline cursor-pointer" data-testid={`text-visit-contact-${visit.id}`}>
+                          {visit.contactName}
+                        </span>
+                      </Link>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{visit.propertyAddress || visit.servicePlanName}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-medium tabular-nums" data-testid={`text-visit-amount-${visit.id}`}>
+                      ${visit.amount.toFixed(2)}
+                    </span>
+                    {(visit.status === "scheduled" || visit.status === "in_progress") && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30"
+                          onClick={() => markVisitMutation.mutate({ visitId: visit.id, status: "completed" })}
+                          disabled={markVisitMutation.isPending}
+                          title="Mark complete"
+                          data-testid={`button-complete-visit-${visit.id}`}
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                          onClick={() => markVisitMutation.mutate({ visitId: visit.id, status: "skipped" })}
+                          disabled={markVisitMutation.isPending}
+                          title="Skip"
+                          data-testid={`button-skip-visit-${visit.id}`}
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function BusinessPerformance({ data }: { data: PipelineData }) {
+  return (
+    <div className="space-y-4" data-testid="section-business-performance">
+      <Card data-testid="card-receivables">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            Receivables
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <div className="text-2xl font-bold" data-testid="text-total-receivables">
+              ${data.receivables.total.toFixed(2)}
+            </div>
+            {data.receivables.overdueCount > 0 && (
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5" data-testid="text-overdue-receivables">
+                ${data.receivables.overdueTotal.toFixed(2)} overdue ({data.receivables.overdueCount} invoice{data.receivables.overdueCount !== 1 ? "s" : ""})
+              </p>
+            )}
+          </div>
+          {data.receivables.topClients.length > 0 && (
+            <div className="space-y-1.5 pt-1 border-t">
+              <p className="text-xs text-muted-foreground font-medium">Top Balances</p>
+              {data.receivables.topClients.map((client) => (
+                <Link key={client.contactId} href={`/contacts/${client.contactId}`}>
+                  <div
+                    className="flex items-center justify-between gap-2 text-sm py-1 hover:bg-muted/50 rounded px-1 cursor-pointer"
+                    data-testid={`receivable-client-${client.contactId}`}
+                  >
+                    <span className="truncate">{client.contactName}</span>
+                    <span className="font-medium tabular-nums shrink-0">${client.total.toFixed(2)}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-month-revenue">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Revenue This Month
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold" data-testid="text-month-revenue-sidebar">
+            ${data.monthRevenue.toFixed(2)}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-upcoming-week">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <CalendarCheck className="h-4 w-4" />
+            Upcoming This Week
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold" data-testid="text-upcoming-count">
+            {data.upcomingThisWeek.count}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            ${data.upcomingThisWeek.totalDollars.toFixed(2)} in scheduled work
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -99,8 +446,8 @@ export default function Dashboard() {
     queryKey: ["/api/company"],
   });
 
-  const { data: uninvoicedSummary } = useQuery<{ count: number; totalDollars: number }>({
-    queryKey: ["/api/company/uninvoiced-summary"],
+  const { data: pipeline, isLoading: pipelineLoading, isError: pipelineError } = useQuery<PipelineData>({
+    queryKey: ["/api/company/pipeline"],
   });
 
   const saveMutation = useMutation({
@@ -213,9 +560,11 @@ export default function Dashboard() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {!uninvoicedSummary ? (
+            {pipelineLoading ? (
               <Skeleton className="h-8 w-24" />
-            ) : uninvoicedSummary.count === 0 ? (
+            ) : !pipeline ? (
+              <Skeleton className="h-8 w-24" />
+            ) : pipeline.requiresInvoicing.count === 0 ? (
               <div data-testid="text-requires-invoicing">
                 <div className="text-2xl font-bold text-green-600 dark:text-green-400">0</div>
                 <p className="text-xs text-muted-foreground mt-1">All caught up</p>
@@ -223,10 +572,10 @@ export default function Dashboard() {
             ) : (
               <div data-testid="text-requires-invoicing">
                 <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                  {uninvoicedSummary.count}
+                  {pipeline.requiresInvoicing.count}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  ${uninvoicedSummary.totalDollars.toFixed(2)} uninvoiced
+                  ${pipeline.requiresInvoicing.totalDollars.toFixed(2)} uninvoiced
                 </p>
               </div>
             )}
@@ -446,35 +795,72 @@ export default function Dashboard() {
         <GuidedSetup onboarding={onboarding} />
       )}
 
-      {activeStatWidgets.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-testid="widgets-grid">
-          {activeStatWidgets.map((id) => widgetRenderers[id]?.())}
+      {pipelineLoading ? (
+        <div className="space-y-2" data-testid="loading-pipeline">
+          <Skeleton className="h-3 w-full rounded-lg" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20" />)}
+          </div>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Current Plan</CardTitle>
-            <CardDescription>Your subscription details</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-16 w-full" />
-            ) : (
-              <div className="space-y-3" data-testid="text-plan-info">
-                <div className="flex items-center gap-2">
-                  <p className="text-xl font-semibold">{tierInfo?.name ?? stats?.tierName ?? "Unknown"}</p>
-                  <Badge variant="secondary">Active</Badge>
-                </div>
-                <p className="text-muted-foreground">
-                  ${tierInfo?.price?.toFixed(2) ?? "0.00"}/mo -- Up to {tierInfo?.maxUsers ?? 1} user{(tierInfo?.maxUsers ?? 1) > 1 ? "s" : ""}
-                </p>
-              </div>
-            )}
+      ) : pipelineError ? (
+        <Card className="border-destructive/50" data-testid="pipeline-error">
+          <CardContent className="p-4 text-center text-sm text-muted-foreground">
+            Unable to load pipeline data. Please refresh to try again.
           </CardContent>
         </Card>
-        {activeFullWidgets.map((id) => widgetRenderers[id]?.())}
+      ) : pipeline ? (
+        <PipelineBar data={pipeline} />
+      ) : null}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          {pipeline && (
+            <TodaysAppointments visits={pipeline.todaysVisits} />
+          )}
+
+          {activeStatWidgets.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="widgets-grid">
+              {activeStatWidgets.map((id) => widgetRenderers[id]?.())}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Current Plan</CardTitle>
+                <CardDescription>Your subscription details</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-16 w-full" />
+                ) : (
+                  <div className="space-y-3" data-testid="text-plan-info">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xl font-semibold">{tierInfo?.name ?? stats?.tierName ?? "Unknown"}</p>
+                      <Badge variant="secondary">Active</Badge>
+                    </div>
+                    <p className="text-muted-foreground">
+                      ${tierInfo?.price?.toFixed(2) ?? "0.00"}/mo -- Up to {tierInfo?.maxUsers ?? 1} user{(tierInfo?.maxUsers ?? 1) > 1 ? "s" : ""}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            {activeFullWidgets.map((id) => widgetRenderers[id]?.())}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {pipelineLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-40" />
+              <Skeleton className="h-24" />
+              <Skeleton className="h-24" />
+            </div>
+          ) : pipeline ? (
+            <BusinessPerformance data={pipeline} />
+          ) : null}
+        </div>
       </div>
 
       <Dialog open={customizeOpen} onOpenChange={setCustomizeOpen}>
