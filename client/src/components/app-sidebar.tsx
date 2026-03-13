@@ -49,6 +49,7 @@ const menuSections = [
     items: [
       { title: "Scheduling", url: "/scheduling", icon: Calendar },
       { title: "Routes", url: "/routes", icon: MapPin },
+      { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Field View", url: "/m/today", icon: Smartphone },
       { title: "Messages", url: "/communications", icon: MessageSquare },
       { title: "Reports", url: "/reports", icon: BarChart3 },
@@ -74,7 +75,6 @@ const menuSections = [
     label: "Billing",
     items: [
       { title: "Pricing", url: "/pricing", icon: DollarSign },
-      { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Subscription", url: "/billing", icon: CreditCard },
     ],
   },

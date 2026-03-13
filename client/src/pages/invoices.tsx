@@ -749,15 +749,18 @@ export default function Invoices() {
                         <span className="text-xs font-bold">$</span>
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => sendEmailMutation.mutate(invoice.id)}
-                      disabled={sendEmailMutation.isPending}
-                      data-testid={`button-email-invoice-${invoice.id}`}
-                    >
-                      <Mail className="h-4 w-4" />
-                    </Button>
+                    {invoice.status !== "paid" && invoice.status !== "voided" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => sendEmailMutation.mutate(invoice.id)}
+                        disabled={sendEmailMutation.isPending}
+                        data-testid={`button-email-invoice-${invoice.id}`}
+                      >
+                        <Mail className="mr-1 h-4 w-4" />
+                        Send
+                      </Button>
+                    )}
                     {invoice.status !== "paid" && invoice.status !== "voided" && (
                       <Button
                         variant="ghost"
