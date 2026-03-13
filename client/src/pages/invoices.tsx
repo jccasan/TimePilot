@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Invoice, Contact, ServicePricingItem, InvoicePayment } from "@shared/schema";
+import type { Invoice, Contact, ServicePricingItem, InvoicePayment, InvoiceLineItem } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,7 +67,7 @@ interface LineItem {
 }
 
 interface InvoiceWithLineItems extends Invoice {
-  lineItems?: any[];
+  lineItems?: InvoiceLineItem[];
 }
 
 function formatPaymentDate(dateStr: string | Date): string {
@@ -296,7 +296,7 @@ export default function Invoices() {
       const res = await apiRequest("POST", `/api/invoices/${invoiceId}/charge`);
       return res.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { status: string }) => {
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
       if (data.status === "paid") {
         toast({ title: "Payment successful", description: "Invoice charged to card on file." });
@@ -314,7 +314,7 @@ export default function Invoices() {
       const res = await apiRequest("POST", `/api/invoices/${invoiceId}/checkout`);
       return res.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { url?: string }) => {
       if (data.url) {
         window.open(data.url, "_blank");
       }
@@ -393,7 +393,7 @@ export default function Invoices() {
 
   function enterEditMode() {
     if (!selectedInvoice) return;
-    setEditLineItems((selectedInvoice.lineItems || []).map((li: any) => ({
+    setEditLineItems((selectedInvoice.lineItems || []).map((li: InvoiceLineItem) => ({
       description: li.description || "",
       quantity: String(li.quantity || 1),
       unitPrice: String(li.unitPrice || "0"),
@@ -1346,7 +1346,7 @@ export default function Invoices() {
                     <div>
                       <h4 className="font-medium text-sm mb-2">Line Items</h4>
                       <div className="space-y-1">
-                        {selectedInvoice.lineItems.map((li: any, idx: number) => (
+                        {selectedInvoice.lineItems.map((li: InvoiceLineItem, idx: number) => (
                           <div key={idx} className="flex flex-wrap justify-between gap-2 text-sm py-1 border-b last:border-0">
                             <span>{li.description}</span>
                             <span>{li.quantity} x ${Number(li.unitPrice).toFixed(2)} = ${Number(li.total).toFixed(2)}</span>

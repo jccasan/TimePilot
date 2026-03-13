@@ -3640,13 +3640,21 @@ export async function registerRoutes(
       const existing = await storage.getInvoice(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Invoice not found" });
 
-      const { lineItems, ...invoiceUpdates } = req.body;
+      const { lineItems, status: newStatus, ...invoiceUpdates } = req.body;
+
+      const contentFields = ["dueDate", "notes", "taxRate", "discountType", "discountValue", "subtotal", "total", "tax"];
+      const hasContentEdits = (lineItems && Array.isArray(lineItems)) || contentFields.some(f => f in invoiceUpdates);
+      const editableStatuses = ["draft", "sent", "pending"];
+
+      if (hasContentEdits && !editableStatuses.includes(existing.status)) {
+        return res.status(400).json({ error: "Cannot edit a paid, voided, or failed invoice" });
+      }
+
+      if (newStatus) {
+        invoiceUpdates.status = newStatus;
+      }
 
       if (lineItems && Array.isArray(lineItems)) {
-        const editableStatuses = ["draft", "sent", "pending"];
-        if (!editableStatuses.includes(existing.status)) {
-          return res.status(400).json({ error: "Cannot edit line items on a paid, voided, or failed invoice" });
-        }
 
         await storage.deleteInvoiceLineItems(req.params.id);
 
