@@ -329,6 +329,7 @@ export const visits = pgTable("visits", {
   extraPhotos: jsonb("extra_photos"),
   technicianNotes: text("technician_notes"),
   invoiceId: varchar("invoice_id"),
+  serviceReminderSentAt: timestamp("service_reminder_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

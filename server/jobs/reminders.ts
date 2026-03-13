@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { eq, and, lte, sql, isNull, lt } from "drizzle-orm";
+import { eq, and, lte, sql, isNull, lt, inArray } from "drizzle-orm";
 import { contacts, visits, invoices, servicePlans, properties } from "@shared/schema";
 import { storage } from "../storage";
 import { sendEmail } from "../services/email";
@@ -53,29 +53,36 @@ async function sendServiceReminders(companyId: string, companyName: string): Pro
       and(
         eq(visits.companyId, companyId),
         eq(visits.scheduledDate, tomorrowStr),
-        eq(visits.status, "scheduled")
+        eq(visits.status, "scheduled"),
+        isNull(visits.serviceReminderSentAt)
       )
     );
 
   let sent = 0;
 
-  const contactVisitsMap = new Map<string, { contact: typeof tomorrowVisits[0]["contact"]; addresses: string[] }>();
+  const contactVisitsMap = new Map<string, {
+    contact: typeof tomorrowVisits[0]["contact"];
+    addresses: string[];
+    visitIds: string[];
+  }>();
 
   for (const row of tomorrowVisits) {
     const existing = contactVisitsMap.get(row.contact.id);
     const addr = `${row.property.streetAddress}, ${row.property.city}`;
     if (existing) {
       existing.addresses.push(addr);
+      existing.visitIds.push(row.visit.id);
     } else {
       contactVisitsMap.set(row.contact.id, {
         contact: row.contact,
         addresses: [addr],
+        visitIds: [row.visit.id],
       });
     }
   }
 
   const entries = Array.from(contactVisitsMap.values());
-  for (const { contact, addresses } of entries) {
+  for (const { contact, addresses, visitIds } of entries) {
     const prefs = (contact.reminderPreferences as { email: boolean; sms: boolean } | null) ?? {
       email: true,
       sms: false,
@@ -83,6 +90,20 @@ async function sendServiceReminders(companyId: string, companyName: string): Pro
 
     if (!prefs.email && !prefs.sms) continue;
 
+    const claimed = await db.update(visits)
+      .set({ serviceReminderSentAt: new Date() })
+      .where(and(
+        inArray(visits.id, visitIds),
+        eq(visits.companyId, companyId),
+        eq(visits.scheduledDate, tomorrowStr),
+        eq(visits.status, "scheduled"),
+        isNull(visits.serviceReminderSentAt)
+      ))
+      .returning({ id: visits.id });
+
+    if (claimed.length === 0) continue;
+
+    const claimedIds = claimed.map(c => c.id);
     const contactName = `${contact.firstName} ${contact.lastName}`;
     const addressList = addresses.join("; ");
     const message = `Hi ${contact.firstName}, your service with ${companyName} is scheduled for tomorrow at ${addressList}. Thank you!`;
@@ -112,7 +133,13 @@ async function sendServiceReminders(companyId: string, companyName: string): Pro
       }
     }
 
-    if (delivered) sent++;
+    if (delivered) {
+      sent++;
+    } else {
+      await db.update(visits)
+        .set({ serviceReminderSentAt: null })
+        .where(inArray(visits.id, claimedIds));
+    }
   }
 
   return sent;
