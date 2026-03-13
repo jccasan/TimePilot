@@ -5858,7 +5858,7 @@ export async function registerRoutes(
         status: "sent",
       });
 
-      notify(companyId, "portal_message", "New Portal Message", `${contact.firstName} ${contact.lastName} sent a message via the portal.`, `/contacts/${contactId}`);
+      notify(companyId, "portal_message", `${contact.firstName} ${contact.lastName} -- Portal Message`, `${contact.firstName} ${contact.lastName} sent a message via the portal.`, `/#client-requests`);
 
       res.json({ success: true, message: "Your message has been sent." });
     } catch (err) { handleError(res, err); }
@@ -6000,7 +6000,7 @@ export async function registerRoutes(
         type: "general",
         title: "One-Time Cleanup Request",
         message: `${contact.firstName} ${contact.lastName} requested a cleanup${preferredDate ? ` on ${preferredDate}` : ""}${notes ? `: ${notes}` : ""}`,
-        data: { contactId, preferredDate, notes },
+        linkUrl: "/#client-requests",
       });
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
@@ -6219,7 +6219,8 @@ export async function registerRoutes(
       });
 
       const contact = await storage.getContactById(contactId);
-      notify(companyId, "general", "Service Change Request", `${contact?.firstName} ${contact?.lastName} requested a ${requestType.replace(/_/g, " ")}${note ? `: ${note}` : ""}`, `/contacts/${contactId}`);
+      const senderName = `${contact?.firstName || ""} ${contact?.lastName || ""}`.trim() || "A client";
+      notify(companyId, "general", `${senderName} -- Service Change Request`, `${senderName} requested a ${requestType.replace(/_/g, " ")}${note ? `: ${note}` : ""}`, `/#client-requests`);
 
       res.json({ success: true, id: request.id });
     } catch (err) { handleError(res, err); }
@@ -6988,7 +6989,10 @@ export async function registerRoutes(
     try {
       const { companyId } = await getCompanyContext(req);
       const limit = parseInt(req.query.limit as string) || 50;
-      const notifs = await storage.getNotifications(companyId, limit);
+      let notifs = await storage.getNotifications(companyId, limit);
+      if (req.query.unread === "true") {
+        notifs = notifs.filter((n) => !n.isRead);
+      }
       res.json(notifs);
     } catch (err) { handleError(res, err); }
   });

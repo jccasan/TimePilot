@@ -120,6 +120,22 @@ type PortalMessage = {
   createdAt: string;
 };
 
+type CleanupNotification = {
+  id: string;
+  title: string;
+  message: string;
+  linkUrl: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+type InboxItem = {
+  kind: "change" | "message" | "cleanup";
+  id: string;
+  sortDate: number;
+  data: ChangeRequest | PortalMessage | CleanupNotification;
+};
+
 const REQUEST_TYPE_LABELS: Record<string, string> = {
   frequency_change: "Frequency Change",
   day_change: "Day Change",
@@ -150,6 +166,16 @@ function ClientRequestsCard() {
     },
   });
 
+  const { data: cleanupRequests = [], isLoading: cleanupLoading } = useQuery<CleanupNotification[]>({
+    queryKey: ["/api/notifications", "cleanup-requests"],
+    queryFn: async () => {
+      const res = await fetch("/api/notifications?unread=true", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load");
+      const all: CleanupNotification[] = await res.json();
+      return all.filter((n) => n.title === "One-Time Cleanup Request");
+    },
+  });
+
   const approveMutation = useMutation({
     mutationFn: async ({ id, adminNote }: { id: string; adminNote?: string }) => {
       await apiRequest("POST", `/api/service-change-requests/${id}/approve`, { adminNote });
@@ -170,12 +196,36 @@ function ClientRequestsCard() {
     },
   });
 
-  const recentMessages = portalMessages.slice(0, 5);
-  const totalPending = changeRequests.length + recentMessages.length;
+  const dismissCleanupMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PATCH", `/api/notifications/${id}/read`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({ title: "Dismissed", description: "Cleanup request dismissed." });
+    },
+  });
 
-  if (crLoading || msgLoading) {
+  const inboxItems = useMemo<InboxItem[]>(() => {
+    const items: InboxItem[] = [];
+    for (const cr of changeRequests) {
+      items.push({ kind: "change", id: `cr-${cr.id}`, sortDate: new Date(cr.createdAt).getTime(), data: cr });
+    }
+    for (const msg of portalMessages.slice(0, 10)) {
+      items.push({ kind: "message", id: `msg-${msg.id}`, sortDate: new Date(msg.createdAt).getTime(), data: msg });
+    }
+    for (const cu of cleanupRequests) {
+      items.push({ kind: "cleanup", id: `cu-${cu.id}`, sortDate: new Date(cu.createdAt).getTime(), data: cu });
+    }
+    items.sort((a, b) => b.sortDate - a.sortDate);
+    return items;
+  }, [changeRequests, portalMessages, cleanupRequests]);
+
+  const isLoading = crLoading || msgLoading || cleanupLoading;
+
+  if (isLoading) {
     return (
-      <Card data-testid="widget-client-requests">
+      <Card data-testid="widget-client-requests" id="client-requests">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <Inbox className="h-5 w-5 text-primary" />
@@ -192,9 +242,9 @@ function ClientRequestsCard() {
     );
   }
 
-  if (totalPending === 0) {
+  if (inboxItems.length === 0) {
     return (
-      <Card data-testid="widget-client-requests">
+      <Card data-testid="widget-client-requests" id="client-requests">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <Inbox className="h-5 w-5 text-primary" />
@@ -211,101 +261,147 @@ function ClientRequestsCard() {
   }
 
   return (
-    <Card data-testid="widget-client-requests">
+    <Card data-testid="widget-client-requests" id="client-requests">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Inbox className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">Client Requests</CardTitle>
-            <Badge variant="secondary" data-testid="badge-request-count">{totalPending}</Badge>
+            <Badge variant="secondary" data-testid="badge-request-count">{inboxItems.length}</Badge>
           </div>
         </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {changeRequests.map((req) => (
-            <div key={req.id} className="border rounded-lg p-3 space-y-2" data-testid={`request-change-${req.id}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sliders className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">{REQUEST_TYPE_LABELS[req.requestType] || req.requestType}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(req.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-              <div className="text-sm">
-                <Link href={`/contacts/${req.contactId}`}>
-                  <span className="font-medium text-primary hover:underline cursor-pointer">{req.contactName}</span>
-                </Link>
-                {req.currentValue && req.requestedValue && (
-                  <span className="text-muted-foreground ml-1">
-                    {req.currentValue} <ArrowRight className="h-3 w-3 inline" /> {req.requestedValue}
-                  </span>
-                )}
-              </div>
-              {req.note && (
-                <p className="text-xs text-muted-foreground italic">"{req.note}"</p>
-              )}
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={() => approveMutation.mutate({ id: req.id })}
-                  disabled={approveMutation.isPending}
-                  data-testid={`button-approve-${req.id}`}
-                >
-                  <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                  Approve
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => denyMutation.mutate({ id: req.id })}
-                  disabled={denyMutation.isPending}
-                  data-testid={`button-deny-${req.id}`}
-                >
-                  <XCircle className="h-3.5 w-3.5 mr-1" />
-                  Deny
-                </Button>
-              </div>
-            </div>
-          ))}
-
-          {recentMessages.map((msg) => (
-            <div key={msg.id} className="border rounded-lg p-3 space-y-2" data-testid={`request-message-${msg.id}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Portal Message</span>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(msg.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-              <div className="text-sm">
-                {msg.contactId ? (
-                  <Link href={`/contacts/${msg.contactId}`}>
-                    <span className="font-medium text-primary hover:underline cursor-pointer">
-                      {msg.contactName || "Client"}
+          {inboxItems.map((item) => {
+            if (item.kind === "change") {
+              const req = item.data as ChangeRequest;
+              return (
+                <div key={item.id} className="border rounded-lg p-3 space-y-2" data-testid={`request-change-${req.id}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sliders className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">{REQUEST_TYPE_LABELS[req.requestType] || req.requestType}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(req.createdAt).toLocaleDateString()}
                     </span>
-                  </Link>
-                ) : (
-                  <span className="font-medium">{msg.contactName || "Client"}</span>
+                  </div>
+                  <div className="text-sm">
+                    <Link href={`/contacts/${req.contactId}`}>
+                      <span className="font-medium text-primary hover:underline cursor-pointer">{req.contactName}</span>
+                    </Link>
+                    {req.currentValue && req.requestedValue && (
+                      <span className="text-muted-foreground ml-1">
+                        {req.currentValue} <ArrowRight className="h-3 w-3 inline" /> {req.requestedValue}
+                      </span>
+                    )}
+                  </div>
+                  {req.note && (
+                    <p className="text-xs text-muted-foreground italic">"{req.note}"</p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => approveMutation.mutate({ id: req.id })}
+                      disabled={approveMutation.isPending}
+                      data-testid={`button-approve-${req.id}`}
+                    >
+                      <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => denyMutation.mutate({ id: req.id })}
+                      disabled={denyMutation.isPending}
+                      data-testid={`button-deny-${req.id}`}
+                    >
+                      <XCircle className="h-3.5 w-3.5 mr-1" />
+                      Deny
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+
+            if (item.kind === "cleanup") {
+              const cu = item.data as CleanupNotification;
+              return (
+                <div key={item.id} className="border rounded-lg p-3 space-y-2" data-testid={`request-cleanup-${cu.id}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CalendarCheck className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">One-Time Cleanup</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(cu.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="text-sm">{cu.message}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => dismissCleanupMutation.mutate(cu.id)}
+                      disabled={dismissCleanupMutation.isPending}
+                      data-testid={`button-accept-cleanup-${cu.id}`}
+                    >
+                      <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                      Accept
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => dismissCleanupMutation.mutate(cu.id)}
+                      disabled={dismissCleanupMutation.isPending}
+                      data-testid={`button-dismiss-cleanup-${cu.id}`}
+                    >
+                      <XCircle className="h-3.5 w-3.5 mr-1" />
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+
+            const msg = item.data as PortalMessage;
+            return (
+              <div key={item.id} className="border rounded-lg p-3 space-y-2" data-testid={`request-message-${msg.id}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Portal Message</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(msg.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="text-sm">
+                  {msg.contactId ? (
+                    <Link href={`/contacts/${msg.contactId}`}>
+                      <span className="font-medium text-primary hover:underline cursor-pointer">
+                        {msg.contactName || "Client"}
+                      </span>
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{msg.contactName || "Client"}</span>
+                  )}
+                  {msg.subject && <span className="text-muted-foreground ml-1">-- {msg.subject}</span>}
+                </div>
+                {msg.body && (
+                  <p className="text-xs text-muted-foreground line-clamp-2">{msg.body}</p>
                 )}
-                {msg.subject && <span className="text-muted-foreground ml-1">-- {msg.subject}</span>}
+                <Link href="/communications">
+                  <Button size="sm" variant="outline" data-testid={`button-reply-${msg.id}`}>
+                    <Mail className="h-3.5 w-3.5 mr-1" />
+                    View & Reply
+                  </Button>
+                </Link>
               </div>
-              {msg.body && (
-                <p className="text-xs text-muted-foreground line-clamp-2">{msg.body}</p>
-              )}
-              <Link href="/communications">
-                <Button size="sm" variant="outline" data-testid={`button-reply-${msg.id}`}>
-                  <Mail className="h-3.5 w-3.5 mr-1" />
-                  View & Reply
-                </Button>
-              </Link>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </CardContent>
     </Card>
