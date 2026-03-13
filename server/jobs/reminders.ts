@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { eq, and, gte, lte, sql, count } from "drizzle-orm";
-import { companies, contacts, visits, invoices, servicePlans, properties } from "@shared/schema";
+import { eq, and, lte, sql, isNull, lt } from "drizzle-orm";
+import { contacts, visits, invoices, servicePlans, properties } from "@shared/schema";
 import { storage } from "../storage";
 import { sendEmail } from "../services/email";
 import { sendSms, isTwilioConfigured } from "../services/sms";
@@ -87,6 +87,8 @@ async function sendServiceReminders(companyId: string, companyName: string): Pro
     const addressList = addresses.join("; ");
     const message = `Hi ${contact.firstName}, your service with ${companyName} is scheduled for tomorrow at ${addressList}. Thank you!`;
 
+    let delivered = false;
+
     if (prefs.email && contact.email) {
       try {
         await sendEmail({
@@ -95,32 +97,59 @@ async function sendServiceReminders(companyId: string, companyName: string): Pro
           text: message,
           html: generateServiceReminderHtml(companyName, contactName, addresses, tomorrowStr),
         });
-        sent++;
+        delivered = true;
       } catch (err) {
         console.error(`[reminders] Failed to send email to ${contact.email}:`, err);
       }
     }
 
-    if (prefs.sms && contact.phone && isTwilioConfigured()) {
+    if (!delivered && prefs.sms && contact.phone && isTwilioConfigured()) {
       try {
         await sendSms({ to: contact.phone, body: message });
-        sent++;
+        delivered = true;
       } catch (err) {
         console.error(`[reminders] Failed to send SMS to ${contact.phone}:`, err);
       }
     }
+
+    if (delivered) sent++;
   }
 
   return sent;
+}
+
+const PRE_DUE_DAYS = [7, 2, 1, 0];
+const LATE_INTERVAL_DAYS = 2;
+
+function shouldSendReminder(dueDate: string, lastReminderSentAt: Date | null, todayStr: string): boolean {
+  const due = new Date(dueDate + "T00:00:00Z");
+  const today = new Date(todayStr + "T00:00:00Z");
+  const daysUntilDue = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const isOverdue = daysUntilDue < 0;
+
+  if (!isOverdue) {
+    if (!PRE_DUE_DAYS.includes(daysUntilDue)) return false;
+  } else {
+    const daysLate = Math.abs(daysUntilDue);
+    if (daysLate % LATE_INTERVAL_DAYS !== 0) return false;
+  }
+
+  if (lastReminderSentAt) {
+    const lastSent = new Date(lastReminderSentAt);
+    const lastSentStr = lastSent.toISOString().split("T")[0];
+    if (lastSentStr === todayStr) return false;
+  }
+
+  return true;
 }
 
 async function sendInvoiceReminders(companyId: string, companyName: string): Promise<number> {
   const now = new Date();
   const todayStr = now.toISOString().split("T")[0];
 
-  const threeDaysFromNow = new Date();
-  threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
-  const threeDaysStr = threeDaysFromNow.toISOString().split("T")[0];
+  const eightDaysFromNow = new Date();
+  eightDaysFromNow.setDate(eightDaysFromNow.getDate() + 8);
+  const eightDaysStr = eightDaysFromNow.toISOString().split("T")[0];
 
   const pendingInvoices = await db
     .select({
@@ -133,7 +162,7 @@ async function sendInvoiceReminders(companyId: string, companyName: string): Pro
       and(
         eq(invoices.companyId, companyId),
         eq(invoices.status, "pending"),
-        lte(invoices.dueDate, threeDaysStr)
+        lte(invoices.dueDate, eightDaysStr)
       )
     );
 
@@ -141,12 +170,32 @@ async function sendInvoiceReminders(companyId: string, companyName: string): Pro
 
   for (const row of pendingInvoices) {
     const { invoice, contact } = row;
+
+    if (invoice.excludeFromReminders) continue;
+
+    if (!shouldSendReminder(invoice.dueDate, invoice.lastReminderSentAt, todayStr)) continue;
+
     const prefs = (contact.reminderPreferences as { email: boolean; sms: boolean } | null) ?? {
       email: true,
       sms: false,
     };
 
     if (!prefs.email && !prefs.sms) continue;
+
+    const claimed = await db.update(invoices)
+      .set({
+        lastReminderSentAt: new Date(),
+        reminderCount: (invoice.reminderCount || 0) + 1,
+      })
+      .where(and(
+        eq(invoices.id, invoice.id),
+        invoice.lastReminderSentAt
+          ? lt(invoices.lastReminderSentAt, sql`${todayStr}::date::timestamp`)
+          : isNull(invoices.lastReminderSentAt)
+      ))
+      .returning({ id: invoices.id });
+
+    if (claimed.length === 0) continue;
 
     const isOverdue = invoice.dueDate < todayStr;
     const contactName = `${contact.firstName} ${contact.lastName}`;
@@ -160,6 +209,8 @@ async function sendInvoiceReminders(companyId: string, companyName: string): Pro
       ? `Hi ${contact.firstName}, invoice #${invoice.invoiceNumber} for $${total} from ${companyName} is overdue (due ${invoice.dueDate}). Please submit payment at your earliest convenience.`
       : `Hi ${contact.firstName}, invoice #${invoice.invoiceNumber} for $${total} from ${companyName} is due on ${invoice.dueDate}. This is a friendly reminder.`;
 
+    let delivered = false;
+
     if (prefs.email && contact.email) {
       try {
         await sendEmail({
@@ -168,20 +219,22 @@ async function sendInvoiceReminders(companyId: string, companyName: string): Pro
           text: message,
           html: generateInvoiceReminderHtml(companyName, contactName, invoice.invoiceNumber, invoice.dueDate, String(total), isOverdue),
         });
-        sent++;
+        delivered = true;
       } catch (err) {
         console.error(`[reminders] Failed to send invoice email to ${contact.email}:`, err);
       }
     }
 
-    if (prefs.sms && contact.phone && isTwilioConfigured()) {
+    if (!delivered && prefs.sms && contact.phone && isTwilioConfigured()) {
       try {
         await sendSms({ to: contact.phone, body: message });
-        sent++;
+        delivered = true;
       } catch (err) {
         console.error(`[reminders] Failed to send invoice SMS to ${contact.phone}:`, err);
       }
     }
+
+    if (delivered) sent++;
   }
 
   return sent;
