@@ -274,6 +274,7 @@ export const servicePlans = pgTable("service_plans", {
   dayOfWeek: dayOfWeekEnum("day_of_week"),
   pricePerVisit: decimal("price_per_visit", { precision: 10, scale: 2 }).notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  pausedAt: timestamp("paused_at"),
   startDate: date("start_date").notNull(),
   endDate: date("end_date"),
   routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),

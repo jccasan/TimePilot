@@ -45,11 +45,24 @@ export async function runAutoVisits() {
   return { companiesProcessed, totalCreated, errors };
 }
 
+export async function generateVisitsForPlans(companyId: string, planIds: string[], startDate: string, endDate: string): Promise<number> {
+  const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+  const plans = allPlans.filter(p => planIds.includes(p.id));
+  if (plans.length === 0) return 0;
+  return generateVisitsFromPlans(companyId, plans, startDate, endDate);
+}
+
 export async function generateVisitsForCompany(companyId: string, startDate: string, endDate: string): Promise<number> {
   const plans = await storage.getServicePlans(companyId, { isActive: true });
+  return generateVisitsFromPlans(companyId, plans, startDate, endDate);
+}
+
+async function generateVisitsFromPlans(companyId: string, plans: Awaited<ReturnType<typeof storage.getServicePlans>>, startDate: string, endDate: string): Promise<number> {
   const existingVisits = await storage.getVisitsForDateRange(companyId, startDate, endDate);
   const existingKeys = new Set(
-    existingVisits.map((v) => `${v.servicePlanId}_${v.scheduledDate}`)
+    existingVisits
+      .filter((v) => v.status !== "cancelled")
+      .map((v) => `${v.servicePlanId}_${v.scheduledDate}`)
   );
 
   const dayMap: Record<string, number> = {

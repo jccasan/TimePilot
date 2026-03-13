@@ -5520,8 +5520,16 @@ export async function registerRoutes(
       await storage.updateContact(contactId, { status: "paused" });
 
       const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+      const pausedPlanIds: string[] = [];
       for (const plan of plans) {
-        await storage.updateServicePlan(plan.id, { isActive: false });
+        await storage.updateServicePlan(plan.id, { isActive: false, pausedAt: new Date() });
+        pausedPlanIds.push(plan.id);
+      }
+
+      const today = new Date().toISOString().split("T")[0];
+      const cancelledCount = await storage.cancelFutureVisitsForPlans(pausedPlanIds, today);
+      if (cancelledCount > 0) {
+        console.log(`[portal-pause] Cancelled ${cancelledCount} future visits for contact ${contactId}`);
       }
 
       notify(companyId, "service_paused", "Service Paused", `${contact.firstName} ${contact.lastName} paused their service via the portal.`, `/contacts/${contactId}`);
@@ -5538,9 +5546,31 @@ export async function registerRoutes(
       await storage.updateContact(contactId, { status: "active" });
 
       const plans = await storage.getServicePlans(companyId, { contactId });
+      const reactivatedPlanIds: string[] = [];
       for (const plan of plans) {
-        if (!plan.isActive) {
-          await storage.updateServicePlan(plan.id, { isActive: true });
+        if (!plan.isActive && plan.pausedAt) {
+          await storage.updateServicePlan(plan.id, { isActive: true, pausedAt: null });
+          reactivatedPlanIds.push(plan.id);
+        }
+      }
+
+      if (reactivatedPlanIds.length > 0) {
+        const now = new Date();
+        const startDate = new Date(now);
+        startDate.setDate(startDate.getDate());
+        const endDate = new Date(now);
+        endDate.setDate(endDate.getDate() + 14);
+        const startStr = startDate.toISOString().split("T")[0];
+        const endStr = endDate.toISOString().split("T")[0];
+
+        try {
+          const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+          const created = await generateVisitsForPlans(companyId, reactivatedPlanIds, startStr, endStr);
+          if (created > 0) {
+            console.log(`[portal-resume] Generated ${created} visits for contact ${contactId}`);
+          }
+        } catch (genErr) {
+          console.error("[portal-resume] Visit generation failed:", genErr);
         }
       }
 

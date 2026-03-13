@@ -120,6 +120,8 @@ export interface IStorage {
   getServicePlanAddOns(servicePlanId: string): Promise<ServicePlanAddOn[]>;
   setServicePlanAddOns(servicePlanId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<ServicePlanAddOn[]>;
 
+  cancelFutureVisitsForPlans(planIds: string[], fromDate: string): Promise<number>;
+
   // Unassign all stops from a route
   unassignAllStops(routeId: string): Promise<number>;
 
@@ -588,6 +590,19 @@ export class DatabaseStorage implements IStorage {
       price: a.price,
     }));
     return db.insert(servicePlanAddOns).values(rows).returning();
+  }
+
+  async cancelFutureVisitsForPlans(planIds: string[], fromDate: string): Promise<number> {
+    if (planIds.length === 0) return 0;
+    const result = await db.update(visits)
+      .set({ status: "cancelled" })
+      .where(and(
+        inArray(visits.servicePlanId, planIds),
+        gte(visits.scheduledDate, fromDate),
+        eq(visits.status, "scheduled")
+      ))
+      .returning();
+    return result.length;
   }
 
   async unassignAllStops(routeId: string): Promise<number> {
