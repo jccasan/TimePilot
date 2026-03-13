@@ -78,7 +78,10 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
       const prefix = apiKeyHeader.substring(0, 8);
       const keyHash = crypto.createHash("sha256").update(apiKeyHeader).digest("hex");
       const apiKey = await storage.getApiKeyByPrefix(prefix);
-      if (apiKey && apiKey.keyHash === keyHash && apiKey.isActive) {
+      if (apiKey && apiKey.keyHash === keyHash) {
+        if (!apiKey.isActive) {
+          return res.status(401).json({ message: "API key is inactive" });
+        }
         if (apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date()) {
           return res.status(401).json({ message: "API key has expired" });
         }
@@ -86,7 +89,6 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
         const ownerOrAdmin = companyUsers_.find(cu => cu.role === "owner" && cu.isActive !== false) || companyUsers_.find(cu => cu.role === "admin" && cu.isActive !== false);
         if (ownerOrAdmin) {
           userId = ownerOrAdmin.userId;
-          (req as any)._apiKeyUserId = userId;
           (req as any)._apiKeyCompanyId = apiKey.companyId;
           (req.session as any).userId = userId;
           req.session.save = (cb?: (err?: any) => void) => { if (cb) cb(); };
@@ -94,7 +96,7 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
           storage.updateApiKeyLastUsed(apiKey.id).catch(console.error);
         }
       } else if (apiKeyHeader) {
-        authMethod = "api-key-invalid";
+        return res.status(401).json({ message: "Invalid API key" });
       }
     }
   }
@@ -118,6 +120,14 @@ async function getCompanyContext(req: Request) {
   const userId = (req.session as any)?.userId;
   if (!userId) {
     throw { status: 401, message: "Not authenticated" };
+  }
+  const apiKeyCompanyId = (req as any)._apiKeyCompanyId as string | undefined;
+  if (apiKeyCompanyId) {
+    const membership = await storage.getCompanyUser(apiKeyCompanyId, userId);
+    if (!membership) {
+      throw { status: 403, message: "No company membership found for API key" };
+    }
+    return { userId, companyId: apiKeyCompanyId, role: membership.role };
   }
   const memberships = await storage.getCompaniesForUser(userId);
   if (!memberships.length) {

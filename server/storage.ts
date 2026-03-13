@@ -991,7 +991,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getApiKeyByPrefix(prefix: string): Promise<ApiKey | undefined> {
-    const [key] = await db.select().from(apiKeys).where(and(eq(apiKeys.keyPrefix, prefix), eq(apiKeys.isActive, true)));
+    const [key] = await db.select().from(apiKeys).where(eq(apiKeys.keyPrefix, prefix));
     return key;
   }
 
