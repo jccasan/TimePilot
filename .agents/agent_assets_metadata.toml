@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "I2R_kLWtmgc85VJJDE3WA"
+uri = "file://.local/tasks/invoice-fix-guide.md"
+type = "text"
+title = "Invoice Fix Guide for Remixed Apps"
