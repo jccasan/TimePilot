@@ -5232,6 +5232,7 @@ export async function registerRoutes(
         metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
       });
 
+      console.log(`[send-email] Sending invoice ${invoice.invoiceNumber} to ${contact.email} from ${fromAddress}`);
       const result = await sendEmail({
         to: contact.email,
         from: fromAddress,
@@ -5241,12 +5242,14 @@ export async function registerRoutes(
       });
 
       if (result.success) {
+        console.log(`[send-email] Successfully sent invoice ${invoice.invoiceNumber} to ${contact.email}`);
         await storage.updateMessageStatus(msg.id, "sent");
         if (invoice.status === "pending" || invoice.status === "draft") {
           await storage.updateInvoice(invoice.id, { status: "sent" });
         }
         res.json({ success: true, messageId: msg.id, paymentUrl: paymentUrl || null });
       } else {
+        console.error(`[send-email] Failed to send invoice ${invoice.invoiceNumber}: ${result.error}`);
         await storage.updateMessageStatus(msg.id, "failed", result.error);
         res.status(500).json({ error: result.error });
       }
