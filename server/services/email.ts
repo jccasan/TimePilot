@@ -22,19 +22,24 @@ interface SendEmailResult {
   error?: string;
 }
 
+const VERIFIED_SENDER = "jeremy@scoopilot.com";
+
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
   if (!SENDGRID_API_KEY) {
     return { success: false, error: "SendGrid API key not configured" };
   }
 
   try {
+    const replyTo = options.replyTo
+      || (options.from && options.from !== VERIFIED_SENDER ? options.from : undefined);
+
     const msg = {
       to: options.to,
-      from: options.from || "jeremy@scoopilot.com",
+      from: VERIFIED_SENDER,
       subject: options.subject,
       text: options.text,
       html: options.html || options.text,
-      replyTo: options.replyTo,
+      replyTo,
     };
 
     const [response] = await sgMail.send(msg);
