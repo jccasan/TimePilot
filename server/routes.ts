@@ -3677,7 +3677,7 @@ export async function registerRoutes(
 
         const taxRate = parseFloat(invoiceUpdates.taxRate ?? existing.taxRate ?? "0");
         const discountType = invoiceUpdates.discountType ?? existing.discountType;
-        const discountVal = parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0");
+        const discountVal = Math.abs(parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0"));
         let discountAmount = 0;
         if (discountType === "percent") {
           discountAmount = subtotal * (discountVal / 100);
@@ -3699,7 +3699,7 @@ export async function registerRoutes(
         const subtotal = parseFloat(existing.subtotal ?? "0");
         const taxRate = parseFloat(invoiceUpdates.taxRate ?? existing.taxRate ?? "0");
         const discountType = invoiceUpdates.discountType ?? existing.discountType;
-        const discountVal = parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0");
+        const discountVal = Math.abs(parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0"));
         let discountAmount = 0;
         if (discountType === "percent") {
           discountAmount = subtotal * (discountVal / 100);

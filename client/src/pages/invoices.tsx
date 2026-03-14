@@ -231,7 +231,7 @@ export default function Invoices() {
 
   const subtotal = useMemo(() => lineItems.reduce((sum, li) => sum + (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0), 0), [lineItems]);
   const parsedDiscountValue = parseFloat(discountValue) || 0;
-  const discountAmount = discountType === "percent" ? subtotal * (parsedDiscountValue / 100) : discountType === "amount" ? parsedDiscountValue : 0;
+  const discountAmount = discountType === "percent" ? subtotal * (Math.abs(parsedDiscountValue) / 100) : discountType === "amount" ? Math.abs(parsedDiscountValue) : 0;
   const afterDiscount = Math.max(0, subtotal - discountAmount);
   const parsedTaxRate = parseFloat(taxRate) || 0;
   const taxAmount = afterDiscount * (parsedTaxRate / 100);
@@ -385,7 +385,7 @@ export default function Invoices() {
 
   const editSubtotal = useMemo(() => editLineItems.reduce((sum, li) => sum + (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0), 0), [editLineItems]);
   const editParsedDiscountValue = parseFloat(editDiscountValue) || 0;
-  const editDiscountAmount = editDiscountType === "percent" ? editSubtotal * (editParsedDiscountValue / 100) : editDiscountType === "amount" ? editParsedDiscountValue : 0;
+  const editDiscountAmount = editDiscountType === "percent" ? editSubtotal * (Math.abs(editParsedDiscountValue) / 100) : editDiscountType === "amount" ? Math.abs(editParsedDiscountValue) : 0;
   const editAfterDiscount = Math.max(0, editSubtotal - editDiscountAmount);
   const editParsedTaxRate = parseFloat(editTaxRate) || 0;
   const editTaxAmount = editAfterDiscount * (editParsedTaxRate / 100);
