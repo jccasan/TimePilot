@@ -5041,7 +5041,7 @@ export async function registerRoutes(
       }
 
       const company = await storage.getCompany(companyId);
-      const fromAddress = company?.email || "noreply@scoopilot.com";
+      const fromAddress = company?.email || "jeremy@scoopilot.com";
 
       const msg = await storage.createMessage({
         companyId,
@@ -5215,7 +5215,7 @@ export async function registerRoutes(
         paymentUrl,
       });
 
-      const fromAddress = company?.email || "noreply@scoopilot.com";
+      const fromAddress = company?.email || "jeremy@scoopilot.com";
 
       const msg = await storage.createMessage({
         companyId,
