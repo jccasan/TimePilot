@@ -30,7 +30,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
   try {
     const msg = {
       to: options.to,
-      from: options.from || "jeremy@scoopilot.com",
+      from: options.from || "jeremy@doocrewva.com",
       subject: options.subject,
       text: options.text,
       html: options.html || options.text,
