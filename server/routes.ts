@@ -2777,41 +2777,15 @@ export async function registerRoutes(
   app.post("/api/jobs", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const {
-        contactId, propertyId, frequency, dayOfWeek, pricePerVisit, startDate,
-        endDate, routeId, stopOrder, serviceName, jobType, jobStatus,
-        startTime, endTime, anytime, endsAfterCount, endsAfterUnit,
-        visitInstructions, assignedUserId, estimateId
-      } = req.body;
+      const body = { ...req.body, companyId };
+      if (!body.routeId || body.routeId === "") body.routeId = null;
+      if (!body.jobType) body.jobType = body.frequency === "onetime" ? "one_off" : "recurring";
+      if (!body.jobStatus) body.jobStatus = "draft";
+      if (body.anytime === undefined) body.anytime = true;
+      body.isActive = body.jobStatus === "active";
 
-      if (!contactId || !propertyId || !frequency || !pricePerVisit || !startDate) {
-        return res.status(400).json({ error: "contactId, propertyId, frequency, pricePerVisit, and startDate are required" });
-      }
-
-      const job = await storage.createServicePlan({
-        companyId,
-        contactId,
-        propertyId,
-        frequency,
-        dayOfWeek: dayOfWeek || null,
-        pricePerVisit,
-        startDate,
-        endDate: endDate || null,
-        routeId: routeId || null,
-        stopOrder: stopOrder ?? 0,
-        serviceName: serviceName || null,
-        jobType: jobType || (frequency === "onetime" ? "one_off" : "recurring"),
-        jobStatus: jobStatus || "draft",
-        startTime: startTime || null,
-        endTime: endTime || null,
-        anytime: anytime !== undefined ? anytime : true,
-        endsAfterCount: endsAfterCount || null,
-        endsAfterUnit: endsAfterUnit || null,
-        visitInstructions: visitInstructions || null,
-        assignedUserId: assignedUserId || null,
-        estimateId: estimateId || null,
-        isActive: (jobStatus || "draft") === "active",
-      });
+      const parsed = insertServicePlanSchema.parse(body);
+      const job = await storage.createServicePlan(parsed);
 
       res.status(201).json(job);
     } catch (err) { handleError(res, err); }
