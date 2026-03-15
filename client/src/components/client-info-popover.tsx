@@ -156,7 +156,7 @@ function PopoverBody({ contactId }: { contactId: string }) {
           <Separator />
           <div>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-              Scheduled Services ({contactPlans.length})
+              Jobs ({contactPlans.length})
             </p>
             <div className="space-y-1.5">
               {contactPlans.slice(0, 3).map(plan => {

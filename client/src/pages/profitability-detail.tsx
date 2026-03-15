@@ -294,7 +294,7 @@ function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contac
           <Button variant="outline" size="sm" asChild data-testid={`button-edit-plan-${prop.propertyId}`}>
             <Link href={`/contacts/${contactId}`}>
               <Edit2 className="h-3.5 w-3.5 mr-1" />
-              Edit Scheduled Service
+              Edit Job
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild data-testid={`button-calculator-${prop.propertyId}`}>

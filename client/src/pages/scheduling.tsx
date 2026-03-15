@@ -217,7 +217,7 @@ export default function Scheduling() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
-      toast({ title: `${data.generated} visit${data.generated === 1 ? "" : "s"} generated`, description: data.generated > 0 ? "Visits created from active scheduled services." : "No new visits needed." });
+      toast({ title: `${data.generated} visit${data.generated === 1 ? "" : "s"} generated`, description: data.generated > 0 ? "Visits created from active jobs." : "No new visits needed." });
     },
     onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
   });
@@ -227,7 +227,7 @@ export default function Scheduling() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/visits"] });
-      toast({ title: "Service scheduled", description: "New scheduled service added successfully." });
+      toast({ title: "Job created", description: "New job added successfully." });
       setDialogOpen(false);
       form.reset();
     },
@@ -349,7 +349,7 @@ export default function Scheduling() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Create Visits</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will create visits for all active scheduled services in the selected date range ({dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}). Existing visits won't be duplicated.
+                  This will create visits for all active jobs in the selected date range ({dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}). Existing visits won't be duplicated.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

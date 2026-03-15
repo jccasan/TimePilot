@@ -131,7 +131,7 @@ const ENTITY_TYPES = [
   { value: "contact", label: "Contact" },
   { value: "invoice", label: "Invoice" },
   { value: "route", label: "Route" },
-  { value: "service_plan", label: "Scheduled Service" },
+  { value: "service_plan", label: "Job" },
   { value: "company", label: "Company" },
 ];
 
@@ -1223,14 +1223,14 @@ export default function Settings() {
                 <CalendarClock className="h-5 w-5" />
                 Auto Visit Generation
               </CardTitle>
-              <CardDescription>Automatically generate visits for the next 7 days based on active scheduled services. Runs daily.</CardDescription>
+              <CardDescription>Automatically generate visits for the next 7 days based on active jobs. Runs daily.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between gap-4">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Enable auto visit generation</p>
                   <p className="text-xs text-muted-foreground">
-                    When enabled, visits will be created automatically each day for the upcoming week based on your scheduled services.
+                    When enabled, visits will be created automatically each day for the upcoming week based on your active jobs.
                   </p>
                 </div>
                 <Switch

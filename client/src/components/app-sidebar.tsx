@@ -22,6 +22,7 @@ import {
   ArrowRightLeft,
   Map,
   SlidersHorizontal,
+  Briefcase,
 } from "lucide-react";
 import {
   Sidebar,
@@ -49,6 +50,7 @@ const menuSections = [
     items: [
       { title: "Scheduling", url: "/scheduling", icon: Calendar },
       { title: "Routes", url: "/routes", icon: MapPin },
+      { title: "Jobs", url: "/jobs", icon: Briefcase },
       { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Field View", url: "/m/today", icon: Smartphone },
       { title: "Messages", url: "/communications", icon: MessageSquare },

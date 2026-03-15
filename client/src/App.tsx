@@ -54,6 +54,7 @@ import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
 import OverheadCosts from "@/pages/overhead-costs";
 import MigrationPage from "@/pages/migration-page";
 import ResetPassword from "@/pages/reset-password";
+import Jobs from "@/pages/jobs";
 import { NotificationBell } from "@/components/notification-bell";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
@@ -75,6 +76,7 @@ function Router() {
       <Route path="/contacts/:id" component={ContactDetail} />
       <Route path="/scheduling" component={Scheduling} />
       <Route path="/routes" component={RoutesPage} />
+      <Route path="/jobs" component={Jobs} />
       <Route path="/m/today" component={TechMobile} />
       <Route path="/invoices" component={Invoices} />
       <Route path="/billing" component={Billing} />
