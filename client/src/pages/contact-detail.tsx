@@ -1648,13 +1648,13 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     if (editingPlan) {
       editForm.reset({
         propertyId: editingPlan.propertyId,
-        frequency: editingPlan.frequency as any,
-        dayOfWeek: (editingPlan.dayOfWeek as any) || "monday",
+        frequency: (editingPlan.frequency || "weekly") as ServicePlanFormValues["frequency"],
+        dayOfWeek: (editingPlan.dayOfWeek || "monday") as ServicePlanFormValues["dayOfWeek"],
         pricePerVisit: editingPlan.pricePerVisit,
         startDate: editingPlan.startDate,
         routeId: editingPlan.routeId || "",
         isActive: editingPlan.isActive,
-        jobType: (editingPlan.jobType as any) || "recurring",
+        jobType: (editingPlan.jobType || "recurring") as ServicePlanFormValues["jobType"],
         serviceName: editingPlan.serviceName || "",
         startTime: editingPlan.startTime || "",
         endTime: editingPlan.endTime || "",
@@ -1662,7 +1662,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
         visitInstructions: editingPlan.visitInstructions || "",
         assignedUserId: editingPlan.assignedUserId || "",
         endsAfterCount: editingPlan.endsAfterCount || undefined,
-        endsAfterUnit: (editingPlan.endsAfterUnit as any) || undefined,
+        endsAfterUnit: (editingPlan.endsAfterUnit || undefined) as ServicePlanFormValues["endsAfterUnit"],
         endDate: editingPlan.endDate || "",
       });
       const planWithAddOns = servicePlans?.find(sp => sp.id === editingPlan.id);
@@ -1714,8 +1714,8 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<ServicePlanFormValues> }) => {
-      const normalized = normalizeJobPayload(data as ServicePlanFormValues);
+    mutationFn: async ({ id, data }: { id: string; data: ServicePlanFormValues }) => {
+      const normalized = normalizeJobPayload(data);
       await apiRequest("PATCH", `/api/service-plans/${id}`, {
         ...normalized,
         addOns: buildAddOnsPayload(editSelectedAddOns),
@@ -2130,7 +2130,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               <div key={plan.id} className="border rounded-md p-3" data-testid={`text-plan-${plan.id}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="font-medium capitalize">{frequencyLabelsMap[plan.frequency] || plan.frequency} service</p>
+                    <p className="font-medium capitalize">{plan.serviceName || `${frequencyLabelsMap[plan.frequency] || plan.frequency} job`}</p>
                     <p className="text-sm text-muted-foreground">${plan.pricePerVisit}/visit</p>
                     {plan.addOns && plan.addOns.length > 0 && (
                       <div className="text-xs text-muted-foreground">
