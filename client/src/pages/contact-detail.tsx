@@ -640,7 +640,7 @@ export default function ContactDetail() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete Property</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to delete {prop.streetAddress}? This action cannot be undone. Any scheduled services linked to this property will also be affected.
+                              Are you sure you want to delete {prop.streetAddress}? This action cannot be undone. Any jobs linked to this property will also be affected.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -1290,7 +1290,7 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
             </Select>
             <p className="text-xs text-muted-foreground mt-1">
               {timing === "before_service"
-                ? "Invoice created before scheduled services"
+                ? "Invoice created before jobs"
                 : "Invoice created after services are completed"}
             </p>
           </div>
@@ -1340,6 +1340,16 @@ const servicePlanFormSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   routeId: z.string().optional(),
   isActive: z.boolean().optional(),
+  jobType: z.enum(["one_off", "recurring"]).optional(),
+  serviceName: z.string().optional(),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  anytime: z.boolean().optional(),
+  visitInstructions: z.string().optional(),
+  assignedUserId: z.string().optional(),
+  endsAfterCount: z.number().optional(),
+  endsAfterUnit: z.enum(["days", "weeks", "months", "years"]).optional(),
+  endDate: z.string().optional(),
 });
 
 type ServicePlanFormValues = z.infer<typeof servicePlanFormSchema>;
@@ -1562,6 +1572,10 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     queryKey: ["/api/routes"],
   });
 
+  const { data: team } = useQuery<{ id: string; firstName: string; lastName: string; role: string }[]>({
+    queryKey: ["/api/company/team"],
+  });
+
   const [createSelectedAddOns, setCreateSelectedAddOns] = useState<string[]>([]);
   const [editSelectedAddOns, setEditSelectedAddOns] = useState<string[]>([]);
 
@@ -1595,6 +1609,8 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       propertyId: "",
       frequency: "weekly",
       dayOfWeek: "monday",
+      jobType: "recurring",
+      anytime: true,
       pricePerVisit: "",
       startDate: new Date().toISOString().split("T")[0],
       routeId: "",
@@ -1607,6 +1623,8 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       propertyId: "",
       frequency: "weekly",
       dayOfWeek: "monday",
+      jobType: "recurring",
+      anytime: true,
       pricePerVisit: "",
       startDate: new Date().toISOString().split("T")[0],
       routeId: "",
@@ -1636,6 +1654,16 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
         startDate: editingPlan.startDate,
         routeId: editingPlan.routeId || "",
         isActive: editingPlan.isActive,
+        jobType: (editingPlan.jobType as any) || "recurring",
+        serviceName: editingPlan.serviceName || "",
+        startTime: editingPlan.startTime || "",
+        endTime: editingPlan.endTime || "",
+        anytime: editingPlan.anytime !== false,
+        visitInstructions: editingPlan.visitInstructions || "",
+        assignedUserId: editingPlan.assignedUserId || "",
+        endsAfterCount: editingPlan.endsAfterCount || undefined,
+        endsAfterUnit: (editingPlan.endsAfterUnit as any) || undefined,
+        endDate: editingPlan.endDate || "",
       });
       const planWithAddOns = servicePlans?.find(sp => sp.id === editingPlan.id);
       setEditSelectedAddOns(planWithAddOns?.addOns?.map(a => a.servicePricingId) || []);
@@ -1649,17 +1677,33 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     });
   };
 
+  const normalizeJobPayload = (data: ServicePlanFormValues) => {
+    const { assignedUserId, ...rest } = data;
+    const isOneOff = rest.jobType === "one_off";
+    return {
+      ...rest,
+      frequency: isOneOff ? "onetime" as const : rest.frequency,
+      assignedUserId: (assignedUserId && assignedUserId !== "none") ? assignedUserId : null,
+      startTime: rest.anytime ? null : (rest.startTime || null),
+      endTime: rest.anytime ? null : (rest.endTime || null),
+      endsAfterCount: isOneOff ? null : (rest.endsAfterCount || null),
+      endsAfterUnit: isOneOff ? null : (rest.endsAfterUnit || null),
+    };
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: ServicePlanFormValues) => {
+      const normalized = normalizeJobPayload(data);
       await apiRequest("POST", "/api/service-plans", {
-        ...data,
+        ...normalized,
         contactId,
         addOns: buildAddOnsPayload(createSelectedAddOns),
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
-      toast({ title: "Service scheduled" });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({ title: "Job created" });
       setCreateDialogOpen(false);
       createForm.reset();
       setCreateSelectedAddOns([]);
@@ -1671,13 +1715,15 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<ServicePlanFormValues> }) => {
+      const normalized = normalizeJobPayload(data as ServicePlanFormValues);
       await apiRequest("PATCH", `/api/service-plans/${id}`, {
-        ...data,
+        ...normalized,
         addOns: buildAddOnsPayload(editSelectedAddOns),
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       toast({ title: "Job updated" });
       setEditingPlan(null);
       setEditSelectedAddOns([]);
@@ -1693,6 +1739,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       toast({ title: "Job deleted" });
     },
     onError: (error: Error) => {
@@ -1735,6 +1782,8 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
   ) => {
     const freq = form.watch("frequency");
     const basePrice = form.watch("pricePerVisit");
+    const jobType = form.watch("jobType");
+    const anytimeVal = form.watch("anytime");
     const templates = basePricingForFreq(freq);
     const addOnsTotal = (selectedAddOns || []).reduce((sum, id) => {
       const item = addOnPricing.find(p => p.id === id);
@@ -1745,6 +1794,42 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     return (
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <div>
+            <Label className="text-sm font-semibold">Job Type</Label>
+            <div className="flex gap-2 mt-1.5">
+              <Button
+                type="button"
+                variant={jobType === "one_off" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  form.setValue("jobType", "one_off");
+                  form.setValue("frequency", "onetime");
+                }}
+                data-testid="button-plan-job-type-one-off"
+              >
+                One-off
+              </Button>
+              <Button
+                type="button"
+                variant={jobType === "recurring" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  form.setValue("jobType", "recurring");
+                  form.setValue("frequency", "weekly");
+                }}
+                data-testid="button-plan-job-type-recurring"
+              >
+                Recurring
+              </Button>
+            </div>
+          </div>
+          <FormField control={form.control} name="serviceName" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Service Name (optional)</FormLabel>
+              <FormControl><Input placeholder="e.g. Yard Cleanup" {...field} data-testid="input-plan-service-name" /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
           <FormField control={form.control} name="propertyId" render={({ field }) => (
             <FormItem>
               <FormLabel>Property</FormLabel>
@@ -1887,6 +1972,59 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                 <FormMessage />
               </FormItem>
             )} />
+          <div className="space-y-3 rounded-md border p-3">
+            <Label className="text-sm font-semibold">Time Window</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!anytimeVal}
+                onChange={(e) => form.setValue("anytime", e.target.checked)}
+                className="accent-primary"
+                data-testid="checkbox-plan-anytime"
+              />
+              <Label className="text-sm">Anytime (no specific window)</Label>
+            </div>
+            {!anytimeVal && (
+              <div className="flex gap-2">
+                <FormField control={form.control} name="startTime" render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel>Start</FormLabel>
+                    <FormControl><Input type="time" {...field} data-testid="input-plan-start-time" /></FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="endTime" render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel>End</FormLabel>
+                    <FormControl><Input type="time" {...field} data-testid="input-plan-end-time" /></FormControl>
+                  </FormItem>
+                )} />
+              </div>
+            )}
+          </div>
+          <FormField control={form.control} name="assignedUserId" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Assigned Team Member (optional)</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl><SelectTrigger data-testid="select-plan-assigned-user"><SelectValue placeholder="Unassigned" /></SelectTrigger></FormControl>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {team?.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.firstName} {m.lastName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="visitInstructions" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Visit Instructions (optional)</FormLabel>
+              <FormControl>
+                <Textarea placeholder="Special instructions for this job..." {...field} rows={2} data-testid="input-plan-visit-instructions" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
           {isEdit && (
             <FormField control={form.control} name="isActive" render={({ field }) => (
               <FormItem className="flex items-center gap-2">
@@ -1921,14 +2059,14 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
         }}>
           <DialogTrigger asChild>
             <Button size="sm" data-testid="button-add-service-plan">
-              <Plus className="mr-1 h-4 w-4" /> Schedule Service
+              <Plus className="mr-1 h-4 w-4" /> Add Job
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Schedule Service</DialogTitle>
+              <DialogTitle>Add Job</DialogTitle>
             </DialogHeader>
-            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Schedule Service", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns)}
+            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Job", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns)}
           </DialogContent>
         </Dialog>
       </CardHeader>

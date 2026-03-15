@@ -360,10 +360,10 @@ export default function Scheduling() {
           </AlertDialog>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Schedule Service</Button>
+              <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Add Job</Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Schedule Service</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Add Job</DialogTitle></DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
                   <FormField control={form.control} name="contactId" render={({ field }) => (
@@ -446,7 +446,7 @@ export default function Scheduling() {
                     </FormItem>
                   )} />
                   <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-service-plan">
-                    {createMutation.isPending ? "Creating..." : "Schedule Service"}
+                    {createMutation.isPending ? "Creating..." : "Create Job"}
                   </Button>
                 </form>
               </Form>

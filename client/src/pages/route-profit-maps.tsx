@@ -204,7 +204,7 @@ export default function RouteProfitMaps() {
             <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-8" data-testid="empty-map-state">
               <MapIcon className="h-12 w-12 opacity-30" />
               <p className="text-lg font-medium">No route data available</p>
-              <p className="text-sm">Create routes and assign scheduled services with geocoded properties to see profitability on the map.</p>
+              <p className="text-sm">Create routes and assign jobs with geocoded properties to see profitability on the map.</p>
             </div>
           ) : (
             <ProfitabilityMap

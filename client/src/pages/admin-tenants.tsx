@@ -269,7 +269,7 @@ export default function AdminTenants() {
           <DialogHeader>
             <DialogTitle>Remove Tenant</DialogTitle>
             <DialogDescription>
-              This will permanently delete <strong>{deleteTarget?.name}</strong> and all of its data including contacts, scheduled services, invoices, and user accounts that belong only to this company. This cannot be undone.
+              This will permanently delete <strong>{deleteTarget?.name}</strong> and all of its data including contacts, jobs, invoices, and user accounts that belong only to this company. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

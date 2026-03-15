@@ -562,9 +562,10 @@ export default function Jobs() {
   }, [enrichedJobs, statusFilter, typeFilter, search]);
 
   const counts = useMemo(() => {
-    if (!jobs) return { draft: 0, active: 0, completed: 0, cancelled: 0, total: 0 };
+    if (!jobs) return { draft: 0, approved: 0, active: 0, completed: 0, cancelled: 0, total: 0 };
     return {
       draft: jobs.filter(j => j.jobStatus === "draft").length,
+      approved: jobs.filter(j => j.jobStatus === "approved").length,
       active: jobs.filter(j => j.jobStatus === "active").length,
       completed: jobs.filter(j => j.jobStatus === "completed").length,
       cancelled: jobs.filter(j => j.jobStatus === "cancelled").length,
@@ -595,7 +596,7 @@ export default function Jobs() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Card className="cursor-pointer" onClick={() => setStatusFilter("all")} data-testid="card-stat-total">
           <CardContent className="p-3 text-center">
             <p className="text-2xl font-bold">{counts.total}</p>
@@ -606,6 +607,12 @@ export default function Jobs() {
           <CardContent className="p-3 text-center">
             <p className="text-2xl font-bold">{counts.draft}</p>
             <p className="text-xs text-muted-foreground">Drafts</p>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer" onClick={() => setStatusFilter("approved")} data-testid="card-stat-approved">
+          <CardContent className="p-3 text-center">
+            <p className="text-2xl font-bold">{counts.approved}</p>
+            <p className="text-xs text-muted-foreground">Approved</p>
           </CardContent>
         </Card>
         <Card className="cursor-pointer" onClick={() => setStatusFilter("active")} data-testid="card-stat-active">
@@ -641,6 +648,7 @@ export default function Jobs() {
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>

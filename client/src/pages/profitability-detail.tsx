@@ -425,7 +425,7 @@ export default function ProfitabilityDetail() {
         <Card>
           <CardContent className="p-6">
             <p className="text-muted-foreground" data-testid="text-no-data">
-              No profitability data available for this customer. They may not have active scheduled services.
+              No profitability data available for this customer. They may not have active jobs.
             </p>
           </CardContent>
         </Card>

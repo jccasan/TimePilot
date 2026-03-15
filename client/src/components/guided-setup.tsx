@@ -99,7 +99,7 @@ const STEP_LABELS = [
   "Set up your service zones",
   "Add your first customer",
   "Price your first property",
-  "Schedule your first service",
+  "Create your first job",
   "Generate your first route",
 ];
 
@@ -383,17 +383,17 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       setActiveStep(4);
-      toast({ title: "Service scheduled" });
+      toast({ title: "Job created" });
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to schedule service", description: err.message, variant: "destructive" });
+      toast({ title: "Failed to create job", description: err.message, variant: "destructive" });
     },
   });
 
   const generateRouteMutation = useMutation({
     mutationFn: async () => {
       if (!createdPlanId) {
-        throw new Error("Scheduled service not found. Please go back and create one first.");
+        throw new Error("Job not found. Please go back and create one first.");
       }
       const dayLabel = DAYS.find(d => d.value === customerDay)?.label || "Monday";
       const routeRes = await apiRequest("POST", "/api/routes", {
@@ -850,7 +850,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                     {createServicePlanMutation.isPending ? (
                       <><Loader2 className="h-4 w-4 animate-spin" /> Creating...</>
                     ) : (
-                      <>Schedule Service <ArrowRight className="h-4 w-4" /></>
+                      <>Create Job <ArrowRight className="h-4 w-4" /></>
                     )}
                   </Button>
                 </div>
@@ -860,7 +860,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                 <div className="px-4 pb-4 space-y-3" data-testid="step-4-route">
                   <p className="text-sm text-muted-foreground">
                     We'll create a {DAYS.find(d => d.value === customerDay)?.label || customerDay} route, 
-                    assign your scheduled service to it, and generate visits for the next 4 weeks.
+                    assign your job to it, and generate visits for the next 4 weeks.
                   </p>
                   <Button
                     className="w-full gap-2"
