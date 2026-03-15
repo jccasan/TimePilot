@@ -2025,48 +2025,59 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               <FormMessage />
             </FormItem>
           )} />
-          {jobType === "recurring" && (
-            <div className="space-y-3 rounded-md border p-3">
-              <Label className="text-sm font-semibold">End Conditions (optional)</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="endsAfterCount" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Ends After (count)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={1}
-                        placeholder="e.g. 12"
-                        value={field.value ?? ""}
-                        onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                        data-testid="input-plan-ends-after-count"
-                      />
-                    </FormControl>
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="endsAfterUnit" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Unit</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || "months"}>
-                      <FormControl><SelectTrigger data-testid="select-plan-ends-after-unit"><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="days">Days</SelectItem>
-                        <SelectItem value="weeks">Weeks</SelectItem>
-                        <SelectItem value="months">Months</SelectItem>
-                        <SelectItem value="years">Years</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )} />
+          {jobType === "recurring" && (() => {
+            const endMode = form.watch("endsAfterCount") ? "count" : form.watch("endDate") ? "date" : "none";
+            return (
+              <div className="space-y-3 rounded-md border p-3">
+                <Label className="text-sm font-semibold">End Conditions (optional)</Label>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant={endMode === "none" ? "default" : "outline"} onClick={() => { form.setValue("endsAfterCount", undefined); form.setValue("endsAfterUnit", undefined); form.setValue("endDate", ""); }} data-testid="button-plan-end-none">
+                    No End
+                  </Button>
+                  <Button type="button" size="sm" variant={endMode === "count" ? "default" : "outline"} onClick={() => { form.setValue("endsAfterCount", form.getValues("endsAfterCount") || 12); form.setValue("endsAfterUnit", form.getValues("endsAfterUnit") || "months"); form.setValue("endDate", ""); }} data-testid="button-plan-end-count">
+                    After Count
+                  </Button>
+                  <Button type="button" size="sm" variant={endMode === "date" ? "default" : "outline"} onClick={() => { form.setValue("endsAfterCount", undefined); form.setValue("endsAfterUnit", undefined); form.setValue("endDate", form.getValues("endDate") || new Date().toISOString().split("T")[0]); }} data-testid="button-plan-end-date">
+                    On Date
+                  </Button>
+                </div>
+                {endMode === "count" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField control={form.control} name="endsAfterCount" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Count</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={1} placeholder="e.g. 12" value={field.value ?? ""} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)} data-testid="input-plan-ends-after-count" />
+                        </FormControl>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="endsAfterUnit" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Unit</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || "months"}>
+                          <FormControl><SelectTrigger data-testid="select-plan-ends-after-unit"><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="days">Days</SelectItem>
+                            <SelectItem value="weeks">Weeks</SelectItem>
+                            <SelectItem value="months">Months</SelectItem>
+                            <SelectItem value="years">Years</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )} />
+                  </div>
+                )}
+                {endMode === "date" && (
+                  <FormField control={form.control} name="endDate" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End Date</FormLabel>
+                      <FormControl><Input type="date" {...field} data-testid="input-plan-end-date" /></FormControl>
+                    </FormItem>
+                  )} />
+                )}
               </div>
-              <FormField control={form.control} name="endDate" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Or End Date</FormLabel>
-                  <FormControl><Input type="date" {...field} data-testid="input-plan-end-date" /></FormControl>
-                </FormItem>
-              )} />
-            </div>
-          )}
+            );
+          })()}
           {isEdit && (
             <FormField control={form.control} name="isActive" render={({ field }) => (
               <FormItem className="flex items-center gap-2">
