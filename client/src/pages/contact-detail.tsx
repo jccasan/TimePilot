@@ -2025,6 +2025,48 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               <FormMessage />
             </FormItem>
           )} />
+          {jobType === "recurring" && (
+            <div className="space-y-3 rounded-md border p-3">
+              <Label className="text-sm font-semibold">End Conditions (optional)</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name="endsAfterCount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ends After (count)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="e.g. 12"
+                        value={field.value ?? ""}
+                        onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                        data-testid="input-plan-ends-after-count"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="endsAfterUnit" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Unit</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || "months"}>
+                      <FormControl><SelectTrigger data-testid="select-plan-ends-after-unit"><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="days">Days</SelectItem>
+                        <SelectItem value="weeks">Weeks</SelectItem>
+                        <SelectItem value="months">Months</SelectItem>
+                        <SelectItem value="years">Years</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+              </div>
+              <FormField control={form.control} name="endDate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Or End Date</FormLabel>
+                  <FormControl><Input type="date" {...field} data-testid="input-plan-end-date" /></FormControl>
+                </FormItem>
+              )} />
+            </div>
+          )}
           {isEdit && (
             <FormField control={form.control} name="isActive" render={({ field }) => (
               <FormItem className="flex items-center gap-2">
