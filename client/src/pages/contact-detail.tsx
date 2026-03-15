@@ -1688,6 +1688,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       endTime: rest.anytime ? null : (rest.endTime || null),
       endsAfterCount: isOneOff ? null : (rest.endsAfterCount || null),
       endsAfterUnit: isOneOff ? null : (rest.endsAfterUnit || null),
+      endDate: isOneOff ? null : (rest.endDate || null),
     };
   };
 

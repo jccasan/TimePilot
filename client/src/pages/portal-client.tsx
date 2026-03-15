@@ -1083,7 +1083,7 @@ export default function PortalClient() {
               />
               <SummaryCard
                 icon={Calendar}
-                label="Your Service"
+                label="Your Job"
                 value={activePlan ? (frequencyLabels[activePlan.frequency] || activePlan.frequency) : "No active plan"}
                 sublabel={activePlan ? `${activePlan.dayOfWeek ? activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1) + "s" : ""} - $${Number(activePlan.pricePerVisit).toFixed(2)}/visit` : undefined}
                 accent="bg-primary/10 text-primary"
@@ -1396,7 +1396,7 @@ export default function PortalClient() {
             </section>
 
             <section>
-              <SectionHeader title="Change Your Service" description="Change frequency, service day, pause, or request same-day service" />
+              <SectionHeader title="Change Your Job" description="Change frequency, service day, pause, or request same-day service" />
               <Card>
                 <CardContent className="pt-4">
                   <form onSubmit={handleSubmitChangeRequest} className="space-y-4">
