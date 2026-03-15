@@ -346,6 +346,9 @@ export interface IStorage {
   updateServiceZone(id: string, data: Partial<InsertServiceZone>): Promise<ServiceZone>;
   deleteServiceZone(id: string): Promise<void>;
 
+  // Jobs
+  createJobFromEstimate(estimate: Estimate, contactId: string): Promise<ServicePlan>;
+
   // Referral helpers
   getContactByReferralCode(code: string): Promise<Contact | undefined>;
   getReferralCount(contactId: string): Promise<number>;
@@ -1966,6 +1969,27 @@ export class DatabaseStorage implements IStorage {
 
   async deleteServiceZone(id: string): Promise<void> {
     await db.delete(serviceZones).where(eq(serviceZones.id, id));
+  }
+
+  async createJobFromEstimate(estimate: Estimate, contactId: string): Promise<ServicePlan> {
+    const totalDollars = (estimate.totalCents / 100).toFixed(2);
+    const today = new Date().toISOString().split("T")[0];
+    const [job] = await db.insert(servicePlans).values({
+      companyId: estimate.companyId,
+      contactId,
+      propertyId: estimate.propertyId!,
+      frequency: "onetime",
+      pricePerVisit: totalDollars,
+      startDate: today,
+      isActive: false,
+      serviceName: estimate.description || "Job from estimate",
+      jobType: "one_off",
+      jobStatus: "draft",
+      anytime: true,
+      estimateId: estimate.id,
+      stopOrder: 0,
+    }).returning();
+    return job;
   }
 }
 

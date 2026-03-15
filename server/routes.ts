@@ -2819,17 +2819,17 @@ export async function registerRoutes(
 
   app.post("/api/jobs/:id/approve", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
       const job = await storage.getServicePlan(req.params.id, companyId);
       if (!job) return res.status(404).json({ error: "Job not found" });
-      if (job.jobStatus !== "draft" && job.jobStatus !== "approved") {
+      if (job.jobStatus !== "draft") {
         return res.status(400).json({ error: `Cannot approve a job with status '${job.jobStatus}'` });
       }
 
-      const newStatus = job.jobStatus === "draft" ? "approved" : "active";
       const updated = await storage.updateServicePlan(job.id, {
-        jobStatus: newStatus as any,
-        isActive: newStatus === "active",
+        jobStatus: "active",
+        isActive: true,
       });
 
       res.json(updated);
@@ -6454,23 +6454,7 @@ export async function registerRoutes(
 
       if (estimate.propertyId) {
         try {
-          const totalDollars = (estimate.totalCents / 100).toFixed(2);
-          const today = new Date().toISOString().split("T")[0];
-          await storage.createServicePlan({
-            companyId,
-            contactId,
-            propertyId: estimate.propertyId,
-            frequency: "onetime",
-            pricePerVisit: totalDollars,
-            startDate: today,
-            isActive: false,
-            serviceName: estimate.description || "Job from estimate",
-            jobType: "one_off",
-            jobStatus: "draft",
-            anytime: true,
-            estimateId: estimate.id,
-            stopOrder: 0,
-          });
+          await storage.createJobFromEstimate(estimate, contactId);
           notify(companyId, "general", "Draft Job Created from Estimate", `${contactName} approved estimate "${estimate.description}". A draft job has been created — review and approve the schedule.`, `/jobs`);
         } catch (jobErr) {
           console.error("[estimate-approve] Failed to auto-create job:", jobErr);
