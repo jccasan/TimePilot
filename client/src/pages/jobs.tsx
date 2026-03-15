@@ -20,6 +20,7 @@ import {
 import {
   Briefcase, Plus, Search, CheckCircle, Clock, Loader2,
   Edit2, Trash2, Eye, ChevronDown, ChevronUp, Filter,
+  User, Calendar,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -69,6 +70,25 @@ const dayLabels: Record<string, string> = {
   sunday: "Sunday",
 };
 
+interface JobFormPayload {
+  contactId: string;
+  propertyId: string;
+  serviceName: string | null;
+  jobType: string;
+  frequency: string;
+  dayOfWeek: string | null;
+  pricePerVisit: string;
+  startDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  anytime: boolean;
+  visitInstructions: string | null;
+  assignedUserId: string | null;
+  endsAfterCount?: number | null;
+  endsAfterUnit?: string | null;
+  endDate?: string | null;
+}
+
 function JobForm({
   onSubmit,
   isPending,
@@ -78,7 +98,7 @@ function JobForm({
   initial,
   submitLabel,
 }: {
-  onSubmit: (data: any) => void;
+  onSubmit: (data: JobFormPayload) => void;
   isPending: boolean;
   contacts: Contact[];
   properties: Property[];
@@ -113,7 +133,7 @@ function JobForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const data: any = {
+    const payload: JobFormPayload = {
       contactId,
       propertyId,
       serviceName: serviceName || null,
@@ -131,25 +151,25 @@ function JobForm({
 
     if (jobType === "recurring") {
       if (endsAfterMode === "count" && endsAfterCount) {
-        data.endsAfterCount = parseInt(endsAfterCount);
-        data.endsAfterUnit = endsAfterUnit;
-        data.endDate = null;
+        payload.endsAfterCount = parseInt(endsAfterCount);
+        payload.endsAfterUnit = endsAfterUnit;
+        payload.endDate = null;
       } else if (endsAfterMode === "date" && endDate) {
-        data.endDate = endDate;
-        data.endsAfterCount = null;
-        data.endsAfterUnit = null;
+        payload.endDate = endDate;
+        payload.endsAfterCount = null;
+        payload.endsAfterUnit = null;
       } else {
-        data.endsAfterCount = null;
-        data.endsAfterUnit = null;
-        data.endDate = null;
+        payload.endsAfterCount = null;
+        payload.endsAfterUnit = null;
+        payload.endDate = null;
       }
     } else {
-      data.endsAfterCount = null;
-      data.endsAfterUnit = null;
-      data.endDate = null;
+      payload.endsAfterCount = null;
+      payload.endsAfterUnit = null;
+      payload.endDate = null;
     }
 
-    onSubmit(data);
+    onSubmit(payload);
   };
 
   return (
@@ -472,7 +492,7 @@ export default function Jobs() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: JobFormPayload) => {
       await apiRequest("POST", "/api/jobs", data);
     },
     onSuccess: () => {
@@ -488,7 +508,7 @@ export default function Jobs() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+    mutationFn: async ({ id, data }: { id: string; data: JobFormPayload }) => {
       await apiRequest("PATCH", `/api/service-plans/${id}`, data);
     },
     onSuccess: () => {
@@ -709,6 +729,22 @@ export default function Jobs() {
                           </span>
                         )}
                         <span className="text-xs text-muted-foreground">${Number(job.pricePerVisit).toFixed(2)}/visit</span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-muted-foreground">
+                        {assignedName && (
+                          <span data-testid={`text-job-assigned-${job.id}`}>
+                            <User className="h-3 w-3 inline mr-0.5" />{assignedName}
+                          </span>
+                        )}
+                        <span data-testid={`text-job-next-visit-${job.id}`}>
+                          <Calendar className="h-3 w-3 inline mr-0.5" />
+                          {job.startDate ? `Starts ${job.startDate}` : "No date set"}
+                        </span>
+                        <span data-testid={`text-job-schedule-${job.id}`}>
+                          {job.jobType === "one_off"
+                            ? "One-time visit"
+                            : `${frequencyLabels[job.frequency] || job.frequency}${job.dayOfWeek ? `, ${dayLabels[job.dayOfWeek] || job.dayOfWeek}s` : ""}`}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
