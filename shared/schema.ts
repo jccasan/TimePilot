@@ -10,6 +10,9 @@ import { users } from "./models/auth";
 export const userRoleEnum = pgEnum("user_role", ["owner", "admin", "tech"]);
 export const leadStatusEnum = pgEnum("lead_status", ["lead", "estimate", "active", "paused", "cancelled"]);
 export const serviceFrequencyEnum = pgEnum("service_frequency", ["weekly", "biweekly", "monthly", "onetime"]);
+export const jobStatusEnum = pgEnum("job_status", ["draft", "approved", "active", "completed", "cancelled"]);
+export const jobTypeEnum = pgEnum("job_type", ["one_off", "recurring"]);
+export const endsAfterUnitEnum = pgEnum("ends_after_unit", ["days", "weeks", "months", "years"]);
 export const dayOfWeekEnum = pgEnum("day_of_week", ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "tbd"]);
 export const visitStatusEnum = pgEnum("visit_status", ["scheduled", "in_progress", "completed", "skipped", "cancelled"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["draft", "sent", "pending", "paid", "failed", "refunded", "voided"]);
@@ -287,11 +290,23 @@ export const servicePlans = pgTable("service_plans", {
   endDate: date("end_date"),
   routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),
   stopOrder: integer("stop_order").notNull().default(0),
+  serviceName: varchar("service_name", { length: 255 }),
+  jobType: jobTypeEnum("job_type").default("recurring"),
+  jobStatus: jobStatusEnum("job_status").default("active"),
+  startTime: varchar("start_time", { length: 10 }),
+  endTime: varchar("end_time", { length: 10 }),
+  anytime: boolean("anytime").default(true),
+  endsAfterCount: integer("ends_after_count"),
+  endsAfterUnit: endsAfterUnitEnum("ends_after_unit"),
+  visitInstructions: text("visit_instructions"),
+  assignedUserId: varchar("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+  estimateId: varchar("estimate_id").references(() => estimates.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_sp_company").on(table.companyId),
   index("idx_sp_property").on(table.propertyId),
+  index("idx_sp_job_status").on(table.jobStatus),
 ]);
 
 export const servicePlanAddOns = pgTable("service_plan_add_ons", {
@@ -600,6 +615,8 @@ export const servicePlanRelations = relations(servicePlans, ({ one, many }) => (
   contact: one(contacts, { fields: [servicePlans.contactId], references: [contacts.id] }),
   property: one(properties, { fields: [servicePlans.propertyId], references: [properties.id] }),
   route: one(routes, { fields: [servicePlans.routeId], references: [routes.id] }),
+  assignedUser: one(users, { fields: [servicePlans.assignedUserId], references: [users.id] }),
+  estimate: one(estimates, { fields: [servicePlans.estimateId], references: [estimates.id] }),
   visits: many(visits),
   vacationHolds: many(vacationHolds),
   addOns: many(servicePlanAddOns),

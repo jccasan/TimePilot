@@ -49,14 +49,14 @@ export async function runAutoVisits() {
 
 export async function generateVisitsForPlans(companyId: string, planIds: string[], startDate: string, endDate: string): Promise<number> {
   const allPlans = await storage.getServicePlans(companyId, { isActive: true });
-  const plans = allPlans.filter(p => planIds.includes(p.id) && !p.pausedAt);
+  const plans = allPlans.filter(p => planIds.includes(p.id) && !p.pausedAt && (!p.jobStatus || p.jobStatus === "active"));
   if (plans.length === 0) return 0;
   return generateVisitsFromPlans(companyId, plans, startDate, endDate, true);
 }
 
 export async function generateVisitsForCompany(companyId: string, startDate: string, endDate: string): Promise<number> {
   const allPlans = await storage.getServicePlans(companyId, { isActive: true });
-  const plans = allPlans.filter(p => !p.pausedAt);
+  const plans = allPlans.filter(p => !p.pausedAt && (!p.jobStatus || p.jobStatus === "active"));
   return generateVisitsFromPlans(companyId, plans, startDate, endDate, false);
 }
 
@@ -101,7 +101,18 @@ async function generateVisitsFromPlans(companyId: string, plans: Awaited<ReturnT
     if (targetDay === undefined) continue;
 
     const planStart = plan.startDate ? new Date(plan.startDate + "T00:00:00Z") : start;
-    const planEnd = plan.endDate ? new Date(plan.endDate + "T00:00:00Z") : end;
+    let computedEndDate: Date | null = plan.endDate ? new Date(plan.endDate + "T00:00:00Z") : null;
+    if (!computedEndDate && plan.endsAfterCount && plan.endsAfterUnit && plan.startDate) {
+      const base = new Date(plan.startDate + "T00:00:00Z");
+      switch (plan.endsAfterUnit) {
+        case "days": base.setUTCDate(base.getUTCDate() + plan.endsAfterCount); break;
+        case "weeks": base.setUTCDate(base.getUTCDate() + plan.endsAfterCount * 7); break;
+        case "months": base.setUTCMonth(base.getUTCMonth() + plan.endsAfterCount); break;
+        case "years": base.setUTCFullYear(base.getUTCFullYear() + plan.endsAfterCount); break;
+      }
+      computedEndDate = base;
+    }
+    const planEnd = computedEndDate || end;
     const effectiveStart = planStart > start ? planStart : start;
     const effectiveEnd = planEnd < end ? planEnd : end;
 

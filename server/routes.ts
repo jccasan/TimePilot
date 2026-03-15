@@ -2755,6 +2755,87 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Jobs API (thin wrappers over service_plans) ================
+
+  app.get("/api/jobs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const filters: any = {};
+      if (req.query.contactId) filters.contactId = req.query.contactId as string;
+      if (req.query.propertyId) filters.propertyId = req.query.propertyId as string;
+      if (req.query.isActive !== undefined) filters.isActive = req.query.isActive === "true";
+      const plans = await storage.getServicePlans(companyId, filters);
+      const jobStatus = req.query.jobStatus as string | undefined;
+      const jobType = req.query.jobType as string | undefined;
+      let filtered = plans;
+      if (jobStatus) filtered = filtered.filter(p => p.jobStatus === jobStatus);
+      if (jobType) filtered = filtered.filter(p => p.jobType === jobType);
+      res.json(filtered);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/jobs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const {
+        contactId, propertyId, frequency, dayOfWeek, pricePerVisit, startDate,
+        endDate, routeId, stopOrder, serviceName, jobType, jobStatus,
+        startTime, endTime, anytime, endsAfterCount, endsAfterUnit,
+        visitInstructions, assignedUserId, estimateId
+      } = req.body;
+
+      if (!contactId || !propertyId || !frequency || !pricePerVisit || !startDate) {
+        return res.status(400).json({ error: "contactId, propertyId, frequency, pricePerVisit, and startDate are required" });
+      }
+
+      const job = await storage.createServicePlan({
+        companyId,
+        contactId,
+        propertyId,
+        frequency,
+        dayOfWeek: dayOfWeek || null,
+        pricePerVisit,
+        startDate,
+        endDate: endDate || null,
+        routeId: routeId || null,
+        stopOrder: stopOrder ?? 0,
+        serviceName: serviceName || null,
+        jobType: jobType || (frequency === "onetime" ? "one_off" : "recurring"),
+        jobStatus: jobStatus || "draft",
+        startTime: startTime || null,
+        endTime: endTime || null,
+        anytime: anytime !== undefined ? anytime : true,
+        endsAfterCount: endsAfterCount || null,
+        endsAfterUnit: endsAfterUnit || null,
+        visitInstructions: visitInstructions || null,
+        assignedUserId: assignedUserId || null,
+        estimateId: estimateId || null,
+        isActive: (jobStatus || "draft") === "active",
+      });
+
+      res.status(201).json(job);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/jobs/:id/approve", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const job = await storage.getServicePlan(req.params.id, companyId);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      if (job.jobStatus !== "draft" && job.jobStatus !== "approved") {
+        return res.status(400).json({ error: `Cannot approve a job with status '${job.jobStatus}'` });
+      }
+
+      const newStatus = job.jobStatus === "draft" ? "approved" : "active";
+      const updated = await storage.updateServicePlan(job.id, {
+        jobStatus: newStatus as any,
+        isActive: newStatus === "active",
+      });
+
+      res.json(updated);
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Service Zone Routes ================
 
   app.get("/api/service-zones", isAuthenticated, async (req: Request, res: Response) => {
@@ -6369,7 +6450,36 @@ export async function registerRoutes(
       });
 
       const contact = await storage.getContactById(contactId);
-      notify(companyId, "general", "Estimate Approved", `${contact?.firstName} ${contact?.lastName} approved estimate: ${estimate.description}`, `/contacts/${contactId}`);
+      const contactName = `${contact?.firstName || ""} ${contact?.lastName || ""}`.trim();
+
+      if (estimate.propertyId) {
+        try {
+          const totalDollars = (estimate.totalCents / 100).toFixed(2);
+          const today = new Date().toISOString().split("T")[0];
+          await storage.createServicePlan({
+            companyId,
+            contactId,
+            propertyId: estimate.propertyId,
+            frequency: "onetime",
+            pricePerVisit: totalDollars,
+            startDate: today,
+            isActive: false,
+            serviceName: estimate.description || "Job from estimate",
+            jobType: "one_off",
+            jobStatus: "draft",
+            anytime: true,
+            estimateId: estimate.id,
+            stopOrder: 0,
+          });
+          notify(companyId, "general", "Draft Job Created from Estimate", `${contactName} approved estimate "${estimate.description}". A draft job has been created — review and approve the schedule.`, `/jobs`);
+        } catch (jobErr) {
+          console.error("[estimate-approve] Failed to auto-create job:", jobErr);
+          notify(companyId, "general", "Estimate Approved", `${contactName} approved estimate: ${estimate.description}`, `/contacts/${contactId}`);
+        }
+      } else {
+        notify(companyId, "general", "Estimate Approved", `${contactName} approved estimate: ${estimate.description}`, `/contacts/${contactId}`);
+      }
+
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
