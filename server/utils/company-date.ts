@@ -39,3 +39,32 @@ export function getCompanyDayOfMonth(timezone: string): number {
     return new Date().getDate();
   }
 }
+
+export function getCompanyMonthStart(timezone: string): string {
+  const today = getCompanyToday(timezone);
+  return today.slice(0, 8) + "01";
+}
+
+export function getCompanyMonthEnd(timezone: string): string {
+  const today = getCompanyToday(timezone);
+  const year = parseInt(today.slice(0, 4), 10);
+  const month = parseInt(today.slice(5, 7), 10);
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+}
+
+export function getCompanyWeekStart(timezone: string): string {
+  const today = getCompanyToday(timezone);
+  const dow = getCompanyDayOfWeek(timezone);
+  const d = new Date(today + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d.toISOString().split("T")[0];
+}
+
+export function getCompanyWeekEnd(timezone: string): string {
+  const today = getCompanyToday(timezone);
+  const dow = getCompanyDayOfWeek(timezone);
+  const d = new Date(today + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + (6 - dow));
+  return d.toISOString().split("T")[0];
+}

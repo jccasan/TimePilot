@@ -13,6 +13,7 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
 import { sendEmail, generateInvoiceEmailHtml } from "./services/email";
+import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
 import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
 import {
   isStripeConfigured,
@@ -971,16 +972,17 @@ export async function registerRoutes(
       const tier = company.subscriptionTier as keyof typeof TIER_CONFIG;
       const tierInfo = TIER_CONFIG[tier];
 
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+      const tz = company.timezone || "America/New_York";
+      const today = getCompanyToday(tz);
+      const monthStart = getCompanyMonthStart(tz);
+      const monthEnd = getCompanyMonthEnd(tz);
 
       const [todaysVisits, todaysVisitsList, failedPayments, activeUsers, overdueInvoices, activeContacts, activeServicePlans, monthRevenue, smsCountThisMonth, emailCountThisMonth] = await Promise.all([
-        storage.getTodaysVisitsCount(companyId),
-        storage.getTodaysVisits(companyId),
+        storage.getTodaysVisitsCount(companyId, today),
+        storage.getTodaysVisits(companyId, today),
         storage.getFailedPaymentsCount(companyId),
         storage.countActiveCompanyUsers(companyId),
-        storage.getOverdueInvoicesCount(companyId),
+        storage.getOverdueInvoicesCount(companyId, today),
         storage.getActiveContactsCount(companyId),
         storage.getActiveServicePlansCount(companyId),
         storage.getRevenueForPeriod(companyId, monthStart, monthEnd),
@@ -1033,18 +1035,13 @@ export async function registerRoutes(
   app.get("/api/company/pipeline", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-
-      const now = new Date();
-      const today = now.toISOString().split("T")[0];
-      const dayOfWeek = now.getDay();
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - dayOfWeek);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6);
-      const weekStartStr = weekStart.toISOString().split("T")[0];
-      const weekEndStr = weekEnd.toISOString().split("T")[0];
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+      const company = await storage.getCompany(companyId);
+      const tz = company?.timezone || "America/New_York";
+      const today = getCompanyToday(tz);
+      const weekStartStr = getCompanyWeekStart(tz);
+      const weekEndStr = getCompanyWeekEnd(tz);
+      const monthStart = getCompanyMonthStart(tz);
+      const monthEnd = getCompanyMonthEnd(tz);
 
       const [
         activePlans,
@@ -1055,7 +1052,7 @@ export async function registerRoutes(
       ] = await Promise.all([
         storage.getServicePlans(companyId, { isActive: true }),
         storage.getUninvoicedSummary(companyId),
-        storage.getTodaysVisits(companyId),
+        storage.getTodaysVisits(companyId, today),
         storage.getRevenueForPeriod(companyId, monthStart, monthEnd),
         storage.getVisits(companyId, {}),
       ]);

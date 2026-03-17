@@ -137,9 +137,9 @@ export interface IStorage {
   getVisitsForDateRange(companyId: string, startDate: string, endDate: string): Promise<Visit[]>;
   createVisit(data: InsertVisit): Promise<Visit>;
   updateVisit(id: string, companyId: string, data: Partial<InsertVisit>): Promise<Visit>;
-  getTodaysVisitsCount(companyId: string): Promise<number>;
-  getTodaysVisits(companyId: string): Promise<Visit[]>;
-  getOverdueInvoicesCount(companyId: string): Promise<number>;
+  getTodaysVisitsCount(companyId: string, today: string): Promise<number>;
+  getTodaysVisits(companyId: string, today: string): Promise<Visit[]>;
+  getOverdueInvoicesCount(companyId: string, today: string): Promise<number>;
   getActiveContactsCount(companyId: string): Promise<number>;
   getActiveServicePlansCount(companyId: string): Promise<number>;
 
@@ -674,19 +674,16 @@ export class DatabaseStorage implements IStorage {
     return visit;
   }
 
-  async getTodaysVisitsCount(companyId: string): Promise<number> {
-    const today = new Date().toISOString().split("T")[0];
+  async getTodaysVisitsCount(companyId: string, today: string): Promise<number> {
     const [result] = await db.select({ count: count() }).from(visits).where(and(eq(visits.companyId, companyId), eq(visits.scheduledDate, today)));
     return result?.count ?? 0;
   }
 
-  async getTodaysVisits(companyId: string): Promise<Visit[]> {
-    const today = new Date().toISOString().split("T")[0];
+  async getTodaysVisits(companyId: string, today: string): Promise<Visit[]> {
     return db.select().from(visits).where(and(eq(visits.companyId, companyId), eq(visits.scheduledDate, today)));
   }
 
-  async getOverdueInvoicesCount(companyId: string): Promise<number> {
-    const today = new Date().toISOString().split("T")[0];
+  async getOverdueInvoicesCount(companyId: string, today: string): Promise<number> {
     const [result] = await db.select({ count: count() }).from(invoices).where(and(
       eq(invoices.companyId, companyId),
       inArray(invoices.status, ["pending"]),

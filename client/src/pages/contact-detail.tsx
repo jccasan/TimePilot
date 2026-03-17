@@ -2438,7 +2438,7 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
                       <div className="flex items-center gap-2">
                         <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                         <span className="text-sm font-medium" data-testid={`text-visit-date-${v.id}`}>
-                          {new Date(v.scheduledDate + "T00:00:00").toLocaleDateString("en-US", {
+                          {new Date(v.scheduledDate + "T12:00:00").toLocaleDateString("en-US", {
                             month: "short", day: "numeric", year: "numeric",
                           })}
                         </span>
@@ -2601,7 +2601,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
                     <div className="flex items-center gap-2 min-w-0">
                       <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <span className="truncate">
-                        {new Date(v.scheduledDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        {new Date(v.scheduledDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </span>
                       <span className="text-xs text-muted-foreground truncate">{v.servicePlanName}</span>
                     </div>
