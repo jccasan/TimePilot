@@ -1141,7 +1141,7 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
   const cfg = statusConfig[data.status] || statusConfig.profitable;
   const isUnprofitable = data.status === "unprofitable";
 
-  const unprofitableProperties = data.properties.filter(p => p.profitMarginPct < 0);
+  const unprofitableProperties = (data.properties || []).filter(p => p.profitMarginPct < 0);
 
   return (
     <Card data-testid="card-profitability-indicator">

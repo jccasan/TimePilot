@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, Search, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { TIER_CONFIG } from "@shared/schema";
+import { TIER_CONFIG, type Company } from "@shared/schema";
 import { useState, useMemo } from "react";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 
@@ -87,7 +87,7 @@ export default function AdminTenants() {
     },
   });
 
-  const { data: companies, isLoading: companiesLoading } = useQuery<any[]>({
+  const { data: companies, isLoading: companiesLoading } = useQuery<Company[]>({
     queryKey: ["/api/admin/companies"],
     queryFn: adminFetchFn("/api/admin/companies"),
   });
@@ -97,7 +97,7 @@ export default function AdminTenants() {
     if (!search.trim()) return companies;
     const q = search.toLowerCase();
     return companies.filter(
-      (c: any) =>
+      (c) =>
         c.name?.toLowerCase().includes(q) ||
         c.id?.toLowerCase().includes(q) ||
         c.subscriptionTier?.toLowerCase().includes(q)
@@ -136,7 +136,7 @@ export default function AdminTenants() {
         <div className="text-center py-8 text-muted-foreground">No tenants found</div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((c: any) => {
+          {filtered.map((c) => {
             const tierConfig = TIER_CONFIG[c.subscriptionTier as keyof typeof TIER_CONFIG];
             return (
               <Card key={c.id} className="hover-elevate" data-testid={`card-company-${c.id}`}>

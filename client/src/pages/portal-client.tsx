@@ -407,26 +407,26 @@ export default function PortalClient() {
       try {
         const [profileData, scheduleData, invoicesData, propertiesData] = await Promise.all([
           portalFetch("/api/portal/me"),
-          portalFetch("/api/portal/schedule"),
-          portalFetch("/api/portal/invoices"),
+          portalFetch("/api/portal/schedule").catch(() => ({ servicePlans: [], upcomingVisits: [] })),
+          portalFetch("/api/portal/invoices").catch(() => []),
           portalFetch("/api/portal/properties").catch(() => []),
         ]);
         setProfile(profileData);
         setSchedule(scheduleData);
         setInvoices(invoicesData);
         setProperties(propertiesData);
-        if (profileData.numberOfDogs != null) {
+        if (profileData?.numberOfDogs != null) {
           setNumberOfDogs(profileData.numberOfDogs);
         }
         setProfileEdits({
-          firstName: profileData.firstName || "",
-          lastName: profileData.lastName || "",
-          email: profileData.email || "",
-          phone: profileData.phone || "",
-          streetAddress: profileData.streetAddress || "",
-          city: profileData.city || "",
-          state: profileData.state || "",
-          zipCode: profileData.zipCode || "",
+          firstName: profileData?.firstName || "",
+          lastName: profileData?.lastName || "",
+          email: profileData?.email || "",
+          phone: profileData?.phone || "",
+          streetAddress: profileData?.streetAddress || "",
+          city: profileData?.city || "",
+          state: profileData?.state || "",
+          zipCode: profileData?.zipCode || "",
         });
         const edits: Record<string, { gateCode: string; specialInstructions: string; streetAddress: string; city: string; state: string; zipCode: string }> = {};
         for (const p of propertiesData) {
