@@ -985,7 +985,7 @@ export async function registerRoutes(
         storage.getOverdueInvoicesCount(companyId, today),
         storage.getActiveContactsCount(companyId),
         storage.getActiveServicePlansCount(companyId),
-        storage.getRevenueForPeriod(companyId, monthStart, monthEnd),
+        storage.getRevenueForPeriod(companyId, monthStart, monthEnd, tz),
         storage.getSmsCountForPeriod(companyId, monthStart, monthEnd),
         storage.getEmailCountForPeriod(companyId, monthStart, monthEnd),
       ]);
@@ -1053,7 +1053,7 @@ export async function registerRoutes(
         storage.getServicePlans(companyId, { isActive: true }),
         storage.getUninvoicedSummary(companyId),
         storage.getTodaysVisits(companyId, today),
-        storage.getRevenueForPeriod(companyId, monthStart, monthEnd),
+        storage.getRevenueForPeriod(companyId, monthStart, monthEnd, tz),
         storage.getVisits(companyId, {}),
       ]);
 
@@ -1215,6 +1215,8 @@ export async function registerRoutes(
   app.get("/api/reports/summary", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const tz = company?.timezone || "America/New_York";
       const period = (req.query.period as string) || "6m";
       const now = new Date();
 
@@ -1284,7 +1286,7 @@ export async function registerRoutes(
             projected: true,
           });
         } else {
-          const revenue = await storage.getRevenueForPeriod(companyId, start, end);
+          const revenue = await storage.getRevenueForPeriod(companyId, start, end, tz);
           revenueValues.push(revenue);
           monthlyRevenue.push({
             month: d.toLocaleString("default", { month: "short", year: "numeric" }) + (isCurrent ? " (current)" : ""),
@@ -1398,6 +1400,8 @@ export async function registerRoutes(
   app.get("/api/analytics/dashboard", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const tz = company?.timezone || "America/New_York";
       const now = new Date();
 
       const allContacts = await storage.getContacts(companyId);
@@ -1409,7 +1413,7 @@ export async function registerRoutes(
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const start = d.toISOString().split("T")[0];
         const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0];
-        const revenue = await storage.getRevenueForPeriod(companyId, start, end);
+        const revenue = await storage.getRevenueForPeriod(companyId, start, end, tz);
         monthlyRevenue.push({
           month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
           revenue,
@@ -1421,7 +1425,7 @@ export async function registerRoutes(
       for (let y = now.getFullYear() - 2; y <= now.getFullYear(); y++) {
         const yStart = `${y}-01-01`;
         const yEnd = `${y}-12-31`;
-        const rev = await storage.getRevenueForPeriod(companyId, yStart, yEnd);
+        const rev = await storage.getRevenueForPeriod(companyId, yStart, yEnd, tz);
         yearlyRevenue.push({ year: String(y), revenue: rev });
       }
 
@@ -1549,8 +1553,8 @@ export async function registerRoutes(
       const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
       const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0];
       const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0];
-      const thisMonthRev = await storage.getRevenueForPeriod(companyId, thisMonthStart, thisMonthEnd);
-      const lastMonthRev = await storage.getRevenueForPeriod(companyId, lastMonthStart, lastMonthEnd);
+      const thisMonthRev = await storage.getRevenueForPeriod(companyId, thisMonthStart, thisMonthEnd, tz);
+      const lastMonthRev = await storage.getRevenueForPeriod(companyId, lastMonthStart, lastMonthEnd, tz);
       const revenueGrowth = lastMonthRev > 0 ? Math.round(((thisMonthRev - lastMonthRev) / lastMonthRev) * 100) : 0;
 
       const totalOutstanding = allInvoices

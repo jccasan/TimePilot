@@ -150,7 +150,7 @@ export interface IStorage {
   updateInvoice(id: string, companyId: string, data: Partial<InsertInvoice>): Promise<Invoice>;
   getNextInvoiceNumber(companyId: string): Promise<string>;
   getFailedPaymentsCount(companyId: string): Promise<number>;
-  getRevenueForPeriod(companyId: string, startDate: string, endDate: string): Promise<number>;
+  getRevenueForPeriod(companyId: string, startDate: string, endDate: string, timezone?: string): Promise<number>;
 
   // Invoice Line Items
   getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]>;
@@ -742,15 +742,16 @@ export class DatabaseStorage implements IStorage {
     return result?.count ?? 0;
   }
 
-  async getRevenueForPeriod(companyId: string, startDate: string, endDate: string): Promise<number> {
-    const endNextDay = new Date(endDate);
-    endNextDay.setDate(endNextDay.getDate() + 1);
-    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(${invoices.total}::numeric), 0)` }).from(invoices).where(and(
-      eq(invoices.companyId, companyId),
-      eq(invoices.status, "paid"),
-      gte(invoices.createdAt, new Date(startDate)),
-      lt(invoices.createdAt, endNextDay),
-    ));
+  async getRevenueForPeriod(companyId: string, startDate: string, endDate: string, timezone: string = "UTC"): Promise<number> {
+    const [result] = await db.select({
+      total: sql<string>`COALESCE(SUM(${invoices.total}::numeric), 0)`
+    }).from(invoices).where(
+      sql`${invoices.companyId} = ${companyId}
+        AND ${invoices.status} = 'paid'
+        AND ${invoices.paidAt} IS NOT NULL
+        AND ((${invoices.paidAt} AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})::date >= ${startDate}::date
+        AND ((${invoices.paidAt} AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})::date <= ${endDate}::date`
+    );
     return parseFloat(result?.total ?? "0");
   }
 
