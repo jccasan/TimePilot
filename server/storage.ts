@@ -81,8 +81,8 @@ export interface IStorage {
   getContact(id: string, companyId: string): Promise<Contact | undefined>;
   getContacts(companyId: string, filters?: { status?: string; search?: string }): Promise<Contact[]>;
   createContact(data: InsertContact): Promise<Contact>;
-  updateContact(id: string, data: Partial<InsertContact>): Promise<Contact>;
-  deleteContact(id: string): Promise<void>;
+  updateContact(id: string, companyId: string, data: Partial<InsertContact>): Promise<Contact>;
+  deleteContact(id: string, companyId: string): Promise<void>;
 
   // Tags
   getTags(companyId: string): Promise<Tag[]>;
@@ -101,22 +101,22 @@ export interface IStorage {
   getProperty(id: string, companyId: string): Promise<Property | undefined>;
   getProperties(companyId: string, contactId?: string): Promise<Property[]>;
   createProperty(data: InsertProperty): Promise<Property>;
-  updateProperty(id: string, data: Partial<InsertProperty>): Promise<Property>;
-  deleteProperty(id: string): Promise<void>;
+  updateProperty(id: string, companyId: string, data: Partial<InsertProperty>): Promise<Property>;
+  deleteProperty(id: string, companyId: string): Promise<void>;
 
   // Routes
   getRoute(id: string, companyId: string): Promise<Route | undefined>;
   getRoutes(companyId: string, dayOfWeek?: string): Promise<Route[]>;
   createRoute(data: InsertRoute): Promise<Route>;
-  updateRoute(id: string, data: Partial<InsertRoute>): Promise<Route>;
-  deleteRoute(id: string): Promise<void>;
+  updateRoute(id: string, companyId: string, data: Partial<InsertRoute>): Promise<Route>;
+  deleteRoute(id: string, companyId: string): Promise<void>;
 
   // Service Plans
   getServicePlan(id: string, companyId: string): Promise<ServicePlan | undefined>;
   getServicePlans(companyId: string, filters?: { contactId?: string; propertyId?: string; isActive?: boolean; routeId?: string }): Promise<ServicePlan[]>;
   createServicePlan(data: InsertServicePlan): Promise<ServicePlan>;
-  updateServicePlan(id: string, data: Partial<InsertServicePlan>): Promise<ServicePlan>;
-  deleteServicePlan(id: string): Promise<void>;
+  updateServicePlan(id: string, companyId: string, data: Partial<InsertServicePlan>): Promise<ServicePlan>;
+  deleteServicePlan(id: string, companyId: string): Promise<void>;
   getServicePlanAddOns(servicePlanId: string): Promise<ServicePlanAddOn[]>;
   setServicePlanAddOns(servicePlanId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<ServicePlanAddOn[]>;
 
@@ -129,14 +129,14 @@ export interface IStorage {
   getVacationHolds(servicePlanId: string): Promise<VacationHold[]>;
   getVacationHoldsForPlans(planIds: string[]): Promise<VacationHold[]>;
   createVacationHold(data: InsertVacationHold): Promise<VacationHold>;
-  deleteVacationHold(id: string): Promise<void>;
+  deleteVacationHold(id: string, companyId: string): Promise<void>;
 
   // Visits
   getVisit(id: string, companyId: string): Promise<Visit | undefined>;
   getVisits(companyId: string, filters?: { date?: string; routeId?: string; status?: string }): Promise<Visit[]>;
   getVisitsForDateRange(companyId: string, startDate: string, endDate: string): Promise<Visit[]>;
   createVisit(data: InsertVisit): Promise<Visit>;
-  updateVisit(id: string, data: Partial<InsertVisit>): Promise<Visit>;
+  updateVisit(id: string, companyId: string, data: Partial<InsertVisit>): Promise<Visit>;
   getTodaysVisitsCount(companyId: string): Promise<number>;
   getTodaysVisits(companyId: string): Promise<Visit[]>;
   getOverdueInvoicesCount(companyId: string): Promise<number>;
@@ -147,7 +147,7 @@ export interface IStorage {
   getInvoice(id: string, companyId: string): Promise<Invoice | undefined>;
   getInvoices(companyId: string, filters?: { contactId?: string; status?: string }): Promise<Invoice[]>;
   createInvoice(data: InsertInvoice): Promise<Invoice>;
-  updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice>;
+  updateInvoice(id: string, companyId: string, data: Partial<InsertInvoice>): Promise<Invoice>;
   getNextInvoiceNumber(companyId: string): Promise<string>;
   getFailedPaymentsCount(companyId: string): Promise<number>;
   getRevenueForPeriod(companyId: string, startDate: string, endDate: string): Promise<number>;
@@ -167,7 +167,7 @@ export interface IStorage {
   // Automation Rules
   getAutomationRules(companyId: string): Promise<AutomationRule[]>;
   createAutomationRule(data: InsertAutomationRule): Promise<AutomationRule>;
-  updateAutomationRule(id: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule>;
+  updateAutomationRule(id: string, companyId: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule>;
   deleteAutomationRule(id: string, companyId?: string): Promise<void>;
   getRulesForTrigger(companyId: string, trigger: string): Promise<AutomationRule[]>;
   createAutomationEventLog(data: { companyId: string; ruleId?: string; trigger: string; payload?: any; result?: any }): Promise<void>;
@@ -182,7 +182,7 @@ export interface IStorage {
   // Webhooks
   getWebhooks(companyId: string): Promise<Webhook[]>;
   createWebhook(data: InsertWebhook): Promise<Webhook>;
-  updateWebhook(id: string, data: Partial<InsertWebhook>): Promise<Webhook>;
+  updateWebhook(id: string, companyId: string, data: Partial<InsertWebhook>): Promise<Webhook>;
   deleteWebhook(id: string, companyId?: string): Promise<void>;
   getWebhooksForEvent(companyId: string, event: string): Promise<Webhook[]>;
 
@@ -260,7 +260,7 @@ export interface IStorage {
 
   // Time Entries
   createTimeEntry(data: InsertTimeEntry): Promise<TimeEntry>;
-  updateTimeEntry(id: string, data: Partial<InsertTimeEntry>): Promise<TimeEntry>;
+  updateTimeEntry(id: string, companyId: string, data: Partial<InsertTimeEntry>): Promise<TimeEntry>;
   getTimeEntries(companyId: string, filters?: { userId?: string; startDate?: string; endDate?: string }): Promise<TimeEntry[]>;
   getActiveTimeEntry(userId: string): Promise<TimeEntry | undefined>;
 
@@ -333,18 +333,18 @@ export interface IStorage {
   getEstimate(id: string, companyId: string): Promise<Estimate | undefined>;
   getEstimates(companyId: string, filters?: { contactId?: string; status?: string }): Promise<Estimate[]>;
   createEstimate(data: InsertEstimate): Promise<Estimate>;
-  updateEstimate(id: string, data: Partial<InsertEstimate>): Promise<Estimate>;
+  updateEstimate(id: string, companyId: string, data: Partial<InsertEstimate>): Promise<Estimate>;
 
   // Service Change Requests
   getServiceChangeRequest(id: string, companyId: string): Promise<ServiceChangeRequest | undefined>;
   getServiceChangeRequests(companyId: string, filters?: { contactId?: string; status?: string }): Promise<ServiceChangeRequest[]>;
   createServiceChangeRequest(data: InsertServiceChangeRequest): Promise<ServiceChangeRequest>;
-  updateServiceChangeRequest(id: string, data: Partial<InsertServiceChangeRequest>): Promise<ServiceChangeRequest>;
+  updateServiceChangeRequest(id: string, companyId: string, data: Partial<InsertServiceChangeRequest>): Promise<ServiceChangeRequest>;
 
   getServiceZones(companyId: string): Promise<ServiceZone[]>;
   createServiceZone(data: InsertServiceZone): Promise<ServiceZone>;
-  updateServiceZone(id: string, data: Partial<InsertServiceZone>): Promise<ServiceZone>;
-  deleteServiceZone(id: string): Promise<void>;
+  updateServiceZone(id: string, companyId: string, data: Partial<InsertServiceZone>): Promise<ServiceZone>;
+  deleteServiceZone(id: string, companyId: string): Promise<void>;
 
   // Jobs
   createJobFromEstimate(estimate: Estimate, contactId: string): Promise<ServicePlan>;
@@ -444,13 +444,13 @@ export class DatabaseStorage implements IStorage {
     return contact;
   }
 
-  async updateContact(id: string, data: Partial<InsertContact>): Promise<Contact> {
-    const [contact] = await db.update(contacts).set({ ...data, updatedAt: new Date() }).where(eq(contacts.id, id)).returning();
+  async updateContact(id: string, companyId: string, data: Partial<InsertContact>): Promise<Contact> {
+    const [contact] = await db.update(contacts).set({ ...data, updatedAt: new Date() }).where(and(eq(contacts.id, id), eq(contacts.companyId, companyId))).returning();
     return contact;
   }
 
-  async deleteContact(id: string): Promise<void> {
-    await db.delete(contacts).where(eq(contacts.id, id));
+  async deleteContact(id: string, companyId: string): Promise<void> {
+    await db.delete(contacts).where(and(eq(contacts.id, id), eq(contacts.companyId, companyId)));
   }
 
   // ================ Tags ================
@@ -517,13 +517,13 @@ export class DatabaseStorage implements IStorage {
     return property;
   }
 
-  async updateProperty(id: string, data: Partial<InsertProperty>): Promise<Property> {
-    const [property] = await db.update(properties).set({ ...data, updatedAt: new Date() }).where(eq(properties.id, id)).returning();
+  async updateProperty(id: string, companyId: string, data: Partial<InsertProperty>): Promise<Property> {
+    const [property] = await db.update(properties).set({ ...data, updatedAt: new Date() }).where(and(eq(properties.id, id), eq(properties.companyId, companyId))).returning();
     return property;
   }
 
-  async deleteProperty(id: string): Promise<void> {
-    await db.delete(properties).where(eq(properties.id, id));
+  async deleteProperty(id: string, companyId: string): Promise<void> {
+    await db.delete(properties).where(and(eq(properties.id, id), eq(properties.companyId, companyId)));
   }
 
   // ================ Routes ================
@@ -543,13 +543,13 @@ export class DatabaseStorage implements IStorage {
     return route;
   }
 
-  async updateRoute(id: string, data: Partial<InsertRoute>): Promise<Route> {
-    const [route] = await db.update(routes).set({ ...data, updatedAt: new Date() }).where(eq(routes.id, id)).returning();
+  async updateRoute(id: string, companyId: string, data: Partial<InsertRoute>): Promise<Route> {
+    const [route] = await db.update(routes).set({ ...data, updatedAt: new Date() }).where(and(eq(routes.id, id), eq(routes.companyId, companyId))).returning();
     return route;
   }
 
-  async deleteRoute(id: string): Promise<void> {
-    await db.delete(routes).where(eq(routes.id, id));
+  async deleteRoute(id: string, companyId: string): Promise<void> {
+    await db.delete(routes).where(and(eq(routes.id, id), eq(routes.companyId, companyId)));
   }
 
   // ================ Service Plans ================
@@ -572,13 +572,13 @@ export class DatabaseStorage implements IStorage {
     return sp;
   }
 
-  async updateServicePlan(id: string, data: Partial<InsertServicePlan>): Promise<ServicePlan> {
-    const [sp] = await db.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(eq(servicePlans.id, id)).returning();
+  async updateServicePlan(id: string, companyId: string, data: Partial<InsertServicePlan>): Promise<ServicePlan> {
+    const [sp] = await db.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId))).returning();
     return sp;
   }
 
-  async deleteServicePlan(id: string): Promise<void> {
-    await db.delete(servicePlans).where(eq(servicePlans.id, id));
+  async deleteServicePlan(id: string, companyId: string): Promise<void> {
+    await db.delete(servicePlans).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
   }
 
   async getServicePlanAddOns(servicePlanId: string): Promise<ServicePlanAddOn[]> {
@@ -633,7 +633,7 @@ export class DatabaseStorage implements IStorage {
     return vh;
   }
 
-  async deleteVacationHold(id: string): Promise<void> {
+  async deleteVacationHold(id: string, _companyId: string): Promise<void> {
     await db.delete(vacationHolds).where(eq(vacationHolds.id, id));
   }
 
@@ -664,8 +664,8 @@ export class DatabaseStorage implements IStorage {
     return visit;
   }
 
-  async updateVisit(id: string, data: Partial<InsertVisit>): Promise<Visit> {
-    const [visit] = await db.update(visits).set({ ...data, updatedAt: new Date() }).where(eq(visits.id, id)).returning();
+  async updateVisit(id: string, companyId: string, data: Partial<InsertVisit>): Promise<Visit> {
+    const [visit] = await db.update(visits).set({ ...data, updatedAt: new Date() }).where(and(eq(visits.id, id), eq(visits.companyId, companyId))).returning();
     return visit;
   }
 
@@ -724,8 +724,8 @@ export class DatabaseStorage implements IStorage {
     return invoice;
   }
 
-  async updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice> {
-    const [invoice] = await db.update(invoices).set({ ...data, updatedAt: new Date() }).where(eq(invoices.id, id)).returning();
+  async updateInvoice(id: string, companyId: string, data: Partial<InsertInvoice>): Promise<Invoice> {
+    const [invoice] = await db.update(invoices).set({ ...data, updatedAt: new Date() }).where(and(eq(invoices.id, id), eq(invoices.companyId, companyId))).returning();
     return invoice;
   }
 
@@ -966,8 +966,8 @@ export class DatabaseStorage implements IStorage {
     return rule;
   }
 
-  async updateAutomationRule(id: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule> {
-    const [rule] = await db.update(automationRules).set({ ...data, updatedAt: new Date() }).where(eq(automationRules.id, id)).returning();
+  async updateAutomationRule(id: string, companyId: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule> {
+    const [rule] = await db.update(automationRules).set({ ...data, updatedAt: new Date() }).where(and(eq(automationRules.id, id), eq(automationRules.companyId, companyId))).returning();
     return rule;
   }
 
@@ -1022,8 +1022,8 @@ export class DatabaseStorage implements IStorage {
     return wh;
   }
 
-  async updateWebhook(id: string, data: Partial<InsertWebhook>): Promise<Webhook> {
-    const [wh] = await db.update(webhooks).set({ ...data, updatedAt: new Date() }).where(eq(webhooks.id, id)).returning();
+  async updateWebhook(id: string, companyId: string, data: Partial<InsertWebhook>): Promise<Webhook> {
+    const [wh] = await db.update(webhooks).set({ ...data, updatedAt: new Date() }).where(and(eq(webhooks.id, id), eq(webhooks.companyId, companyId))).returning();
     return wh;
   }
 
@@ -1433,8 +1433,8 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
-  async updateTimeEntry(id: string, data: Partial<InsertTimeEntry>): Promise<TimeEntry> {
-    const [entry] = await db.update(timeEntries).set(data).where(eq(timeEntries.id, id)).returning();
+  async updateTimeEntry(id: string, companyId: string, data: Partial<InsertTimeEntry>): Promise<TimeEntry> {
+    const [entry] = await db.update(timeEntries).set(data).where(and(eq(timeEntries.id, id), eq(timeEntries.companyId, companyId))).returning();
     return entry;
   }
 
@@ -1910,8 +1910,8 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  async updateEstimate(id: string, data: Partial<InsertEstimate>): Promise<Estimate> {
-    const [item] = await db.update(estimates).set(data).where(eq(estimates.id, id)).returning();
+  async updateEstimate(id: string, companyId: string, data: Partial<InsertEstimate>): Promise<Estimate> {
+    const [item] = await db.update(estimates).set(data).where(and(eq(estimates.id, id), eq(estimates.companyId, companyId))).returning();
     return item;
   }
 
@@ -1934,8 +1934,8 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  async updateServiceChangeRequest(id: string, data: Partial<InsertServiceChangeRequest>): Promise<ServiceChangeRequest> {
-    const [item] = await db.update(serviceChangeRequests).set(data).where(eq(serviceChangeRequests.id, id)).returning();
+  async updateServiceChangeRequest(id: string, companyId: string, data: Partial<InsertServiceChangeRequest>): Promise<ServiceChangeRequest> {
+    const [item] = await db.update(serviceChangeRequests).set(data).where(and(eq(serviceChangeRequests.id, id), eq(serviceChangeRequests.companyId, companyId))).returning();
     return item;
   }
 
@@ -1962,13 +1962,13 @@ export class DatabaseStorage implements IStorage {
     return zone;
   }
 
-  async updateServiceZone(id: string, data: Partial<InsertServiceZone>): Promise<ServiceZone> {
-    const [zone] = await db.update(serviceZones).set(data).where(eq(serviceZones.id, id)).returning();
+  async updateServiceZone(id: string, companyId: string, data: Partial<InsertServiceZone>): Promise<ServiceZone> {
+    const [zone] = await db.update(serviceZones).set(data).where(and(eq(serviceZones.id, id), eq(serviceZones.companyId, companyId))).returning();
     return zone;
   }
 
-  async deleteServiceZone(id: string): Promise<void> {
-    await db.delete(serviceZones).where(eq(serviceZones.id, id));
+  async deleteServiceZone(id: string, companyId: string): Promise<void> {
+    await db.delete(serviceZones).where(and(eq(serviceZones.id, id), eq(serviceZones.companyId, companyId)));
   }
 
   async createJobFromEstimate(estimate: Estimate, contactId: string): Promise<ServicePlan> {

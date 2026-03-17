@@ -357,12 +357,12 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/mapbox-token", (_req: Request, res: Response) => {
+  app.get("/api/mapbox-token", isAuthenticated, (_req: Request, res: Response) => {
     const token = process.env.MAPBOX_PUBLIC_TOKEN || "";
     res.json({ token });
   });
 
-  app.get("/api/streetview", async (req: Request, res: Response) => {
+  app.get("/api/streetview", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const apiKey = process.env.GOOGLE_MAPS_API_KEY;
       if (!apiKey) return res.status(503).json({ error: "Street View not configured" });
@@ -405,7 +405,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/satellite", async (req: Request, res: Response) => {
+  app.get("/api/satellite", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const apiKey = process.env.GOOGLE_MAPS_API_KEY;
       if (!apiKey) return res.status(503).json({ error: "Satellite view not configured" });
@@ -914,7 +914,7 @@ export async function registerRoutes(
       const routes = await storage.getRoutes(companyId);
       for (const route of routes) {
         if (route.technicianId === targetUserId) {
-          await storage.updateRoute(route.id, { technicianId: null });
+          await storage.updateRoute(route.id, companyId, { technicianId: null });
         }
       }
       res.json({ success: true });
@@ -925,7 +925,8 @@ export async function registerRoutes(
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const cu = await storage.createCompanyUser({ ...req.body, companyId });
+      const { email, name, role: userRole, phone } = req.body;
+      const cu = await storage.createCompanyUser({ email, name, role: userRole, phone, companyId });
       res.status(201).json(cu);
     } catch (err) { handleError(res, err); }
   });
@@ -1973,7 +1974,7 @@ export async function registerRoutes(
             phone: contact.phone || undefined,
             metadata: { contactId: contact.id, companyId },
           });
-          await storage.updateContact(contact.id, { stripeCustomerId });
+          await storage.updateContact(contact.id, companyId, { stripeCustomerId });
         } catch (stripeErr) {
           console.error("[auto-stripe] Customer creation failed:", stripeErr);
         }
@@ -1996,7 +1997,7 @@ export async function registerRoutes(
       if (req.body.status && !validStatuses.includes(req.body.status)) {
         return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
       }
-      const contact = await storage.updateContact(req.params.id, req.body);
+      const contact = await storage.updateContact(req.params.id, companyId, req.body);
       auditLog(companyId, userId, "contact", req.params.id, "update", { old: existing, new: contact }, req.ip);
 
       if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
@@ -2024,7 +2025,7 @@ export async function registerRoutes(
       const { companyId, userId } = await getCompanyContext(req);
       const existing = await storage.getContact(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Contact not found" });
-      await storage.deleteContact(req.params.id);
+      await storage.deleteContact(req.params.id, companyId);
       auditLog(companyId, userId, "contact", req.params.id, "delete", { deleted: existing }, req.ip);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
@@ -2040,7 +2041,7 @@ export async function registerRoutes(
         const existing = await storage.getContact(id, companyId);
         if (!existing) continue;
         if (status) {
-          await storage.updateContact(id, { status });
+          await storage.updateContact(id, companyId, { status });
           updated++;
         }
         if (tagId) {
@@ -2061,7 +2062,7 @@ export async function registerRoutes(
       for (const id of ids) {
         const existing = await storage.getContact(id, companyId);
         if (!existing) continue;
-        await storage.deleteContact(id);
+        await storage.deleteContact(id, companyId);
         deleted++;
       }
       res.json({ success: true, deleted });
@@ -2212,7 +2213,7 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getProperty(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Property not found" });
-      const property = await storage.updateProperty(req.params.id, req.body);
+      const property = await storage.updateProperty(req.params.id, companyId, req.body);
       res.json(property);
     } catch (err) { handleError(res, err); }
   });
@@ -2227,7 +2228,7 @@ export async function registerRoutes(
       for (const prop of needsGeocode) {
         const coords = await geocodeAddress(prop.streetAddress!, prop.city, prop.state, prop.zipCode);
         if (coords) {
-          await storage.updateProperty(prop.id, { latitude: coords.latitude, longitude: coords.longitude });
+          await storage.updateProperty(prop.id, companyId, { latitude: coords.latitude, longitude: coords.longitude });
           geocoded++;
         }
       }
@@ -2240,7 +2241,7 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getProperty(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Property not found" });
-      await storage.deleteProperty(req.params.id);
+      await storage.deleteProperty(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -2279,7 +2280,7 @@ export async function registerRoutes(
       const allowed = ["name", "dayOfWeek", "technicianId", "color"];
       const updates: any = {};
       for (const key of allowed) { if (req.body[key] !== undefined) updates[key] = req.body[key]; }
-      const route = await storage.updateRoute(req.params.id, updates);
+      const route = await storage.updateRoute(req.params.id, companyId, updates);
       res.json(route);
     } catch (err) { handleError(res, err); }
   });
@@ -2289,7 +2290,7 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getRoute(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Route not found" });
-      await storage.deleteRoute(req.params.id);
+      await storage.deleteRoute(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -2366,7 +2367,7 @@ export async function registerRoutes(
           const prop = propertyMap.get(sp.propertyId)!;
           const coords = await geocodeAddress(prop.streetAddress!, prop.city, prop.state, prop.zipCode);
           if (coords) {
-            const updated = await storage.updateProperty(prop.id, { latitude: coords.latitude, longitude: coords.longitude });
+            const updated = await storage.updateProperty(prop.id, companyId, { latitude: coords.latitude, longitude: coords.longitude });
             propertyMap.set(prop.id, updated);
           }
         }
@@ -2407,7 +2408,7 @@ export async function registerRoutes(
       const optimizedStops = result.orderedIds.map(id => stopsById.get(id)!);
 
       for (let i = 0; i < result.orderedIds.length; i++) {
-        await storage.updateServicePlan(result.orderedIds[i], { stopOrder: i + 1 });
+        await storage.updateServicePlan(result.orderedIds[i], companyId, { stopOrder: i + 1 });
       }
 
       const plansWithoutCoords = routePlans.filter(sp => {
@@ -2415,7 +2416,7 @@ export async function registerRoutes(
         return !prop || !prop.latitude || !prop.longitude;
       });
       for (const plan of plansWithoutCoords) {
-        await storage.updateServicePlan(plan.id, { stopOrder: result.orderedIds.length + 1 });
+        await storage.updateServicePlan(plan.id, companyId, { stopOrder: result.orderedIds.length + 1 });
       }
 
       await storage.updateCompany(companyId, { routeCredits: currentCredits - creditsRequired } as any);
@@ -2665,7 +2666,7 @@ export async function registerRoutes(
 
       const contact = await storage.getContact(parsed.contactId, companyId);
       if (contact && (contact.status === "lead" || contact.status === "estimate")) {
-        await storage.updateContact(parsed.contactId, { status: "active" });
+        await storage.updateContact(parsed.contactId, companyId, { status: "active" });
       }
 
       if (req.body.addOns && Array.isArray(req.body.addOns)) {
@@ -2732,7 +2733,7 @@ export async function registerRoutes(
       }
 
       const { addOns: addOnsData, ...updateBody } = body;
-      const plan = await storage.updateServicePlan(req.params.id, updateBody);
+      const plan = await storage.updateServicePlan(req.params.id, companyId, updateBody);
 
       if (addOnsData && Array.isArray(addOnsData)) {
         const validatedAddOns = await validateAndResolveAddOns(addOnsData, companyId);
@@ -2750,7 +2751,7 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getServicePlan(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Scheduled service not found" });
-      await storage.deleteServicePlan(req.params.id);
+      await storage.deleteServicePlan(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -2801,7 +2802,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: `Cannot approve a job with status '${job.jobStatus}'` });
       }
 
-      const updated = await storage.updateServicePlan(job.id, {
+      const updated = await storage.updateServicePlan(job.id, companyId, {
         jobStatus: "active",
         isActive: true,
       });
@@ -2870,7 +2871,7 @@ export async function registerRoutes(
       if (dayOfWeek !== undefined) updates.dayOfWeek = dayOfWeek;
       if (label !== undefined) updates.label = label;
       if (isActive !== undefined) updates.isActive = isActive;
-      const zone = await storage.updateServiceZone(req.params.id, updates);
+      const zone = await storage.updateServiceZone(req.params.id, companyId, updates);
       res.json(zone);
     } catch (err) { handleError(res, err); }
   });
@@ -2881,7 +2882,7 @@ export async function registerRoutes(
       const zones = await storage.getServiceZones(companyId);
       const existing = zones.find(z => z.id === req.params.id);
       if (!existing) return res.status(404).json({ error: "Service zone not found" });
-      await storage.deleteServiceZone(req.params.id);
+      await storage.deleteServiceZone(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -2907,8 +2908,8 @@ export async function registerRoutes(
 
   app.delete("/api/vacation-holds/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      await getCompanyContext(req);
-      await storage.deleteVacationHold(req.params.id);
+      const { companyId } = await getCompanyContext(req);
+      await storage.deleteVacationHold(req.params.id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -3061,7 +3062,7 @@ export async function registerRoutes(
           updates[field] = new Date(updates[field]);
         }
       }
-      const visit = await storage.updateVisit(req.params.id, updates);
+      const visit = await storage.updateVisit(req.params.id, companyId, updates);
 
       if (req.body.status === "completed" && existing.status !== "completed") {
         try {
@@ -3093,7 +3094,7 @@ export async function registerRoutes(
                   unitPrice: pricePerVisit.toFixed(2),
                   total: pricePerVisit.toFixed(2),
                 }]);
-                await storage.updateVisit(visit.id, { invoiceId: autoInvoice.id });
+                await storage.updateVisit(visit.id, companyId, { invoiceId: autoInvoice.id });
               }
             }
           }
@@ -3136,7 +3137,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "extraPhotos must be an array of strings" });
       }
 
-      const visit = await storage.updateVisit(req.params.id, {
+      const visit = await storage.updateVisit(req.params.id, companyId, {
         status: "completed",
         completedAt: new Date(),
         completedBy: userId,
@@ -3177,7 +3178,7 @@ export async function registerRoutes(
               unitPrice: pricePerVisit.toFixed(2),
               total: pricePerVisit.toFixed(2),
             }]);
-            await storage.updateVisit(visit.id, { invoiceId: autoInv.id });
+            await storage.updateVisit(visit.id, companyId, { invoiceId: autoInv.id });
           }
         } catch (autoErr) {
           console.error("Auto-invoice generation failed:", autoErr);
@@ -3555,7 +3556,7 @@ export async function registerRoutes(
       }, lineItems);
 
       for (const v of billableVisits) {
-        await storage.updateVisit(v.id, { invoiceId: invoice.id });
+        await storage.updateVisit(v.id, companyId, { invoiceId: invoice.id });
       }
 
       const items = await storage.getInvoiceLineItems(invoice.id);
@@ -3656,7 +3657,7 @@ export async function registerRoutes(
       }, lineItems);
 
       for (const visit of allVisits) {
-        await storage.updateVisit(visit.id, { invoiceId: invoice.id });
+        await storage.updateVisit(visit.id, companyId, { invoiceId: invoice.id });
       }
 
       const items = await storage.getInvoiceLineItems(invoice.id);
@@ -3680,7 +3681,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid invoice frequency" });
       }
 
-      const updated = await storage.updateContact(req.params.id, {
+      const updated = await storage.updateContact(req.params.id, companyId, {
         ...(invoiceTiming && { invoiceTiming }),
         ...(invoiceFrequency && { invoiceFrequency }),
         ...(typeof autoInvoiceEnabled === "boolean" && { autoInvoiceEnabled }),
@@ -3773,7 +3774,7 @@ export async function registerRoutes(
         invoiceUpdates.total = total.toFixed(2);
       }
 
-      const invoice = await storage.updateInvoice(req.params.id, invoiceUpdates);
+      const invoice = await storage.updateInvoice(req.params.id, companyId, invoiceUpdates);
       const updatedLineItems = await storage.getInvoiceLineItems(req.params.id);
       res.json({ ...invoice, lineItems: updatedLineItems });
     } catch (err) { handleError(res, err); }
@@ -3803,7 +3804,7 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getAutomationRules(companyId);
       if (!existing.find(r => r.id === req.params.id)) return res.status(404).json({ error: "Rule not found" });
-      const rule = await storage.updateAutomationRule(req.params.id, req.body);
+      const rule = await storage.updateAutomationRule(req.params.id, companyId, req.body);
       res.json(rule);
     } catch (err) { handleError(res, err); }
   });
@@ -4201,7 +4202,7 @@ export async function registerRoutes(
       requireRole(role);
       const existing = await storage.getWebhooks(companyId);
       if (!existing.find(w => w.id === req.params.id)) return res.status(404).json({ error: "Webhook not found" });
-      const webhook = await storage.updateWebhook(req.params.id, req.body);
+      const webhook = await storage.updateWebhook(req.params.id, companyId, req.body);
       res.json(webhook);
     } catch (err) { handleError(res, err); }
   });
@@ -5236,7 +5237,7 @@ export async function registerRoutes(
               name: `${contact.firstName} ${contact.lastName}`.trim(),
               metadata: { contactId: contact.id, companyId },
             });
-            await storage.updateContact(contact.id, { stripeCustomerId });
+            await storage.updateContact(contact.id, companyId, { stripeCustomerId });
           }
 
           const baseUrl = getBaseUrl(req);
@@ -5300,7 +5301,7 @@ export async function registerRoutes(
         console.log(`[send-email] Successfully sent invoice ${invoice.invoiceNumber} to ${contact.email}`);
         await storage.updateMessageStatus(msg.id, "sent");
         if (invoice.status === "pending" || invoice.status === "draft") {
-          await storage.updateInvoice(invoice.id, { status: "sent" });
+          await storage.updateInvoice(invoice.id, companyId, { status: "sent" });
         }
         res.json({ success: true, messageId: msg.id, paymentUrl: paymentUrl || null });
       } else {
@@ -5335,7 +5336,7 @@ export async function registerRoutes(
         metadata: { contactId: contact.id, companyId },
       });
 
-      await storage.updateContact(req.params.id, { stripeCustomerId });
+      await storage.updateContact(req.params.id, companyId, { stripeCustomerId });
       res.json({ stripeCustomerId, alreadyExists: false });
     } catch (err) { handleError(res, err); }
   });
@@ -5408,7 +5409,7 @@ export async function registerRoutes(
         notify(companyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}.`, `/invoices`);
       }
 
-      const updated = await storage.updateInvoice(invoice.id, updateData);
+      const updated = await storage.updateInvoice(invoice.id, companyId, updateData);
       res.json({ ...updated, chargeResult: result });
     } catch (err) { handleError(res, err); }
   });
@@ -5430,7 +5431,7 @@ export async function registerRoutes(
           name: `${contact.firstName} ${contact.lastName}`.trim(),
           metadata: { contactId: contact.id, companyId },
         });
-        await storage.updateContact(contact.id, { stripeCustomerId });
+        await storage.updateContact(contact.id, companyId, { stripeCustomerId });
       }
 
       const baseUrl = getBaseUrl(req);
@@ -5570,7 +5571,7 @@ export async function registerRoutes(
           for (const company of allCompanies) {
             const invoice = await storage.getInvoice(invoiceId, company.id);
             if (invoice && invoice.status !== "paid") {
-              await storage.updateInvoice(invoiceId, {
+              await storage.updateInvoice(invoiceId, company.id, {
                 status: "paid",
                 paidAt: new Date(),
                 stripePaymentIntentId: session.payment_intent,
@@ -5592,7 +5593,7 @@ export async function registerRoutes(
           for (const company of allCompanies) {
             const invoice = await storage.getInvoice(invoiceId, company.id);
             if (invoice && invoice.status !== "paid") {
-              await storage.updateInvoice(invoiceId, {
+              await storage.updateInvoice(invoiceId, company.id, {
                 status: "paid",
                 paidAt: new Date(),
                 stripePaymentIntentId: pi.id,
@@ -5630,7 +5631,7 @@ export async function registerRoutes(
           for (const company of allCompanies) {
             const invoice = await storage.getInvoice(invoiceId, company.id);
             if (invoice) {
-              await storage.updateInvoice(invoiceId, {
+              await storage.updateInvoice(invoiceId, company.id, {
                 status: "failed",
                 paymentAttempts: (invoice.paymentAttempts || 0) + 1,
                 lastPaymentAttempt: new Date(),
@@ -5742,7 +5743,7 @@ export async function registerRoutes(
 
       const resetTokenRaw = crypto.randomBytes(32).toString("hex");
       const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
-      await storage.updateContact(foundContact.id, {
+      await storage.updateContact(foundContact.id, foundContact.companyId, {
         resetToken: resetTokenRaw,
         resetTokenExpiry,
       });
@@ -5809,7 +5810,7 @@ export async function registerRoutes(
         });
       });
 
-      await storage.updateContact(foundContact.id, {
+      await storage.updateContact(foundContact.id, foundContact.companyId, {
         portalPasswordHash,
         resetToken: null,
         resetTokenExpiry: null,
@@ -5841,7 +5842,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid or expired verification link." });
       }
 
-      await storage.updateContact(foundContact.id, {
+      await storage.updateContact(foundContact.id, foundContact.companyId, {
         email: foundContact.pendingEmail,
         pendingEmail: null,
         emailVerificationToken: null,
@@ -5956,7 +5957,7 @@ export async function registerRoutes(
           name: `${contact.firstName} ${contact.lastName}`.trim(),
           metadata: { contactId: contact.id, companyId },
         });
-        await storage.updateContact(contact.id, { stripeCustomerId });
+        await storage.updateContact(contact.id, companyId, { stripeCustomerId });
       }
 
       const chargeAmount = parseFloat(invoice.total) + tipAmount;
@@ -5983,12 +5984,12 @@ export async function registerRoutes(
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      await storage.updateContact(contactId, { status: "paused" });
+      await storage.updateContact(contactId, companyId, { status: "paused" });
 
       const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
       const pausedPlanIds: string[] = [];
       for (const plan of plans) {
-        await storage.updateServicePlan(plan.id, { isActive: false, pausedAt: new Date() });
+        await storage.updateServicePlan(plan.id, companyId, { isActive: false, pausedAt: new Date() });
         pausedPlanIds.push(plan.id);
       }
 
@@ -6009,13 +6010,13 @@ export async function registerRoutes(
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      await storage.updateContact(contactId, { status: "active" });
+      await storage.updateContact(contactId, companyId, { status: "active" });
 
       const plans = await storage.getServicePlans(companyId, { contactId });
       const reactivatedPlanIds: string[] = [];
       for (const plan of plans) {
         if (!plan.isActive && plan.pausedAt) {
-          await storage.updateServicePlan(plan.id, { isActive: true, pausedAt: null });
+          await storage.updateServicePlan(plan.id, companyId, { isActive: true, pausedAt: null });
           reactivatedPlanIds.push(plan.id);
         }
       }
@@ -6188,7 +6189,7 @@ export async function registerRoutes(
         }
       }
       if (Object.keys(updates).length > 0) {
-        await storage.updateContact(contactId, updates);
+        await storage.updateContact(contactId, companyId, updates);
       }
       if (req.body.properties && Array.isArray(req.body.properties)) {
         for (const prop of req.body.properties) {
@@ -6206,7 +6207,7 @@ export async function registerRoutes(
               if (prop.state !== undefined) propUpdates.state = String(prop.state).trim();
               if (prop.zipCode !== undefined) propUpdates.zipCode = String(prop.zipCode).trim();
               if (Object.keys(propUpdates).length > 0) {
-                await storage.updateProperty(prop.id, propUpdates);
+                await storage.updateProperty(prop.id, companyId, propUpdates);
               }
             }
           }
@@ -6216,7 +6217,7 @@ export async function registerRoutes(
       if (pendingEmailChange) {
         const verificationToken = crypto.randomBytes(32).toString("hex");
         const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await storage.updateContact(contactId, {
+        await storage.updateContact(contactId, companyId, {
           pendingEmail: pendingEmailChange,
           emailVerificationToken: verificationToken,
           emailVerificationExpiry: verificationExpiry,
@@ -6307,7 +6308,7 @@ export async function registerRoutes(
           name: `${contact.firstName} ${contact.lastName}`.trim(),
           metadata: { contactId: contact.id, companyId },
         });
-        await storage.updateContact(contact.id, { stripeCustomerId });
+        await storage.updateContact(contact.id, companyId, { stripeCustomerId });
       }
 
       const baseUrl = getBaseUrl(req);
@@ -6354,9 +6355,9 @@ export async function registerRoutes(
 
   app.patch("/api/portal/auto-pay", async (req: Request, res: Response) => {
     try {
-      const { contactId } = await getPortalContext(req);
+      const { contactId, companyId } = await getPortalContext(req);
       const { enabled } = req.body;
-      await storage.updateContact(contactId, { autoPayEnabled: !!enabled });
+      await storage.updateContact(contactId, companyId, { autoPayEnabled: !!enabled });
       res.json({ success: true, autoPayEnabled: !!enabled });
     } catch (err) { handleError(res, err); }
   });
@@ -6379,13 +6380,13 @@ export async function registerRoutes(
 
   app.post("/api/portal/referral/generate", async (req: Request, res: Response) => {
     try {
-      const { contactId } = await getPortalContext(req);
+      const { contactId, companyId } = await getPortalContext(req);
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       if (contact.referralCode) return res.json({ referralCode: contact.referralCode });
 
       const code = `REF-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
-      await storage.updateContact(contactId, { referralCode: code });
+      await storage.updateContact(contactId, companyId, { referralCode: code });
       res.json({ referralCode: code });
     } catch (err) { handleError(res, err); }
   });
@@ -6417,7 +6418,7 @@ export async function registerRoutes(
       if (!estimate || estimate.contactId !== contactId) return res.status(404).json({ error: "Estimate not found" });
       if (estimate.status !== "pending") return res.status(400).json({ error: "Estimate is no longer pending" });
 
-      await storage.updateEstimate(estimate.id, {
+      await storage.updateEstimate(estimate.id, companyId, {
         status: "approved",
         respondedAt: new Date(),
         responseNote: req.body.note || null,
@@ -6449,7 +6450,7 @@ export async function registerRoutes(
       if (!estimate || estimate.contactId !== contactId) return res.status(404).json({ error: "Estimate not found" });
       if (estimate.status !== "pending") return res.status(400).json({ error: "Estimate is no longer pending" });
 
-      await storage.updateEstimate(estimate.id, {
+      await storage.updateEstimate(estimate.id, companyId, {
         status: "declined",
         respondedAt: new Date(),
         responseNote: req.body.reason || null,
@@ -6474,7 +6475,7 @@ export async function registerRoutes(
 
   app.patch("/api/portal/notifications", async (req: Request, res: Response) => {
     try {
-      const { contactId } = await getPortalContext(req);
+      const { contactId, companyId } = await getPortalContext(req);
       const prefs = req.body;
       const allowed = ["email", "sms", "serviceReminder", "serviceCompleted", "invoiceReady", "invoiceDueReminder", "paymentConfirmation"];
       const cleaned: Record<string, boolean> = {};
@@ -6484,7 +6485,7 @@ export async function registerRoutes(
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const merged = { ...(contact.reminderPreferences || { email: true, sms: false }), ...cleaned };
-      await storage.updateContact(contactId, { reminderPreferences: merged });
+      await storage.updateContact(contactId, companyId, { reminderPreferences: merged });
       res.json({ success: true, preferences: merged });
     } catch (err) { handleError(res, err); }
   });
@@ -6815,25 +6816,25 @@ export async function registerRoutes(
       if (!request) return res.status(404).json({ error: "Change request not found" });
       if (request.status !== "pending") return res.status(400).json({ error: "Request is not pending" });
 
-      await storage.updateServiceChangeRequest(request.id, {
+      await storage.updateServiceChangeRequest(request.id, companyId, {
         status: "approved",
         adminNote: req.body.adminNote || null,
         respondedAt: new Date(),
       });
 
       if (request.requestType === "pause") {
-        await storage.updateContact(request.contactId, { status: "paused" });
+        await storage.updateContact(request.contactId, companyId, { status: "paused" });
         const plans = await storage.getServicePlans(companyId, { contactId: request.contactId, isActive: true });
         for (const plan of plans) {
-          await storage.updateServicePlan(plan.id, { isActive: false });
+          await storage.updateServicePlan(plan.id, companyId, { isActive: false });
         }
       } else if (request.requestType === "cancel" && request.servicePlanId) {
-        await storage.updateServicePlan(request.servicePlanId, { isActive: false });
+        await storage.updateServicePlan(request.servicePlanId, companyId, { isActive: false });
       } else if (request.servicePlanId && request.requestedValue) {
         if (request.requestType === "frequency_change") {
-          await storage.updateServicePlan(request.servicePlanId, { frequency: request.requestedValue as any });
+          await storage.updateServicePlan(request.servicePlanId, companyId, { frequency: request.requestedValue as any });
         } else if (request.requestType === "day_change") {
-          await storage.updateServicePlan(request.servicePlanId, { dayOfWeek: request.requestedValue as any });
+          await storage.updateServicePlan(request.servicePlanId, companyId, { dayOfWeek: request.requestedValue as any });
         }
       }
 
@@ -6849,7 +6850,7 @@ export async function registerRoutes(
       if (!request) return res.status(404).json({ error: "Change request not found" });
       if (request.status !== "pending") return res.status(400).json({ error: "Request is not pending" });
 
-      await storage.updateServiceChangeRequest(request.id, {
+      await storage.updateServiceChangeRequest(request.id, companyId, {
         status: "denied",
         adminNote: req.body.adminNote || req.body.reason || null,
         respondedAt: new Date(),
@@ -6877,7 +6878,7 @@ export async function registerRoutes(
         });
       });
 
-      await storage.updateContact(req.params.id, { hasPortalAccess: true, portalPasswordHash });
+      await storage.updateContact(req.params.id, companyId, { hasPortalAccess: true, portalPasswordHash });
 
       const company = await storage.getCompany(companyId);
       const portalUrl = `${getBaseUrl(req)}/portal/login`;
@@ -6917,7 +6918,7 @@ export async function registerRoutes(
       const contact = await storage.getContact(req.params.id, companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      await storage.updateContact(req.params.id, { hasPortalAccess: false });
+      await storage.updateContact(req.params.id, companyId, { hasPortalAccess: false });
       res.json({ success: true, message: "Portal access disabled." });
     } catch (err) { handleError(res, err); }
   });
@@ -6940,7 +6941,7 @@ export async function registerRoutes(
           resolve(`${salt}:${key.toString("hex")}`);
         });
       });
-      await storage.updateContact(req.params.id, { portalPasswordHash });
+      await storage.updateContact(req.params.id, companyId, { portalPasswordHash });
       auditLog(companyId, userId, "contact", req.params.id, "portal_password_reset", { resetBy: userId });
       res.json({ success: true, message: "Client portal password has been updated." });
     } catch (err) { handleError(res, err); }
@@ -6964,7 +6965,7 @@ export async function registerRoutes(
         });
       });
 
-      await storage.updateContact(req.params.id, { portalPasswordHash });
+      await storage.updateContact(req.params.id, companyId, { portalPasswordHash });
 
       const company = await storage.getCompany(companyId);
       const portalUrl = `${getBaseUrl(req)}/portal/login`;
@@ -7028,7 +7029,7 @@ export async function registerRoutes(
                 resolve(`${salt}:${key.toString("hex")}`);
               });
             });
-            await storage.updateContact(contactId, { hasPortalAccess: true, portalPasswordHash });
+            await storage.updateContact(contactId, companyId, { hasPortalAccess: true, portalPasswordHash });
           } else {
             tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
             const salt = crypto.randomBytes(16).toString("hex");
@@ -7038,7 +7039,7 @@ export async function registerRoutes(
                 resolve(`${salt}:${key.toString("hex")}`);
               });
             });
-            await storage.updateContact(contactId, { portalPasswordHash });
+            await storage.updateContact(contactId, companyId, { portalPasswordHash });
           }
 
           sendEmail({
@@ -7249,14 +7250,14 @@ export async function registerRoutes(
 
   app.post("/api/time-entries/clock-out", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { userId } = await getCompanyContext(req);
+      const { userId, companyId } = await getCompanyContext(req);
       const active = await storage.getActiveTimeEntry(userId);
       if (!active) {
         return res.status(400).json({ error: "Not clocked in" });
       }
       const clockOut = new Date();
       const durationMinutes = Math.round((clockOut.getTime() - new Date(active.clockIn).getTime()) / 60000);
-      const entry = await storage.updateTimeEntry(active.id, {
+      const entry = await storage.updateTimeEntry(active.id, companyId, {
         clockOut,
         durationMinutes,
       });
@@ -8107,7 +8108,7 @@ export async function registerRoutes(
                 if (pc.serviceFrequency && !existing.serviceFrequency) updates.serviceFrequency = pc.serviceFrequency;
                 if (pc.serviceDay && !existing.serviceDay) updates.serviceDay = pc.serviceDay;
                 if (Object.keys(updates).length > 0) {
-                  await storage.updateContact(existing.id, updates);
+                  await storage.updateContact(existing.id, companyId, updates);
                 }
                 updated++;
                 continue;

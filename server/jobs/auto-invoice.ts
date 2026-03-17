@@ -152,7 +152,7 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, ti
       );
 
       for (const visit of uninvoicedVisits) {
-        await storage.updateVisit(visit.id, { invoiceId: invoice.id });
+        await storage.updateVisit(visit.id, companyId, { invoiceId: invoice.id });
       }
 
       invoicesCreated++;
