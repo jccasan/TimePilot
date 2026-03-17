@@ -499,6 +499,9 @@ export default function Jobs() {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
       setCreateOpen(false);
       toast({ title: "Job created" });
     },
@@ -514,6 +517,10 @@ export default function Jobs() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
       setEditJob(null);
       toast({ title: "Job updated" });
     },
@@ -530,6 +537,9 @@ export default function Jobs() {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
       setDeleteId(null);
       toast({ title: "Job deleted" });
     },
@@ -545,6 +555,10 @@ export default function Jobs() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
       toast({ title: "Job approved and activated" });
     },
     onError: (err: Error) => {

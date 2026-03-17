@@ -217,6 +217,9 @@ export default function Scheduling() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       toast({ title: `${data.generated} visit${data.generated === 1 ? "" : "s"} generated`, description: data.generated > 0 ? "Visits created from active jobs." : "No new visits needed." });
     },
     onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
@@ -227,6 +230,10 @@ export default function Scheduling() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/visits"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
       toast({ title: "Job created", description: "New job added successfully." });
       setDialogOpen(false);
       form.reset();

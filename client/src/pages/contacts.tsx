@@ -151,6 +151,8 @@ export default function Contacts() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       setSelectedIds(new Set());
       const action = variables.status ? `Status changed to ${variables.status}` : "Tag added";
       toast({ title: "Bulk update complete", description: `${action} for ${variables.ids.length} contact(s).` });
@@ -166,6 +168,10 @@ export default function Contacts() {
     },
     onSuccess: (_, ids) => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       setSelectedIds(new Set());
       setDeleteConfirmOpen(false);
       toast({ title: "Contacts deleted", description: `${ids.length} contact(s) deleted successfully.` });
@@ -241,6 +247,7 @@ export default function Contacts() {
     onSuccess: (result: Record<string, unknown>) => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       const meta = result._meta as { propertyCreated?: boolean; hasPartialAddress?: boolean } | undefined;
       if (meta?.hasPartialAddress && !meta?.propertyCreated) {
         toast({ title: "Contact created", description: "Address is incomplete — a service property was not created automatically. Please add one manually from the contact page." });

@@ -280,7 +280,7 @@ export default function Invoices() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
       const desc = data?.paymentUrl
         ? "Invoice emailed with a payment link."
         : "Invoice emailed to the client.";
@@ -298,6 +298,10 @@ export default function Invoices() {
     },
     onSuccess: (data: { status: string }) => {
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
       if (data.status === "paid") {
         toast({ title: "Payment successful", description: "Invoice charged to card on file." });
       } else {
@@ -347,6 +351,10 @@ export default function Invoices() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
       toast({ title: "Invoice created", description: "New invoice has been created." });
       resetCreateForm();
       setCreateDialogOpen(false);
@@ -363,6 +371,8 @@ export default function Invoices() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       toast({ title: "Invoice updated", description: "Invoice marked as paid." });
     },
     onError: (error: Error) => {
@@ -376,6 +386,9 @@ export default function Invoices() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
       toast({ title: "Invoice voided", description: "Invoice has been voided." });
     },
     onError: (error: Error) => {
@@ -430,6 +443,8 @@ export default function Invoices() {
     },
     onSuccess: (data: InvoiceWithLineItems) => {
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       setSelectedInvoice(data);
       setEditMode(false);
       toast({ title: "Invoice updated", description: "Changes saved successfully." });

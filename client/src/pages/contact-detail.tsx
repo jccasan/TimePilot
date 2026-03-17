@@ -122,7 +122,10 @@ export default function ContactDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       toast({ title: "Updated", description: "Contact updated successfully." });
       setEditing(false);
     },
@@ -1704,6 +1707,10 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
       toast({ title: "Job created" });
       setCreateDialogOpen(false);
       createForm.reset();
@@ -1725,6 +1732,10 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
       toast({ title: "Job updated" });
       setEditingPlan(null);
       setEditSelectedAddOns([]);
@@ -1741,6 +1752,10 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
       toast({ title: "Job deleted" });
     },
     onError: (error: Error) => {

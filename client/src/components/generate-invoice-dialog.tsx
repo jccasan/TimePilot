@@ -179,6 +179,7 @@ export function GenerateInvoiceDialog({
       }});
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", activeContactId, "uninvoiced-visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       toast({
         title: "Invoice created",
         description: `Invoice #${data.invoiceNumber} for $${parseFloat(data.total).toFixed(2)} created from ${selectedVisitIds.size} visit${selectedVisitIds.size > 1 ? "s" : ""}.`,
