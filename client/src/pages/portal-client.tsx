@@ -850,14 +850,14 @@ export default function PortalClient() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const hasActivePlans = schedule?.servicePlans.some((p) => p.isActive);
+  const hasActivePlans = schedule?.servicePlans?.some((p) => p.isActive);
   const activeInvoices = useMemo(() => invoices.filter((inv) => inv.status !== "voided"), [invoices]);
   const unpaidInvoices = useMemo(() => activeInvoices.filter((inv) => inv.status !== "paid" && inv.status !== "voided"), [activeInvoices]);
   const balanceDue = useMemo(() => unpaidInvoices.reduce((sum, inv) => sum + Number(inv.total), 0), [unpaidInvoices]);
   const pendingEstimates = useMemo(() => estimates.filter((e) => e.status === "pending"), [estimates]);
   const pastEstimates = useMemo(() => estimates.filter((e) => e.status !== "pending"), [estimates]);
   const totalPages = Math.ceil(pastVisitsTotal / 20);
-  const activePlan = schedule?.servicePlans.find((p) => p.isActive);
+  const activePlan = schedule?.servicePlans?.find((p) => p.isActive);
   const nextVisit = schedule?.upcomingVisits?.[0];
 
   if (loading) {
