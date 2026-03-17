@@ -320,6 +320,9 @@ export default function TechMobile() {
 
       setPendingAdvanceAfter(completeDialogVisit.id);
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
       setCompleteDialogVisit(null);
       toast({ title: "Visit completed", description: "Customer has been notified." });
     } catch (err: any) {

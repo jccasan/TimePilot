@@ -458,6 +458,7 @@ function RouteVisitDetailSheet({
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
       toast({ title: "Visit updated" });
       onOpenChange(false);
     },
@@ -925,6 +926,7 @@ export default function RoutesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
     },
     onError: (err: Error) => {
       setUpdatingVisitId(null);
