@@ -633,7 +633,12 @@ export class DatabaseStorage implements IStorage {
     return vh;
   }
 
-  async deleteVacationHold(id: string, _companyId: string): Promise<void> {
+  async deleteVacationHold(id: string, companyId: string): Promise<void> {
+    const [hold] = await db.select({ id: vacationHolds.id })
+      .from(vacationHolds)
+      .innerJoin(servicePlans, eq(vacationHolds.servicePlanId, servicePlans.id))
+      .where(and(eq(vacationHolds.id, id), eq(servicePlans.companyId, companyId)));
+    if (!hold) return;
     await db.delete(vacationHolds).where(eq(vacationHolds.id, id));
   }
 
