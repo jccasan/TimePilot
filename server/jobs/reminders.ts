@@ -123,6 +123,29 @@ export async function runReminders() {
   );
 }
 
+async function hasChannelLog(
+  companyId: string,
+  contactId: string,
+  ruleId: string,
+  visitId: string,
+  channel: string
+): Promise<boolean> {
+  const logs = await db
+    .select({ id: reminderLogs.id })
+    .from(reminderLogs)
+    .where(
+      and(
+        eq(reminderLogs.companyId, companyId),
+        eq(reminderLogs.contactId, contactId),
+        eq(reminderLogs.ruleId, ruleId),
+        eq(reminderLogs.visitId, visitId),
+        sql`(${reminderLogs.channel} = ${channel} OR ${reminderLogs.channel} = 'both')`
+      )
+    )
+    .limit(1);
+  return logs.length > 0;
+}
+
 async function sendServiceRemindersForRule(
   companyId: string,
   companyName: string,
@@ -189,34 +212,37 @@ async function sendServiceRemindersForRule(
     if (prefs.serviceReminder === false) continue;
     if (prefs.preferredTiming && prefs.preferredTiming !== rule.timing) continue;
 
+    const contactChannel = prefs.preferredChannel || null;
+    const effectiveChannel = contactChannel || rule.channel;
+
+    const wantsEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
+    const wantsSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && isTwilioConfigured();
+
+    const isTimeSensitive = rule.timing === "2h_before" || rule.timing === "morning_of";
+    const smsDeferredByQuiet = smsQuiet && !isTimeSensitive;
+
+    if (!wantsEmail && wantsSms && smsDeferredByQuiet) continue;
+
     const unsentVisits: typeof contactVisits = [];
     for (const cv of contactVisits) {
-      const existingLog = await db
-        .select({ id: reminderLogs.id })
-        .from(reminderLogs)
-        .where(
-          and(
-            eq(reminderLogs.companyId, companyId),
-            eq(reminderLogs.contactId, contact.id),
-            eq(reminderLogs.ruleId, rule.id),
-            eq(reminderLogs.visitId, cv.visitId)
-          )
-        )
-        .limit(1);
-      if (existingLog.length === 0) {
+      const emailDone = !wantsEmail || await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "email");
+      const smsDone = !wantsSms || await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "sms");
+      const smsDeferred = wantsSms && smsDeferredByQuiet;
+      if (!emailDone || (!smsDone && !smsDeferred)) {
         unsentVisits.push(cv);
       }
     }
 
     if (unsentVisits.length === 0) continue;
 
-    const contactChannel = prefs.preferredChannel || null;
-    const effectiveChannel = contactChannel || rule.channel;
+    const firstVisitId = unsentVisits[0].visitId;
+    const alreadySentEmail = wantsEmail && await hasChannelLog(companyId, contact.id, rule.id, firstVisitId, "email");
+    const alreadySentSms = wantsSms && await hasChannelLog(companyId, contact.id, rule.id, firstVisitId, "sms");
 
-    const canEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
-    const canSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && isTwilioConfigured();
+    const shouldSendEmail = wantsEmail && !alreadySentEmail;
+    const shouldSendSms = wantsSms && !alreadySentSms && !smsDeferredByQuiet;
 
-    if (!canEmail && canSms && smsQuiet) continue;
+    if (!shouldSendEmail && !shouldSendSms) continue;
 
     const addresses = unsentVisits.map(v => v.address);
     const visitIds = unsentVisits.map(v => v.visitId);
@@ -271,11 +297,10 @@ async function sendServiceRemindersForRule(
     };
 
     const message = applyTemplate(rule.template, templateFields);
+    let emailSent = false;
+    let smsSent = false;
 
-    let delivered = false;
-    let deliveredChannel = "";
-
-    if (canEmail) {
+    if (shouldSendEmail) {
       try {
         await sendEmail({
           to: contact.email!,
@@ -283,25 +308,24 @@ async function sendServiceRemindersForRule(
           text: message,
           html: generateServiceReminderHtml(companyName, `${contact.firstName} ${contact.lastName}`, addresses, firstVisit.visit.scheduledDate, techName, arrivalWindow),
         });
-        delivered = true;
-        deliveredChannel = "email";
+        emailSent = true;
       } catch (err) {
         console.error(`[reminders] Failed to send email to ${contact.email}:`, err);
       }
     }
 
-    if (canSms && !smsQuiet) {
+    if (shouldSendSms) {
       try {
         await sendSms({ to: contact.phone!, body: message });
-        delivered = true;
-        deliveredChannel = deliveredChannel ? "both" : "sms";
+        smsSent = true;
       } catch (err) {
         console.error(`[reminders] Failed to send SMS to ${contact.phone}:`, err);
       }
     }
 
-    if (delivered) {
+    if (emailSent || smsSent) {
       sent++;
+      const channelsSent = emailSent && smsSent ? "both" : emailSent ? "email" : "sms";
       for (const vid of visitIds) {
         await db.insert(reminderLogs).values({
           companyId,
@@ -309,7 +333,7 @@ async function sendServiceRemindersForRule(
           visitId: vid,
           ruleId: rule.id,
           reminderType: `service_${rule.timing}`,
-          channel: deliveredChannel,
+          channel: channelsSent,
           messagePreview: message.substring(0, 200),
           deliveryStatus: "sent",
         });
