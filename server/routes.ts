@@ -1205,30 +1205,29 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const company = await storage.getCompany(companyId);
       const tz = company?.timezone || "America/New_York";
-      const today = getCompanyToday(tz);
       const routes = await storage.getRoutes(companyId);
-      const todayDow = new Date().toLocaleDateString("en-US", { weekday: "long", timeZone: tz });
-      const todayRoutes = routes.filter(r => r.dayOfWeek === todayDow);
+      const todayDow = new Date().toLocaleDateString("en-US", { weekday: "long", timeZone: tz }).toLowerCase();
+      const todayRoutes = routes.filter(r => (r.dayOfWeek || "").toLowerCase() === todayDow);
       const allProperties = await storage.getProperties(companyId);
       const propMap = new Map(allProperties.map(p => [p.id, p]));
       const routeData = await Promise.all(todayRoutes.map(async (route) => {
-        const stops = await storage.getRouteStops(route.id);
-        const coordinates = stops
-          .sort((a, b) => a.stopOrder - b.stopOrder)
-          .map(s => {
-            const prop = propMap.get(s.propertyId);
+        const plans = await storage.getServicePlans(companyId, { routeId: route.id, isActive: true });
+        const coordinates = plans
+          .sort((a, b) => (a.stopOrder || 0) - (b.stopOrder || 0))
+          .map(p => {
+            const prop = propMap.get(p.propertyId);
             return prop ? {
               lat: prop.latitude ? parseFloat(String(prop.latitude)) : null,
               lng: prop.longitude ? parseFloat(String(prop.longitude)) : null,
               address: prop.streetAddress || "",
             } : null;
           })
-          .filter(c => c && c.lat && c.lng);
+          .filter((c): c is { lat: number; lng: number; address: string } => c !== null && c.lat !== null && c.lng !== null);
         return {
           id: route.id,
           name: route.name,
           color: route.color || "#4CAF50",
-          stopCount: stops.length,
+          stopCount: plans.length,
           coordinates,
         };
       }));
