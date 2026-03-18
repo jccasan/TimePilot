@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Ban, Pencil, Save, Loader2 } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
@@ -255,6 +255,8 @@ export default function Invoices() {
     fontFamily: string;
     logoSize: number;
     borderRadius: number;
+    showLogo: boolean;
+    logoPosition: "left" | "center" | "right";
   }
 
   const { data: invoiceTheme } = useQuery<InvoiceTheme>({
@@ -383,16 +385,19 @@ export default function Invoices() {
     },
   });
 
-  const voidMutation = useMutation({
+  const deleteMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
-      await apiRequest("PATCH", `/api/invoices/${invoiceId}`, { status: "voided" });
+      await apiRequest("DELETE", `/api/invoices/${invoiceId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({ predicate: (query) => {
+        const key = query.queryKey[0] as string;
+        return key?.startsWith("/api/invoices") || key?.startsWith("/api/contacts");
+      }});
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
-      toast({ title: "Invoice voided", description: "Invoice has been voided." });
+      toast({ title: "Invoice deleted", description: "Invoice has been permanently removed." });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -739,6 +744,7 @@ export default function Invoices() {
         <TabsList className="flex-wrap">
           <TabsTrigger value="all" data-testid="tab-invoice-all">All</TabsTrigger>
           <TabsTrigger value="draft" data-testid="tab-invoice-draft">Draft</TabsTrigger>
+          <TabsTrigger value="sent" data-testid="tab-invoice-sent">Sent</TabsTrigger>
           <TabsTrigger value="pending" data-testid="tab-invoice-pending">Pending</TabsTrigger>
           <TabsTrigger value="paid" data-testid="tab-invoice-paid">Paid</TabsTrigger>
           <TabsTrigger value="failed" data-testid="tab-invoice-failed">Failed</TabsTrigger>
@@ -831,7 +837,7 @@ export default function Invoices() {
                         <span className="text-xs font-bold">$</span>
                       </Button>
                     )}
-                    {invoice.status !== "paid" && invoice.status !== "voided" && (
+                    {invoice.status !== "paid" && (
                       <Button
                         variant="default"
                         size="sm"
@@ -845,16 +851,20 @@ export default function Invoices() {
                         Send to Client
                       </Button>
                     )}
-                    {invoice.status !== "paid" && invoice.status !== "voided" && (
+                    {invoice.status !== "paid" && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => voidMutation.mutate(invoice.id)}
-                        disabled={voidMutation.isPending}
-                        data-testid={`button-void-invoice-${invoice.id}`}
-                        title="Void invoice"
+                        onClick={() => {
+                          if (window.confirm("Permanently delete this invoice? This cannot be undone.")) {
+                            deleteMutation.mutate(invoice.id);
+                          }
+                        }}
+                        disabled={deleteMutation.isPending}
+                        data-testid={`button-delete-invoice-${invoice.id}`}
+                        title="Delete invoice"
                       >
-                        <Ban className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     )}
                   </div>
@@ -1079,6 +1089,37 @@ export default function Invoices() {
                       onChange={e => setEditTheme({ ...editTheme, logoSize: parseInt(e.target.value) || 56 })}
                       data-testid="input-theme-logo-size"
                     />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Show Logo</Label>
+                    <Select
+                      value={editTheme.showLogo === false ? "hide" : "show"}
+                      onValueChange={v => setEditTheme({ ...editTheme, showLogo: v === "show" })}
+                    >
+                      <SelectTrigger data-testid="select-theme-show-logo">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="show">Visible</SelectItem>
+                        <SelectItem value="hide">Hidden</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Logo Position</Label>
+                    <Select
+                      value={editTheme.logoPosition || "left"}
+                      onValueChange={v => setEditTheme({ ...editTheme, logoPosition: v as "left" | "center" | "right" })}
+                    >
+                      <SelectTrigger data-testid="select-theme-logo-position">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="left">Left</SelectItem>
+                        <SelectItem value="center">Center</SelectItem>
+                        <SelectItem value="right">Right</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 

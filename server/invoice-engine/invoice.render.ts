@@ -85,9 +85,15 @@ export function loadTheme(themePath: string): any {
 }
 
 export function renderInvoice(templateHtml: string, theme: any, invoiceData: any): string {
+  const showLogo = theme.showLogo !== false;
+  const logoPosition = theme.logoPosition || "left";
   const mergedData = {
     theme,
     ...invoiceData,
+    logoVisible: showLogo,
+    logoLeft: showLogo && logoPosition === "left",
+    logoCenter: showLogo && logoPosition === "center",
+    logoRight: showLogo && logoPosition === "right",
   };
   return renderTemplate(templateHtml, mergedData);
 }

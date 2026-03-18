@@ -4084,6 +4084,17 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.delete("/api/invoices/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const invoice = await storage.getInvoice(req.params.id, companyId);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+      if (invoice.status === "paid") return res.status(400).json({ error: "Cannot delete a paid invoice" });
+      await storage.deleteInvoice(req.params.id, companyId);
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Automation Rule Routes ================
 
   app.get("/api/automation-rules", isAuthenticated, async (req: Request, res: Response) => {
@@ -7479,11 +7490,15 @@ export async function registerRoutes(
     try {
       const { companyId } = await getCompanyContext(req);
       const theme = req.body;
-      const allowed = ["primaryColor", "accentColor", "textColor", "mutedColor", "borderColor", "backgroundColor", "cardColor", "fontFamily", "logoSize", "borderRadius"];
+      const allowed = ["primaryColor", "accentColor", "textColor", "mutedColor", "borderColor", "backgroundColor", "cardColor", "fontFamily", "logoSize", "borderRadius", "showLogo", "logoPosition"];
       const filtered: any = {};
       for (const key of allowed) {
         if (theme[key] !== undefined) filtered[key] = theme[key];
       }
+      if (filtered.logoPosition && !["left", "center", "right"].includes(filtered.logoPosition)) {
+        return res.status(400).json({ error: "Invalid logoPosition" });
+      }
+      if (filtered.showLogo !== undefined) filtered.showLogo = Boolean(filtered.showLogo);
       await storage.updateCompany(companyId, { invoiceTheme: JSON.stringify(filtered) });
       const defaultTheme = loadTheme(getDefaultThemePath());
       res.json({ ...defaultTheme, ...filtered });

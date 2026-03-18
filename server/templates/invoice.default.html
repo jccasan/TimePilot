@@ -66,6 +66,23 @@
       height: auto;
       border-radius: 6px;
     }
+    .header-logo-center {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .header-logo-center img {
+      width: {{theme.logoSize}}px;
+      height: auto;
+      border-radius: 6px;
+    }
+    .header-logo-right {
+      margin-left: auto;
+    }
+    .header-logo-right img {
+      width: {{theme.logoSize}}px;
+      height: auto;
+      border-radius: 6px;
+    }
     .header-biz h1 {
       font-size: 1.4rem;
       color: {{theme.primaryColor}};
@@ -334,13 +351,22 @@
 
     <!-- HEADER -->
     <div class="card">
+      {{#logoCenter}}
+      {{#business.logo}}
+      <div class="header-logo-center">
+        <img src="{{business.logo}}" alt="{{business.name}} logo" />
+      </div>
+      {{/business.logo}}
+      {{/logoCenter}}
       <div class="header">
         <div class="header-left">
+          {{#logoLeft}}
           {{#business.logo}}
           <div class="header-logo">
             <img src="{{business.logo}}" alt="{{business.name}} logo" />
           </div>
           {{/business.logo}}
+          {{/logoLeft}}
           <div class="header-biz">
             <h1>{{business.name}}</h1>
             <p>
@@ -351,6 +377,13 @@
             </p>
           </div>
         </div>
+        {{#logoRight}}
+        {{#business.logo}}
+        <div class="header-logo-right">
+          <img src="{{business.logo}}" alt="{{business.name}} logo" />
+        </div>
+        {{/business.logo}}
+        {{/logoRight}}
         <div class="header-right">
           <h2>Invoice</h2>
           <p class="inv-number">{{invoice.number}}</p>

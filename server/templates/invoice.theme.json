@@ -8,5 +8,7 @@
   "cardColor": "#ffffff",
   "fontFamily": "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
   "logoSize": 56,
-  "borderRadius": 8
+  "borderRadius": 8,
+  "showLogo": true,
+  "logoPosition": "left"
 }

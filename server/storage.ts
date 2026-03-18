@@ -156,6 +156,7 @@ export interface IStorage {
   getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]>;
   createInvoiceLineItem(data: InsertInvoiceLineItem): Promise<InvoiceLineItem>;
   deleteInvoiceLineItems(invoiceId: string): Promise<void>;
+  deleteInvoice(id: string, companyId: string): Promise<void>;
   isVisitInvoiced(visitId: string): Promise<boolean>;
   getUninvoicedCompletedVisits(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]>;
   getScheduledVisitsForRange(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]>;
@@ -767,6 +768,12 @@ export class DatabaseStorage implements IStorage {
 
   async deleteInvoiceLineItems(invoiceId: string): Promise<void> {
     await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId));
+  }
+
+  async deleteInvoice(id: string, companyId: string): Promise<void> {
+    await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, id));
+    await db.update(visits).set({ invoiceId: null }).where(eq(visits.invoiceId, id));
+    await db.delete(invoices).where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
   }
 
   async isVisitInvoiced(visitId: string): Promise<boolean> {
