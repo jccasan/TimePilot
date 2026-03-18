@@ -5567,7 +5567,7 @@ export async function registerRoutes(
       const paidNum = invoice.paidAt ? parseFloat(invoice.total) : 0;
       const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : "";
 
-      const invoiceData: any = {
+      const invoiceData = {
         business: {
           name: company?.name || "",
           address: company?.address || "",
@@ -5597,13 +5597,13 @@ export async function registerRoutes(
           zip: contact.zipCode || "",
         } : null,
         service_address: serviceAddr ? {
-          line1: (serviceAddr as any).streetAddress || (serviceAddr as any).street || "",
+          line1: serviceAddr.streetAddress || "",
           line2: "",
-          city: (serviceAddr as any).city || "",
-          state: (serviceAddr as any).state || "",
-          zip: (serviceAddr as any).zipCode || (serviceAddr as any).zip || "",
+          city: serviceAddr.city || "",
+          state: serviceAddr.state || "",
+          zip: serviceAddr.zipCode || "",
         } : null,
-        line_items: lineItems.map((li: any) => ({
+        line_items: lineItems.map(li => ({
           description: li.description,
           details: "",
           qty: li.quantity,
@@ -5616,7 +5616,7 @@ export async function registerRoutes(
           tax_rate: taxRateNum,
           paid: paidNum,
         },
-        visits: [],
+        visits: [] as { date: string; time: string; status: string }[],
         notes: "",
         payment_instructions: "",
         thank_you: "Thank you for your business!",
