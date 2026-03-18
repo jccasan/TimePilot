@@ -1,8 +1,8 @@
-const CACHE_NAME = 'scoopilot-v1';
+const CACHE_VERSION = '__BUILD_HASH__';
+const CACHE_NAME = 'scoopilot-' + CACHE_VERSION;
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [
-  '/',
   '/offline.html',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
@@ -36,6 +36,13 @@ self.addEventListener('fetch', (event) => {
 
   if (url.pathname.startsWith('/api/')) return;
 
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(() => caches.match(OFFLINE_URL))
+    );
+    return;
+  }
+
   if (url.pathname.startsWith('/icons/') || url.pathname === '/manifest.json' || url.pathname === '/favicon.png') {
     event.respondWith(
       caches.match(request).then((cached) => {
@@ -52,12 +59,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
   event.respondWith(
-    fetch(request).catch(() => {
-      if (request.mode === 'navigate') {
-        return caches.match(OFFLINE_URL);
-      }
-      return caches.match(request);
-    })
+    fetch(request).catch(() => caches.match(request))
   );
 });
