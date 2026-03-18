@@ -1615,7 +1615,7 @@ export default function PortalClient() {
                             <Button variant="ghost" size="icon" className="h-10 w-10 min-h-[44px]" onClick={() => handleDownloadInvoicePdf(inv.id, inv.invoiceNumber)} data-testid={`button-download-invoice-${inv.id}`}>
                               <Download className="h-3.5 w-3.5" />
                             </Button>
-                            {inv.status !== "paid" && inv.status !== "voided" && (
+                            {(inv.status === "sent" || inv.status === "pending") && (
                               <Button size="sm" onClick={() => handlePayInvoice(inv.id)} disabled={actionPending} data-testid={`button-portal-pay-${inv.id}`}>
                                 Pay Invoice
                               </Button>
