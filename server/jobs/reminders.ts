@@ -147,6 +147,49 @@ async function hasChannelLog(
   return logs.length > 0;
 }
 
+async function getVisitTechInfo(
+  cv: { visit: { routeId: string | null }; plan: { id: string } },
+  isMorningOf: boolean,
+  companyId: string
+): Promise<{ techName: string; arrivalWindow: string }> {
+  if (!isMorningOf || !cv.visit.routeId) return { techName: "", arrivalWindow: "" };
+  try {
+    const routeData = await db.select().from(routes).where(eq(routes.id, cv.visit.routeId)).limit(1);
+    if (routeData.length === 0) return { techName: "", arrivalWindow: "" };
+    const route = routeData[0];
+    let techName = "";
+    if (route.technicianId) {
+      const techData = await db.select({ firstName: users.firstName, lastName: users.lastName })
+        .from(users).where(eq(users.id, route.technicianId)).limit(1);
+      if (techData.length > 0) {
+        techName = `${techData[0].firstName} ${techData[0].lastName}`.trim();
+      }
+    }
+    let arrivalWindow = "";
+    const routePlans = await storage.getServicePlans(companyId, { routeId: route.id, isActive: true });
+    const sortedPlans = routePlans.sort((a, b) => (a.stopOrder || 0) - (b.stopOrder || 0));
+    const stopIndex = sortedPlans.findIndex(p => p.id === cv.plan.id);
+    if (stopIndex >= 0) {
+      const avgMinutesPerStop = 15;
+      const startHour = 8;
+      const etaMinutes = startHour * 60 + stopIndex * avgMinutesPerStop;
+      const etaEndMinutes = etaMinutes + 30;
+      const formatTime = (m: number) => {
+        const h = Math.floor(m / 60);
+        const min = m % 60;
+        const ampm = h >= 12 ? "PM" : "AM";
+        const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+        return `${h12}:${min.toString().padStart(2, "0")} ${ampm}`;
+      };
+      arrivalWindow = `${formatTime(etaMinutes)} - ${formatTime(etaEndMinutes)}`;
+    }
+    return { techName, arrivalWindow };
+  } catch (err) {
+    console.error(`[reminders] Error calculating arrival window:`, err);
+    return { techName: "", arrivalWindow: "" };
+  }
+}
+
 async function sendServiceRemindersForRule(
   companyId: string,
   companyName: string,
@@ -180,11 +223,28 @@ async function sendServiceRemindersForRule(
       )
     );
 
-  const eligibleVisits = candidateVisits.filter(row =>
+  const inWindow = candidateVisits.filter(row =>
     isVisitInRuleWindow(rule, row.visit.scheduledDate, row.plan.startTime ?? null, timezone)
   );
 
   const smsQuiet = isQuietHours(timezone);
+
+  const deferredVisits: typeof candidateVisits = [];
+  if (!smsQuiet) {
+    const outOfWindow = candidateVisits.filter(row =>
+      !isVisitInRuleWindow(rule, row.visit.scheduledDate, row.plan.startTime ?? null, timezone)
+    );
+    for (const row of outOfWindow) {
+      const hasEmailLog = await hasChannelLog(companyId, row.contact.id, rule.id, row.visit.id, "email");
+      if (!hasEmailLog) continue;
+      const hasSmsLog = await hasChannelLog(companyId, row.contact.id, rule.id, row.visit.id, "sms");
+      if (!hasSmsLog) {
+        deferredVisits.push(row);
+      }
+    }
+  }
+
+  const eligibleVisits = [...inWindow, ...deferredVisits];
   let sent = 0;
 
   type ContactGroup = {
@@ -219,172 +279,99 @@ async function sendServiceRemindersForRule(
     const wantsEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
     const wantsSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && isTwilioConfigured();
 
-    const smsDeferredByQuiet = smsQuiet;
+    if (!wantsEmail && !wantsSms) continue;
 
-    if (!wantsEmail && wantsSms && smsDeferredByQuiet) continue;
-
-    const unsentVisits: typeof contactVisits = [];
     for (const cv of contactVisits) {
-      const emailDone = !wantsEmail || await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "email");
-      const smsDone = !wantsSms || await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "sms");
-      const smsDeferred = wantsSms && smsDeferredByQuiet;
-      if (!emailDone || (!smsDone && !smsDeferred)) {
-        unsentVisits.push(cv);
+      const emailAlreadySent = wantsEmail && await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "email");
+      const smsAlreadySent = wantsSms && await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "sms");
+
+      const needEmail = wantsEmail && !emailAlreadySent;
+      const needSms = wantsSms && !smsAlreadySent && !smsQuiet;
+
+      if (!needEmail && !needSms) continue;
+
+      const addresses = [cv.address];
+      const techInfo = await getVisitTechInfo(cv, isMorningOf, companyId);
+
+      const templateFields: Record<string, string> = {
+        firstName: contact.firstName,
+        lastName: contact.lastName || "",
+        companyName: companyName,
+        propertyAddress: addresses.join("; "),
+        serviceDate: cv.visit.scheduledDate,
+        serviceTime: techInfo.arrivalWindow || "during the day",
+        technicianName: techInfo.techName || "your technician",
+        arrivalWindow: techInfo.arrivalWindow || "TBD",
+      };
+
+      let messageBody = applyTemplate(rule.template, templateFields);
+      if (isMorningOf && techInfo.techName && !rule.template.includes("{technicianName}")) {
+        messageBody += ` Your technician today is ${techInfo.techName}.`;
       }
-    }
+      if (isMorningOf && techInfo.arrivalWindow && !rule.template.includes("{arrivalWindow}")) {
+        messageBody += ` Estimated arrival: ${techInfo.arrivalWindow}.`;
+      }
+      const message = messageBody;
 
-    if (unsentVisits.length === 0) continue;
+      let emailOk = false;
+      let smsOk = false;
 
-    const firstVisitId = unsentVisits[0].visitId;
-    const alreadySentEmail = wantsEmail && await hasChannelLog(companyId, contact.id, rule.id, firstVisitId, "email");
-    const alreadySentSms = wantsSms && await hasChannelLog(companyId, contact.id, rule.id, firstVisitId, "sms");
-
-    const shouldSendEmail = wantsEmail && !alreadySentEmail;
-    const shouldSendSms = wantsSms && !alreadySentSms && !smsDeferredByQuiet;
-
-    if (!shouldSendEmail && !shouldSendSms) continue;
-
-    const addresses = unsentVisits.map(v => v.address);
-    const visitIds = unsentVisits.map(v => v.visitId);
-    const firstVisit = unsentVisits[0];
-
-    let techName = "";
-    let arrivalWindow = "";
-    if (isMorningOf && firstVisit.visit.routeId) {
-      try {
-        const routeData = await db.select().from(routes).where(eq(routes.id, firstVisit.visit.routeId)).limit(1);
-        if (routeData.length > 0) {
-          const route = routeData[0];
-          if (route.technicianId) {
-            const techData = await db.select({ firstName: users.firstName, lastName: users.lastName })
-              .from(users).where(eq(users.id, route.technicianId)).limit(1);
-            if (techData.length > 0) {
-              techName = `${techData[0].firstName} ${techData[0].lastName}`.trim();
-            }
-          }
-          const routePlans = await storage.getServicePlans(companyId, { routeId: route.id, isActive: true });
-          const sortedPlans = routePlans.sort((a, b) => (a.stopOrder || 0) - (b.stopOrder || 0));
-          const stopIndex = sortedPlans.findIndex(p => p.id === firstVisit.plan.id);
-          if (stopIndex >= 0) {
-            const avgMinutesPerStop = 15;
-            const startHour = 8;
-            const etaMinutes = startHour * 60 + stopIndex * avgMinutesPerStop;
-            const etaEndMinutes = etaMinutes + 30;
-            const formatTime = (m: number) => {
-              const h = Math.floor(m / 60);
-              const min = m % 60;
-              const ampm = h >= 12 ? "PM" : "AM";
-              const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
-              return `${h12}:${min.toString().padStart(2, "0")} ${ampm}`;
-            };
-            arrivalWindow = `${formatTime(etaMinutes)} - ${formatTime(etaEndMinutes)}`;
-          }
+      if (needEmail) {
+        try {
+          const emailRes = await sendEmail({
+            to: contact.email!,
+            subject: `Service Reminder - ${companyName}`,
+            text: message,
+            html: generateServiceReminderHtml(companyName, `${contact.firstName} ${contact.lastName}`, addresses, cv.visit.scheduledDate, techInfo.techName, techInfo.arrivalWindow),
+          });
+          emailOk = emailRes.success;
+          if (!emailOk) console.error(`[reminders] Email delivery failed for ${contact.email}: ${emailRes.error}`);
+        } catch (err) {
+          console.error(`[reminders] Failed to send email to ${contact.email}:`, err);
         }
-      } catch (err) {
-        console.error(`[reminders] Error calculating arrival window:`, err);
       }
-    }
 
-    const templateFields: Record<string, string> = {
-      firstName: contact.firstName,
-      lastName: contact.lastName || "",
-      companyName: companyName,
-      propertyAddress: addresses.join("; "),
-      serviceDate: firstVisit.visit.scheduledDate,
-      serviceTime: arrivalWindow || "during the day",
-      technicianName: techName || "your technician",
-      arrivalWindow: arrivalWindow || "TBD",
-    };
-
-    let messageBody = applyTemplate(rule.template, templateFields);
-    if (isMorningOf && techName && !rule.template.includes("{technicianName}")) {
-      messageBody += ` Your technician today is ${techName}.`;
-    }
-    if (isMorningOf && arrivalWindow && !rule.template.includes("{arrivalWindow}")) {
-      messageBody += ` Estimated arrival: ${arrivalWindow}.`;
-    }
-    const message = messageBody;
-    let emailSent = false;
-    let smsSent = false;
-
-    if (shouldSendEmail) {
-      try {
-        const emailRes = await sendEmail({
-          to: contact.email!,
-          subject: `Service Reminder - ${companyName}`,
-          text: message,
-          html: generateServiceReminderHtml(companyName, `${contact.firstName} ${contact.lastName}`, addresses, firstVisit.visit.scheduledDate, techName, arrivalWindow),
-        });
-        if (emailRes.success) {
-          emailSent = true;
-        } else {
-          console.error(`[reminders] Email delivery failed for ${contact.email}: ${emailRes.error}`);
+      if (needSms) {
+        try {
+          const smsRes = await sendSms({ to: contact.phone!, body: message });
+          smsOk = smsRes.success;
+          if (!smsOk) console.error(`[reminders] SMS delivery failed for ${contact.phone}: ${smsRes.error}`);
+        } catch (err) {
+          console.error(`[reminders] Failed to send SMS to ${contact.phone}:`, err);
         }
-      } catch (err) {
-        console.error(`[reminders] Failed to send email to ${contact.email}:`, err);
       }
-    }
 
-    if (shouldSendSms) {
-      try {
-        const smsRes = await sendSms({ to: contact.phone!, body: message });
-        if (smsRes.success) {
-          smsSent = true;
-        } else {
-          console.error(`[reminders] SMS delivery failed for ${contact.phone}: ${smsRes.error}`);
-        }
-      } catch (err) {
-        console.error(`[reminders] Failed to send SMS to ${contact.phone}:`, err);
-      }
-    }
-
-    for (const vid of visitIds) {
-      if (emailSent) {
+      if (emailOk) {
         await db.insert(reminderLogs).values({
-          companyId,
-          contactId: contact.id,
-          visitId: vid,
-          ruleId: rule.id,
-          reminderType: `service_${rule.timing}`,
-          channel: "email",
-          messagePreview: message.substring(0, 200),
-          deliveryStatus: "sent",
+          companyId, contactId: contact.id, visitId: cv.visitId, ruleId: rule.id,
+          reminderType: `service_${rule.timing}`, channel: "email",
+          messagePreview: message.substring(0, 200), deliveryStatus: "sent",
         });
       }
-      if (smsSent) {
+      if (smsOk) {
         await db.insert(reminderLogs).values({
-          companyId,
-          contactId: contact.id,
-          visitId: vid,
-          ruleId: rule.id,
-          reminderType: `service_${rule.timing}`,
-          channel: "sms",
-          messagePreview: message.substring(0, 200),
-          deliveryStatus: "sent",
+          companyId, contactId: contact.id, visitId: cv.visitId, ruleId: rule.id,
+          reminderType: `service_${rule.timing}`, channel: "sms",
+          messagePreview: message.substring(0, 200), deliveryStatus: "sent",
         });
       }
-      if ((shouldSendEmail && !emailSent) || (shouldSendSms && !smsSent)) {
-        const failedChannels = [];
-        if (shouldSendEmail && !emailSent) failedChannels.push("email");
-        if (shouldSendSms && !smsSent) failedChannels.push("sms");
+      if ((needEmail && !emailOk) || (needSms && !smsOk)) {
+        const failedCh = [];
+        if (needEmail && !emailOk) failedCh.push("email");
+        if (needSms && !smsOk) failedCh.push("sms");
         await db.insert(reminderLogs).values({
-          companyId,
-          contactId: contact.id,
-          visitId: vid,
-          ruleId: rule.id,
-          reminderType: `service_${rule.timing}`,
-          channel: failedChannels.join(","),
-          messagePreview: message.substring(0, 200),
-          deliveryStatus: "failed",
+          companyId, contactId: contact.id, visitId: cv.visitId, ruleId: rule.id,
+          reminderType: `service_${rule.timing}`, channel: failedCh.join(","),
+          messagePreview: message.substring(0, 200), deliveryStatus: "failed",
         });
       }
-    }
 
-    if (emailSent || smsSent) {
-      sent++;
-      await db.update(visits)
-        .set({ serviceReminderSentAt: new Date() })
-        .where(inArray(visits.id, visitIds));
+      if (emailOk || smsOk) {
+        sent++;
+        await db.update(visits)
+          .set({ serviceReminderSentAt: new Date() })
+          .where(eq(visits.id, cv.visitId));
+      }
     }
   }
 
@@ -485,13 +472,38 @@ async function sendInvoiceReminders(
       ? `Hi ${contact.firstName}, invoice #${invoice.invoiceNumber} for $${total} from ${companyName} is overdue (due ${invoice.dueDate}). Please submit payment at your earliest convenience.`
       : `Hi ${contact.firstName}, invoice #${invoice.invoiceNumber} for $${total} from ${companyName} is due on ${invoice.dueDate}. This is a friendly reminder.`;
 
+    const todayStart = todayStr + "T00:00:00Z";
+    const emailAlreadyLogged = canEmail && (await db.select({ id: reminderLogs.id }).from(reminderLogs).where(
+      and(
+        eq(reminderLogs.companyId, companyId),
+        eq(reminderLogs.contactId, contact.id),
+        eq(reminderLogs.invoiceId, invoice.id),
+        eq(reminderLogs.channel, "email"),
+        eq(reminderLogs.deliveryStatus, "sent"),
+        sql`${reminderLogs.sentAt} >= ${todayStart}`
+      )
+    ).limit(1)).length > 0;
+
+    const smsAlreadyLogged = canSms && (await db.select({ id: reminderLogs.id }).from(reminderLogs).where(
+      and(
+        eq(reminderLogs.companyId, companyId),
+        eq(reminderLogs.contactId, contact.id),
+        eq(reminderLogs.invoiceId, invoice.id),
+        eq(reminderLogs.channel, "sms"),
+        eq(reminderLogs.deliveryStatus, "sent"),
+        sql`${reminderLogs.sentAt} >= ${todayStart}`
+      )
+    ).limit(1)).length > 0;
+
+    const needEmail = canEmail && !emailAlreadyLogged;
+    const needSms = canSms && !smsAlreadyLogged && !smsQuiet;
+
+    if (!needEmail && !needSms) continue;
+
     let emailOk = false;
     let smsOk = false;
-    let emailAttempted = false;
-    let smsAttempted = false;
 
-    if (canEmail) {
-      emailAttempted = true;
+    if (needEmail) {
       try {
         const emailRes = await sendEmail({
           to: contact.email!,
@@ -509,8 +521,7 @@ async function sendInvoiceReminders(
       }
     }
 
-    if (canSms && !smsQuiet) {
-      smsAttempted = true;
+    if (needSms) {
       try {
         const smsRes = await sendSms({ to: contact.phone!, body: message });
         if (smsRes.success) {
@@ -539,10 +550,10 @@ async function sendInvoiceReminders(
         messagePreview: message.substring(0, 200), deliveryStatus: "sent",
       });
     }
-    if ((emailAttempted && !emailOk) || (smsAttempted && !smsOk)) {
+    if ((needEmail && !emailOk) || (needSms && !smsOk)) {
       const failedChannels = [];
-      if (emailAttempted && !emailOk) failedChannels.push("email");
-      if (smsAttempted && !smsOk) failedChannels.push("sms");
+      if (needEmail && !emailOk) failedChannels.push("email");
+      if (needSms && !smsOk) failedChannels.push("sms");
       await db.insert(reminderLogs).values({
         companyId, contactId: contact.id, invoiceId: invoice.id,
         ruleId: "invoice_reminder", reminderType, channel: failedChannels.join(","),
