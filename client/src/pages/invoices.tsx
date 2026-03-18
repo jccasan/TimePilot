@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Ban, Pencil, Save } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Ban, Pencil, Save, Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
@@ -833,13 +833,15 @@ export default function Invoices() {
                     )}
                     {invoice.status !== "paid" && invoice.status !== "voided" && (
                       <Button
-                        variant="outline"
+                        variant="default"
                         size="sm"
                         onClick={() => sendEmailMutation.mutate(invoice.id)}
                         disabled={sendEmailMutation.isPending}
                         data-testid={`button-email-invoice-${invoice.id}`}
                       >
-                        <Mail className="mr-1 h-4 w-4" />
+                        {sendEmailMutation.isPending && sendEmailMutation.variables === invoice.id
+                          ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                          : <Mail className="mr-1 h-4 w-4" />}
                         Send
                       </Button>
                     )}
@@ -1443,8 +1445,8 @@ export default function Invoices() {
                       </Button>
                     )}
                     {selectedInvoice.status !== "paid" && (
-                      <Button size="sm" variant="outline" onClick={() => sendEmailMutation.mutate(selectedInvoice.id)} disabled={sendEmailMutation.isPending} data-testid="button-send-invoice-email">
-                        <Mail className="mr-1 h-3 w-3" /> Send to Client
+                      <Button size="sm" variant="default" onClick={() => sendEmailMutation.mutate(selectedInvoice.id)} disabled={sendEmailMutation.isPending} data-testid="button-send-invoice-email">
+                        {sendEmailMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Mail className="mr-1 h-3 w-3" />} Send to Client
                       </Button>
                     )}
                   </div>

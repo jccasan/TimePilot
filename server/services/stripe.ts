@@ -219,6 +219,8 @@ export async function createCheckoutSession(params: {
       transfer_data: { destination: params.stripeConnectAccountId },
       application_fee_amount: computeApplicationFee(amountCents),
     };
+  } else {
+    sessionParams.automatic_payment_methods = { enabled: true };
   }
 
   const session = await stripe.checkout.sessions.create(sessionParams);
