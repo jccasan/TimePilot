@@ -139,6 +139,7 @@ async function hasChannelLog(
         eq(reminderLogs.contactId, contactId),
         eq(reminderLogs.ruleId, ruleId),
         eq(reminderLogs.visitId, visitId),
+        eq(reminderLogs.deliveryStatus, "sent"),
         sql`(${reminderLogs.channel} = ${channel} OR ${reminderLogs.channel} = 'both')`
       )
     )
@@ -308,13 +309,17 @@ async function sendServiceRemindersForRule(
 
     if (shouldSendEmail) {
       try {
-        await sendEmail({
+        const emailRes = await sendEmail({
           to: contact.email!,
           subject: `Service Reminder - ${companyName}`,
           text: message,
           html: generateServiceReminderHtml(companyName, `${contact.firstName} ${contact.lastName}`, addresses, firstVisit.visit.scheduledDate, techName, arrivalWindow),
         });
-        emailSent = true;
+        if (emailRes.success) {
+          emailSent = true;
+        } else {
+          console.error(`[reminders] Email delivery failed for ${contact.email}: ${emailRes.error}`);
+        }
       } catch (err) {
         console.error(`[reminders] Failed to send email to ${contact.email}:`, err);
       }
@@ -322,29 +327,61 @@ async function sendServiceRemindersForRule(
 
     if (shouldSendSms) {
       try {
-        await sendSms({ to: contact.phone!, body: message });
-        smsSent = true;
+        const smsRes = await sendSms({ to: contact.phone!, body: message });
+        if (smsRes.success) {
+          smsSent = true;
+        } else {
+          console.error(`[reminders] SMS delivery failed for ${contact.phone}: ${smsRes.error}`);
+        }
       } catch (err) {
         console.error(`[reminders] Failed to send SMS to ${contact.phone}:`, err);
       }
     }
 
-    if (emailSent || smsSent) {
-      sent++;
-      const channelsSent = emailSent && smsSent ? "both" : emailSent ? "email" : "sms";
-      for (const vid of visitIds) {
+    for (const vid of visitIds) {
+      if (emailSent) {
         await db.insert(reminderLogs).values({
           companyId,
           contactId: contact.id,
           visitId: vid,
           ruleId: rule.id,
           reminderType: `service_${rule.timing}`,
-          channel: channelsSent,
+          channel: "email",
           messagePreview: message.substring(0, 200),
           deliveryStatus: "sent",
         });
       }
+      if (smsSent) {
+        await db.insert(reminderLogs).values({
+          companyId,
+          contactId: contact.id,
+          visitId: vid,
+          ruleId: rule.id,
+          reminderType: `service_${rule.timing}`,
+          channel: "sms",
+          messagePreview: message.substring(0, 200),
+          deliveryStatus: "sent",
+        });
+      }
+      if ((shouldSendEmail && !emailSent) || (shouldSendSms && !smsSent)) {
+        const failedChannels = [];
+        if (shouldSendEmail && !emailSent) failedChannels.push("email");
+        if (shouldSendSms && !smsSent) failedChannels.push("sms");
+        await db.insert(reminderLogs).values({
+          companyId,
+          contactId: contact.id,
+          visitId: vid,
+          ruleId: rule.id,
+          reminderType: `service_${rule.timing}`,
+          channel: failedChannels.join(","),
+          messagePreview: message.substring(0, 200),
+          deliveryStatus: "failed",
+        });
+      }
+    }
 
+    if (emailSent || smsSent) {
+      sent++;
       await db.update(visits)
         .set({ serviceReminderSentAt: new Date() })
         .where(inArray(visits.id, visitIds));
@@ -448,35 +485,72 @@ async function sendInvoiceReminders(
       ? `Hi ${contact.firstName}, invoice #${invoice.invoiceNumber} for $${total} from ${companyName} is overdue (due ${invoice.dueDate}). Please submit payment at your earliest convenience.`
       : `Hi ${contact.firstName}, invoice #${invoice.invoiceNumber} for $${total} from ${companyName} is due on ${invoice.dueDate}. This is a friendly reminder.`;
 
-    let delivered = false;
-    let deliveredChannel = "";
+    let emailOk = false;
+    let smsOk = false;
+    let emailAttempted = false;
+    let smsAttempted = false;
 
     if (canEmail) {
+      emailAttempted = true;
       try {
-        await sendEmail({
+        const emailRes = await sendEmail({
           to: contact.email!,
           subject,
           text: message,
           html: generateInvoiceReminderHtml(companyName, contactName, invoice.invoiceNumber, invoice.dueDate, String(total), isOverdue),
         });
-        delivered = true;
-        deliveredChannel = "email";
+        if (emailRes.success) {
+          emailOk = true;
+        } else {
+          console.error(`[reminders] Invoice email delivery failed for ${contact.email}: ${emailRes.error}`);
+        }
       } catch (err) {
         console.error(`[reminders] Failed to send invoice email to ${contact.email}:`, err);
       }
     }
 
     if (canSms && !smsQuiet) {
+      smsAttempted = true;
       try {
-        await sendSms({ to: contact.phone!, body: message });
-        delivered = true;
-        deliveredChannel = deliveredChannel ? "both" : "sms";
+        const smsRes = await sendSms({ to: contact.phone!, body: message });
+        if (smsRes.success) {
+          smsOk = true;
+        } else {
+          console.error(`[reminders] Invoice SMS delivery failed for ${contact.phone}: ${smsRes.error}`);
+        }
       } catch (err) {
         console.error(`[reminders] Failed to send invoice SMS to ${contact.phone}:`, err);
       }
     }
 
-    if (delivered) {
+    const reminderType = isOverdue ? "invoice_overdue" : "invoice_upcoming";
+
+    if (emailOk) {
+      await db.insert(reminderLogs).values({
+        companyId, contactId: contact.id, invoiceId: invoice.id,
+        ruleId: "invoice_reminder", reminderType, channel: "email",
+        messagePreview: message.substring(0, 200), deliveryStatus: "sent",
+      });
+    }
+    if (smsOk) {
+      await db.insert(reminderLogs).values({
+        companyId, contactId: contact.id, invoiceId: invoice.id,
+        ruleId: "invoice_reminder", reminderType, channel: "sms",
+        messagePreview: message.substring(0, 200), deliveryStatus: "sent",
+      });
+    }
+    if ((emailAttempted && !emailOk) || (smsAttempted && !smsOk)) {
+      const failedChannels = [];
+      if (emailAttempted && !emailOk) failedChannels.push("email");
+      if (smsAttempted && !smsOk) failedChannels.push("sms");
+      await db.insert(reminderLogs).values({
+        companyId, contactId: contact.id, invoiceId: invoice.id,
+        ruleId: "invoice_reminder", reminderType, channel: failedChannels.join(","),
+        messagePreview: message.substring(0, 200), deliveryStatus: "failed",
+      });
+    }
+
+    if (emailOk || smsOk) {
       sent++;
       await db.update(invoices)
         .set({
@@ -484,17 +558,6 @@ async function sendInvoiceReminders(
           reminderCount: (invoice.reminderCount || 0) + 1,
         })
         .where(eq(invoices.id, invoice.id));
-
-      await db.insert(reminderLogs).values({
-        companyId,
-        contactId: contact.id,
-        invoiceId: invoice.id,
-        ruleId: "invoice_reminder",
-        reminderType: isOverdue ? "invoice_overdue" : "invoice_upcoming",
-        channel: deliveredChannel,
-        messagePreview: message.substring(0, 200),
-        deliveryStatus: "sent",
-      });
     }
   }
 
