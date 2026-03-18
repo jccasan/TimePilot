@@ -79,6 +79,12 @@ export default function RoverChatbot() {
     }
   }, [open, view]);
 
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   if (!user) return null;
 
   const dismissIntro = () => {
@@ -91,12 +97,6 @@ export default function RoverChatbot() {
     dismissIntro();
     setOpen(true);
   };
-
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-    };
-  }, []);
 
   const clearChat = () => {
     abortRef.current?.abort();
