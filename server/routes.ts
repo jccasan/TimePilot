@@ -1107,10 +1107,10 @@ export async function registerRoutes(
     try {
       const { companyId } = await getCompanyContext(req);
       const company = await storage.getCompany(companyId);
-      const reminderSettings = (company as any)?.reminderSettings || [
+      const reminderSettings = company?.reminderSettings || [
         { id: "default_24h", timing: "24h_before", channel: "sms", template: "Hi {firstName}, your service with {companyName} is scheduled for tomorrow at {propertyAddress}. Thank you!", isActive: true }
       ];
-      const invoiceReminderSettings = (company as any)?.invoiceReminderSettings || {
+      const invoiceReminderSettings = company?.invoiceReminderSettings || {
         preDueDays: [7, 2, 1, 0], overdueIntervalDays: 2, maxReminders: 10
       };
       res.json({ reminderSettings, invoiceReminderSettings, remindersEnabled: company?.remindersEnabled || false });
@@ -6746,10 +6746,18 @@ export async function registerRoutes(
     try {
       const { contactId, companyId } = await getPortalContext(req);
       const prefs = req.body;
-      const allowed = ["email", "sms", "serviceReminder", "serviceCompleted", "invoiceReady", "invoiceDueReminder", "paymentConfirmation"];
-      const cleaned: Record<string, boolean> = {};
-      for (const key of allowed) {
+      const booleanKeys = ["email", "sms", "serviceReminder", "serviceCompleted", "invoiceReady", "invoiceDueReminder", "paymentConfirmation", "reminderOptOut"];
+      const validChannels = ["sms", "email", "both"];
+      const validTimings = ["24h_before", "2h_before", "morning_of"];
+      const cleaned: Record<string, boolean | string | undefined> = {};
+      for (const key of booleanKeys) {
         if (prefs[key] !== undefined) cleaned[key] = !!prefs[key];
+      }
+      if (prefs.preferredChannel !== undefined) {
+        cleaned.preferredChannel = validChannels.includes(prefs.preferredChannel) ? prefs.preferredChannel : undefined;
+      }
+      if (prefs.preferredTiming !== undefined) {
+        cleaned.preferredTiming = validTimings.includes(prefs.preferredTiming) ? prefs.preferredTiming : undefined;
       }
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
@@ -9189,7 +9197,7 @@ export async function registerRoutes(
 
   import("./jobs/reminders").then(({ runReminders }) => {
     setTimeout(() => runReminders().catch(console.error), 60000);
-    setInterval(() => runReminders().catch(console.error), 24 * 60 * 60 * 1000);
+    setInterval(() => runReminders().catch(console.error), 10 * 60 * 1000);
   });
 
   import("./jobs/auto-invoice").then(({ runAutoInvoice }) => {

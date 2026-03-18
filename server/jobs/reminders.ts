@@ -73,7 +73,7 @@ export async function runReminders() {
 
     try {
       const tz = company.timezone || "America/New_York";
-      const rules: ReminderRule[] = (company as any).reminderSettings || DEFAULT_REMINDER_RULES;
+      const rules: ReminderRule[] = company.reminderSettings || DEFAULT_REMINDER_RULES;
       const activeRules = rules.filter(r => r.isActive);
 
       for (const rule of activeRules) {
@@ -81,7 +81,7 @@ export async function runReminders() {
         totalServiceReminders += count;
       }
 
-      const invoiceSettings: InvoiceReminderSettings = (company as any).invoiceReminderSettings || DEFAULT_INVOICE_SETTINGS;
+      const invoiceSettings: InvoiceReminderSettings = company.invoiceReminderSettings || DEFAULT_INVOICE_SETTINGS;
       const invoiceCount = await sendInvoiceReminders(company.id, company.name, tz, invoiceSettings);
       totalInvoiceReminders += invoiceCount;
     } catch (err) {
@@ -152,10 +152,12 @@ async function sendServiceRemindersForRule(
   const entries = Array.from(contactVisitsMap.values());
 
   for (const { contact, addresses, visitIds, plan, visit } of entries) {
-    const prefs = (contact.reminderPreferences as any) ?? { email: true, sms: false };
+    const prefs = contact.reminderPreferences ?? { email: true, sms: false };
 
     if (prefs.reminderOptOut) continue;
     if (prefs.serviceReminder === false) continue;
+
+    if (prefs.preferredTiming && prefs.preferredTiming !== rule.timing) continue;
 
     const existingLog = await db
       .select({ id: reminderLogs.id })
@@ -230,10 +232,12 @@ async function sendServiceRemindersForRule(
     let delivered = false;
     let deliveredChannel = "";
 
-    const shouldSendEmail = (effectiveChannel === "email" || effectiveChannel === "both") && contact.email;
-    const shouldSendSms = (effectiveChannel === "sms" || effectiveChannel === "both") && contact.phone && isTwilioConfigured();
+    const canEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
+    const canSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && isTwilioConfigured();
 
-    if (shouldSendEmail) {
+    if (!canEmail && canSms && smsQuiet) continue;
+
+    if (canEmail) {
       try {
         await sendEmail({
           to: contact.email!,
@@ -248,7 +252,7 @@ async function sendServiceRemindersForRule(
       }
     }
 
-    if (shouldSendSms && !smsQuiet) {
+    if (canSms && !smsQuiet) {
       try {
         await sendSms({ to: contact.phone!, body: message });
         delivered = true;
@@ -352,27 +356,17 @@ async function sendInvoiceReminders(
 
     if (!shouldSendInvoiceReminder(invoice.dueDate, invoice.lastReminderSentAt, todayStr, invoice.reminderCount || 0, settings)) continue;
 
-    const prefs = (contact.reminderPreferences as any) ?? { email: true, sms: false };
+    const prefs = contact.reminderPreferences ?? { email: true, sms: false };
     if (prefs.reminderOptOut) continue;
     if (prefs.invoiceDueReminder === false) continue;
 
     const contactChannel = prefs.preferredChannel || null;
     const effectiveChannel = contactChannel || "email";
 
-    const claimed = await db.update(invoices)
-      .set({
-        lastReminderSentAt: new Date(),
-        reminderCount: (invoice.reminderCount || 0) + 1,
-      })
-      .where(and(
-        eq(invoices.id, invoice.id),
-        invoice.lastReminderSentAt
-          ? lt(invoices.lastReminderSentAt, sql`${todayStr}::date::timestamp`)
-          : isNull(invoices.lastReminderSentAt)
-      ))
-      .returning({ id: invoices.id });
+    const canEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
+    const canSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && isTwilioConfigured();
 
-    if (claimed.length === 0) continue;
+    if (!canEmail && canSms && smsQuiet) continue;
 
     const isOverdue = invoice.dueDate < todayStr;
     const contactName = `${contact.firstName} ${contact.lastName}`;
@@ -389,10 +383,7 @@ async function sendInvoiceReminders(
     let delivered = false;
     let deliveredChannel = "";
 
-    const shouldSendEmail = (effectiveChannel === "email" || effectiveChannel === "both") && contact.email;
-    const shouldSendSmsC = (effectiveChannel === "sms" || effectiveChannel === "both") && contact.phone && isTwilioConfigured();
-
-    if (shouldSendEmail) {
+    if (canEmail) {
       try {
         await sendEmail({
           to: contact.email!,
@@ -407,7 +398,7 @@ async function sendInvoiceReminders(
       }
     }
 
-    if (shouldSendSmsC && !smsQuiet) {
+    if (canSms && !smsQuiet) {
       try {
         await sendSms({ to: contact.phone!, body: message });
         delivered = true;
@@ -419,6 +410,13 @@ async function sendInvoiceReminders(
 
     if (delivered) {
       sent++;
+      await db.update(invoices)
+        .set({
+          lastReminderSentAt: new Date(),
+          reminderCount: (invoice.reminderCount || 0) + 1,
+        })
+        .where(eq(invoices.id, invoice.id));
+
       await db.insert(reminderLogs).values({
         companyId,
         contactId: contact.id,
