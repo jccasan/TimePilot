@@ -567,14 +567,18 @@ function ReminderSettingsSection({ company, toast }: { company: Company | null; 
   const [showRuleDialog, setShowRuleDialog] = useState(false);
   const [preDueDaysInput, setPreDueDaysInput] = useState("");
 
-  const { data: settingsData } = useQuery({
+  const { data: settingsData } = useQuery<{
+    reminderSettings: ReminderRule[];
+    invoiceReminderSettings: InvoiceReminderSettings;
+    remindersEnabled: boolean;
+  }>({
     queryKey: ["/api/company/reminder-settings"],
   });
 
   useEffect(() => {
     if (settingsData) {
-      setRules((settingsData as any).reminderSettings || []);
-      const invSettings = (settingsData as any).invoiceReminderSettings;
+      setRules(settingsData.reminderSettings || []);
+      const invSettings = settingsData.invoiceReminderSettings;
       if (invSettings) {
         setInvoiceSettings(invSettings);
         setPreDueDaysInput((invSettings.preDueDays || []).join(", "));

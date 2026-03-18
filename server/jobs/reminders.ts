@@ -48,15 +48,43 @@ function applyTemplate(template: string, fields: Record<string, string>): string
   return result;
 }
 
-function getTargetDateForRule(rule: ReminderRule, timezone: string): string {
+function getServiceDatetime(scheduledDate: string, startTime: string | null, timezone: string): Date {
+  const timeStr = startTime || "08:00";
+  const dateTimeStr = `${scheduledDate}T${timeStr}:00`;
+  const utcDate = new Date(dateTimeStr);
+  const tzOffset = getTimezoneOffsetMs(timezone, utcDate);
+  return new Date(utcDate.getTime() + tzOffset);
+}
+
+function getTimezoneOffsetMs(timezone: string, date: Date): number {
+  const utcStr = date.toLocaleString("en-US", { timeZone: "UTC" });
+  const tzStr = date.toLocaleString("en-US", { timeZone: timezone });
+  return new Date(utcStr).getTime() - new Date(tzStr).getTime();
+}
+
+function isVisitInRuleWindow(rule: ReminderRule, scheduledDate: string, startTime: string | null, timezone: string): boolean {
   const hours = getTimingHours(rule);
-  if (hours === 0) {
-    return getCompanyToday(timezone);
-  }
   const now = new Date();
-  const targetTime = new Date(now.getTime() + hours * 60 * 60 * 1000);
-  const dateStr = targetTime.toLocaleDateString("en-CA", { timeZone: timezone });
-  return dateStr;
+
+  if (rule.timing === "24h_before") {
+    const serviceDt = getServiceDatetime(scheduledDate, startTime, timezone);
+    const hoursUntil = (serviceDt.getTime() - now.getTime()) / (1000 * 60 * 60);
+    return hoursUntil > 0 && hoursUntil <= 26 && hoursUntil >= 22;
+  }
+
+  if (rule.timing === "morning_of") {
+    const todayStr = getCompanyToday(timezone);
+    return scheduledDate === todayStr;
+  }
+
+  if (rule.timing === "2h_before" || rule.timing === "custom") {
+    const serviceDt = getServiceDatetime(scheduledDate, startTime, timezone);
+    const hoursUntil = (serviceDt.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const tolerance = 0.25;
+    return hoursUntil > 0 && hoursUntil <= hours + tolerance && hoursUntil >= Math.max(0, hours - tolerance);
+  }
+
+  return false;
 }
 
 export async function runReminders() {
@@ -101,10 +129,14 @@ async function sendServiceRemindersForRule(
   timezone: string,
   rule: ReminderRule
 ): Promise<number> {
-  const targetDate = getTargetDateForRule(rule, timezone);
   const isMorningOf = rule.timing === "morning_of";
+  const todayStr = getCompanyToday(timezone);
+  const hours = getTimingHours(rule);
+  const now = new Date();
+  const lookAheadDate = new Date(now.getTime() + (hours + 2) * 60 * 60 * 1000);
+  const lookAheadStr = lookAheadDate.toLocaleDateString("en-CA", { timeZone: timezone });
 
-  const matchingVisits = await db
+  const candidateVisits = await db
     .select({
       visit: visits,
       contact: contacts,
@@ -118,72 +150,83 @@ async function sendServiceRemindersForRule(
     .where(
       and(
         eq(visits.companyId, companyId),
-        eq(visits.scheduledDate, targetDate),
-        eq(visits.status, "scheduled")
+        eq(visits.status, "scheduled"),
+        sql`${visits.scheduledDate} >= ${todayStr}`,
+        sql`${visits.scheduledDate} <= ${lookAheadStr}`
       )
     );
 
-  const contactVisitsMap = new Map<string, {
-    contact: typeof matchingVisits[0]["contact"];
-    addresses: string[];
-    visitIds: string[];
-    plan: typeof matchingVisits[0]["plan"];
-    visit: typeof matchingVisits[0]["visit"];
-  }>();
+  const eligibleVisits = candidateVisits.filter(row =>
+    isVisitInRuleWindow(rule, row.visit.scheduledDate, row.plan.startTime ?? null, timezone)
+  );
 
-  for (const row of matchingVisits) {
-    const existing = contactVisitsMap.get(row.contact.id);
+  const smsQuiet = isQuietHours(timezone);
+  let sent = 0;
+
+  type ContactGroup = {
+    contact: typeof eligibleVisits[0]["contact"];
+    visits: { visitId: string; address: string; plan: typeof eligibleVisits[0]["plan"]; visit: typeof eligibleVisits[0]["visit"] }[];
+  };
+  const contactGroups = new Map<string, ContactGroup>();
+
+  for (const row of eligibleVisits) {
     const addr = `${row.property.streetAddress}, ${row.property.city}`;
+    const existing = contactGroups.get(row.contact.id);
     if (existing) {
-      existing.addresses.push(addr);
-      existing.visitIds.push(row.visit.id);
+      existing.visits.push({ visitId: row.visit.id, address: addr, plan: row.plan, visit: row.visit });
     } else {
-      contactVisitsMap.set(row.contact.id, {
+      contactGroups.set(row.contact.id, {
         contact: row.contact,
-        addresses: [addr],
-        visitIds: [row.visit.id],
-        plan: row.plan,
-        visit: row.visit,
+        visits: [{ visitId: row.visit.id, address: addr, plan: row.plan, visit: row.visit }],
       });
     }
   }
 
-  let sent = 0;
-  const entries = Array.from(contactVisitsMap.values());
-
-  for (const { contact, addresses, visitIds, plan, visit } of entries) {
+  for (const { contact, visits: contactVisits } of contactGroups.values()) {
     const prefs = contact.reminderPreferences ?? { email: true, sms: false };
 
     if (prefs.reminderOptOut) continue;
     if (prefs.serviceReminder === false) continue;
-
     if (prefs.preferredTiming && prefs.preferredTiming !== rule.timing) continue;
 
-    const existingLog = await db
-      .select({ id: reminderLogs.id })
-      .from(reminderLogs)
-      .where(
-        and(
-          eq(reminderLogs.companyId, companyId),
-          eq(reminderLogs.contactId, contact.id),
-          eq(reminderLogs.ruleId, rule.id),
-          inArray(reminderLogs.visitId, visitIds)
+    const unsentVisits: typeof contactVisits = [];
+    for (const cv of contactVisits) {
+      const existingLog = await db
+        .select({ id: reminderLogs.id })
+        .from(reminderLogs)
+        .where(
+          and(
+            eq(reminderLogs.companyId, companyId),
+            eq(reminderLogs.contactId, contact.id),
+            eq(reminderLogs.ruleId, rule.id),
+            eq(reminderLogs.visitId, cv.visitId)
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
+      if (existingLog.length === 0) {
+        unsentVisits.push(cv);
+      }
+    }
 
-    if (existingLog.length > 0) continue;
+    if (unsentVisits.length === 0) continue;
 
     const contactChannel = prefs.preferredChannel || null;
     const effectiveChannel = contactChannel || rule.channel;
 
-    const smsQuiet = isQuietHours(timezone);
+    const canEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
+    const canSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && isTwilioConfigured();
+
+    if (!canEmail && canSms && smsQuiet) continue;
+
+    const addresses = unsentVisits.map(v => v.address);
+    const visitIds = unsentVisits.map(v => v.visitId);
+    const firstVisit = unsentVisits[0];
 
     let techName = "";
     let arrivalWindow = "";
-    if (isMorningOf && visit.routeId) {
+    if (isMorningOf && firstVisit.visit.routeId) {
       try {
-        const routeData = await db.select().from(routes).where(eq(routes.id, visit.routeId)).limit(1);
+        const routeData = await db.select().from(routes).where(eq(routes.id, firstVisit.visit.routeId)).limit(1);
         if (routeData.length > 0) {
           const route = routeData[0];
           if (route.technicianId) {
@@ -195,7 +238,7 @@ async function sendServiceRemindersForRule(
           }
           const routePlans = await storage.getServicePlans(companyId, { routeId: route.id, isActive: true });
           const sortedPlans = routePlans.sort((a, b) => (a.stopOrder || 0) - (b.stopOrder || 0));
-          const stopIndex = sortedPlans.findIndex(p => p.id === plan.id);
+          const stopIndex = sortedPlans.findIndex(p => p.id === firstVisit.plan.id);
           if (stopIndex >= 0) {
             const avgMinutesPerStop = 15;
             const startHour = 8;
@@ -221,7 +264,7 @@ async function sendServiceRemindersForRule(
       lastName: contact.lastName || "",
       companyName: companyName,
       propertyAddress: addresses.join("; "),
-      serviceDate: targetDate,
+      serviceDate: firstVisit.visit.scheduledDate,
       serviceTime: arrivalWindow || "during the day",
       technicianName: techName || "your technician",
       arrivalWindow: arrivalWindow || "TBD",
@@ -232,18 +275,13 @@ async function sendServiceRemindersForRule(
     let delivered = false;
     let deliveredChannel = "";
 
-    const canEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
-    const canSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && isTwilioConfigured();
-
-    if (!canEmail && canSms && smsQuiet) continue;
-
     if (canEmail) {
       try {
         await sendEmail({
           to: contact.email!,
           subject: `Service Reminder - ${companyName}`,
           text: message,
-          html: generateServiceReminderHtml(companyName, `${contact.firstName} ${contact.lastName}`, addresses, targetDate, techName, arrivalWindow),
+          html: generateServiceReminderHtml(companyName, `${contact.firstName} ${contact.lastName}`, addresses, firstVisit.visit.scheduledDate, techName, arrivalWindow),
         });
         delivered = true;
         deliveredChannel = "email";
