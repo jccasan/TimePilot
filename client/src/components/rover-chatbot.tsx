@@ -45,10 +45,20 @@ export default function RoverChatbot() {
   const [ticketSubject, setTicketSubject] = useState("");
   const [ticketDescription, setTicketDescription] = useState("");
   const [submittingTicket, setSubmittingTicket] = useState(false);
+  const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (open && aiAvailable === null) {
+      fetch("/api/rover/status", { credentials: "include" })
+        .then((r) => r.json())
+        .then((data) => setAiAvailable(data.aiAvailable ?? false))
+        .catch(() => setAiAvailable(false));
+    }
+  }, [open, aiAvailable]);
 
   useEffect(() => {
     if (user) {
@@ -427,7 +437,9 @@ export default function RoverChatbot() {
               )}
               <img src={roverImage} alt="Rover" className="w-6 h-6 rounded-full object-cover" />
               <span className="font-semibold text-sm">Rover</span>
-              <span className="text-xs opacity-80">AI Assistant</span>
+              <span className="text-xs opacity-80">
+                {aiAvailable === false ? "Basic Mode" : "AI Assistant"}
+              </span>
             </div>
             <div className="flex items-center gap-1">
               {view === "chat" && messages.length > 1 && (

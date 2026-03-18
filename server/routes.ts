@@ -8911,6 +8911,21 @@ export async function registerRoutes(
     message: { error: "Too many requests. Please wait a moment before trying again." },
   });
 
+  app.get("/api/rover/status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const aiKeyAvailable = !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY);
+      const [company] = await db.select({ roverAiEnabled: companies.roverAiEnabled }).from(companies).where(eq(companies.id, companyId));
+      res.json({
+        aiAvailable: aiKeyAvailable && (company?.roverAiEnabled ?? false),
+        aiEnabled: company?.roverAiEnabled ?? false,
+        aiKeyConfigured: aiKeyAvailable,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/rover/chat", isAuthenticated, roverRateLimiter as any, async (req: Request, res: Response) => {
     try {
       const { userId, companyId } = await getCompanyContext(req);
