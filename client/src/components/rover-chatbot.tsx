@@ -175,6 +175,16 @@ export default function RoverChatbot() {
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === streamingMsgId
+                ? { ...m, text: "You're sending messages too quickly. Please wait a moment and try again.", streaming: false }
+                : m
+            )
+          );
+          return;
+        }
         const errorData = await response.json().catch(() => ({}));
         if (errorData.fallback) {
           throw new Error("FALLBACK");
@@ -245,7 +255,13 @@ export default function RoverChatbot() {
         return;
       }
 
-      await handleKeywordFallback(question, streamingMsgId);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === streamingMsgId
+            ? { ...m, text: "Sorry, something went wrong. Please try again.", streaming: false }
+            : m
+        )
+      );
     } finally {
       abortRef.current = null;
     }

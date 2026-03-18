@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { db } from "../db";
-import { contacts, invoices, visits, routes, servicePlans, companyUsers, users, companies } from "@shared/schema";
+import { contacts, invoices, visits, routes, servicePlans, companyUsers, users, companies, notifications } from "@shared/schema";
+import { desc } from "drizzle-orm";
 import { eq, and, sql, gte, lte, count } from "drizzle-orm";
 
 const openai = new OpenAI({
@@ -53,6 +54,7 @@ interface UserContext {
   mrrDollars: string;
   teamSize: number;
   routeCount: number;
+  recentNotifications: { title: string; type: string; isRead: boolean }[];
 }
 
 export async function buildUserContext(companyId: string, userId: string): Promise<UserContext> {
@@ -107,6 +109,17 @@ export async function buildUserContext(companyId: string, userId: string): Promi
     .from(routes)
     .where(eq(routes.companyId, companyId));
 
+  const recentNotifs = await db
+    .select({
+      title: notifications.title,
+      type: notifications.type,
+      isRead: notifications.isRead,
+    })
+    .from(notifications)
+    .where(eq(notifications.companyId, companyId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(5);
+
   return {
     userName: user ? `${user.firstName} ${user.lastName}`.trim() : "User",
     userRole: membership?.role || "tech",
@@ -124,6 +137,7 @@ export async function buildUserContext(companyId: string, userId: string): Promi
     mrrDollars: company ? `$${(company.mrrCents / 100).toFixed(2)}` : "$0.00",
     teamSize: teamCount?.count || 0,
     routeCount: routeCount?.count || 0,
+    recentNotifications: recentNotifs,
   };
 }
 
@@ -146,7 +160,8 @@ ${["owner", "admin"].includes(ctx.userRole) ? `ACCOUNT STATS (live snapshot):
 - Invoices: ${ctx.invoiceCount} total (${ctx.overdueInvoiceCount} overdue)
 - MRR: ${ctx.mrrDollars}
 - Team members: ${ctx.teamSize}
-- Routes: ${ctx.routeCount}` : `ACCOUNT STATS (limited - tech role):
+- Routes: ${ctx.routeCount}
+${ctx.recentNotifications.length > 0 ? `\nRecent notifications:\n${ctx.recentNotifications.map((n) => `- [${n.isRead ? "read" : "unread"}] (${n.type}) ${n.title}`).join("\n")}` : ""}` : `ACCOUNT STATS (limited - tech role):
 - Routes: ${ctx.routeCount}`}
 
 ${KNOWLEDGE_BASE}
