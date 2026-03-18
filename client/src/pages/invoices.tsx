@@ -842,7 +842,7 @@ export default function Invoices() {
                         {sendEmailMutation.isPending && sendEmailMutation.variables === invoice.id
                           ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                           : <Mail className="mr-1 h-4 w-4" />}
-                        Send
+                        Send to Client
                       </Button>
                     )}
                     {invoice.status !== "paid" && invoice.status !== "voided" && (
