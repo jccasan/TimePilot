@@ -1,0 +1,370 @@
+commit bb8d42c65a1cffa5d77b3420d35f4d29eabf4c56
+Author: AnchorAI <54788874-AnchorAI@users.noreply.replit.com>
+Date:   Wed Mar 18 08:48:02 2026 -0400
+
+    Task #12: Visit status inline spinner feedback
+    
+    Updated the route builder's stop action menu to show a spinner
+    only on the specific menu item that was clicked, rather than
+    showing spinners on all menu items for the same visit.
+    
+    Changes in routes-page.tsx:
+    - Added `updatingVisitStatus` state alongside `updatingVisitId`
+      to track which status transition is in progress
+    - Updated visitStatusMutation to set/clear both states
+    - Updated DraggableStop component to accept `updatingVisitStatus`
+      prop and conditionally show Loader2 spinner only on the menu
+      item matching the active status change
+    - Updated the quick-complete button to show spinner only when
+      the "completed" status is being set (not for skip/cancel)
+    - Updated the dropdown trigger button (MoreVertical) to show
+      a spinner when a non-complete status change is pending
+      (since the menu closes after clicking)
+    - Threaded `updatingVisitStatus` prop through RouteCard to
+      DraggableStop in both route cards and unassigned panel
+    - Other stops' action menus remain fully interactive
+
+diff --git a/client/src/pages/routes-page.tsx b/client/src/pages/routes-page.tsx
+index fa5134d..56a3426 100644
+--- a/client/src/pages/routes-page.tsx
++++ b/client/src/pages/routes-page.tsx
+@@ -94,44 +94,45 @@ type RouteMetrics = {
+   totalDuration: number;
+   legs: { fromId: string | null; toId: string; distance: number; duration: number }[];
+   stopCount: number;
+   missingCoords?: string[];
+   error?: string;
+ };
+ 
+ function LegSeparator({ distance, duration }: { distance: number; duration: number }) {
+   return (
+     <div className="flex items-center gap-1.5 py-0.5 px-2 text-[10px] text-muted-foreground" data-testid="leg-separator">
+       <div className="flex-1 border-t border-dashed border-muted-foreground/30" />
+       <Car className="h-2.5 w-2.5" />
+       <span>{distance < 0.1 ? "<0.1" : distance.toFixed(1)} mi</span>
+       <span className="text-muted-foreground/50">|</span>
+       <span>{duration < 1 ? "<1" : Math.round(duration)} min</span>
+       <div className="flex-1 border-t border-dashed border-muted-foreground/30" />
+     </div>
+   );
+ }
+ 
+-function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, onStopClick }: {
++function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, updatingVisitStatus, onStopClick }: {
+   stop: ServicePlan; contacts: Contact[]; properties: Property[];
+   visit?: Visit | null; onVisitStatusChange?: (visitId: string, status: string) => void;
+   updatingVisitId?: string | null;
++  updatingVisitStatus?: string | null;
+   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
+ }) {
+   const contact = contacts.find(c => c.id === stop.contactId);
+   const property = properties.find(p => p.id === stop.propertyId);
+   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+     id: stop.id, data: { stop },
+   });
+   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
+   const isCompleted = visit?.status === "completed";
+   const isSkipped = visit?.status === "skipped";
+   const isCancelled = visit?.status === "cancelled";
+   const isDone = isCompleted || isSkipped || isCancelled;
+ 
+   return (
+     <div ref={setNodeRef} style={style}
+       className={`border rounded-md p-2.5 bg-background transition-all ${isDragging ? "opacity-30" : ""} ${isCompleted ? "border-green-300 dark:border-green-800 opacity-70" : ""} ${isSkipped ? "border-orange-300 dark:border-orange-800 opacity-60" : ""} ${isCancelled ? "border-red-300 dark:border-red-800 opacity-50" : ""}`}
+       data-testid={`draggable-stop-${stop.id}`}
+     >
+       <div className="flex items-start gap-2">
+         <div className="cursor-grab active:cursor-grabbing touch-none pt-0.5 shrink-0" {...listeners} {...attributes}>
+@@ -163,69 +164,69 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
+               {stop.frequency === "onetime" && (
+                 <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid={`badge-onetime-${stop.id}`}>
+                   One-Time
+                 </Badge>
+               )}
+               {stop.stopOrder > 0 && (
+                 <Badge variant="outline" className="text-[10px]" data-testid={`badge-stop-order-${stop.id}`}>
+                   #{stop.stopOrder}
+                 </Badge>
+               )}
+               {visit && onVisitStatusChange && visit.status !== "completed" && (
+                 <Button
+                   variant="ghost"
+                   size="icon"
+                   className="h-6 w-6 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 hover:text-green-700"
+                   onClick={(e) => { e.stopPropagation(); onVisitStatusChange(visit.id, "completed"); }}
+                   disabled={updatingVisitId === visit.id}
+                   data-testid={`button-complete-${stop.id}`}
+                   title="Mark Completed"
+                 >
+-                  {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
++                  {updatingVisitId === visit.id && updatingVisitStatus === "completed" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                 </Button>
+               )}
+               {visit && onVisitStatusChange && (
+                 <DropdownMenu>
+                   <DropdownMenuTrigger asChild>
+                     <Button variant="ghost" size="icon" className="h-5 w-5" disabled={updatingVisitId === visit?.id} data-testid={`button-visit-menu-${stop.id}`}>
+-                      <MoreVertical className="h-3 w-3" />
++                      {updatingVisitId === visit?.id && updatingVisitStatus !== "completed" ? <Loader2 className="h-3 w-3 animate-spin" /> : <MoreVertical className="h-3 w-3" />}
+                     </Button>
+                   </DropdownMenuTrigger>
+                   <DropdownMenuContent align="end">
+                     {visit.status !== "completed" && (
+                       <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "completed")} disabled={updatingVisitId === visit.id} data-testid={`menu-complete-${stop.id}`}>
+-                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5 mr-2 text-green-600" />} Mark Completed
++                        {updatingVisitId === visit.id && updatingVisitStatus === "completed" ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5 mr-2 text-green-600" />} Mark Completed
+                       </DropdownMenuItem>
+                     )}
+                     {visit.status !== "skipped" && (
+                       <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "skipped")} disabled={updatingVisitId === visit.id} data-testid={`menu-skip-${stop.id}`}>
+-                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <SkipForward className="h-3.5 w-3.5 mr-2 text-orange-600" />} Mark Skipped
++                        {updatingVisitId === visit.id && updatingVisitStatus === "skipped" ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <SkipForward className="h-3.5 w-3.5 mr-2 text-orange-600" />} Mark Skipped
+                       </DropdownMenuItem>
+                     )}
+                     {visit.status !== "cancelled" && (
+                       <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "cancelled")} disabled={updatingVisitId === visit.id} data-testid={`menu-cancel-${stop.id}`}>
+-                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <XCircle className="h-3.5 w-3.5 mr-2 text-red-600" />} Mark Cancelled
++                        {updatingVisitId === visit.id && updatingVisitStatus === "cancelled" ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <XCircle className="h-3.5 w-3.5 mr-2 text-red-600" />} Mark Cancelled
+                       </DropdownMenuItem>
+                     )}
+                     {visit.status !== "scheduled" && (
+                       <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "scheduled")} disabled={updatingVisitId === visit.id} data-testid={`menu-revert-${stop.id}`}>
+-                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Clock className="h-3.5 w-3.5 mr-2 text-blue-600" />} Revert to Scheduled
++                        {updatingVisitId === visit.id && updatingVisitStatus === "scheduled" ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Clock className="h-3.5 w-3.5 mr-2 text-blue-600" />} Revert to Scheduled
+                       </DropdownMenuItem>
+                     )}
+                   </DropdownMenuContent>
+                 </DropdownMenu>
+               )}
+             </div>
+           </div>
+           {property && (
+             <div
+               className={`flex items-center gap-1 text-xs text-muted-foreground ${visit && onStopClick ? "cursor-pointer hover:text-foreground" : ""}`}
+               role={visit && onStopClick ? "button" : undefined}
+               tabIndex={visit && onStopClick ? 0 : undefined}
+               onClick={() => { if (visit && onStopClick) onStopClick(stop, visit); }}
+               onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && visit && onStopClick) { e.preventDefault(); onStopClick(stop, visit); } }}
+               data-testid={`clickable-address-${stop.id}`}
+             >
+               <MapPin className="h-3 w-3 shrink-0" />
+               <span className="truncate">{property.streetAddress}{property.city ? `, ${property.city}` : ""}</span>
+             </div>
+           )}
+@@ -256,51 +257,52 @@ function StopOverlay({ stop, contacts, properties }: {
+       </div>
+       {property?.streetAddress && <p className="text-xs text-muted-foreground truncate">{property.streetAddress}</p>}
+     </div>
+   );
+ }
+ 
+ function DroppableZone({ id, children, isOver, className = "" }: {
+   id: string; children: React.ReactNode; isOver: boolean; className?: string;
+ }) {
+   const { setNodeRef } = useDroppable({ id });
+   return (
+     <div ref={setNodeRef}
+       className={`min-h-[80px] rounded-md p-2 space-y-2 transition-colors ${isOver ? "bg-primary/10 ring-2 ring-primary/30" : ""} ${className}`}
+       data-testid={`drop-zone-${id}`}
+     >{children}</div>
+   );
+ }
+ 
+ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
+   onEdit, onDelete, onOptimize, onDispatch, onUnassignAll, isOptimizing, isDispatching, isUnassigning,
+-  visitsByPlan, onVisitStatusChange, updatingVisitId, metrics, metricsLoading, onStopClick }: {
++  visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick }: {
+   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
+   team: TeamMember[]; isOverThis: boolean; credits: number;
+   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
+   onOptimize: (routeId: string, stopCount: number) => void;
+   onDispatch: (routeId: string) => void;
+   onUnassignAll: (routeId: string) => void;
+   isOptimizing: boolean; isDispatching: boolean; isUnassigning: boolean;
+   visitsByPlan?: Record<string, Visit>;
+   onVisitStatusChange?: (visitId: string, status: string) => void;
+   updatingVisitId?: string | null;
++  updatingVisitStatus?: string | null;
+   metrics?: RouteMetrics | null;
+   metricsLoading?: boolean;
+   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
+ }) {
+   const tech = team.find(t => t.id === route.technicianId);
+   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
+   const totalRevenue = stops.reduce((sum, s) => sum + Number(s.pricePerVisit), 0);
+   const stopCount = stops.length;
+   const routeVisitCount = visitsByPlan ? sortedStops.filter(s => visitsByPlan[s.id]).length : 0;
+   const processedCount = visitsByPlan ? sortedStops.filter(s => {
+     const st = visitsByPlan[s.id]?.status;
+     return st === "completed" || st === "skipped" || st === "cancelled";
+   }).length : 0;
+   const hasVisits = routeVisitCount > 0;
+   const creditsNeeded = stopCount <= 30 ? 1 : 2;
+   const isOverLimit = stopCount > 30;
+   const isOverMax = stopCount > 60;
+ 
+   return (
+     <Card className="flex flex-col" data-testid={`card-route-${route.id}`}>
+@@ -397,40 +399,41 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
+           </Button>
+         )}
+       </CardHeader>
+       <CardContent className="p-2 pt-0 flex-1">
+         <DroppableZone id={`route-${route.id}`} isOver={isOverThis}>
+           {sortedStops.length > 0 ? (
+             sortedStops.map((stop, idx) => {
+               const leg = metrics?.legs?.find(l => l.toId === stop.id);
+               return (
+                 <div key={stop.id}>
+                   {idx > 0 && leg && (
+                     <LegSeparator distance={leg.distance} duration={leg.duration} />
+                   )}
+                   {idx === 0 && metrics?.legs?.[0]?.fromId === null && metrics.legs[0]?.toId === stop.id && (
+                     <LegSeparator distance={metrics.legs[0].distance} duration={metrics.legs[0].duration} />
+                   )}
+                   <DraggableStop stop={stop} contacts={contacts} properties={properties}
+                     visit={visitsByPlan?.[stop.id] || null}
+                     onVisitStatusChange={onVisitStatusChange}
+                     updatingVisitId={updatingVisitId}
++                    updatingVisitStatus={updatingVisitStatus}
+                     onStopClick={onStopClick}
+                   />
+                 </div>
+               );
+             })
+           ) : (
+             <p className="text-xs text-muted-foreground text-center py-4">Drag stops here</p>
+           )}
+         </DroppableZone>
+       </CardContent>
+     </Card>
+   );
+ }
+ 
+ function RouteVisitDetailSheet({
+   visit, servicePlan, open, onOpenChange, contacts, properties, routes, selectedDayDate,
+ }: {
+   visit: Visit | null;
+   servicePlan: ServicePlan | null;
+   open: boolean;
+@@ -882,74 +885,78 @@ export default function RoutesPage() {
+     return target.toISOString().split("T")[0];
+   }, [selectedDay]);
+ 
+   const { data: dayVisits = [] } = useQuery<Visit[]>({
+     queryKey: ["/api/visits/range", selectedDayDate],
+     queryFn: async () => {
+       const res = await apiRequest("GET", `/api/visits/range?start=${selectedDayDate}&end=${selectedDayDate}`);
+       return res.json();
+     },
+   });
+ 
+   const visitsByPlan = useMemo(() => {
+     const map: Record<string, Visit> = {};
+     for (const v of dayVisits) {
+       if (v.servicePlanId) map[v.servicePlanId] = v;
+     }
+     return map;
+   }, [dayVisits]);
+ 
+   const [updatingVisitId, setUpdatingVisitId] = useState<string | null>(null);
++  const [updatingVisitStatus, setUpdatingVisitStatus] = useState<string | null>(null);
+   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
+   const [detailVisit, setDetailVisit] = useState<Visit | null>(null);
+   const [detailPlan, setDetailPlan] = useState<ServicePlan | null>(null);
+ 
+   const handleStopClick = useCallback((stop: ServicePlan, visit: Visit) => {
+     setDetailPlan(stop);
+     setDetailVisit(visit);
+     setDetailSheetOpen(true);
+   }, []);
+   const visitStatusMutation = useMutation({
+     mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
+       setUpdatingVisitId(visitId);
++      setUpdatingVisitStatus(status);
+       const body: { status: string; completedAt?: string | null; startedAt?: string | null } = { status };
+       if (status === "in_progress") {
+         body.startedAt = new Date().toISOString();
+       } else if (status === "completed") {
+         body.completedAt = new Date().toISOString();
+       } else if (status === "scheduled") {
+         body.completedAt = null;
+         body.startedAt = null;
+       }
+       const res = await apiRequest("PATCH", `/api/visits/${visitId}`, body);
+       return res.json();
+     },
+     onSuccess: () => {
+       setUpdatingVisitId(null);
++      setUpdatingVisitStatus(null);
+       queryClient.invalidateQueries({ queryKey: ["/api/visits/range", selectedDayDate] });
+       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
+     },
+     onError: (err: Error) => {
+       setUpdatingVisitId(null);
++      setUpdatingVisitStatus(null);
+       toast({ title: "Error updating visit", description: err.message, variant: "destructive" });
+     },
+   });
+ 
+   const handleVisitStatusChange = useCallback((visitId: string, status: string) => {
+     visitStatusMutation.mutate({ visitId, status });
+   }, [visitStatusMutation]);
+ 
+   const [routeMetrics, setRouteMetrics] = useState<Record<string, RouteMetrics>>({});
+   const [metricsLoadingRoutes, setMetricsLoadingRoutes] = useState<Set<string>>(new Set());
+ 
+   const isLoading = routesLoading || plansLoading;
+ 
+   const routesForDay = useMemo(() => allRoutes.filter(r => r.dayOfWeek === selectedDay), [allRoutes, selectedDay]);
+ 
+   const routeCounts = useMemo(() => {
+     const counts: Record<string, number> = {};
+     for (const d of DAYS) counts[d] = allRoutes.filter(r => r.dayOfWeek === d).length;
+     return counts;
+   }, [allRoutes]);
+@@ -1318,40 +1325,41 @@ export default function RoutesPage() {
+                     {routesForDay.map(route => (
+                       <RouteCard key={route.id} route={route}
+                         stops={stopsByRoute[route.id] || []}
+                         contacts={contacts} properties={properties} team={team}
+                         isOverThis={overContainerId === `route-${route.id}`}
+                         credits={credits}
+                         onEdit={(r) => { setEditingRoute(r); setDialogOpen(true); }}
+                         onDelete={(r) => {
+                           if ((stopsByRoute[r.id]?.length || 0) > 0) {
+                             toast({ title: "Cannot delete", description: "Remove all stops first.", variant: "destructive" });
+                           } else { deleteRouteMutation.mutate(r.id); }
+                         }}
+                         onOptimize={handleOptimizeClick}
+                         onDispatch={(id) => dispatchMutation.mutate(id)}
+                         onUnassignAll={(id) => setConfirmUnassignAll(id)}
+                         isOptimizing={optimizingRouteId === route.id}
+                         isDispatching={dispatchingRouteId === route.id}
+                         visitsByPlan={visitsByPlan}
+                         onVisitStatusChange={handleVisitStatusChange}
+                         updatingVisitId={updatingVisitId}
++                        updatingVisitStatus={updatingVisitStatus}
+                         metrics={routeMetrics[route.id] || null}
+                         metricsLoading={metricsLoadingRoutes.has(route.id)}
+                         isUnassigning={unassigningRouteId === route.id}
+                         onStopClick={handleStopClick}
+                       />
+                     ))}
+                   </div>
+                 )}
+               </div>
+ 
+               <div className="lg:w-80 xl:w-96 shrink-0">
+                 <Card className="h-full max-h-[calc(100vh-280px)] flex flex-col" data-testid="card-unassigned">
+                   <CardHeader className="p-3 pb-2 space-y-2 shrink-0">
+                     <div className="flex items-center justify-between">
+                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                         <AlertCircle className="h-4 w-4 text-orange-500" />
+                         Unassigned Stops
+                         <Badge variant="secondary" data-testid="badge-unassigned-count">{unassignedPlans.length}</Badge>
+                       </CardTitle>
+                     </div>

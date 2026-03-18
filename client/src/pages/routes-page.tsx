@@ -188,7 +188,7 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-5 w-5" disabled={updatingVisitId === visit?.id} data-testid={`button-visit-menu-${stop.id}`}>
-                      {updatingVisitId === visit?.id && updatingVisitStatus !== "completed" ? <Loader2 className="h-3 w-3 animate-spin" /> : <MoreVertical className="h-3 w-3" />}
+                      {updatingVisitId === visit?.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <MoreVertical className="h-3 w-3" />}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
