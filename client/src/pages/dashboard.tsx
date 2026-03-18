@@ -25,7 +25,7 @@ import {
   MessageSquare, Mail, Sliders, ChevronUp, ChevronDown,
   CheckCircle, XCircle, MapPin, BarChart3, Activity,
   StickyNote, Route, GripVertical, X, LayoutGrid,
-  Inbox, ArrowRight,
+  Inbox, ArrowRight, RotateCcw,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -210,13 +210,14 @@ const WIDGET_DEFS: {
   { id: "upcoming_visits", label: "Upcoming Visits", icon: CalendarCheck, description: "Visits scheduled for this week", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
   { id: "revenue_chart", label: "Revenue Chart", icon: BarChart3, description: "6-month revenue trend", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
   { id: "route_summary", label: "Route Summary", icon: Route, description: "Active routes overview", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "insights" },
-  { id: "quick_notes", label: "Quick Notes", icon: StickyNote, description: "Personal scratchpad for reminders", defaultW: 4, defaultH: 4, minW: 3, minH: 3, category: "tools" },
+  { id: "quick_notes", label: "Quick Notes", icon: StickyNote, description: "Scratchpad for reminders (synced to account)", defaultW: 4, defaultH: 4, minW: 3, minH: 3, category: "tools" },
+  { id: "current_plan", label: "Current Plan", icon: ClipboardList, description: "Your subscription details", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
 ];
 
 const DEFAULT_WIDGET_IDS = [
   "mrr", "month_revenue", "requires_invoicing", "overdue_invoices",
   "todays_visits", "active_clients", "service_plans", "team_size",
-  "texts_sent", "emails_sent", "quick_actions",
+  "texts_sent", "emails_sent", "quick_actions", "current_plan",
 ];
 
 function generateDefaultLayout(widgetIds: string[]): LayoutItem[] {
@@ -249,8 +250,9 @@ function generateDefaultLayout(widgetIds: string[]): LayoutItem[] {
 }
 
 function migrateLayout(raw: any): LayoutItem[] | null {
-  if (!raw) return null;
-  if (Array.isArray(raw) && raw.length > 0) {
+  if (raw === null || raw === undefined) return null;
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return [];
     if (typeof raw[0] === "string") {
       return generateDefaultLayout(raw as string[]);
     }
@@ -1052,30 +1054,46 @@ function RouteSummaryWidget() {
 }
 
 function QuickNotesWidget() {
-  const [notes, setNotes] = useState(() => {
-    try {
-      return localStorage.getItem("scoopilot_quick_notes") || "";
-    } catch {
-      return "";
-    }
+  const { data: company } = useQuery<CompanyData>({
+    queryKey: ["/api/company"],
   });
+  const [notes, setNotes] = useState("");
+  const [initialized, setInitialized] = useState(false);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (company && !initialized) {
+      setNotes((company as any).dashboardNotes || "");
+      setInitialized(true);
+    }
+  }, [company, initialized]);
+
+  const notesMutation = useMutation({
+    mutationFn: async (value: string) => {
+      await apiRequest("PATCH", "/api/company", { dashboardNotes: value });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save notes", description: err.message, variant: "destructive" });
+    },
+  });
 
   const handleChange = useCallback((value: string) => {
     setNotes(value);
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
-      try {
-        localStorage.setItem("scoopilot_quick_notes", value);
-      } catch {}
-    }, 500);
-  }, []);
+      notesMutation.mutate(value);
+    }, 1000);
+  }, [notesMutation]);
 
   return (
     <div className="h-full flex flex-col" data-testid="widget-quick-notes-content">
       <div className="flex items-center gap-2 mb-2">
         <StickyNote className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">Quick Notes</span>
+        {notesMutation.isPending && (
+          <span className="text-[10px] text-muted-foreground">Saving...</span>
+        )}
       </div>
       <Textarea
         className="flex-1 resize-none text-sm min-h-0"
@@ -1094,12 +1112,14 @@ function WidgetLibraryDrawer({
   activeWidgetIds,
   onAddWidget,
   onRemoveWidget,
+  onResetLayout,
 }: {
   open: boolean;
   onClose: () => void;
   activeWidgetIds: string[];
   onAddWidget: (id: string) => void;
   onRemoveWidget: (id: string) => void;
+  onResetLayout: () => void;
 }) {
   const categories = [
     { key: "stats", label: "Stats" },
@@ -1117,6 +1137,17 @@ function WidgetLibraryDrawer({
           </SheetTitle>
         </SheetHeader>
         <div className="mt-4 space-y-6 overflow-y-auto max-h-[calc(100vh-160px)] pr-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full text-xs"
+            onClick={() => { onResetLayout(); onClose(); }}
+            data-testid="button-reset-layout"
+          >
+            <RotateCcw className="h-3 w-3 mr-1" />
+            Reset to Default Layout
+          </Button>
+          <div className="border-t pt-4" />
           {categories.map(cat => {
             const widgets = WIDGET_DEFS.filter(w => w.category === cat.key);
             return (
@@ -1226,8 +1257,12 @@ export default function Dashboard() {
   }, [savedLayout]);
 
   const currentLayout = useMemo<LayoutItem[]>(() => {
-    if (localLayout && localLayout.length > 0) return localLayout;
-    if (savedLayout && savedLayout.length > 0) return savedLayout;
+    if (localLayout !== null) {
+      return localLayout.length > 0 ? localLayout : [];
+    }
+    if (savedLayout !== null) {
+      return savedLayout.length > 0 ? savedLayout : [];
+    }
     return generateDefaultLayout(DEFAULT_WIDGET_IDS);
   }, [localLayout, savedLayout]);
 
@@ -1301,12 +1336,20 @@ export default function Dashboard() {
 
   const handleRemoveWidget = useCallback((id: string) => {
     const newLayout = currentLayout.filter(item => item.i !== id);
-    setLocalLayout(newLayout.length > 0 ? newLayout : null);
+    setLocalLayout(newLayout.length > 0 ? newLayout : []);
     userInteractedRef.current = true;
     saveMutation.mutate(newLayout);
     const def = WIDGET_DEFS.find(w => w.id === id);
     toast({ title: `${def?.label || "Widget"} removed from dashboard` });
   }, [currentLayout, saveMutation, toast]);
+
+  const handleResetLayout = useCallback(() => {
+    const defaultLayout = generateDefaultLayout(DEFAULT_WIDGET_IDS);
+    setLocalLayout(defaultLayout);
+    userInteractedRef.current = true;
+    saveMutation.mutate(defaultLayout);
+    toast({ title: "Dashboard reset to default layout" });
+  }, [saveMutation, toast]);
 
   const tierKey = stats?.subscriptionTier as keyof typeof TIER_CONFIG | undefined;
   const tierInfo = tierKey ? TIER_CONFIG[tierKey] : null;
@@ -1614,6 +1657,30 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         );
+      case "current_plan":
+        return (
+          <Card className="h-full" data-testid="widget-current-plan">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Current Plan</CardTitle>
+              <ClipboardList className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-8 w-full" />
+              ) : (
+                <div data-testid="text-plan-info">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold">{tierInfo?.name ?? stats?.tierName ?? "Unknown"}</span>
+                    <Badge variant="secondary" className="text-[10px]">Active</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ${tierInfo?.price?.toFixed(2) ?? "0.00"}/mo -- Up to {tierInfo?.maxUsers ?? 1} user{(tierInfo?.maxUsers ?? 1) > 1 ? "s" : ""}
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
       default:
         return null;
     }
@@ -1692,30 +1759,6 @@ export default function Dashboard() {
           {pipeline && (
             <TodaysAppointments visits={pipeline.todaysVisits} />
           )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Current Plan</CardTitle>
-                <CardDescription>Your subscription details</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <Skeleton className="h-16 w-full" />
-                ) : (
-                  <div className="space-y-3" data-testid="text-plan-info">
-                    <div className="flex items-center gap-2">
-                      <p className="text-xl font-semibold">{tierInfo?.name ?? stats?.tierName ?? "Unknown"}</p>
-                      <Badge variant="secondary">Active</Badge>
-                    </div>
-                    <p className="text-muted-foreground">
-                      ${tierInfo?.price?.toFixed(2) ?? "0.00"}/mo -- Up to {tierInfo?.maxUsers ?? 1} user{(tierInfo?.maxUsers ?? 1) > 1 ? "s" : ""}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
         </div>
 
         <div className="space-y-4">
@@ -1785,6 +1828,7 @@ export default function Dashboard() {
         activeWidgetIds={activeWidgetIds}
         onAddWidget={handleAddWidget}
         onRemoveWidget={handleRemoveWidget}
+        onResetLayout={handleResetLayout}
       />
     </div>
   );
