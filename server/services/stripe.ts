@@ -213,14 +213,13 @@ export async function createCheckoutSession(params: {
     cancel_url: params.cancelUrl,
   };
 
+  sessionParams.automatic_payment_methods = { enabled: true };
+
   if (params.stripeConnectAccountId) {
-    sessionParams.payment_method_types = ["card"];
     sessionParams.payment_intent_data = {
       transfer_data: { destination: params.stripeConnectAccountId },
       application_fee_amount: computeApplicationFee(amountCents),
     };
-  } else {
-    sessionParams.automatic_payment_methods = { enabled: true };
   }
 
   const session = await stripe.checkout.sessions.create(sessionParams);
