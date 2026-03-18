@@ -228,7 +228,7 @@ export default function RoverChatbot() {
                 )
               );
             } else if (event.type === "error") {
-              throw new Error(event.content);
+              throw new Error("FALLBACK");
             }
           } catch (e) {
             if (e instanceof SyntaxError) continue;
@@ -255,13 +255,7 @@ export default function RoverChatbot() {
         return;
       }
 
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === streamingMsgId
-            ? { ...m, text: "Sorry, something went wrong. Please try again.", streaming: false }
-            : m
-        )
-      );
+      await handleKeywordFallback(question, streamingMsgId);
     } finally {
       abortRef.current = null;
     }

@@ -413,14 +413,21 @@ export async function streamRoverChat(
     ...messages,
   ];
 
+  const OPENAI_TIMEOUT_MS = 30000;
+
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      messages: fullMessages,
-      tools: availableTools.length > 0 ? availableTools : undefined,
-      stream: true,
-      max_completion_tokens: 8192,
-    });
+    const response = await Promise.race([
+      openai.chat.completions.create({
+        model: "gpt-5-mini",
+        messages: fullMessages,
+        tools: availableTools.length > 0 ? availableTools : undefined,
+        stream: true,
+        max_completion_tokens: 8192,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("OPENAI_TIMEOUT")), OPENAI_TIMEOUT_MS)
+      ),
+    ]);
 
     let fullResponse = "";
     let toolCalls: { id: string; name: string; arguments: string }[] = [];
