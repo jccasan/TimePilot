@@ -4,8 +4,8 @@ import { contacts, invoices, visits, routes, servicePlans, companyUsers, users, 
 import { eq, and, sql, gte, lte, count } from "drizzle-orm";
 
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
 });
 
 const KNOWLEDGE_BASE = `
@@ -391,10 +391,7 @@ export async function streamRoverChat(
   const systemPrompt = buildSystemPrompt(userCtx);
 
   const isPrivileged = ["owner", "admin"].includes(userCtx.userRole);
-  const ADMIN_ONLY_TOOL_NAMES = new Set(["get_business_stats", "get_overdue_invoices"]);
-  const availableTools = isPrivileged
-    ? ROVER_TOOLS
-    : ROVER_TOOLS.filter((t) => !ADMIN_ONLY_TOOL_NAMES.has(t.function.name));
+  const availableTools = isPrivileged ? ROVER_TOOLS : [];
 
   const fullMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
@@ -452,15 +449,13 @@ export async function streamRoverChat(
         })),
       });
 
-      const ADMIN_ONLY_TOOLS = new Set(["get_business_stats", "get_overdue_invoices"]);
-
       for (const tc of toolCalls) {
         if (signal?.aborted) return;
-        if (ADMIN_ONLY_TOOLS.has(tc.name) && !["owner", "admin"].includes(userCtx.userRole)) {
+        if (!isPrivileged) {
           toolResults.push({
             role: "tool",
             tool_call_id: tc.id,
-            content: JSON.stringify({ error: "Access denied. This data is only available to owners and admins." }),
+            content: JSON.stringify({ error: "Access denied. Data tools are only available to owners and admins." }),
           });
           continue;
         }
