@@ -1102,6 +1102,78 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/company/revenue-chart", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const tz = company?.timezone || "America/New_York";
+      const now = new Date();
+      const months: { month: string; revenue: number }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const start = d.toISOString().split("T")[0];
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0];
+        const revenue = await storage.getRevenueForPeriod(companyId, start, end, tz);
+        months.push({
+          month: d.toLocaleString("default", { month: "short" }),
+          revenue: Math.round(revenue * 100) / 100,
+        });
+      }
+      res.json(months);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/company/recent-activity", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const notifications = await storage.getNotifications(companyId, 10);
+      res.json(notifications.map(n => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: n.type,
+        linkUrl: n.linkUrl,
+        isRead: n.isRead,
+        createdAt: n.createdAt,
+      })));
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/company/upcoming-visits", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const tz = company?.timezone || "America/New_York";
+      const today = getCompanyToday(tz);
+      const weekEnd = getCompanyWeekEnd(tz);
+      const visits = await storage.getVisitsForDateRange(companyId, today, weekEnd);
+      const allPlans = await storage.getServicePlans(companyId, {});
+      const allContacts = await storage.getContacts(companyId, {});
+      const allProperties = await storage.getProperties(companyId);
+      const planMap = new Map(allPlans.map(p => [p.id, p]));
+      const contactMap = new Map(allContacts.map(c => [c.id, c]));
+      const propMap = new Map(allProperties.map(p => [p.id, p]));
+      const upcoming = visits
+        .filter(v => v.status === "scheduled" && v.scheduledDate >= today)
+        .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))
+        .slice(0, 10)
+        .map(v => {
+          const plan = planMap.get(v.servicePlanId!);
+          const contact = plan ? contactMap.get(plan.contactId) : null;
+          const prop = plan ? propMap.get(plan.propertyId) : null;
+          return {
+            id: v.id,
+            scheduledDate: v.scheduledDate,
+            status: v.status,
+            contactName: contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown",
+            propertyAddress: prop?.streetAddress || "Unknown",
+            servicePlanName: plan?.name || "Service",
+          };
+        });
+      res.json(upcoming);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/company/pipeline", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);

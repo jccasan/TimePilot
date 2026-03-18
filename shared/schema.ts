@@ -130,7 +130,7 @@ export const companies = pgTable("companies", {
   routeCredits: integer("route_credits").notNull().default(10),
   remindersEnabled: boolean("reminders_enabled").notNull().default(false),
   autoVisitsEnabled: boolean("auto_visits_enabled").notNull().default(false),
-  dashboardLayout: jsonb("dashboard_layout").$type<string[]>(),
+  dashboardLayout: jsonb("dashboard_layout").$type<any>(),
   aiImportMappingEnabled: boolean("ai_import_mapping_enabled").notNull().default(true),
   pricingConfig: jsonb("pricing_config").$type<PricingConfig>(),
   voiceAgentServiceArea: text("voice_agent_service_area"),

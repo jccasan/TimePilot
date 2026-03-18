@@ -1,33 +1,38 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { Responsive, WidthProvider } from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import {
   DollarSign, CalendarCheck, AlertTriangle, UserCheck,
   Plus, Eye, Users, ClipboardList, TrendingUp,
   FileText, Clock,
   MessageSquare, Mail, Sliders, ChevronUp, ChevronDown,
-  CheckCircle, XCircle, MapPin,
+  CheckCircle, XCircle, MapPin, BarChart3, Activity,
+  StickyNote, Route, GripVertical, X, LayoutGrid,
+  Inbox, ArrowRight,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import GuidedSetup from "@/components/guided-setup";
-import { Textarea } from "@/components/ui/textarea";
-import { Inbox, ArrowRight } from "lucide-react";
+
+const ResponsiveGridLayout = WidthProvider(Responsive);
 
 type OnboardingStatus = {
   isComplete: boolean;
@@ -63,7 +68,7 @@ type CompanyStats = {
 
 type CompanyData = {
   id: string;
-  dashboardLayout?: string[] | null;
+  dashboardLayout?: any;
   [key: string]: unknown;
 };
 
@@ -136,6 +141,40 @@ type InboxItem = {
   data: ChangeRequest | PortalMessage | CleanupNotification;
 };
 
+type RevenueChartItem = {
+  month: string;
+  revenue: number;
+};
+
+type ActivityItem = {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  linkUrl: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+type UpcomingVisit = {
+  id: string;
+  scheduledDate: string;
+  status: string;
+  contactName: string;
+  propertyAddress: string;
+  servicePlanName: string;
+};
+
+type LayoutItem = {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minW?: number;
+  minH?: number;
+};
+
 const REQUEST_TYPE_LABELS: Record<string, string> = {
   frequency_change: "Frequency Change",
   day_change: "Day Change",
@@ -144,6 +183,83 @@ const REQUEST_TYPE_LABELS: Record<string, string> = {
   same_day_service: "Same-Day Service",
   other: "Other Request",
 };
+
+const WIDGET_DEFS: {
+  id: string;
+  label: string;
+  icon: typeof DollarSign;
+  description: string;
+  defaultW: number;
+  defaultH: number;
+  minW: number;
+  minH: number;
+  category: "stats" | "insights" | "tools";
+}[] = [
+  { id: "mrr", label: "Monthly Revenue (MRR)", icon: DollarSign, description: "Current monthly recurring revenue", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
+  { id: "month_revenue", label: "Revenue This Month", icon: TrendingUp, description: "Total revenue collected this month", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
+  { id: "requires_invoicing", label: "Requires Invoicing", icon: FileText, description: "Completed visits needing invoices", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
+  { id: "overdue_invoices", label: "Overdue Invoices", icon: AlertTriangle, description: "Invoices past their due date", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
+  { id: "todays_visits", label: "Today's Visits", icon: CalendarCheck, description: "Scheduled visits for today with progress", defaultW: 4, defaultH: 3, minW: 3, minH: 2, category: "stats" },
+  { id: "active_clients", label: "Active Clients", icon: Users, description: "Total active client count", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
+  { id: "service_plans", label: "Jobs", icon: ClipboardList, description: "Active service plan count", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
+  { id: "team_size", label: "Team Size", icon: UserCheck, description: "Active team members", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
+  { id: "texts_sent", label: "SMS Sent", icon: MessageSquare, description: "Text messages sent this month", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
+  { id: "emails_sent", label: "Emails Sent", icon: Mail, description: "Emails sent this month", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
+  { id: "quick_actions", label: "Quick Actions", icon: LayoutGrid, description: "Shortcut buttons to common tasks", defaultW: 6, defaultH: 3, minW: 4, minH: 2, category: "tools" },
+  { id: "recent_activity", label: "Recent Activity", icon: Activity, description: "Latest notifications and events", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
+  { id: "upcoming_visits", label: "Upcoming Visits", icon: CalendarCheck, description: "Visits scheduled for this week", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
+  { id: "revenue_chart", label: "Revenue Chart", icon: BarChart3, description: "6-month revenue trend", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
+  { id: "route_summary", label: "Route Summary", icon: Route, description: "Active routes overview", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "insights" },
+  { id: "quick_notes", label: "Quick Notes", icon: StickyNote, description: "Personal scratchpad for reminders", defaultW: 4, defaultH: 4, minW: 3, minH: 3, category: "tools" },
+];
+
+const DEFAULT_WIDGET_IDS = [
+  "mrr", "month_revenue", "requires_invoicing", "overdue_invoices",
+  "todays_visits", "active_clients", "service_plans", "team_size",
+  "texts_sent", "emails_sent", "quick_actions",
+];
+
+function generateDefaultLayout(widgetIds: string[]): LayoutItem[] {
+  const items: LayoutItem[] = [];
+  let x = 0;
+  let y = 0;
+  for (const id of widgetIds) {
+    const def = WIDGET_DEFS.find(w => w.id === id);
+    if (!def) continue;
+    if (x + def.defaultW > 12) {
+      x = 0;
+      y += 2;
+    }
+    items.push({
+      i: id,
+      x,
+      y,
+      w: def.defaultW,
+      h: def.defaultH,
+      minW: def.minW,
+      minH: def.minH,
+    });
+    x += def.defaultW;
+    if (x >= 12) {
+      x = 0;
+      y += def.defaultH;
+    }
+  }
+  return items;
+}
+
+function migrateLayout(raw: any): LayoutItem[] | null {
+  if (!raw) return null;
+  if (Array.isArray(raw) && raw.length > 0) {
+    if (typeof raw[0] === "string") {
+      return generateDefaultLayout(raw as string[]);
+    }
+    if (typeof raw[0] === "object" && "i" in raw[0]) {
+      return raw as LayoutItem[];
+    }
+  }
+  return null;
+}
 
 function ClientRequestsCard() {
   const { toast } = useToast();
@@ -202,6 +318,7 @@ function ClientRequestsCard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/recent-activity"] });
       toast({ title: "Accepted", description: "Cleanup request accepted. Schedule the visit from your routes page." });
     },
   });
@@ -212,6 +329,7 @@ function ClientRequestsCard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/recent-activity"] });
       toast({ title: "Dismissed", description: "Cleanup request dismissed." });
     },
   });
@@ -418,22 +536,6 @@ function ClientRequestsCard() {
   );
 }
 
-const ALL_WIDGETS = [
-  { id: "mrr", label: "Monthly Revenue (MRR)" },
-  { id: "month_revenue", label: "Revenue This Month" },
-  { id: "requires_invoicing", label: "Requires Invoicing" },
-  { id: "overdue_invoices", label: "Overdue Invoices" },
-  { id: "todays_visits", label: "Today's Visits" },
-  { id: "active_clients", label: "Active Clients" },
-  { id: "service_plans", label: "Jobs" },
-  { id: "team_size", label: "Team Size" },
-  { id: "texts_sent", label: "SMS Sent" },
-  { id: "emails_sent", label: "Emails Sent" },
-  { id: "quick_actions", label: "Quick Actions" },
-] as const;
-
-const DEFAULT_ORDER = ALL_WIDGETS.map((w) => w.id);
-
 function PipelineBar({ data }: { data: PipelineData }) {
   const stages = [
     {
@@ -574,6 +676,8 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/upcoming-visits"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/recent-activity"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
       toast({ title: "Visit updated" });
     },
@@ -781,12 +885,310 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
   );
 }
 
+function RevenueChartWidget() {
+  const { data: chartData, isLoading } = useQuery<RevenueChartItem[]>({
+    queryKey: ["/api/company/revenue-chart"],
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-full w-full" />;
+  }
+
+  const maxRevenue = Math.max(...(chartData || []).map(d => d.revenue), 1);
+
+  return (
+    <div className="h-full flex flex-col" data-testid="widget-revenue-chart-content">
+      <div className="flex items-center gap-2 mb-3">
+        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">Revenue Trend (6 months)</span>
+      </div>
+      <div className="flex-1 flex items-end gap-1.5 min-h-0 pb-1">
+        {(chartData || []).map((item, idx) => {
+          const height = maxRevenue > 0 ? Math.max((item.revenue / maxRevenue) * 100, 4) : 4;
+          return (
+            <div key={idx} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+              <span className="text-[10px] tabular-nums text-muted-foreground truncate w-full text-center">
+                ${item.revenue >= 1000 ? `${(item.revenue / 1000).toFixed(1)}k` : item.revenue.toFixed(0)}
+              </span>
+              <div
+                className="w-full rounded-t bg-primary/80 hover:bg-primary transition-colors min-h-[4px]"
+                style={{ height: `${height}%` }}
+                title={`${item.month}: $${item.revenue.toFixed(2)}`}
+                data-testid={`bar-revenue-${idx}`}
+              />
+              <span className="text-[10px] text-muted-foreground">{item.month}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RecentActivityWidget() {
+  const { data: activities, isLoading } = useQuery<ActivityItem[]>({
+    queryKey: ["/api/company/recent-activity"],
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-full w-full" />;
+  }
+
+  if (!activities || activities.length === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-muted-foreground" data-testid="widget-recent-activity-empty">
+        <Activity className="h-8 w-8 mb-2 opacity-40" />
+        <p className="text-sm">No recent activity</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden" data-testid="widget-recent-activity-content">
+      <div className="flex items-center gap-2 mb-2">
+        <Activity className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">Recent Activity</span>
+      </div>
+      <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+        {activities.map((item) => (
+          <div key={item.id} className="flex gap-2 py-1.5 border-b last:border-0" data-testid={`activity-item-${item.id}`}>
+            <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium truncate">{item.title}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{item.message}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {new Date(item.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function UpcomingVisitsWidget() {
+  const { data: visits, isLoading } = useQuery<UpcomingVisit[]>({
+    queryKey: ["/api/company/upcoming-visits"],
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-full w-full" />;
+  }
+
+  if (!visits || visits.length === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-muted-foreground" data-testid="widget-upcoming-visits-empty">
+        <CalendarCheck className="h-8 w-8 mb-2 opacity-40" />
+        <p className="text-sm">No upcoming visits this week</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden" data-testid="widget-upcoming-visits-content">
+      <div className="flex items-center gap-2 mb-2">
+        <CalendarCheck className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">Upcoming Visits</span>
+      </div>
+      <div className="flex-1 overflow-y-auto space-y-1.5 min-h-0">
+        {visits.map((visit) => (
+          <div key={visit.id} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-muted/30" data-testid={`upcoming-visit-${visit.id}`}>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium truncate">{visit.contactName}</p>
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <MapPin className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">{visit.propertyAddress}</span>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs font-medium">
+                {new Date(visit.scheduledDate + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RouteSummaryWidget() {
+  const { data: pipeline } = useQuery<PipelineData>({
+    queryKey: ["/api/company/pipeline"],
+  });
+  const { data: stats } = useQuery<CompanyStats>({
+    queryKey: ["/api/company/stats"],
+  });
+
+  return (
+    <div className="h-full flex flex-col" data-testid="widget-route-summary-content">
+      <div className="flex items-center gap-2 mb-2">
+        <Route className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">Route Summary</span>
+      </div>
+      <div className="flex-1 flex flex-col justify-center space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Active Plans</span>
+          <span className="text-sm font-bold">{pipeline?.activePlans.count ?? 0}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">This Week</span>
+          <span className="text-sm font-bold">{pipeline?.scheduledVisits.count ?? 0} visits</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Team Members</span>
+          <span className="text-sm font-bold">{stats?.activeUsers ?? 0}</span>
+        </div>
+        <Link href="/routes">
+          <Button size="sm" variant="outline" className="w-full mt-1" data-testid="button-view-routes-widget">
+            <Eye className="h-3.5 w-3.5 mr-1" />
+            View Routes
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function QuickNotesWidget() {
+  const [notes, setNotes] = useState(() => {
+    try {
+      return localStorage.getItem("scoopilot_quick_notes") || "";
+    } catch {
+      return "";
+    }
+  });
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleChange = useCallback((value: string) => {
+    setNotes(value);
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    saveTimeout.current = setTimeout(() => {
+      try {
+        localStorage.setItem("scoopilot_quick_notes", value);
+      } catch {}
+    }, 500);
+  }, []);
+
+  return (
+    <div className="h-full flex flex-col" data-testid="widget-quick-notes-content">
+      <div className="flex items-center gap-2 mb-2">
+        <StickyNote className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">Quick Notes</span>
+      </div>
+      <Textarea
+        className="flex-1 resize-none text-sm min-h-0"
+        placeholder="Jot down reminders, to-dos, or notes..."
+        value={notes}
+        onChange={(e) => handleChange(e.target.value)}
+        data-testid="textarea-quick-notes"
+      />
+    </div>
+  );
+}
+
+function WidgetLibraryDrawer({
+  open,
+  onClose,
+  activeWidgetIds,
+  onAddWidget,
+  onRemoveWidget,
+}: {
+  open: boolean;
+  onClose: () => void;
+  activeWidgetIds: string[];
+  onAddWidget: (id: string) => void;
+  onRemoveWidget: (id: string) => void;
+}) {
+  const categories = [
+    { key: "stats", label: "Stats" },
+    { key: "insights", label: "Insights" },
+    { key: "tools", label: "Tools" },
+  ] as const;
+
+  return (
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent side="right" className="w-[340px] sm:w-[380px]" data-testid="drawer-widget-library">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <LayoutGrid className="h-5 w-5" />
+            Widget Library
+          </SheetTitle>
+        </SheetHeader>
+        <div className="mt-4 space-y-6 overflow-y-auto max-h-[calc(100vh-160px)] pr-1">
+          {categories.map(cat => {
+            const widgets = WIDGET_DEFS.filter(w => w.category === cat.key);
+            return (
+              <div key={cat.key}>
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 tracking-wider">{cat.label}</h3>
+                <div className="space-y-2">
+                  {widgets.map(widget => {
+                    const isActive = activeWidgetIds.includes(widget.id);
+                    const Icon = widget.icon;
+                    return (
+                      <div
+                        key={widget.id}
+                        className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                        data-testid={`library-widget-${widget.id}`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="p-1.5 rounded-md bg-muted">
+                            <Icon className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{widget.label}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">{widget.description}</p>
+                          </div>
+                        </div>
+                        {isActive ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0 text-xs"
+                            onClick={() => onRemoveWidget(widget.id)}
+                            data-testid={`button-remove-widget-${widget.id}`}
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Remove
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="shrink-0 text-xs"
+                            onClick={() => onAddWidget(widget.id)}
+                            data-testid={`button-add-widget-${widget.id}`}
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Add
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [editLayout, setEditLayout] = useState<string[]>([]);
-  const [editEnabled, setEditEnabled] = useState<Set<string>>(new Set());
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const { data: stats, isLoading } = useQuery<CompanyStats>({
     queryKey: ["/api/company/stats"],
@@ -804,60 +1206,107 @@ export default function Dashboard() {
     queryKey: ["/api/company/pipeline"],
   });
 
+  const savedLayout = useMemo(() => {
+    if (!company) return null;
+    return migrateLayout(company.dashboardLayout);
+  }, [company]);
+
+  const [localLayout, setLocalLayout] = useState<LayoutItem[] | null>(null);
+  const initializedRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userInteractedRef = useRef(false);
+
+  useEffect(() => {
+    if (savedLayout && !initializedRef.current) {
+      setLocalLayout(savedLayout);
+      initializedRef.current = true;
+    } else if (savedLayout && initializedRef.current && !userInteractedRef.current) {
+      setLocalLayout(savedLayout);
+    }
+  }, [savedLayout]);
+
+  const currentLayout = useMemo<LayoutItem[]>(() => {
+    if (localLayout && localLayout.length > 0) return localLayout;
+    if (savedLayout && savedLayout.length > 0) return savedLayout;
+    return generateDefaultLayout(DEFAULT_WIDGET_IDS);
+  }, [localLayout, savedLayout]);
+
+  const activeWidgetIds = useMemo(() => currentLayout.map(l => l.i), [currentLayout]);
+
   const saveMutation = useMutation({
-    mutationFn: async (layout: string[]) => {
+    mutationFn: async (layout: LayoutItem[]) => {
       await apiRequest("PATCH", "/api/company", { dashboardLayout: layout });
     },
     onSuccess: () => {
+      userInteractedRef.current = false;
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
-      toast({ title: "Dashboard layout saved" });
-      setCustomizeOpen(false);
     },
     onError: (err: Error) => {
       toast({ title: "Failed to save layout", description: err.message, variant: "destructive" });
     },
   });
 
-  const openCustomize = useCallback(() => {
-    const savedLayout = company?.dashboardLayout;
-    if (savedLayout && savedLayout.length > 0) {
-      const enabledSet = new Set(savedLayout);
-      const disabledIds = DEFAULT_ORDER.filter((id) => !enabledSet.has(id));
-      setEditLayout([...savedLayout, ...disabledIds]);
-      setEditEnabled(enabledSet);
-    } else {
-      setEditLayout([...DEFAULT_ORDER]);
-      setEditEnabled(new Set(DEFAULT_ORDER));
-    }
-    setCustomizeOpen(true);
-  }, [company]);
+  const debouncedSave = useCallback((layout: LayoutItem[]) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveMutation.mutate(layout);
+    }, 800);
+  }, [saveMutation]);
 
-  const toggleWidget = useCallback((id: string) => {
-    setEditEnabled((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+  const handleLayoutChange = useCallback((_current: any[], allLayouts: { [key: string]: any[] }) => {
+    if (!userInteractedRef.current) return;
+    const lgLayout = allLayouts.lg;
+    if (!lgLayout || lgLayout.length === 0) return;
+    const cleaned: LayoutItem[] = lgLayout.map((item: any) => ({
+      i: item.i,
+      x: item.x,
+      y: item.y,
+      w: item.w,
+      h: item.h,
+      minW: WIDGET_DEFS.find(w => w.id === item.i)?.minW,
+      minH: WIDGET_DEFS.find(w => w.id === item.i)?.minH,
+    }));
+    setLocalLayout(cleaned);
+    debouncedSave(cleaned);
+  }, [debouncedSave]);
+
+  const handleDragStart = useCallback(() => {
+    userInteractedRef.current = true;
   }, []);
 
-  const moveWidget = useCallback((index: number, direction: "up" | "down") => {
-    setEditLayout((prev) => {
-      const next = [...prev];
-      const targetIndex = direction === "up" ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= next.length) return prev;
-      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
-      return next;
-    });
+  const handleResizeStart = useCallback(() => {
+    userInteractedRef.current = true;
   }, []);
 
-  const handleSave = useCallback(() => {
-    const enabledInOrder = editLayout.filter((id) => editEnabled.has(id));
-    saveMutation.mutate(enabledInOrder);
-  }, [editLayout, editEnabled, saveMutation]);
+  const handleAddWidget = useCallback((id: string) => {
+    if (activeWidgetIds.includes(id)) return;
+    const def = WIDGET_DEFS.find(w => w.id === id);
+    if (!def) return;
+    const maxY = currentLayout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+    const newItem: LayoutItem = {
+      i: id,
+      x: 0,
+      y: maxY,
+      w: def.defaultW,
+      h: def.defaultH,
+      minW: def.minW,
+      minH: def.minH,
+    };
+    const newLayout = [...currentLayout, newItem];
+    setLocalLayout(newLayout);
+    userInteractedRef.current = true;
+    saveMutation.mutate(newLayout);
+    toast({ title: `${def.label} added to dashboard` });
+  }, [currentLayout, activeWidgetIds, saveMutation, toast]);
+
+  const handleRemoveWidget = useCallback((id: string) => {
+    const newLayout = currentLayout.filter(item => item.i !== id);
+    setLocalLayout(newLayout.length > 0 ? newLayout : null);
+    userInteractedRef.current = true;
+    saveMutation.mutate(newLayout);
+    const def = WIDGET_DEFS.find(w => w.id === id);
+    toast({ title: `${def?.label || "Widget"} removed from dashboard` });
+  }, [currentLayout, saveMutation, toast]);
 
   const tierKey = stats?.subscriptionTier as keyof typeof TIER_CONFIG | undefined;
   const tierInfo = tierKey ? TIER_CONFIG[tierKey] : null;
@@ -866,265 +1315,335 @@ export default function Dashboard() {
     ? Math.round((stats.todaysVisitBreakdown.completed / stats.todaysVisits) * 100)
     : 0;
 
-  const savedLayout = company?.dashboardLayout;
-  const activeWidgets: string[] = savedLayout && savedLayout.length > 0
-    ? savedLayout
-    : DEFAULT_ORDER;
-
-  const widgetRenderers: Record<string, () => JSX.Element> = {
-    mrr: () => (
-      <Card key="mrr" data-testid="widget-mrr">
-        <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Monthly Revenue (MRR)</CardTitle>
-          <DollarSign className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-24" />
-          ) : (
-            <div className="text-2xl font-bold" data-testid="text-mrr">
-              ${stats?.mrr?.toFixed(2) ?? "0.00"}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    month_revenue: () => (
-      <Card key="month_revenue" data-testid="widget-month-revenue">
-        <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Revenue This Month</CardTitle>
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-24" />
-          ) : (
-            <div className="text-2xl font-bold" data-testid="text-month-revenue">
-              ${(stats?.monthRevenue ?? 0).toFixed(2)}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    requires_invoicing: () => (
-      <Link href="/invoices" key="requires_invoicing">
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" data-testid="widget-requires-invoicing">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Requires Invoicing</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {pipelineLoading ? (
-              <Skeleton className="h-8 w-24" />
-            ) : !pipeline ? (
-              <Skeleton className="h-8 w-24" />
-            ) : pipeline.requiresInvoicing.count === 0 ? (
-              <div data-testid="text-requires-invoicing">
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">0</div>
-                <p className="text-xs text-muted-foreground mt-1">All caught up</p>
-              </div>
-            ) : (
-              <div data-testid="text-requires-invoicing">
-                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                  {pipeline.requiresInvoicing.count}
+  const renderWidget = (widgetId: string) => {
+    switch (widgetId) {
+      case "mrr":
+        return (
+          <Card className="h-full" data-testid="widget-mrr">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Monthly Revenue (MRR)</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-8 w-24" />
+              ) : (
+                <div className="text-2xl font-bold" data-testid="text-mrr">
+                  ${stats?.mrr?.toFixed(2) ?? "0.00"}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  ${pipeline.requiresInvoicing.totalDollars.toFixed(2)} uninvoiced
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </Link>
-    ),
-    overdue_invoices: () => (
-      <Card key="overdue_invoices" data-testid="widget-overdue-invoices">
-        <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Overdue Invoices</CardTitle>
-          <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-16" />
-          ) : (
-            <div data-testid="text-overdue-invoices">
-              <div className="text-2xl font-bold">{stats?.overdueInvoices ?? 0}</div>
-              {(stats?.failedPayments ?? 0) > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {stats?.failedPayments} failed payment{stats?.failedPayments === 1 ? "" : "s"}
-                </p>
               )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    todays_visits: () => (
-      <Card key="todays_visits" data-testid="widget-todays-visits">
-        <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Today's Visits</CardTitle>
-          <CalendarCheck className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-16" />
-          ) : (
-            <div data-testid="text-todays-visits">
-              <div className="text-2xl font-bold">{stats?.todaysVisits ?? 0}</div>
-              {stats && stats.todaysVisits > 0 && (
-                <div className="mt-2 space-y-1">
-                  <Progress value={visitProgress} className="h-2" />
-                  <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
-                    <span>{stats.todaysVisitBreakdown.completed} done</span>
-                    <span>/</span>
-                    <span>{stats.todaysVisitBreakdown.inProgress} active</span>
-                    <span>/</span>
-                    <span>{stats.todaysVisitBreakdown.scheduled} pending</span>
+            </CardContent>
+          </Card>
+        );
+      case "month_revenue":
+        return (
+          <Card className="h-full" data-testid="widget-month-revenue">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Revenue This Month</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-8 w-24" />
+              ) : (
+                <div className="text-2xl font-bold" data-testid="text-month-revenue">
+                  ${(stats?.monthRevenue ?? 0).toFixed(2)}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      case "requires_invoicing":
+        return (
+          <Link href="/invoices">
+            <Card className="h-full cursor-pointer hover:shadow-md transition-shadow" data-testid="widget-requires-invoicing">
+              <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Requires Invoicing</CardTitle>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {pipelineLoading ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : !pipeline ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : pipeline.requiresInvoicing.count === 0 ? (
+                  <div data-testid="text-requires-invoicing">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">0</div>
+                    <p className="text-xs text-muted-foreground mt-1">All caught up</p>
                   </div>
+                ) : (
+                  <div data-testid="text-requires-invoicing">
+                    <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                      {pipeline.requiresInvoicing.count}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ${pipeline.requiresInvoicing.totalDollars.toFixed(2)} uninvoiced
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </Link>
+        );
+      case "overdue_invoices":
+        return (
+          <Card className="h-full" data-testid="widget-overdue-invoices">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Overdue Invoices</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div data-testid="text-overdue-invoices">
+                  <div className="text-2xl font-bold">{stats?.overdueInvoices ?? 0}</div>
+                  {(stats?.failedPayments ?? 0) > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {stats?.failedPayments} failed payment{stats?.failedPayments === 1 ? "" : "s"}
+                    </p>
+                  )}
                 </div>
               )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    active_clients: () => (
-      <Card key="active_clients" data-testid="widget-active-clients">
-        <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
-          <Users className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-16" />
-          ) : (
-            <div className="text-2xl font-bold" data-testid="text-active-contacts">
-              {stats?.activeContacts ?? 0}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    service_plans: () => (
-      <Card key="service_plans" data-testid="widget-service-plans">
-        <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Jobs</CardTitle>
-          <ClipboardList className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-16" />
-          ) : (
-            <div className="text-2xl font-bold" data-testid="text-active-plans">
-              {stats?.activeServicePlans ?? 0}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    team_size: () => (
-      <Card key="team_size" data-testid="widget-team-size">
-        <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Team Size</CardTitle>
-          <UserCheck className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-16" />
-          ) : (
-            <div data-testid="text-active-users">
-              <div className="text-2xl font-bold">{stats?.activeUsers ?? 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                of {tierInfo?.maxUsers ?? 1} allowed
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    texts_sent: () => (
-      <Card key="texts_sent" data-testid="widget-texts-sent">
-        <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">SMS Sent</CardTitle>
-          <MessageSquare className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-16" />
-          ) : (
-            <div data-testid="text-sms-count">
-              <div className="text-2xl font-bold">{stats?.smsCountThisMonth ?? 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">this month</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    emails_sent: () => (
-      <Card key="emails_sent" data-testid="widget-emails-sent">
-        <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Emails Sent</CardTitle>
-          <Mail className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-16" />
-          ) : (
-            <div data-testid="text-email-count">
-              <div className="text-2xl font-bold">{stats?.emailCountThisMonth ?? 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">this month</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    quick_actions: () => (
-      <Card key="quick_actions" className="md:col-span-2" data-testid="widget-quick-actions">
-        <CardHeader>
-          <CardTitle className="text-lg">Quick Actions</CardTitle>
-          <CardDescription>Common tasks</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" data-testid="button-quick-add-contact">
-            <Link href="/contacts">
-              <Plus className="mr-1 h-4 w-4" />
-              Add Contact
-            </Link>
-          </Button>
-          <Button asChild variant="outline" data-testid="button-quick-scheduling">
-            <Link href="/scheduling">
-              <CalendarCheck className="mr-1 h-4 w-4" />
-              Scheduling
-            </Link>
-          </Button>
-          <Button asChild variant="outline" data-testid="button-quick-view-routes">
-            <Link href="/routes">
-              <Eye className="mr-1 h-4 w-4" />
-              Routes
-            </Link>
-          </Button>
-          <Button asChild variant="outline" data-testid="button-quick-invoices">
-            <Link href="/invoices">
-              <FileText className="mr-1 h-4 w-4" />
-              Invoices
-            </Link>
-          </Button>
-          <Button asChild variant="outline" data-testid="button-quick-tech-mobile">
-            <Link href="/m/today">
-              <Clock className="mr-1 h-4 w-4" />
-              Field View
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-    ),
+            </CardContent>
+          </Card>
+        );
+      case "todays_visits":
+        return (
+          <Card className="h-full" data-testid="widget-todays-visits">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Today's Visits</CardTitle>
+              <CalendarCheck className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div data-testid="text-todays-visits">
+                  <div className="text-2xl font-bold">{stats?.todaysVisits ?? 0}</div>
+                  {stats && stats.todaysVisits > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <Progress value={visitProgress} className="h-2" />
+                      <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
+                        <span>{stats.todaysVisitBreakdown.completed} done</span>
+                        <span>/</span>
+                        <span>{stats.todaysVisitBreakdown.inProgress} active</span>
+                        <span>/</span>
+                        <span>{stats.todaysVisitBreakdown.scheduled} pending</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      case "active_clients":
+        return (
+          <Card className="h-full" data-testid="widget-active-clients">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-2xl font-bold" data-testid="text-active-contacts">
+                  {stats?.activeContacts ?? 0}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      case "service_plans":
+        return (
+          <Card className="h-full" data-testid="widget-service-plans">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Jobs</CardTitle>
+              <ClipboardList className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-2xl font-bold" data-testid="text-active-plans">
+                  {stats?.activeServicePlans ?? 0}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      case "team_size":
+        return (
+          <Card className="h-full" data-testid="widget-team-size">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Team Size</CardTitle>
+              <UserCheck className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div data-testid="text-active-users">
+                  <div className="text-2xl font-bold">{stats?.activeUsers ?? 0}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    of {tierInfo?.maxUsers ?? 1} allowed
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      case "texts_sent":
+        return (
+          <Card className="h-full" data-testid="widget-texts-sent">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">SMS Sent</CardTitle>
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div data-testid="text-sms-count">
+                  <div className="text-2xl font-bold">{stats?.smsCountThisMonth ?? 0}</div>
+                  <p className="text-xs text-muted-foreground mt-1">this month</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      case "emails_sent":
+        return (
+          <Card className="h-full" data-testid="widget-emails-sent">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Emails Sent</CardTitle>
+              <Mail className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div data-testid="text-email-count">
+                  <div className="text-2xl font-bold">{stats?.emailCountThisMonth ?? 0}</div>
+                  <p className="text-xs text-muted-foreground mt-1">this month</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      case "quick_actions":
+        return (
+          <Card className="h-full" data-testid="widget-quick-actions">
+            <CardHeader>
+              <CardTitle className="text-lg">Quick Actions</CardTitle>
+              <CardDescription>Common tasks</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" data-testid="button-quick-add-contact">
+                <Link href="/contacts">
+                  <Plus className="mr-1 h-4 w-4" />
+                  Add Contact
+                </Link>
+              </Button>
+              <Button asChild variant="outline" data-testid="button-quick-scheduling">
+                <Link href="/scheduling">
+                  <CalendarCheck className="mr-1 h-4 w-4" />
+                  Scheduling
+                </Link>
+              </Button>
+              <Button asChild variant="outline" data-testid="button-quick-view-routes">
+                <Link href="/routes">
+                  <Eye className="mr-1 h-4 w-4" />
+                  Routes
+                </Link>
+              </Button>
+              <Button asChild variant="outline" data-testid="button-quick-invoices">
+                <Link href="/invoices">
+                  <FileText className="mr-1 h-4 w-4" />
+                  Invoices
+                </Link>
+              </Button>
+              <Button asChild variant="outline" data-testid="button-quick-tech-mobile">
+                <Link href="/m/today">
+                  <Clock className="mr-1 h-4 w-4" />
+                  Field View
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      case "recent_activity":
+        return (
+          <Card className="h-full" data-testid="widget-recent-activity">
+            <CardContent className="p-4 h-full">
+              <RecentActivityWidget />
+            </CardContent>
+          </Card>
+        );
+      case "upcoming_visits":
+        return (
+          <Card className="h-full" data-testid="widget-upcoming-visits">
+            <CardContent className="p-4 h-full">
+              <UpcomingVisitsWidget />
+            </CardContent>
+          </Card>
+        );
+      case "revenue_chart":
+        return (
+          <Card className="h-full" data-testid="widget-revenue-chart">
+            <CardContent className="p-4 h-full">
+              <RevenueChartWidget />
+            </CardContent>
+          </Card>
+        );
+      case "route_summary":
+        return (
+          <Card className="h-full" data-testid="widget-route-summary">
+            <CardContent className="p-4 h-full">
+              <RouteSummaryWidget />
+            </CardContent>
+          </Card>
+        );
+      case "quick_notes":
+        return (
+          <Card className="h-full" data-testid="widget-quick-notes">
+            <CardContent className="p-4 h-full">
+              <QuickNotesWidget />
+            </CardContent>
+          </Card>
+        );
+      default:
+        return null;
+    }
   };
 
-  const statWidgetIds = ["mrr", "month_revenue", "requires_invoicing", "overdue_invoices", "todays_visits", "active_clients", "service_plans", "team_size", "texts_sent", "emails_sent"];
-  const fullWidgetIds = ["quick_actions"];
+  const gridLayouts = useMemo(() => {
+    const lgLayout = currentLayout.map(item => ({
+      ...item,
+      minW: WIDGET_DEFS.find(w => w.id === item.i)?.minW ?? 3,
+      minH: WIDGET_DEFS.find(w => w.id === item.i)?.minH ?? 2,
+    }));
 
-  const activeStatWidgets = activeWidgets.filter((id) => statWidgetIds.includes(id));
-  const activeFullWidgets = activeWidgets.filter((id) => fullWidgetIds.includes(id));
+    const smLayout = currentLayout.map((item, idx) => ({
+      ...item,
+      x: 0,
+      y: idx * 2,
+      w: 6,
+      minW: 6,
+    }));
+
+    const xsLayout = currentLayout.map((item, idx) => ({
+      ...item,
+      x: 0,
+      y: idx * 2,
+      w: 1,
+      minW: 1,
+    }));
+
+    return { lg: lgLayout, md: lgLayout, sm: smLayout, xs: xsLayout };
+  }, [currentLayout]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
@@ -1137,7 +1656,7 @@ export default function Dashboard() {
         </div>
         <Button
           variant="outline"
-          onClick={openCustomize}
+          onClick={() => setDrawerOpen(true)}
           data-testid="button-customize-dashboard"
         >
           <Sliders className="mr-1 h-4 w-4" />
@@ -1174,12 +1693,6 @@ export default function Dashboard() {
             <TodaysAppointments visits={pipeline.todaysVisits} />
           )}
 
-          {activeStatWidgets.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="widgets-grid">
-              {activeStatWidgets.map((id) => widgetRenderers[id]?.())}
-            </div>
-          )}
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
@@ -1202,7 +1715,6 @@ export default function Dashboard() {
                 )}
               </CardContent>
             </Card>
-            {activeFullWidgets.map((id) => widgetRenderers[id]?.())}
           </div>
         </div>
 
@@ -1219,71 +1731,61 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <Dialog open={customizeOpen} onOpenChange={setCustomizeOpen}>
-        <DialogContent className="max-w-md" data-testid="dialog-customize-dashboard">
-          <DialogHeader>
-            <DialogTitle>Customize Dashboard</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-            {editLayout.map((widgetId, index) => {
-              const widget = ALL_WIDGETS.find((w) => w.id === widgetId);
-              if (!widget) return null;
-              return (
-                <div
-                  key={widgetId}
-                  className="flex items-center justify-between gap-2 rounded-md p-2"
-                  data-testid={`customize-widget-${widgetId}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={editEnabled.has(widgetId)}
-                      onCheckedChange={() => toggleWidget(widgetId)}
-                      data-testid={`checkbox-widget-${widgetId}`}
-                    />
-                    <span className="text-sm">{widget.label}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={index === 0}
-                      onClick={() => moveWidget(index, "up")}
-                      data-testid={`button-move-up-${widgetId}`}
-                    >
-                      <ChevronUp className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={index === editLayout.length - 1}
-                      onClick={() => moveWidget(index, "down")}
-                      data-testid={`button-move-down-${widgetId}`}
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </div>
+      <div data-testid="widgets-grid">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <LayoutGrid className="h-5 w-5" />
+            Dashboard Widgets
+          </h2>
+          <span className="text-xs text-muted-foreground">
+            {isMobile ? "Scroll to view widgets" : "Drag to reorder, resize from corners"}
+          </span>
+        </div>
+        <ResponsiveGridLayout
+          className="layout"
+          layouts={gridLayouts}
+          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480 }}
+          cols={{ lg: 12, md: 12, sm: 6, xs: 1 }}
+          rowHeight={60}
+          isDraggable={!isMobile}
+          isResizable={!isMobile}
+          draggableHandle=".widget-drag-handle"
+          onLayoutChange={handleLayoutChange}
+          onDragStart={handleDragStart}
+          onResizeStart={handleResizeStart}
+          compactType="vertical"
+          margin={[16, 16]}
+        >
+          {currentLayout.map(item => (
+            <div key={item.i} className="relative group" data-testid={`grid-widget-${item.i}`}>
+              {!isMobile && (
+                <div className="widget-drag-handle absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1 rounded bg-background/80 backdrop-blur-sm border shadow-sm">
+                  <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
                 </div>
-              );
-            })}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCustomizeOpen(false)}
-              data-testid="button-cancel-customize"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={saveMutation.isPending}
-              data-testid="button-save-layout"
-            >
-              {saveMutation.isPending ? "Saving..." : "Save Layout"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              )}
+              {!isMobile && (
+                <button
+                  className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-destructive/10"
+                  onClick={() => handleRemoveWidget(item.i)}
+                  title="Remove widget"
+                  data-testid={`button-remove-grid-widget-${item.i}`}
+                >
+                  <X className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              )}
+              {renderWidget(item.i)}
+            </div>
+          ))}
+        </ResponsiveGridLayout>
+      </div>
+
+      <WidgetLibraryDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        activeWidgetIds={activeWidgetIds}
+        onAddWidget={handleAddWidget}
+        onRemoveWidget={handleRemoveWidget}
+      />
     </div>
   );
 }
