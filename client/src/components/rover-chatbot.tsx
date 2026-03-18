@@ -17,6 +17,9 @@ type ChatMessage = {
   timestamp: Date;
   actions?: ("ticket" | "feature")[];
   streaming?: boolean;
+  suggestedSubject?: string;
+  suggestedDescription?: string;
+  isFallback?: boolean;
 };
 
 type View = "chat" | "ticket-form";
@@ -108,9 +111,16 @@ export default function RoverChatbot() {
       }));
   };
 
-  const parseActions = (text: string): { cleanText: string; actions: ("ticket" | "feature")[] } => {
+  const parseActions = (text: string): {
+    cleanText: string;
+    actions: ("ticket" | "feature")[];
+    suggestedSubject?: string;
+    suggestedDescription?: string;
+  } => {
     const actions: ("ticket" | "feature")[] = [];
     let cleanText = text;
+    let suggestedSubject: string | undefined;
+    let suggestedDescription: string | undefined;
 
     if (text.includes("[SUGGEST_TICKET]")) {
       actions.push("ticket");
@@ -121,7 +131,19 @@ export default function RoverChatbot() {
       cleanText = cleanText.replace(/\[SUGGEST_FEATURE\]/g, "").trim();
     }
 
-    return { cleanText, actions };
+    const subjectMatch = cleanText.match(/SUBJECT:\s*(.+)/i);
+    if (subjectMatch) {
+      suggestedSubject = subjectMatch[1].trim();
+      cleanText = cleanText.replace(/SUBJECT:\s*.+/i, "").trim();
+    }
+
+    const descMatch = cleanText.match(/DESCRIPTION:\s*(.+)/i);
+    if (descMatch) {
+      suggestedDescription = descMatch[1].trim();
+      cleanText = cleanText.replace(/DESCRIPTION:\s*.+/i, "").trim();
+    }
+
+    return { cleanText, actions, suggestedSubject, suggestedDescription };
   };
 
   const handleStreamingChat = async (question: string) => {
@@ -187,11 +209,11 @@ export default function RoverChatbot() {
                 )
               );
             } else if (event.type === "done") {
-              const { cleanText, actions } = parseActions(fullText);
+              const { cleanText, actions, suggestedSubject, suggestedDescription } = parseActions(fullText);
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === streamingMsgId
-                    ? { ...m, text: cleanText, streaming: false, actions: actions.length > 0 ? actions : undefined }
+                    ? { ...m, text: cleanText, streaming: false, actions: actions.length > 0 ? actions : undefined, suggestedSubject, suggestedDescription }
                     : m
                 )
               );
@@ -206,11 +228,11 @@ export default function RoverChatbot() {
       }
 
       if (fullText) {
-        const { cleanText, actions } = parseActions(fullText);
+        const { cleanText, actions, suggestedSubject, suggestedDescription } = parseActions(fullText);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === streamingMsgId
-              ? { ...m, text: cleanText, streaming: false, actions: actions.length > 0 ? actions : undefined }
+              ? { ...m, text: cleanText, streaming: false, actions: actions.length > 0 ? actions : undefined, suggestedSubject, suggestedDescription }
               : m
           )
         );
@@ -239,6 +261,7 @@ export default function RoverChatbot() {
         text: data.answer,
         timestamp: new Date(),
         actions: data.matched ? undefined : ["ticket", "feature"],
+        isFallback: true,
       };
 
       if (replaceId) {
@@ -286,10 +309,10 @@ export default function RoverChatbot() {
     }
   };
 
-  const openTicketForm = (type: "bug" | "feature_request") => {
+  const openTicketForm = (type: "bug" | "feature_request", subject?: string, description?: string) => {
     setTicketType(type);
-    setTicketSubject("");
-    setTicketDescription("");
+    setTicketSubject(subject || "");
+    setTicketDescription(description || "");
     setView("ticket-form");
   };
 
@@ -418,11 +441,14 @@ export default function RoverChatbot() {
                       {msg.streaming && (
                         <span className="inline-block w-1.5 h-4 bg-current opacity-60 animate-pulse ml-0.5 align-text-bottom" />
                       )}
+                      {msg.isFallback && !msg.streaming && (
+                        <p className="text-[10px] opacity-50 mt-1 italic">AI temporarily unavailable - basic mode</p>
+                      )}
                       {msg.actions && !msg.streaming && (
                         <div className="flex gap-2 mt-2">
                           {msg.actions.includes("ticket") && (
                             <button
-                              onClick={() => openTicketForm("bug")}
+                              onClick={() => openTicketForm("bug", msg.suggestedSubject, msg.suggestedDescription)}
                               className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-background/20 hover:bg-background/30 transition-colors border border-current/20"
                               data-testid="button-rover-submit-ticket"
                             >
@@ -431,7 +457,7 @@ export default function RoverChatbot() {
                           )}
                           {msg.actions.includes("feature") && (
                             <button
-                              onClick={() => openTicketForm("feature_request")}
+                              onClick={() => openTicketForm("feature_request", msg.suggestedSubject, msg.suggestedDescription)}
                               className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-background/20 hover:bg-background/30 transition-colors border border-current/20"
                               data-testid="button-rover-submit-feature"
                             >

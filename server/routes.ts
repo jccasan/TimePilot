@@ -8925,8 +8925,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Last message must be a non-empty user message" });
       }
 
-      const [company] = await db.select({ name: companies.name, roverAiEnabled: companies.roverAiEnabled }).from(companies).where(eq(companies.id, companyId));
-      const companyName = company?.name || "your company";
+      const [company] = await db.select({ roverAiEnabled: companies.roverAiEnabled }).from(companies).where(eq(companies.id, companyId));
 
       if (!company?.roverAiEnabled) {
         return res.status(400).json({ error: "AI chat is disabled", fallback: true });
@@ -8949,7 +8948,7 @@ export async function registerRoutes(
       await streamRoverChat(
         sanitizedMessages,
         companyId,
-        companyName,
+        userId,
         (text: string) => {
           if (!abortSignal.aborted) {
             res.write(`data: ${JSON.stringify({ type: "chunk", content: text })}\n\n`);

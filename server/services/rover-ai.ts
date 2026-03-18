@@ -36,20 +36,84 @@ NAVIGATION:
 - Rover (me!): Floating chat button in bottom-right corner
 `;
 
-export function buildSystemPrompt(companyName: string): string {
-  return `You are Rover, a friendly and knowledgeable AI assistant for ScooPilot — a business management platform for pet waste removal companies. You're helping a user from "${companyName}".
+interface UserContext {
+  userName: string;
+  userRole: string;
+  companyName: string;
+  subscriptionTier: string;
+  subscriptionStatus: string;
+  remindersEnabled: boolean;
+  autoVisitsEnabled: boolean;
+  roverAiEnabled: boolean;
+  timezone: string;
+}
+
+export async function buildUserContext(companyId: string, userId: string): Promise<UserContext> {
+  const [company] = await db
+    .select({
+      name: companies.name,
+      subscriptionTier: companies.subscriptionTier,
+      subscriptionStatus: companies.subscriptionStatus,
+      remindersEnabled: companies.remindersEnabled,
+      autoVisitsEnabled: companies.autoVisitsEnabled,
+      roverAiEnabled: companies.roverAiEnabled,
+      timezone: companies.timezone,
+    })
+    .from(companies)
+    .where(eq(companies.id, companyId));
+
+  const [membership] = await db
+    .select({ role: companyUsers.role })
+    .from(companyUsers)
+    .where(and(eq(companyUsers.companyId, companyId), eq(companyUsers.userId, userId)));
+
+  const [user] = await db
+    .select({ firstName: users.firstName, lastName: users.lastName })
+    .from(users)
+    .where(eq(users.id, userId));
+
+  return {
+    userName: user ? `${user.firstName} ${user.lastName}`.trim() : "User",
+    userRole: membership?.role || "tech",
+    companyName: company?.name || "your company",
+    subscriptionTier: company?.subscriptionTier || "tier_1",
+    subscriptionStatus: company?.subscriptionStatus || "active",
+    remindersEnabled: company?.remindersEnabled ?? false,
+    autoVisitsEnabled: company?.autoVisitsEnabled ?? false,
+    roverAiEnabled: company?.roverAiEnabled ?? true,
+    timezone: company?.timezone || "America/New_York",
+  };
+}
+
+export function buildSystemPrompt(ctx: UserContext): string {
+  return `You are Rover, a friendly and knowledgeable AI assistant for ScooPilot — a business management platform for pet waste removal companies.
+
+CURRENT USER CONTEXT:
+- User: ${ctx.userName} (role: ${ctx.userRole})
+- Company: ${ctx.companyName}
+- Subscription: ${ctx.subscriptionTier} (${ctx.subscriptionStatus})
+- Timezone: ${ctx.timezone}
+- Features enabled: ${[
+    ctx.remindersEnabled ? "automated reminders" : null,
+    ctx.autoVisitsEnabled ? "auto visit generation" : null,
+    ctx.roverAiEnabled ? "Rover AI" : null,
+  ].filter(Boolean).join(", ") || "none"}
 
 ${KNOWLEDGE_BASE}
 
 GUIDELINES:
 - Be concise and helpful. Keep answers focused and actionable.
 - When explaining features, tell the user WHERE to find them in the app.
+- Tailor your advice to the user's role. Technicians have limited access (only their assigned routes). Owners and admins have full access.
 - If the user describes a bug or problem, empathize and offer to help them submit a trouble ticket.
 - If the user asks about something outside ScooPilot's scope, politely redirect.
 - Use a warm, professional tone. No emojis.
 - When you detect the user is reporting a bug or requesting a feature, end your response with exactly one of these markers on its own line:
   [SUGGEST_TICKET] — if it sounds like a bug report or issue
   [SUGGEST_FEATURE] — if it sounds like a feature request
+  Additionally, after the marker, include a suggested subject and description for the ticket on the next two lines:
+  SUBJECT: <brief summary>
+  DESCRIPTION: <detailed description based on the conversation>
 - You can query live business data using your available tools. Use them when the user asks about their specific metrics.
 - Format numbers nicely (e.g., "$1,234.56" for currency).
 - For lists, use bullet points. Keep responses under 200 words unless the topic requires more detail.`;
@@ -267,13 +331,14 @@ async function getRecentActivity(companyId: string): Promise<string> {
 export async function streamRoverChat(
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   companyId: string,
-  companyName: string,
+  userId: string,
   onChunk: (text: string) => void,
   onDone: (fullText: string) => void,
   onError: (error: string) => void,
   signal?: { aborted: boolean }
 ): Promise<void> {
-  const systemPrompt = buildSystemPrompt(companyName);
+  const userCtx = await buildUserContext(companyId, userId);
+  const systemPrompt = buildSystemPrompt(userCtx);
 
   const fullMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
