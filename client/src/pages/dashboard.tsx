@@ -818,15 +818,15 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
 
 function BusinessPerformance({ data }: { data: PipelineData }) {
   return (
-    <div className="space-y-4" data-testid="section-business-performance">
+    <div className="space-y-3" data-testid="section-business-performance">
       <Card data-testid="card-receivables">
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-1">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <DollarSign className="h-4 w-4" />
             Receivables
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-2">
           <div>
             <div className="text-2xl font-bold" data-testid="text-total-receivables">
               ${data.receivables.total.toFixed(2)}
@@ -857,7 +857,7 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
       </Card>
 
       <Card data-testid="card-month-revenue">
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-1">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <TrendingUp className="h-4 w-4" />
             Revenue This Month
@@ -871,7 +871,7 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
       </Card>
 
       <Card data-testid="card-upcoming-week">
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-1">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <CalendarCheck className="h-4 w-4" />
             Upcoming This Week
@@ -2057,7 +2057,7 @@ export default function Dashboard() {
   }, [currentLayout]);
 
   return (
-    <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
+    <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-welcome">
@@ -2098,16 +2098,16 @@ export default function Dashboard() {
 
       <ClientRequestsCard />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2">
           {pipeline && (
             <TodaysAppointments visits={pipeline.todaysVisits} />
           )}
         </div>
 
-        <div className="space-y-4">
+        <div>
           {pipelineLoading ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <Skeleton className="h-40" />
               <Skeleton className="h-24" />
               <Skeleton className="h-24" />
