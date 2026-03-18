@@ -1581,7 +1581,8 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
 
   const [createSelectedAddOns, setCreateSelectedAddOns] = useState<string[]>([]);
   const [editSelectedAddOns, setEditSelectedAddOns] = useState<string[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [createTemplateId, setCreateTemplateId] = useState<string>("");
+  const [editTemplateId, setEditTemplateId] = useState<string>("");
 
   const basePricingForFreq = useCallback((freq: string) => {
     if (!pricingItems) return [];
@@ -1795,7 +1796,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     calcResult?: PriceCalcResult | null,
     calcLoading?: boolean,
     selectedAddOns?: string[],
-    setSelectedAddOns?: (ids: string[]) => void
+    setSelectedAddOns?: (ids: string[]) => void,
+    selectedTemplateId?: string,
+    setSelectedTemplateId?: (id: string) => void
   ) => {
     const freq = form.watch("frequency");
     const basePrice = form.watch("pricePerVisit");
@@ -1821,7 +1824,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                 onClick={() => {
                   form.setValue("jobType", "one_off");
                   form.setValue("frequency", "onetime");
-                  setSelectedTemplateId("");
+                  setSelectedTemplateId?.("");
                 }}
                 data-testid="button-plan-job-type-one-off"
               >
@@ -1834,7 +1837,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                 onClick={() => {
                   form.setValue("jobType", "recurring");
                   form.setValue("frequency", "weekly");
-                  setSelectedTemplateId("");
+                  setSelectedTemplateId?.("");
                 }}
                 data-testid="button-plan-job-type-recurring"
               >
@@ -1866,7 +1869,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
           <FormField control={form.control} name="frequency" render={({ field }) => (
             <FormItem>
               <FormLabel>Frequency</FormLabel>
-              <Select onValueChange={(v) => { field.onChange(v); setSelectedTemplateId(""); }} value={field.value}>
+              <Select onValueChange={(v) => { field.onChange(v); setSelectedTemplateId?.(""); }} value={field.value}>
                 <FormControl><SelectTrigger data-testid="select-plan-frequency"><SelectValue /></SelectTrigger></FormControl>
                 <SelectContent>
                   <SelectItem value="weekly">Weekly</SelectItem>
@@ -1898,7 +1901,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               <Select
                 value={selectedTemplateId}
                 onValueChange={(v) => {
-                  setSelectedTemplateId(v);
+                  setSelectedTemplateId?.(v);
                   handlePricingSelect(v, form);
                 }}
               >
@@ -2144,7 +2147,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
             <DialogHeader>
               <DialogTitle>Add Job</DialogTitle>
             </DialogHeader>
-            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Job", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns)}
+            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Job", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns, createTemplateId, setCreateTemplateId)}
           </DialogContent>
         </Dialog>
       </CardHeader>
@@ -2231,7 +2234,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               editCalcResult,
               editCalcLoading,
               editSelectedAddOns,
-              setEditSelectedAddOns
+              setEditSelectedAddOns,
+              editTemplateId,
+              setEditTemplateId
             )}
           </DialogContent>
         </Dialog>

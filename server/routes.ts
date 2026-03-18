@@ -3277,7 +3277,7 @@ export async function registerRoutes(
           stopOrder: plan?.stopOrder ?? 999,
           routeName: route?.name ?? null,
           routeColor: route?.color ?? null,
-          servicePlanName: plan?.frequency ? `${plan.frequency} service` : null,
+          servicePlanName: plan?.serviceName || (plan?.frequency ? `${plan.frequency} service` : null),
           addOns: addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })),
           property: prop ? {
             streetAddress: prop.streetAddress,
