@@ -111,10 +111,11 @@ function LegSeparator({ distance, duration }: { distance: number; duration: numb
   );
 }
 
-function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, onStopClick }: {
+function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, updatingVisitStatus, onStopClick }: {
   stop: ServicePlan; contacts: Contact[]; properties: Property[];
   visit?: Visit | null; onVisitStatusChange?: (visitId: string, status: string) => void;
   updatingVisitId?: string | null;
+  updatingVisitStatus?: string | null;
   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
 }) {
   const contact = contacts.find(c => c.id === stop.contactId);
@@ -180,35 +181,35 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
                   data-testid={`button-complete-${stop.id}`}
                   title="Mark Completed"
                 >
-                  {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                  {updatingVisitId === visit.id && updatingVisitStatus === "completed" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
                 </Button>
               )}
               {visit && onVisitStatusChange && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-5 w-5" disabled={updatingVisitId === visit?.id} data-testid={`button-visit-menu-${stop.id}`}>
-                      <MoreVertical className="h-3 w-3" />
+                      {updatingVisitId === visit?.id && updatingVisitStatus !== "completed" ? <Loader2 className="h-3 w-3 animate-spin" /> : <MoreVertical className="h-3 w-3" />}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {visit.status !== "completed" && (
                       <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "completed")} disabled={updatingVisitId === visit.id} data-testid={`menu-complete-${stop.id}`}>
-                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5 mr-2 text-green-600" />} Mark Completed
+                        {updatingVisitId === visit.id && updatingVisitStatus === "completed" ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5 mr-2 text-green-600" />} Mark Completed
                       </DropdownMenuItem>
                     )}
                     {visit.status !== "skipped" && (
                       <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "skipped")} disabled={updatingVisitId === visit.id} data-testid={`menu-skip-${stop.id}`}>
-                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <SkipForward className="h-3.5 w-3.5 mr-2 text-orange-600" />} Mark Skipped
+                        {updatingVisitId === visit.id && updatingVisitStatus === "skipped" ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <SkipForward className="h-3.5 w-3.5 mr-2 text-orange-600" />} Mark Skipped
                       </DropdownMenuItem>
                     )}
                     {visit.status !== "cancelled" && (
                       <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "cancelled")} disabled={updatingVisitId === visit.id} data-testid={`menu-cancel-${stop.id}`}>
-                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <XCircle className="h-3.5 w-3.5 mr-2 text-red-600" />} Mark Cancelled
+                        {updatingVisitId === visit.id && updatingVisitStatus === "cancelled" ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <XCircle className="h-3.5 w-3.5 mr-2 text-red-600" />} Mark Cancelled
                       </DropdownMenuItem>
                     )}
                     {visit.status !== "scheduled" && (
                       <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "scheduled")} disabled={updatingVisitId === visit.id} data-testid={`menu-revert-${stop.id}`}>
-                        {updatingVisitId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Clock className="h-3.5 w-3.5 mr-2 text-blue-600" />} Revert to Scheduled
+                        {updatingVisitId === visit.id && updatingVisitStatus === "scheduled" ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Clock className="h-3.5 w-3.5 mr-2 text-blue-600" />} Revert to Scheduled
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
@@ -273,7 +274,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
   onEdit, onDelete, onOptimize, onDispatch, onUnassignAll, isOptimizing, isDispatching, isUnassigning,
-  visitsByPlan, onVisitStatusChange, updatingVisitId, metrics, metricsLoading, onStopClick }: {
+  visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
@@ -284,6 +285,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   visitsByPlan?: Record<string, Visit>;
   onVisitStatusChange?: (visitId: string, status: string) => void;
   updatingVisitId?: string | null;
+  updatingVisitStatus?: string | null;
   metrics?: RouteMetrics | null;
   metricsLoading?: boolean;
   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
@@ -414,6 +416,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
                     visit={visitsByPlan?.[stop.id] || null}
                     onVisitStatusChange={onVisitStatusChange}
                     updatingVisitId={updatingVisitId}
+                    updatingVisitStatus={updatingVisitStatus}
                     onStopClick={onStopClick}
                   />
                 </div>
@@ -899,6 +902,7 @@ export default function RoutesPage() {
   }, [dayVisits]);
 
   const [updatingVisitId, setUpdatingVisitId] = useState<string | null>(null);
+  const [updatingVisitStatus, setUpdatingVisitStatus] = useState<string | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
   const [detailVisit, setDetailVisit] = useState<Visit | null>(null);
   const [detailPlan, setDetailPlan] = useState<ServicePlan | null>(null);
@@ -911,6 +915,7 @@ export default function RoutesPage() {
   const visitStatusMutation = useMutation({
     mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
       setUpdatingVisitId(visitId);
+      setUpdatingVisitStatus(status);
       const body: { status: string; completedAt?: string | null; startedAt?: string | null } = { status };
       if (status === "in_progress") {
         body.startedAt = new Date().toISOString();
@@ -925,6 +930,7 @@ export default function RoutesPage() {
     },
     onSuccess: () => {
       setUpdatingVisitId(null);
+      setUpdatingVisitStatus(null);
       queryClient.invalidateQueries({ queryKey: ["/api/visits/range", selectedDayDate] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
@@ -933,6 +939,7 @@ export default function RoutesPage() {
     },
     onError: (err: Error) => {
       setUpdatingVisitId(null);
+      setUpdatingVisitStatus(null);
       toast({ title: "Error updating visit", description: err.message, variant: "destructive" });
     },
   });
@@ -1335,6 +1342,7 @@ export default function RoutesPage() {
                         visitsByPlan={visitsByPlan}
                         onVisitStatusChange={handleVisitStatusChange}
                         updatingVisitId={updatingVisitId}
+                        updatingVisitStatus={updatingVisitStatus}
                         metrics={routeMetrics[route.id] || null}
                         metricsLoading={metricsLoadingRoutes.has(route.id)}
                         isUnassigning={unassigningRouteId === route.id}
