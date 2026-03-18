@@ -109,6 +109,10 @@ function AuthenticatedLayout() {
   );
   const { activeTour, isRunning, startTour, handleCallback, hasCompletedWelcome, getUnseenTours, isTourStatusLoaded } = useFeatureTour();
   const [autoTourChecked, setAutoTourChecked] = useState(false);
+  const { data: onboardingStatus } = useQuery<{ isComplete: boolean }>({
+    queryKey: ["/api/onboarding/status"],
+    enabled: setupState === "ready",
+  });
 
   const setupMutation = useMutation({
     mutationFn: async () => {
@@ -131,6 +135,7 @@ function AuthenticatedLayout() {
 
   useEffect(() => {
     if (setupState !== "ready" || autoTourChecked || isRunning || !isTourStatusLoaded) return;
+    if (!onboardingStatus || !onboardingStatus.isComplete) return;
     setAutoTourChecked(true);
     const timer = setTimeout(() => {
       const unseen = getUnseenTours();
@@ -145,7 +150,7 @@ function AuthenticatedLayout() {
       }
     }, 1500);
     return () => clearTimeout(timer);
-  }, [setupState, autoTourChecked, isRunning, isTourStatusLoaded, getUnseenTours, startTour]);
+  }, [setupState, autoTourChecked, isRunning, isTourStatusLoaded, onboardingStatus, getUnseenTours, startTour]);
 
   if (setupState === "loading") {
     return (

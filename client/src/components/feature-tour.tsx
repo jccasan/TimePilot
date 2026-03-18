@@ -45,6 +45,13 @@ const WELCOME_TOUR: TourDefinition = {
       disableBeacon: true,
     },
     {
+      target: '[data-testid="link-scheduling"]',
+      title: "Scheduling",
+      content: "View and manage your service calendar. See upcoming visits, plan your week, and keep your team on schedule.",
+      placement: "right",
+      disableBeacon: true,
+    },
+    {
       target: '[data-testid="link-routes"]',
       title: "Routes",
       content: "Build efficient routes with drag-and-drop. See driving distances, assign techs, and optimize your daily schedule.",
