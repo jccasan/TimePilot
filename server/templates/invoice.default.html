@@ -284,6 +284,28 @@
       font-style: italic;
     }
 
+    /* ---- Pay Now CTA ---- */
+    .pay-now-section {
+      text-align: center;
+      padding: 24px 0 8px;
+    }
+    .pay-now-btn {
+      display: inline-block;
+      background-color: {{theme.primaryColor}};
+      color: #ffffff;
+      text-decoration: none;
+      padding: 14px 48px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .pay-now-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: {{theme.mutedColor}};
+    }
+
     /* ---- Print ---- */
     @media print {
       body { background: #fff; }
@@ -448,6 +470,14 @@
         </table>
       </div>
     </div>
+
+    <!-- PAY NOW -->
+    {{#paymentUrl}}
+    <div class="card pay-now-section">
+      <a href="{{paymentUrl}}" class="pay-now-btn">Pay Now — {{totals.total}}</a>
+      <p class="pay-now-hint">Pay securely with credit card, Venmo, or other methods</p>
+    </div>
+    {{/paymentUrl}}
 
     <!-- VISITS -->
     {{#visits}}

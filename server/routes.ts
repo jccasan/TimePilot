@@ -12,7 +12,7 @@ import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
-import { sendEmail, generateInvoiceEmailHtml } from "./services/email";
+import { sendEmail } from "./services/email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
 import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
 import {
@@ -5560,20 +5560,83 @@ export async function registerRoutes(
         }
       }
 
-      const emailContent = generateInvoiceEmailHtml({
-        companyName: company?.name || "ScooPilot",
-        contactName: `${contact.firstName} ${contact.lastName}`.trim(),
-        invoiceNumber: invoice.invoiceNumber,
-        dueDate: invoice.dueDate,
-        total: invoice.total,
-        lineItems: lineItems.map(li => ({
+      const properties = await storage.getProperties(companyId, contact.id);
+      const serviceAddr = properties.length > 0 ? properties[0] : null;
+      const taxRateNum = parseFloat(invoice.taxRate || "0") / 100;
+      const discountNum = parseFloat(invoice.discountAmount || "0");
+      const paidNum = invoice.paidAt ? parseFloat(invoice.total) : 0;
+      const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : "";
+
+      const invoiceData: any = {
+        business: {
+          name: company?.name || "",
+          address: company?.address || "",
+          phone: company?.phone || "",
+          email: company?.email || "",
+          website: "",
+          logo: logoUrl,
+        },
+        invoice: {
+          number: invoice.invoiceNumber,
+          status: invoice.status || "pending",
+          issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
+          due_date: invoice.dueDate,
+          terms: "Net 30",
+          service_period: "",
+        },
+        customer: {
+          name: `${contact.firstName} ${contact.lastName || ""}`.trim(),
+          email: contact.email || "",
+          phone: contact.phone || "",
+        },
+        billing_address: contact.streetAddress ? {
+          line1: contact.streetAddress,
+          line2: contact.address2 || "",
+          city: contact.city || "",
+          state: contact.state || "",
+          zip: contact.zipCode || "",
+        } : null,
+        service_address: serviceAddr ? {
+          line1: (serviceAddr as any).streetAddress || (serviceAddr as any).street || "",
+          line2: "",
+          city: (serviceAddr as any).city || "",
+          state: (serviceAddr as any).state || "",
+          zip: (serviceAddr as any).zipCode || (serviceAddr as any).zip || "",
+        } : null,
+        line_items: lineItems.map((li: any) => ({
           description: li.description,
-          quantity: li.quantity,
-          unitPrice: li.unitPrice,
-          total: li.total,
+          details: "",
+          qty: li.quantity,
+          unit_price: parseFloat(li.unitPrice),
+          line_total: parseFloat(li.total),
         })),
-        paymentUrl,
-      });
+        totals: {
+          subtotal: parseFloat(invoice.subtotal),
+          discount: discountNum,
+          tax_rate: taxRateNum,
+          paid: paidNum,
+        },
+        visits: [],
+        notes: "",
+        payment_instructions: "",
+        thank_you: "Thank you for your business!",
+        paymentUrl: paymentUrl || "",
+      };
+
+      const computed = computeInvoice(invoiceData);
+      const tpl = loadTemplate(getDefaultTemplatePath());
+      const defaultTheme = loadTheme(getDefaultThemePath());
+      let theme = defaultTheme;
+      if (company?.invoiceTheme) {
+        try {
+          const custom = JSON.parse(company.invoiceTheme);
+          theme = { ...defaultTheme, ...custom };
+        } catch {}
+      }
+      const renderedHtml = renderInvoice(tpl, theme, computed);
+
+      const subject = `Invoice ${invoice.invoiceNumber} from ${company?.name || "ScooPilot"}`;
+      const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}\n\nThank you for your business!`;
 
       const fromAddress = company?.email || "jeremy@scoopilot.com";
 
@@ -5585,9 +5648,9 @@ export async function registerRoutes(
         status: "queued",
         fromAddress,
         toAddress: contact.email,
-        subject: emailContent.subject,
-        body: emailContent.text,
-        htmlBody: emailContent.html,
+        subject,
+        body: textBody,
+        htmlBody: renderedHtml,
         sentBy: userId,
         metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
       });
@@ -5596,9 +5659,9 @@ export async function registerRoutes(
       const result = await sendEmail({
         to: contact.email,
         from: fromAddress,
-        subject: emailContent.subject,
-        text: emailContent.text,
-        html: emailContent.html,
+        subject,
+        text: textBody,
+        html: renderedHtml,
       });
 
       if (result.success) {
