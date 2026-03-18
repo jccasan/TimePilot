@@ -35,7 +35,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Client Portal**: Self-service portal with 4-tab layout (Overview, Services, Billing, Account). Clients can edit their contact info (name, email, phone), update property addresses/gate codes/instructions, manage pet count, view service history, approve estimates, manage payments, set notification preferences, request service changes (frequency, day, same-day service, pause, cancel), and use a referral program. Changes sync back to the CRM via `PATCH /api/portal/profile`.
 - **Admin Dashboard**: Platform-level administration for tenant management and analytics.
 - **Notifications System**: In-app notifications for business events.
-- **Rover Chatbot**: In-app AI assistant.
+- **Rover Chatbot**: AI-powered in-app assistant using OpenAI (via Replit AI Integrations, gpt-5-mini model). Features: SSE streaming responses, function calling for live business data queries (stats, overdue invoices, upcoming visits, recent activity), conversation history (last 20 messages), intelligent ticket/feature request detection with `[SUGGEST_TICKET]`/`[SUGGEST_FEATURE]` markers, rate limiting (20 req/min per user), automatic fallback to keyword-based matching when AI disabled or unavailable. Toggle: `companies.roverAiEnabled` (default true), configurable in Settings. Backend: `server/services/rover-ai.ts` (system prompt, tools, streaming), `POST /api/rover/chat` (SSE endpoint). Original keyword endpoint `POST /api/rover/ask` preserved as fallback. Frontend: `client/src/components/rover-chatbot.tsx` with streaming text display, typing indicator, clear chat, ticket form pre-fill.
 - **Dark Mode**: Full dark mode support.
 
 ### Key Features
@@ -63,5 +63,5 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on principles of 
 - **Stripe**: Payment gateway with Stripe Connect (Express accounts) for multi-tenant payment routing. Each tenant can connect their own Stripe account via Settings. Platform fee: 2.9% (`PLATFORM_FEE_PERCENT` in `server/services/stripe.ts`). Payment functions (`createPaymentIntent`, `chargeInvoiceAutomatically`, `createCheckoutSession`) accept optional `stripeConnectAccountId` for routing. Connect endpoints: `/api/stripe-connect/onboard`, `/status`, `/dashboard-link`, `/disconnect`. Webhook handles `account.updated` for auto-syncing onboarding status.
 - **Mapbox**: Directions API, Geocoding API, and GL JS for mapping and routing.
 - **Google Maps**: Street View Static API and Static Maps API for property images.
-- **OpenAI**: Used for AI-assisted import wizard.
+- **OpenAI**: Used for AI-assisted import wizard and Rover AI chatbot (via Replit AI Integrations — no API key required, billed to Replit credits).
 - **Retell AI**: Voice agent integration with 4 API endpoints (`/api/retell/tenant-profile`, `/create-lead`, `/lookup-customer`, `/log-call`). All protected by `RETELL_API_KEY` header/query param. Companies have voice agent profile fields: `voiceAgentServiceArea`, `voiceAgentPricingSummary`, `voiceAgentPolicies`, `voiceAgentSpecialLines`, `voiceAgentGreeting`.

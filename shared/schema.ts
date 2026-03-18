@@ -135,6 +135,7 @@ export const companies = pgTable("companies", {
   dashboardLayout: jsonb("dashboard_layout").$type<any>(),
   dashboardNotes: text("dashboard_notes"),
   aiImportMappingEnabled: boolean("ai_import_mapping_enabled").notNull().default(true),
+  roverAiEnabled: boolean("rover_ai_enabled").notNull().default(true),
   pricingConfig: jsonb("pricing_config").$type<PricingConfig>(),
   voiceAgentServiceArea: text("voice_agent_service_area"),
   voiceAgentPricingSummary: text("voice_agent_pricing_summary"),

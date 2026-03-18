@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, X, Send, Bug, Lightbulb, ArrowLeft } from "lucide-react";
+import { MessageCircle, X, Send, Bug, Lightbulb, ArrowLeft, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,6 +16,7 @@ type ChatMessage = {
   text: string;
   timestamp: Date;
   actions?: ("ticket" | "feature")[];
+  streaming?: boolean;
 };
 
 type View = "chat" | "ticket-form";
@@ -32,7 +33,7 @@ export default function RoverChatbot() {
     {
       id: "welcome",
       role: "rover",
-      text: "Hey there! I'm Rover, your ScooPilot assistant. Ask me anything about how the app works, or I can help you submit a trouble ticket or feature request.",
+      text: "Hey there! I'm Rover, your ScooPilot assistant. I can answer questions about the app, look up your business data, or help you submit a trouble ticket or feature request.",
       timestamp: new Date(),
     },
   ]);
@@ -44,6 +45,7 @@ export default function RoverChatbot() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -77,26 +79,201 @@ export default function RoverChatbot() {
     setOpen(true);
   };
 
-  const addMessage = (role: "user" | "rover", text: string, actions?: ("ticket" | "feature")[]) => {
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const clearChat = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setSending(false);
+    setMessages([
+      {
+        id: "welcome",
+        role: "rover",
+        text: "Hey there! I'm Rover, your ScooPilot assistant. I can answer questions about the app, look up your business data, or help you submit a trouble ticket or feature request.",
+        timestamp: new Date(),
+      },
+    ]);
+  };
+
+  const getConversationHistory = () => {
+    return messages
+      .filter((m) => m.id !== "welcome")
+      .map((m) => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.text,
+      }));
+  };
+
+  const parseActions = (text: string): { cleanText: string; actions: ("ticket" | "feature")[] } => {
+    const actions: ("ticket" | "feature")[] = [];
+    let cleanText = text;
+
+    if (text.includes("[SUGGEST_TICKET]")) {
+      actions.push("ticket");
+      cleanText = cleanText.replace(/\[SUGGEST_TICKET\]/g, "").trim();
+    }
+    if (text.includes("[SUGGEST_FEATURE]")) {
+      actions.push("feature");
+      cleanText = cleanText.replace(/\[SUGGEST_FEATURE\]/g, "").trim();
+    }
+
+    return { cleanText, actions };
+  };
+
+  const handleStreamingChat = async (question: string) => {
+    const history = getConversationHistory();
+    history.push({ role: "user", content: question });
+
+    const streamingMsgId = Date.now().toString() + "-stream";
     setMessages((prev) => [
       ...prev,
-      { id: Date.now().toString(), role, text, timestamp: new Date(), actions },
+      {
+        id: streamingMsgId,
+        role: "rover",
+        text: "",
+        timestamp: new Date(),
+        streaming: true,
+      },
     ]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const response = await fetch("/api/rover/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history }),
+        credentials: "include",
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (errorData.fallback) {
+          throw new Error("FALLBACK");
+        }
+        throw new Error(errorData.error || "Chat request failed");
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fullText = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "chunk") {
+              fullText += event.content;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamingMsgId ? { ...m, text: fullText } : m
+                )
+              );
+            } else if (event.type === "done") {
+              const { cleanText, actions } = parseActions(fullText);
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamingMsgId
+                    ? { ...m, text: cleanText, streaming: false, actions: actions.length > 0 ? actions : undefined }
+                    : m
+                )
+              );
+            } else if (event.type === "error") {
+              throw new Error(event.content);
+            }
+          } catch (e) {
+            if (e instanceof SyntaxError) continue;
+            throw e;
+          }
+        }
+      }
+
+      if (fullText) {
+        const { cleanText, actions } = parseActions(fullText);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === streamingMsgId
+              ? { ...m, text: cleanText, streaming: false, actions: actions.length > 0 ? actions : undefined }
+              : m
+          )
+        );
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") return;
+
+      if (err.message === "FALLBACK") {
+        await handleKeywordFallback(question, streamingMsgId);
+        return;
+      }
+
+      await handleKeywordFallback(question, streamingMsgId);
+    } finally {
+      abortRef.current = null;
+    }
+  };
+
+  const handleKeywordFallback = async (question: string, replaceId?: string) => {
+    try {
+      const res = await apiRequest("POST", "/api/rover/ask", { question });
+      const data = await res.json();
+      const fallbackMsg: ChatMessage = {
+        id: replaceId || Date.now().toString(),
+        role: "rover",
+        text: data.answer,
+        timestamp: new Date(),
+        actions: data.matched ? undefined : ["ticket", "feature"],
+      };
+
+      if (replaceId) {
+        setMessages((prev) => prev.map((m) => (m.id === replaceId ? fallbackMsg : m)));
+      } else {
+        setMessages((prev) => [...prev, fallbackMsg]);
+      }
+    } catch {
+      const errorMsg: ChatMessage = {
+        id: replaceId || Date.now().toString(),
+        role: "rover",
+        text: "Sorry, something went wrong. Please try again.",
+        timestamp: new Date(),
+      };
+      if (replaceId) {
+        setMessages((prev) => prev.map((m) => (m.id === replaceId ? errorMsg : m)));
+      } else {
+        setMessages((prev) => [...prev, errorMsg]);
+      }
+    }
   };
 
   const handleSend = async () => {
     const q = input.trim();
     if (!q || sending) return;
     setInput("");
-    addMessage("user", q);
-    setSending(true);
 
+    setMessages((prev) => [
+      ...prev,
+      { id: Date.now().toString(), role: "user", text: q, timestamp: new Date() },
+    ]);
+
+    setSending(true);
     try {
-      const res = await apiRequest("POST", "/api/rover/ask", { question: q });
-      const data = await res.json();
-      addMessage("rover", data.answer, data.matched ? undefined : ["ticket", "feature"]);
-    } catch {
-      addMessage("rover", "Sorry, something went wrong. Please try again.");
+      await handleStreamingChat(q);
     } finally {
       setSending(false);
     }
@@ -128,7 +305,15 @@ export default function RoverChatbot() {
       const label = ticketType === "bug" ? "Trouble ticket" : ticketType === "feature_request" ? "Feature request" : "Question";
       toast({ title: `${label} submitted`, description: "We'll review it soon." });
       setView("chat");
-      addMessage("rover", `Your ${label.toLowerCase()} "${ticketSubject.trim()}" has been submitted. We'll review it and follow up.`);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: "rover",
+          text: `Your ${label.toLowerCase()} "${ticketSubject.trim()}" has been submitted. We'll review it and follow up.`,
+          timestamp: new Date(),
+        },
+      ]);
     } catch {
       toast({ title: "Failed to submit", description: "Please try again.", variant: "destructive" });
     } finally {
@@ -155,7 +340,7 @@ export default function RoverChatbot() {
             </div>
             <div className="p-5 space-y-3">
               <p className="text-sm text-foreground leading-relaxed">
-                Rover is your built-in ScooPilot assistant. Need help navigating the app, understanding a feature, or running into an issue? Rover is here for you.
+                Rover is your built-in ScooPilot assistant, now powered by AI. Ask questions about the app, look up your business data, or get help with any issue.
               </p>
               <ul className="text-sm text-muted-foreground space-y-1.5">
                 <li className="flex items-start gap-2">
@@ -209,11 +394,18 @@ export default function RoverChatbot() {
               )}
               <img src={roverImage} alt="Rover" className="w-6 h-6 rounded-full object-cover" />
               <span className="font-semibold text-sm">Rover</span>
-              <span className="text-xs opacity-80">ScooPilot Assistant</span>
+              <span className="text-xs opacity-80">AI Assistant</span>
             </div>
-            <button onClick={() => setOpen(false)} className="hover:opacity-80" data-testid="button-rover-close">
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              {view === "chat" && messages.length > 1 && (
+                <button onClick={clearChat} className="hover:opacity-80 p-1" data-testid="button-rover-clear" title="Clear conversation">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <button onClick={() => setOpen(false)} className="hover:opacity-80 p-1" data-testid="button-rover-close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {view === "chat" && (
@@ -223,7 +415,10 @@ export default function RoverChatbot() {
                   <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                       <p className="whitespace-pre-wrap">{msg.text}</p>
-                      {msg.actions && (
+                      {msg.streaming && (
+                        <span className="inline-block w-1.5 h-4 bg-current opacity-60 animate-pulse ml-0.5 align-text-bottom" />
+                      )}
+                      {msg.actions && !msg.streaming && (
                         <div className="flex gap-2 mt-2">
                           {msg.actions.includes("ticket") && (
                             <button
@@ -248,9 +443,14 @@ export default function RoverChatbot() {
                     </div>
                   </div>
                 ))}
-                {sending && (
+                {sending && !messages.some((m) => m.streaming) && (
                   <div className="flex justify-start">
-                    <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground">
+                    <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-1.5">
+                      <span className="flex gap-1">
+                        <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:0ms]" />
+                        <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:150ms]" />
+                        <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:300ms]" />
+                      </span>
                       Thinking...
                     </div>
                   </div>
@@ -273,7 +473,7 @@ export default function RoverChatbot() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask about any feature..."
+                    placeholder="Ask Rover anything..."
                     className="text-sm"
                     disabled={sending}
                     data-testid="input-rover-question"

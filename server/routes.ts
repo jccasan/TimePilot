@@ -923,7 +923,7 @@ export async function registerRoutes(
       const validTimezones = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
       const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
         "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "dashboardNotes", "timezone",
-        "reminderSettings", "invoiceReminderSettings"];
+        "reminderSettings", "invoiceReminderSettings", "roverAiEnabled"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -8895,6 +8895,90 @@ export async function registerRoutes(
   });
 
   // ================ Rover Chatbot Routes ================
+  const roverRateLimiter = (await import("express-rate-limit")).default({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false, default: true },
+    keyGenerator: (req: Request) => {
+      const apiKeyAuth = (req as any)._apiKeyAuth as { userId: string } | undefined;
+      if (apiKeyAuth?.userId) return `api:${apiKeyAuth.userId}`;
+      const sessionUserId = (req.session as any)?.userId;
+      if (sessionUserId) return `session:${sessionUserId}`;
+      return "unauthenticated";
+    },
+    message: { error: "Too many requests. Please wait a moment before trying again." },
+  });
+
+  app.post("/api/rover/chat", isAuthenticated, roverRateLimiter as any, async (req: Request, res: Response) => {
+    try {
+      const { userId, companyId } = await getCompanyContext(req);
+      const { messages: chatMessages } = req.body;
+
+      if (!Array.isArray(chatMessages) || chatMessages.length === 0) {
+        return res.status(400).json({ error: "Messages array is required" });
+      }
+
+      const lastMsg = chatMessages[chatMessages.length - 1];
+      if (!lastMsg || lastMsg.role !== "user" || typeof lastMsg.content !== "string" || lastMsg.content.trim().length < 1) {
+        return res.status(400).json({ error: "Last message must be a non-empty user message" });
+      }
+
+      const [company] = await db.select({ name: companies.name, roverAiEnabled: companies.roverAiEnabled }).from(companies).where(eq(companies.id, companyId));
+      const companyName = company?.name || "your company";
+
+      if (!company?.roverAiEnabled) {
+        return res.status(400).json({ error: "AI chat is disabled", fallback: true });
+      }
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      const sanitizedMessages = chatMessages.slice(-20).map((m: any) => ({
+        role: m.role === "user" ? "user" as const : "assistant" as const,
+        content: String(m.content).slice(0, 2000),
+      }));
+
+      const { streamRoverChat } = await import("./services/rover-ai");
+
+      const abortSignal = { aborted: false };
+      req.on("close", () => { abortSignal.aborted = true; });
+
+      await streamRoverChat(
+        sanitizedMessages,
+        companyId,
+        companyName,
+        (text: string) => {
+          if (!abortSignal.aborted) {
+            res.write(`data: ${JSON.stringify({ type: "chunk", content: text })}\n\n`);
+          }
+        },
+        (fullText: string) => {
+          if (!abortSignal.aborted) {
+            res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
+            res.end();
+          }
+        },
+        (error: string) => {
+          if (!abortSignal.aborted) {
+            res.write(`data: ${JSON.stringify({ type: "error", content: error })}\n\n`);
+            res.end();
+          }
+        },
+        abortSignal
+      );
+    } catch (err) {
+      if (!res.headersSent) {
+        handleError(res, err);
+      } else {
+        res.write(`data: ${JSON.stringify({ type: "error", content: "An error occurred" })}\n\n`);
+        res.end();
+      }
+    }
+  });
+
   const ROVER_KNOWLEDGE_BASE: { keywords: string[]; answer: string }[] = [
     { keywords: ["dashboard", "overview", "home", "main"], answer: "The Dashboard is your home screen showing key metrics like active clients, scheduled visits, revenue, and recent activity. It gives you a quick snapshot of your business operations." },
     { keywords: ["contact", "client", "crm", "lead", "customer"], answer: "The Contacts section is your CRM hub. You can add and manage clients, track their status (lead, estimate, active, paused, cancelled), assign properties, add tags, and manage their scheduled services. Use the search bar to find contacts quickly." },

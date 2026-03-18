@@ -58,6 +58,7 @@ type Company = {
   subscriptionStatus: string;
   autoVisitsEnabled: boolean;
   remindersEnabled: boolean;
+  roverAiEnabled: boolean;
   timezone: string;
 };
 
@@ -711,6 +712,34 @@ function ReminderSettingsSection({ company, toast }: { company: Company | null; 
                     });
                 }}
                 data-testid="switch-reminders-enabled"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2 border-t pt-3">
+              <div>
+                <p className="text-sm font-medium">Rover AI Assistant</p>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, Rover uses AI to answer questions and query your business data
+                </p>
+              </div>
+              <Switch
+                checked={company?.roverAiEnabled ?? true}
+                onCheckedChange={(checked) => {
+                  apiRequest("PATCH", "/api/company", { roverAiEnabled: checked })
+                    .then(() => {
+                      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+                      toast({
+                        title: checked ? "Rover AI enabled" : "Rover AI disabled",
+                        description: checked
+                          ? "Rover will use AI to answer your questions."
+                          : "Rover will use basic keyword matching.",
+                      });
+                    })
+                    .catch(() => {
+                      toast({ title: "Error", description: "Failed to update Rover AI settings.", variant: "destructive" });
+                    });
+                }}
+                data-testid="switch-rover-ai-enabled"
               />
             </div>
 
