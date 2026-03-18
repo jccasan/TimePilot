@@ -17,6 +17,8 @@ const DEFAULT_REMINDER_RULES: ReminderRule[] = [
   },
 ];
 
+const DEFAULT_TEMPLATE = "Hi {firstName}, your service with {companyName} is scheduled for tomorrow at {propertyAddress}. Thank you!";
+
 const DEFAULT_INVOICE_SETTINGS: InvoiceReminderSettings = {
   preDueDays: [7, 2, 1, 0],
   overdueIntervalDays: 2,
@@ -103,9 +105,26 @@ export async function runReminders() {
       const tz = company.timezone || "America/New_York";
       const rules: ReminderRule[] = company.reminderSettings || DEFAULT_REMINDER_RULES;
       const activeRules = rules.filter(r => r.isActive);
+      const coveredTimings = new Set(activeRules.map(r => r.timing));
 
       for (const rule of activeRules) {
-        const count = await sendServiceRemindersForRule(company.id, company.name, tz, rule);
+        const count = await sendServiceRemindersForRule(company.id, company.name, tz, rule, false);
+        totalServiceReminders += count;
+      }
+
+      const contactTimingOverrides = await getContactTimingOverrides(company.id, coveredTimings);
+      for (const timing of contactTimingOverrides) {
+        const fallbackRule: ReminderRule = {
+          id: `contact_override_${timing}`,
+          timing: timing as ReminderRule["timing"],
+          channel: activeRules[0]?.channel || "email",
+          template: activeRules[0]?.template || DEFAULT_TEMPLATE,
+          isActive: true,
+        };
+        if (timing === "custom") {
+          fallbackRule.customHours = 4;
+        }
+        const count = await sendServiceRemindersForRule(company.id, company.name, tz, fallbackRule, true);
         totalServiceReminders += count;
       }
 
@@ -190,11 +209,26 @@ async function getVisitTechInfo(
   }
 }
 
+async function getContactTimingOverrides(companyId: string, coveredTimings: Set<string>): Promise<string[]> {
+  const companyContacts = await db.select({ reminderPreferences: contacts.reminderPreferences })
+    .from(contacts).where(eq(contacts.companyId, companyId));
+  const timings = new Set<string>();
+  for (const c of companyContacts) {
+    const prefs = c.reminderPreferences as Record<string, unknown> | null;
+    const pt = prefs?.preferredTiming as string | undefined;
+    if (pt && !coveredTimings.has(pt)) {
+      timings.add(pt);
+    }
+  }
+  return Array.from(timings);
+}
+
 async function sendServiceRemindersForRule(
   companyId: string,
   companyName: string,
   timezone: string,
-  rule: ReminderRule
+  rule: ReminderRule,
+  contactOverrideOnly: boolean = false
 ): Promise<number> {
   const isMorningOf = rule.timing === "morning_of";
   const todayStr = getCompanyToday(timezone);
@@ -271,7 +305,11 @@ async function sendServiceRemindersForRule(
 
     if (prefs.reminderOptOut) continue;
     if (prefs.serviceReminder === false) continue;
-    if (prefs.preferredTiming && prefs.preferredTiming !== rule.timing) continue;
+    if (contactOverrideOnly) {
+      if (prefs.preferredTiming !== rule.timing) continue;
+    } else {
+      if (prefs.preferredTiming && prefs.preferredTiming !== rule.timing) continue;
+    }
 
     const contactChannel = prefs.preferredChannel || null;
     const effectiveChannel = contactChannel || rule.channel;
@@ -293,13 +331,24 @@ async function sendServiceRemindersForRule(
       const addresses = [cv.address];
       const techInfo = await getVisitTechInfo(cv, isMorningOf, companyId);
 
+      const scheduledServiceTime = cv.plan.startTime || "";
+      let serviceTimeDisplay = "during the day";
+      if (isMorningOf && techInfo.arrivalWindow) {
+        serviceTimeDisplay = techInfo.arrivalWindow;
+      } else if (scheduledServiceTime) {
+        const [h, m] = scheduledServiceTime.split(":").map(Number);
+        const ampm = h >= 12 ? "PM" : "AM";
+        const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+        serviceTimeDisplay = `${h12}:${(m || 0).toString().padStart(2, "0")} ${ampm}`;
+      }
+
       const templateFields: Record<string, string> = {
         firstName: contact.firstName,
         lastName: contact.lastName || "",
         companyName: companyName,
         propertyAddress: addresses.join("; "),
         serviceDate: cv.visit.scheduledDate,
-        serviceTime: techInfo.arrivalWindow || "during the day",
+        serviceTime: serviceTimeDisplay,
         technicianName: techInfo.techName || "your technician",
         arrivalWindow: techInfo.arrivalWindow || "TBD",
       };

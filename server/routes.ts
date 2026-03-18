@@ -931,6 +931,34 @@ export async function registerRoutes(
       if (updates.timezone && !validTimezones.includes(updates.timezone)) {
         return res.status(400).json({ error: "Invalid timezone" });
       }
+      if (updates.reminderSettings) {
+        const validTimings = ["24h_before", "2h_before", "morning_of", "custom"];
+        const validChannels = ["email", "sms", "both"];
+        if (!Array.isArray(updates.reminderSettings)) {
+          return res.status(400).json({ error: "reminderSettings must be an array" });
+        }
+        for (const rule of updates.reminderSettings) {
+          if (!rule.id || typeof rule.id !== "string") return res.status(400).json({ error: "Each rule must have a string id" });
+          if (!validTimings.includes(rule.timing)) return res.status(400).json({ error: `Invalid timing: ${rule.timing}` });
+          if (!validChannels.includes(rule.channel)) return res.status(400).json({ error: `Invalid channel: ${rule.channel}` });
+          if (!rule.template || typeof rule.template !== "string") return res.status(400).json({ error: "Each rule must have a template string" });
+          if (rule.timing === "custom" && (typeof rule.customHours !== "number" || rule.customHours < 0.5 || rule.customHours > 72)) {
+            return res.status(400).json({ error: "Custom timing requires customHours between 0.5 and 72" });
+          }
+        }
+      }
+      if (updates.invoiceReminderSettings) {
+        const s = updates.invoiceReminderSettings;
+        if (!Array.isArray(s.preDueDays) || s.preDueDays.some((d: unknown) => typeof d !== "number" || d < 0)) {
+          return res.status(400).json({ error: "preDueDays must be an array of non-negative numbers" });
+        }
+        if (typeof s.overdueIntervalDays !== "number" || s.overdueIntervalDays < 1) {
+          return res.status(400).json({ error: "overdueIntervalDays must be at least 1" });
+        }
+        if (typeof s.maxReminders !== "number" || s.maxReminders < 1 || s.maxReminders > 100) {
+          return res.status(400).json({ error: "maxReminders must be between 1 and 100" });
+        }
+      }
       const company = await storage.updateCompany(companyId, updates);
       auditLog(companyId, userId, "company", companyId, "update", { old: existing, new: company }, req.ip);
       res.json(company);
