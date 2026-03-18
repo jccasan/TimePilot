@@ -468,7 +468,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { setDismissed(true); localStorage.setItem("scoopilot_setup_dismissed", "true"); }}
+            onClick={() => { setDismissed(true); localStorage.setItem("scoopilot_setup_dismissed", "true"); window.dispatchEvent(new CustomEvent("scoopilot:setup-dismissed")); }}
             className="text-muted-foreground"
             data-testid="button-skip-setup"
           >

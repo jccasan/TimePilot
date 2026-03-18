@@ -113,7 +113,13 @@ function AuthenticatedLayout() {
     queryKey: ["/api/onboarding/status"],
     enabled: setupState === "ready",
   });
-  const isSetupDoneOrDismissed = onboardingStatus?.isComplete || localStorage.getItem("scoopilot_setup_dismissed") === "true";
+  const [setupDismissed, setSetupDismissed] = useState(() => localStorage.getItem("scoopilot_setup_dismissed") === "true");
+  useEffect(() => {
+    const handler = () => setSetupDismissed(true);
+    window.addEventListener("scoopilot:setup-dismissed", handler);
+    return () => window.removeEventListener("scoopilot:setup-dismissed", handler);
+  }, []);
+  const isSetupDoneOrDismissed = onboardingStatus?.isComplete || setupDismissed;
 
   const setupMutation = useMutation({
     mutationFn: async () => {
@@ -135,8 +141,9 @@ function AuthenticatedLayout() {
   }, []);
 
   useEffect(() => {
-    if (setupState !== "ready" || autoTourChecked || isRunning || !isTourStatusLoaded) return;
+    if (setupState !== "ready" || isRunning || !isTourStatusLoaded) return;
     if (!isSetupDoneOrDismissed) return;
+    if (autoTourChecked) return;
     setAutoTourChecked(true);
     const timer = setTimeout(() => {
       const unseen = getUnseenTours();
