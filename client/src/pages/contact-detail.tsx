@@ -2547,7 +2547,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
   const totalOutstanding = useMemo(() => {
     if (!invoicesData) return 0;
     return invoicesData
-      .filter(inv => ["pending", "sent", "failed"].includes(inv.status))
+      .filter(inv => ["pending", "sent"].includes(inv.status))
       .reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0);
   }, [invoicesData]);
 

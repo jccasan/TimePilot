@@ -1379,11 +1379,11 @@ export async function registerRoutes(
       ).length;
 
       const allInvoices = await storage.getInvoices(companyId);
-      const awaitingPayment = allInvoices.filter(i => ["pending", "sent", "failed"].includes(i.status));
+      const awaitingPayment = allInvoices.filter(i => ["pending", "sent"].includes(i.status));
       const awaitingPaymentTotal = awaitingPayment.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
 
       const overdueInvoices = allInvoices.filter(i =>
-        ["pending", "sent", "failed"].includes(i.status) && i.dueDate < today
+        ["pending", "sent"].includes(i.status) && i.dueDate < today
       );
       const overdueTotal = overdueInvoices.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
 
