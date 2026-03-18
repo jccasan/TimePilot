@@ -222,20 +222,15 @@ export function useFeatureTour() {
   const handleCallback = useCallback((data: CallBackProps) => {
     const { status, action, type } = data;
     if (type === EVENTS.TARGET_NOT_FOUND) {
-      const sidebarTrigger = document.querySelector('[data-testid="button-sidebar-toggle"]') as HTMLElement;
-      if (sidebarTrigger) {
-        sidebarTrigger.click();
+      const sidebar = document.querySelector('[data-sidebar="sidebar"]');
+      const isCollapsed = sidebar?.getAttribute("data-state") === "collapsed";
+      if (isCollapsed) {
+        const sidebarTrigger = document.querySelector('[data-testid="button-sidebar-toggle"]') as HTMLElement;
+        if (sidebarTrigger) sidebarTrigger.click();
       }
     }
-    if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
-      setIsRunning(false);
-      if (activeTourId) {
-        const tour = ALL_TOURS.find(t => t.id === activeTourId);
-        completeMutation.mutate({ tourId: activeTourId, version: tour?.version || "1.0" });
-      }
-      setActiveTourId(null);
-    }
-    if (action === ACTIONS.CLOSE) {
+    const isFinished = status === STATUS.FINISHED || status === STATUS.SKIPPED || action === ACTIONS.CLOSE;
+    if (isFinished) {
       setIsRunning(false);
       if (activeTourId) {
         const tour = ALL_TOURS.find(t => t.id === activeTourId);
