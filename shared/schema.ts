@@ -129,6 +129,8 @@ export const companies = pgTable("companies", {
   mrrCents: integer("mrr_cents").notNull().default(0),
   routeCredits: integer("route_credits").notNull().default(10),
   remindersEnabled: boolean("reminders_enabled").notNull().default(false),
+  reminderSettings: jsonb("reminder_settings").$type<ReminderRule[]>(),
+  invoiceReminderSettings: jsonb("invoice_reminder_settings").$type<InvoiceReminderSettings>(),
   autoVisitsEnabled: boolean("auto_visits_enabled").notNull().default(false),
   dashboardLayout: jsonb("dashboard_layout").$type<any>(),
   dashboardNotes: text("dashboard_notes"),
@@ -198,6 +200,9 @@ export const contacts = pgTable("contacts", {
     invoiceReady?: boolean;
     invoiceDueReminder?: boolean;
     paymentConfirmation?: boolean;
+    reminderOptOut?: boolean;
+    preferredChannel?: "sms" | "email" | "both";
+    preferredTiming?: "24h_before" | "2h_before" | "morning_of";
   }>().default({ email: true, sms: false }),
   pendingEmail: varchar("pending_email", { length: 255 }),
   emailVerificationToken: varchar("email_verification_token", { length: 255 }),
@@ -462,6 +467,40 @@ export const webhooks = pgTable("webhooks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export type ReminderRule = {
+  id: string;
+  timing: "24h_before" | "2h_before" | "morning_of" | "custom";
+  customHours?: number;
+  channel: "sms" | "email" | "both";
+  template: string;
+  isActive: boolean;
+};
+
+export type InvoiceReminderSettings = {
+  preDueDays: number[];
+  overdueIntervalDays: number;
+  maxReminders: number;
+};
+
+export const reminderLogs = pgTable("reminder_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  visitId: varchar("visit_id").references(() => visits.id, { onDelete: "set null" }),
+  invoiceId: varchar("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+  ruleId: varchar("rule_id", { length: 100 }),
+  reminderType: varchar("reminder_type", { length: 50 }).notNull(),
+  channel: varchar("channel", { length: 10 }).notNull(),
+  messagePreview: text("message_preview"),
+  deliveryStatus: varchar("delivery_status", { length: 20 }).notNull().default("sent"),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_rl_company").on(table.companyId),
+  index("idx_rl_visit").on(table.visitId),
+  index("idx_rl_invoice").on(table.invoiceId),
+  index("idx_rl_sent").on(table.sentAt),
+]);
 
 export const attachments = pgTable("attachments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

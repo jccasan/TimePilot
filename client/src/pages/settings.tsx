@@ -508,6 +508,507 @@ function AuditLogSection() {
   );
 }
 
+type ReminderRule = {
+  id: string;
+  timing: "24h_before" | "2h_before" | "morning_of" | "custom";
+  customHours?: number;
+  channel: "sms" | "email" | "both";
+  template: string;
+  isActive: boolean;
+};
+
+type InvoiceReminderSettings = {
+  preDueDays: number[];
+  overdueIntervalDays: number;
+  maxReminders: number;
+};
+
+type ReminderLog = {
+  id: string;
+  contactId: string;
+  contactName: string;
+  visitId: string | null;
+  invoiceId: string | null;
+  ruleId: string | null;
+  reminderType: string;
+  channel: string;
+  messagePreview: string | null;
+  deliveryStatus: string;
+  sentAt: string;
+};
+
+const TIMING_OPTIONS = [
+  { value: "24h_before", label: "24 hours before" },
+  { value: "2h_before", label: "2 hours before" },
+  { value: "morning_of", label: "Morning of service" },
+  { value: "custom", label: "Custom hours" },
+];
+
+const CHANNEL_OPTIONS = [
+  { value: "sms", label: "SMS" },
+  { value: "email", label: "Email" },
+  { value: "both", label: "Both" },
+];
+
+const DEFAULT_TEMPLATE = "Hi {firstName}, your service with {companyName} is scheduled for tomorrow at {propertyAddress}. Thank you!";
+
+function ReminderSettingsSection({ company, toast }: { company: Company | null; toast: any }) {
+  const [rules, setRules] = useState<ReminderRule[]>([]);
+  const [invoiceSettings, setInvoiceSettings] = useState<InvoiceReminderSettings>({
+    preDueDays: [7, 2, 1, 0], overdueIntervalDays: 2, maxReminders: 10
+  });
+  const [saving, setSaving] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [logs, setLogs] = useState<ReminderLog[]>([]);
+  const [logPage, setLogPage] = useState(1);
+  const [logTotal, setLogTotal] = useState(0);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [editingRule, setEditingRule] = useState<ReminderRule | null>(null);
+  const [showRuleDialog, setShowRuleDialog] = useState(false);
+  const [preDueDaysInput, setPreDueDaysInput] = useState("");
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["/api/company/reminder-settings"],
+  });
+
+  useEffect(() => {
+    if (settingsData) {
+      setRules((settingsData as any).reminderSettings || []);
+      const invSettings = (settingsData as any).invoiceReminderSettings;
+      if (invSettings) {
+        setInvoiceSettings(invSettings);
+        setPreDueDaysInput((invSettings.preDueDays || []).join(", "));
+      }
+    }
+  }, [settingsData]);
+
+  const saveSettings = async () => {
+    setSaving(true);
+    try {
+      const parsedDays = preDueDaysInput.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 0);
+      const updatedInvoiceSettings = { ...invoiceSettings, preDueDays: parsedDays };
+      await apiRequest("PATCH", "/api/company", {
+        reminderSettings: rules,
+        invoiceReminderSettings: updatedInvoiceSettings,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/reminder-settings"] });
+      toast({ title: "Reminder settings saved" });
+    } catch {
+      toast({ title: "Error", description: "Failed to save reminder settings.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadLogs = async (page = 1) => {
+    setLoadingLogs(true);
+    try {
+      const res = await fetch(`/api/company/reminder-logs?page=${page}&limit=20`, { credentials: "include" });
+      const data = await res.json();
+      setLogs(data.logs || []);
+      setLogTotal(data.total || 0);
+      setLogPage(page);
+    } catch {
+      toast({ title: "Error", description: "Failed to load reminder logs.", variant: "destructive" });
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const handleAddRule = () => {
+    setEditingRule({
+      id: `rule_${Date.now()}`,
+      timing: "24h_before",
+      channel: "sms",
+      template: DEFAULT_TEMPLATE,
+      isActive: true,
+    });
+    setShowRuleDialog(true);
+  };
+
+  const handleEditRule = (rule: ReminderRule) => {
+    setEditingRule({ ...rule });
+    setShowRuleDialog(true);
+  };
+
+  const handleSaveRule = () => {
+    if (!editingRule) return;
+    setRules(prev => {
+      const idx = prev.findIndex(r => r.id === editingRule.id);
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = editingRule;
+        return updated;
+      }
+      return [...prev, editingRule];
+    });
+    setShowRuleDialog(false);
+    setEditingRule(null);
+  };
+
+  const handleDeleteRule = (ruleId: string) => {
+    setRules(prev => prev.filter(r => r.id !== ruleId));
+  };
+
+  const toggleRuleActive = (ruleId: string) => {
+    setRules(prev => prev.map(r => r.id === ruleId ? { ...r, isActive: !r.isActive } : r));
+  };
+
+  const timingLabel = (timing: string) => TIMING_OPTIONS.find(t => t.value === timing)?.label || timing;
+  const channelLabel = (channel: string) => CHANNEL_OPTIONS.find(c => c.value === channel)?.label || channel;
+
+  const reminderTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      service_24h_before: "Service (24h)",
+      service_2h_before: "Service (2h)",
+      service_morning_of: "Service (Morning)",
+      service_custom: "Service (Custom)",
+      invoice_upcoming: "Invoice Due",
+      invoice_overdue: "Invoice Overdue",
+    };
+    return labels[type] || type;
+  };
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            Automated Reminders
+          </CardTitle>
+          <CardDescription>Configure when and how clients receive service and invoice reminders</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-5">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium">Enable Automated Reminders</p>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, clients receive reminders based on the rules below
+                </p>
+              </div>
+              <Switch
+                checked={company?.remindersEnabled ?? false}
+                onCheckedChange={(checked) => {
+                  apiRequest("PATCH", "/api/company", { remindersEnabled: checked })
+                    .then(() => {
+                      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+                      toast({
+                        title: checked ? "Reminders enabled" : "Reminders disabled",
+                        description: checked
+                          ? "Your clients will receive automated reminders."
+                          : "Automated reminders have been turned off.",
+                      });
+                    })
+                    .catch(() => {
+                      toast({ title: "Error", description: "Failed to update reminder settings.", variant: "destructive" });
+                    });
+                }}
+                data-testid="switch-reminders-enabled"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2 border-t pt-3">
+              <div>
+                <p className="text-sm font-medium">Company Timezone</p>
+                <p className="text-xs text-muted-foreground">
+                  Controls when reminders are sent and quiet hours enforcement
+                </p>
+              </div>
+              <select
+                className="border rounded px-2 py-1 text-sm bg-background"
+                value={company?.timezone ?? "America/New_York"}
+                onChange={(e) => {
+                  apiRequest("PATCH", "/api/company", { timezone: e.target.value })
+                    .then(() => {
+                      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+                      toast({ title: "Timezone updated" });
+                    })
+                    .catch(() => {
+                      toast({ title: "Error", description: "Failed to update timezone.", variant: "destructive" });
+                    });
+                }}
+                data-testid="select-timezone"
+              >
+                <option value="America/New_York">Eastern (ET)</option>
+                <option value="America/Chicago">Central (CT)</option>
+                <option value="America/Denver">Mountain (MT)</option>
+                <option value="America/Los_Angeles">Pacific (PT)</option>
+                <option value="America/Anchorage">Alaska (AKT)</option>
+                <option value="Pacific/Honolulu">Hawaii (HT)</option>
+              </select>
+            </div>
+
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm font-medium">Service Reminder Rules</p>
+                  <p className="text-xs text-muted-foreground">Add multiple rules with different timing and channels</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleAddRule} data-testid="button-add-reminder-rule">
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Add Rule
+                </Button>
+              </div>
+
+              {rules.length === 0 ? (
+                <div className="text-center py-6 border rounded-lg bg-muted/30">
+                  <Bell className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">No reminder rules configured</p>
+                  <p className="text-xs text-muted-foreground mt-1">Add a rule to start sending service reminders</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {rules.map((rule) => (
+                    <div key={rule.id} className={`flex items-center justify-between p-3 border rounded-lg ${rule.isActive ? "" : "opacity-50"}`} data-testid={`reminder-rule-${rule.id}`}>
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Switch
+                          checked={rule.isActive}
+                          onCheckedChange={() => toggleRuleActive(rule.id)}
+                          data-testid={`switch-rule-active-${rule.id}`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="secondary" className="text-xs">{timingLabel(rule.timing)}</Badge>
+                            {rule.timing === "custom" && rule.customHours && (
+                              <Badge variant="outline" className="text-xs">{rule.customHours}h</Badge>
+                            )}
+                            <Badge variant="outline" className="text-xs">{channelLabel(rule.channel)}</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1 truncate">{rule.template}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 ml-2 shrink-0">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditRule(rule)} data-testid={`button-edit-rule-${rule.id}`}>
+                          <Wrench className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteRule(rule.id)} data-testid={`button-delete-rule-${rule.id}`}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <Collapsible>
+              <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium border-t pt-4 w-full">
+                <ChevronDown className="h-4 w-4" />
+                Invoice Reminder Settings
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-3 space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Days before due to remind</label>
+                  <Input
+                    value={preDueDaysInput}
+                    onChange={(e) => setPreDueDaysInput(e.target.value)}
+                    placeholder="7, 2, 1, 0"
+                    className="mt-1"
+                    data-testid="input-pre-due-days"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Comma-separated days (e.g., 7, 2, 1, 0 means reminders 7 days, 2 days, 1 day, and day of due date)</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Overdue interval (days)</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={invoiceSettings.overdueIntervalDays}
+                      onChange={(e) => setInvoiceSettings(prev => ({ ...prev, overdueIntervalDays: parseInt(e.target.value) || 2 }))}
+                      className="mt-1"
+                      data-testid="input-overdue-interval"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Max reminders per invoice</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={invoiceSettings.maxReminders}
+                      onChange={(e) => setInvoiceSettings(prev => ({ ...prev, maxReminders: parseInt(e.target.value) || 10 }))}
+                      className="mt-1"
+                      data-testid="input-max-reminders"
+                    />
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            <div className="flex items-center justify-between border-t pt-4">
+              <Button variant="outline" size="sm" onClick={() => { setShowLogs(true); loadLogs(1); }} data-testid="button-view-reminder-logs">
+                <CalendarClock className="h-3.5 w-3.5 mr-1.5" /> View Reminder Log
+              </Button>
+              <Button onClick={saveSettings} disabled={saving} data-testid="button-save-reminder-settings">
+                <Save className="h-3.5 w-3.5 mr-1.5" />
+                {saving ? "Saving..." : "Save Settings"}
+              </Button>
+            </div>
+
+            <div className="text-xs text-muted-foreground space-y-1 border-t pt-3">
+              <p className="flex items-center gap-1"><Info className="h-3 w-3" /> Quiet hours: SMS is not sent before 8 AM or after 8 PM in your timezone.</p>
+              <p className="flex items-center gap-1"><Info className="h-3 w-3" /> Morning-of reminders include technician name and arrival window when a route is assigned.</p>
+              <p className="flex items-center gap-1"><Info className="h-3 w-3" /> Clients can override their preferred channel and opt out from their portal.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={showRuleDialog} onOpenChange={setShowRuleDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingRule && rules.some(r => r.id === editingRule.id) ? "Edit" : "Add"} Reminder Rule</DialogTitle>
+          </DialogHeader>
+          {editingRule && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Timing</label>
+                <Select value={editingRule.timing} onValueChange={(v) => setEditingRule({ ...editingRule, timing: v as ReminderRule["timing"] })}>
+                  <SelectTrigger className="mt-1" data-testid="select-rule-timing">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIMING_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {editingRule.timing === "custom" && (
+                <div>
+                  <label className="text-sm font-medium">Hours before service</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={168}
+                    value={editingRule.customHours || 24}
+                    onChange={(e) => setEditingRule({ ...editingRule, customHours: parseInt(e.target.value) || 24 })}
+                    className="mt-1"
+                    data-testid="input-rule-custom-hours"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-medium">Channel</label>
+                <Select value={editingRule.channel} onValueChange={(v) => setEditingRule({ ...editingRule, channel: v as ReminderRule["channel"] })}>
+                  <SelectTrigger className="mt-1" data-testid="select-rule-channel">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CHANNEL_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Message Template</label>
+                <Textarea
+                  value={editingRule.template}
+                  onChange={(e) => setEditingRule({ ...editingRule, template: e.target.value })}
+                  rows={3}
+                  className="mt-1"
+                  data-testid="textarea-rule-template"
+                />
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {["{firstName}", "{lastName}", "{companyName}", "{propertyAddress}", "{serviceDate}", "{serviceTime}", "{technicianName}", "{arrivalWindow}"].map(tag => (
+                    <Badge key={tag} variant="outline" className="text-xs cursor-pointer hover:bg-primary/10"
+                      onClick={() => setEditingRule({ ...editingRule, template: editingRule.template + " " + tag })}
+                    >{tag}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-xs font-medium text-muted-foreground mb-1">Preview</p>
+                <p className="text-sm">
+                  {editingRule.template
+                    .replace("{firstName}", "John")
+                    .replace("{lastName}", "Smith")
+                    .replace("{companyName}", company?.name || "Your Company")
+                    .replace("{propertyAddress}", "123 Main St")
+                    .replace("{serviceDate}", "2025-03-20")
+                    .replace("{serviceTime}", "9:00 AM - 9:30 AM")
+                    .replace("{technicianName}", "Mike Johnson")
+                    .replace("{arrivalWindow}", "9:00 AM - 9:30 AM")}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRuleDialog(false)} data-testid="button-cancel-rule">Cancel</Button>
+            <Button onClick={handleSaveRule} data-testid="button-save-rule">Save Rule</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showLogs} onOpenChange={setShowLogs}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Reminder Log</DialogTitle>
+          </DialogHeader>
+          {loadingLogs ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="text-center py-8">
+              <Bell className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">No reminders sent yet</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Sent</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Channel</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logs.map(log => (
+                    <TableRow key={log.id} data-testid={`reminder-log-${log.id}`}>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {new Date(log.sentAt).toLocaleDateString()}{" "}
+                        {new Date(log.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </TableCell>
+                      <TableCell className="text-sm">{log.contactName}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-xs">{reminderTypeLabel(log.reminderType)}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs capitalize">{log.channel}</TableCell>
+                      <TableCell>
+                        <Badge variant={log.deliveryStatus === "sent" ? "default" : "destructive"} className="text-xs">
+                          {log.deliveryStatus}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {logTotal > 20 && (
+                <div className="flex items-center justify-between pt-2">
+                  <p className="text-xs text-muted-foreground">{logTotal} total entries</p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" disabled={logPage <= 1} onClick={() => loadLogs(logPage - 1)} data-testid="button-log-prev">Previous</Button>
+                    <Button variant="outline" size="sm" disabled={logPage * 20 >= logTotal} onClick={() => loadLogs(logPage + 1)} data-testid="button-log-next">Next</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export default function Settings() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -891,86 +1392,7 @@ export default function Settings() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5" />
-                Automated Reminders
-              </CardTitle>
-              <CardDescription>Send service and invoice reminders to your clients automatically</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium">Enable Automated Reminders</p>
-                    <p className="text-xs text-muted-foreground">
-                      When enabled, clients receive reminders for upcoming services and due/overdue invoices daily
-                    </p>
-                  </div>
-                  <Switch
-                    checked={company?.remindersEnabled ?? false}
-                    onCheckedChange={(checked) => {
-                      apiRequest("PATCH", "/api/company", { remindersEnabled: checked })
-                        .then(() => {
-                          queryClient.invalidateQueries({ queryKey: ["/api/company"] });
-                          toast({
-                            title: checked ? "Reminders enabled" : "Reminders disabled",
-                            description: checked
-                              ? "Your clients will receive automated reminders."
-                              : "Automated reminders have been turned off.",
-                          });
-                        })
-                        .catch(() => {
-                          toast({ title: "Error", description: "Failed to update reminder settings.", variant: "destructive" });
-                        });
-                    }}
-                    data-testid="switch-reminders-enabled"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2 border-t pt-3">
-                  <div>
-                    <p className="text-sm font-medium">Company Timezone</p>
-                    <p className="text-xs text-muted-foreground">
-                      Controls when reminders, invoices, and visit schedules are calculated
-                    </p>
-                  </div>
-                  <select
-                    className="border rounded px-2 py-1 text-sm bg-background"
-                    value={company?.timezone ?? "America/New_York"}
-                    onChange={(e) => {
-                      apiRequest("PATCH", "/api/company", { timezone: e.target.value })
-                        .then(() => {
-                          queryClient.invalidateQueries({ queryKey: ["/api/company"] });
-                          toast({ title: "Timezone updated" });
-                        })
-                        .catch(() => {
-                          toast({ title: "Error", description: "Failed to update timezone.", variant: "destructive" });
-                        });
-                    }}
-                    data-testid="select-timezone"
-                  >
-                    <option value="America/New_York">Eastern (ET)</option>
-                    <option value="America/Chicago">Central (CT)</option>
-                    <option value="America/Denver">Mountain (MT)</option>
-                    <option value="America/Los_Angeles">Pacific (PT)</option>
-                    <option value="America/Anchorage">Alaska (AKT)</option>
-                    <option value="Pacific/Honolulu">Hawaii (HT)</option>
-                  </select>
-                </div>
-                <div className="text-xs text-muted-foreground space-y-1 border-t pt-3">
-                  <p>Reminder types:</p>
-                  <ul className="list-disc pl-4 space-y-0.5">
-                    <li>Service reminders: Sent the day before scheduled visits</li>
-                    <li>Invoice reminders: Sent for invoices due within 3 days or overdue</li>
-                  </ul>
-                  <p className="mt-2">
-                    Individual clients can set their preferred channel (email, SMS, or both) from their contact profile.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <ReminderSettingsSection company={company} toast={toast} />
 
         </div>
 

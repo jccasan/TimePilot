@@ -5,8 +5,8 @@ import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql, eq, and, lt, isNotNull, like, or } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit } from "@shared/schema";
+import { sql, eq, and, lt, isNotNull, like, or, inArray, desc } from "drizzle-orm";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -922,7 +922,8 @@ export async function registerRoutes(
       const existing = await storage.getCompany(companyId);
       const validTimezones = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
       const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
-        "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "dashboardNotes", "timezone"];
+        "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "dashboardNotes", "timezone",
+        "reminderSettings", "invoiceReminderSettings"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -1099,6 +1100,66 @@ export async function registerRoutes(
         subscriptionTier: tier,
         tierName: tierInfo?.name ?? "Unknown",
       });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/company/reminder-settings", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const reminderSettings = (company as any)?.reminderSettings || [
+        { id: "default_24h", timing: "24h_before", channel: "sms", template: "Hi {firstName}, your service with {companyName} is scheduled for tomorrow at {propertyAddress}. Thank you!", isActive: true }
+      ];
+      const invoiceReminderSettings = (company as any)?.invoiceReminderSettings || {
+        preDueDays: [7, 2, 1, 0], overdueIntervalDays: 2, maxReminders: 10
+      };
+      res.json({ reminderSettings, invoiceReminderSettings, remindersEnabled: company?.remindersEnabled || false });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/company/reminder-logs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      const offset = (page - 1) * limit;
+      const [logs, countResult] = await Promise.all([
+        db.select({
+          id: reminderLogs.id,
+          contactId: reminderLogs.contactId,
+          visitId: reminderLogs.visitId,
+          invoiceId: reminderLogs.invoiceId,
+          ruleId: reminderLogs.ruleId,
+          reminderType: reminderLogs.reminderType,
+          channel: reminderLogs.channel,
+          messagePreview: reminderLogs.messagePreview,
+          deliveryStatus: reminderLogs.deliveryStatus,
+          sentAt: reminderLogs.sentAt,
+        })
+          .from(reminderLogs)
+          .where(eq(reminderLogs.companyId, companyId))
+          .orderBy(desc(reminderLogs.sentAt))
+          .limit(limit)
+          .offset(offset),
+        db.select({ total: sql<number>`count(*)::int` })
+          .from(reminderLogs)
+          .where(eq(reminderLogs.companyId, companyId)),
+      ]);
+
+      const contactIds = [...new Set(logs.map(l => l.contactId))];
+      let contactMap = new Map<string, string>();
+      if (contactIds.length > 0) {
+        const contactRows = await db.select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName })
+          .from(contacts).where(inArray(contacts.id, contactIds));
+        contactMap = new Map(contactRows.map(c => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
+      }
+
+      const enrichedLogs = logs.map(l => ({
+        ...l,
+        contactName: contactMap.get(l.contactId) || "Unknown",
+      }));
+
+      res.json({ logs: enrichedLogs, total: countResult[0]?.total || 0, page, limit });
     } catch (err) { handleError(res, err); }
   });
 

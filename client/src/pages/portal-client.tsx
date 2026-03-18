@@ -363,10 +363,11 @@ export default function PortalClient() {
   const [customTip, setCustomTip] = useState("");
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [estimateNote, setEstimateNote] = useState<Record<string, string>>({});
-  const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, any>>({
     email: true, sms: false,
     serviceReminder: true, serviceCompleted: true,
     invoiceReady: true, invoiceDueReminder: true, paymentConfirmation: true,
+    reminderOptOut: false, preferredChannel: "", preferredTiming: "",
   });
   const [savingNotifs, setSavingNotifs] = useState(false);
   const [changeRequests, setChangeRequests] = useState<ServiceChangeRequest[]>([]);
@@ -2125,6 +2126,53 @@ export default function PortalClient() {
                           <Switch checked={notifPrefs[key] ?? true} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, [key]: v }))} data-testid={`switch-notif-${key}`} />
                         </div>
                       ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 border-t pt-3">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Reminder Preferences</p>
+                    <div className="rounded-lg border divide-y">
+                      <div className="flex items-center justify-between p-3">
+                        <div>
+                          <p className="text-sm font-medium">Opt Out of All Reminders</p>
+                          <p className="text-xs text-muted-foreground">Stop receiving all automated service and invoice reminders</p>
+                        </div>
+                        <Switch checked={notifPrefs.reminderOptOut ?? false} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, reminderOptOut: v }))} data-testid="switch-reminder-opt-out" />
+                      </div>
+                      <div className="flex items-center justify-between p-3">
+                        <div>
+                          <p className="text-sm font-medium">Preferred Reminder Channel</p>
+                          <p className="text-xs text-muted-foreground">Override the default channel for reminders</p>
+                        </div>
+                        <select
+                          className="border rounded px-2 py-1 text-sm bg-background"
+                          value={notifPrefs.preferredChannel || ""}
+                          onChange={(e) => setNotifPrefs((p) => ({ ...p, preferredChannel: e.target.value || undefined }))}
+                          data-testid="select-preferred-channel"
+                        >
+                          <option value="">Use default</option>
+                          <option value="email">Email</option>
+                          <option value="sms">SMS</option>
+                          <option value="both">Both</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center justify-between p-3">
+                        <div>
+                          <p className="text-sm font-medium">Preferred Reminder Timing</p>
+                          <p className="text-xs text-muted-foreground">When you'd like to receive service reminders</p>
+                        </div>
+                        <select
+                          className="border rounded px-2 py-1 text-sm bg-background"
+                          value={notifPrefs.preferredTiming || ""}
+                          onChange={(e) => setNotifPrefs((p) => ({ ...p, preferredTiming: e.target.value || undefined }))}
+                          data-testid="select-preferred-timing"
+                        >
+                          <option value="">Use default</option>
+                          <option value="24h_before">24 hours before</option>
+                          <option value="2h_before">2 hours before</option>
+                          <option value="morning_of">Morning of service</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
