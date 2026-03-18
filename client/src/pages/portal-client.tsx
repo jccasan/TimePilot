@@ -363,7 +363,19 @@ export default function PortalClient() {
   const [customTip, setCustomTip] = useState("");
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [estimateNote, setEstimateNote] = useState<Record<string, string>>({});
-  const [notifPrefs, setNotifPrefs] = useState<Record<string, any>>({
+  const [notifPrefs, setNotifPrefs] = useState<{
+    email: boolean;
+    sms: boolean;
+    serviceReminder: boolean;
+    serviceCompleted: boolean;
+    invoiceReady: boolean;
+    invoiceDueReminder: boolean;
+    paymentConfirmation: boolean;
+    reminderOptOut: boolean;
+    preferredChannel: string;
+    preferredTiming: string;
+    [key: string]: boolean | string;
+  }>({
     email: true, sms: false,
     serviceReminder: true, serviceCompleted: true,
     invoiceReady: true, invoiceDueReminder: true, paymentConfirmation: true,
@@ -467,6 +479,9 @@ export default function PortalClient() {
           invoiceReady: notifsData.invoiceReady ?? true,
           invoiceDueReminder: notifsData.invoiceDueReminder ?? true,
           paymentConfirmation: notifsData.paymentConfirmation ?? true,
+          reminderOptOut: notifsData.reminderOptOut ?? false,
+          preferredChannel: notifsData.preferredChannel ?? "",
+          preferredTiming: notifsData.preferredTiming ?? "",
         });
         setChangeRequests(changesData);
         setGalleryPhotos(photosData);

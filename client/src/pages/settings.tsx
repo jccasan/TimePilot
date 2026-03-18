@@ -552,7 +552,7 @@ const CHANNEL_OPTIONS = [
 
 const DEFAULT_TEMPLATE = "Hi {firstName}, your service with {companyName} is scheduled for tomorrow at {propertyAddress}. Thank you!";
 
-function ReminderSettingsSection({ company, toast }: { company: Company | null; toast: any }) {
+function ReminderSettingsSection({ company, toast }: { company: Company | null; toast: ReturnType<typeof useToast>["toast"] }) {
   const [rules, setRules] = useState<ReminderRule[]>([]);
   const [invoiceSettings, setInvoiceSettings] = useState<InvoiceReminderSettings>({
     preDueDays: [7, 2, 1, 0], overdueIntervalDays: 2, maxReminders: 10

@@ -218,8 +218,7 @@ async function sendServiceRemindersForRule(
     const wantsEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
     const wantsSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && isTwilioConfigured();
 
-    const isTimeSensitive = rule.timing === "2h_before" || rule.timing === "morning_of";
-    const smsDeferredByQuiet = smsQuiet && !isTimeSensitive;
+    const smsDeferredByQuiet = smsQuiet;
 
     if (!wantsEmail && wantsSms && smsDeferredByQuiet) continue;
 
@@ -296,7 +295,14 @@ async function sendServiceRemindersForRule(
       arrivalWindow: arrivalWindow || "TBD",
     };
 
-    const message = applyTemplate(rule.template, templateFields);
+    let messageBody = applyTemplate(rule.template, templateFields);
+    if (isMorningOf && techName && !rule.template.includes("{technicianName}")) {
+      messageBody += ` Your technician today is ${techName}.`;
+    }
+    if (isMorningOf && arrivalWindow && !rule.template.includes("{arrivalWindow}")) {
+      messageBody += ` Estimated arrival: ${arrivalWindow}.`;
+    }
+    const message = messageBody;
     let emailSent = false;
     let smsSent = false;
 
