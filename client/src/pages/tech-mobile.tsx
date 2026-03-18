@@ -24,6 +24,7 @@ type TodayVisit = {
   proofOfServicePhotoBefore: string | null;
   gateClosedPhoto: string | null;
   servicePlanId: string;
+  propertyId: string;
   routeId: string | null;
   stopOrder: number;
   routeName: string | null;
@@ -182,7 +183,7 @@ export default function TechMobile() {
         rg.completedCount++;
       }
 
-      const key = visit.property?.streetAddress || visit.id;
+      const key = visit.propertyId || visit.id;
       let propGroup = rg.groups.find(g => g.propertyKey === key);
       if (!propGroup) {
         propGroup = {
@@ -268,9 +269,9 @@ export default function TechMobile() {
   };
 
   const openCompleteDialog = (visit: TodayVisit) => {
-    const propertyKey = visit.property?.streetAddress || visit.id;
+    const propertyKey = visit.propertyId || visit.id;
     const allGroupVisits = (visits || []).filter(v =>
-      (v.property?.streetAddress || v.id) === propertyKey &&
+      (v.propertyId || v.id) === propertyKey &&
       (v.status === "in_progress" || v.status === "scheduled")
     );
     setCompleteDialogVisit(visit);
@@ -325,6 +326,8 @@ export default function TechMobile() {
         technicianNotes: notes[completeDialogVisit.id] || undefined,
       });
 
+      let completedCount = 1;
+      let failedCount = 0;
       for (const groupVisit of completeDialogGroupVisits) {
         if (groupVisit.id !== completeDialogVisit.id && (groupVisit.status === "in_progress" || groupVisit.status === "scheduled")) {
           try {
@@ -338,7 +341,10 @@ export default function TechMobile() {
               gateClosedPhoto: gateClosedPath,
               technicianNotes: notes[completeDialogVisit.id] || undefined,
             });
-          } catch {
+            completedCount++;
+          } catch (groupErr: any) {
+            failedCount++;
+            console.error(`Failed to complete grouped visit ${groupVisit.id}:`, groupErr);
           }
         }
       }
@@ -350,8 +356,15 @@ export default function TechMobile() {
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
       setCompleteDialogVisit(null);
       setCompleteDialogGroupVisits([]);
-      const count = completeDialogGroupVisits.length > 0 ? completeDialogGroupVisits.length : 1;
-      toast({ title: count > 1 ? `${count} visits completed` : "Visit completed", description: "Customer has been notified." });
+      if (failedCount > 0) {
+        toast({
+          title: `${completedCount} of ${completedCount + failedCount} visits completed`,
+          description: `${failedCount} visit${failedCount !== 1 ? "s" : ""} failed to complete. Check the remaining visits.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: completedCount > 1 ? `${completedCount} visits completed` : "Visit completed", description: "Customer has been notified." });
+      }
     } catch (err: any) {
       toast({ title: "Completion failed", description: err.message, variant: "destructive" });
     } finally {
