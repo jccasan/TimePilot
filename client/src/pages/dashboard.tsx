@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Responsive, WidthProvider } from "react-grid-layout";
+import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import { useAuth } from "@/hooks/use-auth";
@@ -34,7 +34,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import GuidedSetup from "@/components/guided-setup";
 
-const ResponsiveGridLayout = WidthProvider(Responsive);
 
 type OnboardingStatus = {
   isComplete: boolean;
@@ -1359,6 +1358,82 @@ function RouteMapPreviewWidget() {
   );
 }
 
+function GridWidgetsSection({
+  gridLayouts,
+  isMobile,
+  handleLayoutChange,
+  handleDragStart,
+  handleResizeStart,
+  handleRemoveWidget,
+  renderWidget,
+  currentLayout,
+}: {
+  gridLayouts: any;
+  isMobile: boolean;
+  handleLayoutChange: any;
+  handleDragStart: any;
+  handleResizeStart: any;
+  handleRemoveWidget: (id: string) => void;
+  renderWidget: (id: string) => any;
+  currentLayout: any[];
+}) {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const { width } = useContainerWidth(gridRef);
+
+  return (
+    <div data-testid="widgets-grid" ref={gridRef}>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <LayoutGrid className="h-5 w-5" />
+          Dashboard Widgets
+        </h2>
+        <span className="text-xs text-muted-foreground">
+          {isMobile ? "Scroll to view widgets" : "Drag to reorder, resize from corners"}
+        </span>
+      </div>
+      {width > 0 && (
+        <ResponsiveGridLayout
+          className="layout"
+          layouts={gridLayouts}
+          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480 }}
+          cols={{ lg: 12, md: 12, sm: 6, xs: 1 }}
+          rowHeight={60}
+          width={width}
+          isDraggable={!isMobile}
+          isResizable={!isMobile}
+          draggableHandle=".widget-drag-handle"
+          onLayoutChange={handleLayoutChange}
+          onDragStart={handleDragStart}
+          onResizeStart={handleResizeStart}
+          compactType="vertical"
+          margin={[16, 16]}
+        >
+          {currentLayout.map(item => (
+            <div key={item.i} className="relative group" data-testid={`grid-widget-${item.i}`}>
+              {!isMobile && (
+                <div className="widget-drag-handle absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1 rounded bg-background/80 backdrop-blur-sm border shadow-sm">
+                  <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                </div>
+              )}
+              {!isMobile && (
+                <button
+                  className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-destructive/10"
+                  onClick={() => handleRemoveWidget(item.i)}
+                  title="Remove widget"
+                  data-testid={`button-remove-grid-widget-${item.i}`}
+                >
+                  <X className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              )}
+              {renderWidget(item.i)}
+            </div>
+          ))}
+        </ResponsiveGridLayout>
+      )}
+    </div>
+  );
+}
+
 function WidgetLibraryDrawer({
   open,
   onClose,
@@ -2043,53 +2118,16 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div data-testid="widgets-grid">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <LayoutGrid className="h-5 w-5" />
-            Dashboard Widgets
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            {isMobile ? "Scroll to view widgets" : "Drag to reorder, resize from corners"}
-          </span>
-        </div>
-        <ResponsiveGridLayout
-          className="layout"
-          layouts={gridLayouts}
-          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480 }}
-          cols={{ lg: 12, md: 12, sm: 6, xs: 1 }}
-          rowHeight={60}
-          isDraggable={!isMobile}
-          isResizable={!isMobile}
-          draggableHandle=".widget-drag-handle"
-          onLayoutChange={handleLayoutChange}
-          onDragStart={handleDragStart}
-          onResizeStart={handleResizeStart}
-          compactType="vertical"
-          margin={[16, 16]}
-        >
-          {currentLayout.map(item => (
-            <div key={item.i} className="relative group" data-testid={`grid-widget-${item.i}`}>
-              {!isMobile && (
-                <div className="widget-drag-handle absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1 rounded bg-background/80 backdrop-blur-sm border shadow-sm">
-                  <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
-                </div>
-              )}
-              {!isMobile && (
-                <button
-                  className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-destructive/10"
-                  onClick={() => handleRemoveWidget(item.i)}
-                  title="Remove widget"
-                  data-testid={`button-remove-grid-widget-${item.i}`}
-                >
-                  <X className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-              )}
-              {renderWidget(item.i)}
-            </div>
-          ))}
-        </ResponsiveGridLayout>
-      </div>
+      <GridWidgetsSection
+        gridLayouts={gridLayouts}
+        isMobile={isMobile}
+        handleLayoutChange={handleLayoutChange}
+        handleDragStart={handleDragStart}
+        handleResizeStart={handleResizeStart}
+        handleRemoveWidget={handleRemoveWidget}
+        renderWidget={renderWidget}
+        currentLayout={currentLayout}
+      />
 
       <WidgetLibraryDrawer
         open={drawerOpen}
