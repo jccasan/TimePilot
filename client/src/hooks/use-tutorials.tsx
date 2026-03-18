@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { useTutorials, TutorialOverlay } from "@/components/interactive-tutorial";
 
 type TutorialContextType = ReturnType<typeof useTutorials>;
@@ -7,8 +7,16 @@ const TutorialContext = createContext<TutorialContextType | null>(null);
 
 export function TutorialProvider({ children }: { children: ReactNode }) {
   const tutorials = useTutorials();
-  const { activeTutorial, currentStep, setCurrentStep, stopTutorial, completeTutorial } = tutorials;
+  const { activeTutorial, currentStep, setCurrentStep, stopTutorial, completeTutorial, saveProgress } = tutorials;
   const totalSteps = activeTutorial?.steps.length || 0;
+  const prevStepRef = useRef(currentStep);
+
+  useEffect(() => {
+    if (activeTutorial && currentStep !== prevStepRef.current) {
+      prevStepRef.current = currentStep;
+      saveProgress(activeTutorial.id, currentStep, false);
+    }
+  }, [activeTutorial, currentStep, saveProgress]);
 
   return (
     <TutorialContext.Provider value={tutorials}>

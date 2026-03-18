@@ -24,6 +24,13 @@ export type TutorialStep = {
   placement?: "top" | "bottom" | "left" | "right";
   highlightPadding?: number;
   waitForElement?: boolean;
+  validate?: (el: HTMLElement) => boolean;
+};
+
+export type TutorialProgress = {
+  currentStep: number;
+  completed: boolean;
+  version: string;
 };
 
 export type TutorialDefinition = {
@@ -75,9 +82,9 @@ const ROUTE_BUILDER_TUTORIAL: TutorialDefinition = {
     },
     {
       target: '[data-testid="button-toggle-view"]',
-      title: "Map View",
-      content: "Switch to map view to see your stops on a map. This shows driving distances between stops and the overall route shape.",
-      action: "observe",
+      title: "Toggle Map View",
+      content: "Click to switch between list and map view. Map view shows driving distances between stops and the overall route shape.",
+      action: "click",
     },
   ],
 };
@@ -132,41 +139,41 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
 
 const IMPORT_WIZARD_TUTORIAL: TutorialDefinition = {
   id: "tutorial_import_wizard",
-  version: "1.0",
+  version: "1.1",
   title: "Importing Contacts",
   description: "Learn how to bulk-import your customer list from a CSV spreadsheet.",
   requiredPage: "/contacts",
   steps: [
     {
-      target: '[data-testid="button-import-csv"]',
-      title: "Import Your Customer List",
-      content: "Click this button to upload a CSV file. You can export from another CRM, Google Sheets, or Excel. The wizard will guide you through mapping columns.",
-      action: "observe",
-    },
-    {
       target: '[data-testid="button-download-sample-csv"]',
       title: "Download a Template",
-      content: "Not sure how to format your file? Download the import template to see the expected columns. Fill it in with your customer data, then upload it.",
-      action: "observe",
+      content: "Start by downloading the import template. Click here to get a CSV file with the expected columns. Fill it in with your customer data.",
+      action: "click",
+    },
+    {
+      target: '[data-testid="button-import-csv"]',
+      title: "Import Your Customer List",
+      content: "Click here to upload your CSV file. You can export from another CRM, Google Sheets, or Excel. The wizard will guide you through mapping columns.",
+      action: "click",
     },
     {
       target: '[data-testid="button-add-contact"]',
       title: "Or Add One at a Time",
-      content: "If you prefer, you can add contacts individually. Click here to open the form and fill in details like name, address, yard size, and service day.",
-      action: "observe",
+      content: "Prefer to add contacts manually? Click here to open the form and fill in details like name, address, yard size, and service day.",
+      action: "click",
     },
     {
       target: '[data-testid="button-export-csv"]',
       title: "Export Your Data",
-      content: "You can also export your current contact list as a CSV file at any time. Useful for backups or sharing data with your team.",
-      action: "observe",
+      content: "Click here to export your current contact list as a CSV file. Useful for backups or sharing data with your team.",
+      action: "click",
     },
   ],
 };
 
 const STRIPE_CONNECT_TUTORIAL: TutorialDefinition = {
   id: "tutorial_stripe_connect",
-  version: "1.0",
+  version: "1.1",
   title: "Payment Setup",
   description: "Learn how to connect Stripe to accept online payments from your customers.",
   requiredPage: "/settings",
@@ -180,13 +187,14 @@ const STRIPE_CONNECT_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="button-connect-stripe"]',
       title: "Connect Stripe",
-      content: "Click here to start the Stripe onboarding process. You'll be redirected to Stripe to enter your business and banking details.",
-      action: "observe",
+      content: "Click this button to start the Stripe onboarding process. You'll be redirected to Stripe to enter your business and banking details.",
+      action: "click",
+      validate: (el: HTMLElement) => !el.hasAttribute("disabled"),
     },
     {
       target: '[data-testid="badge-stripe-status"]',
-      title: "Connection Status",
-      content: "Once connected, this badge shows your status. When it says 'Connected', your customers can pay invoices online automatically.",
+      title: "Check Connection Status",
+      content: "This badge shows your Stripe connection status. When it says 'Connected', your customers can pay invoices online automatically.",
       action: "observe",
       waitForElement: true,
     },
@@ -195,7 +203,7 @@ const STRIPE_CONNECT_TUTORIAL: TutorialDefinition = {
 
 const PRICING_CALCULATOR_TUTORIAL: TutorialDefinition = {
   id: "tutorial_pricing_calculator",
-  version: "1.0",
+  version: "1.1",
   title: "Pricing Calculator",
   description: "Learn how to use the pricing calculator to set accurate, profitable prices for every job.",
   requiredPage: "/pricing-calculator",
@@ -204,31 +212,39 @@ const PRICING_CALCULATOR_TUTORIAL: TutorialDefinition = {
       target: '[data-testid="input-calc-yard-size"]',
       title: "Enter Yard Size",
       content: "Enter the yard size in acres. A typical small residential yard is about 0.1 acres (4,350 sq ft). This determines how long the job takes.",
-      action: "observe",
+      action: "input",
+      validate: (el: HTMLElement) => {
+        const input = el as HTMLInputElement;
+        return input.value !== "" && parseFloat(input.value) > 0;
+      },
     },
     {
       target: '[data-testid="input-calc-dog-count"]',
       title: "Enter Dog Count",
       content: "Enter how many dogs are at the property. More dogs means more cleanup time, which factors into the recommended price.",
-      action: "observe",
+      action: "input",
+      validate: (el: HTMLElement) => {
+        const input = el as HTMLInputElement;
+        return input.value !== "" && parseInt(input.value) > 0;
+      },
     },
     {
       target: '[data-testid="select-calc-frequency"]',
       title: "Service Frequency",
       content: "Choose how often the service happens. Weekly service costs less per visit than biweekly or monthly because there's less buildup.",
-      action: "observe",
+      action: "select",
     },
     {
       target: '[data-testid="button-calculate"]',
       title: "Calculate the Price",
       content: "Click Calculate to see your price recommendation. The calculator factors in labor, travel, supplies, and overhead to give you three price points.",
-      action: "observe",
+      action: "click",
     },
     {
       target: '[data-testid="tab-settings"]',
       title: "Customize Your Settings",
-      content: "Switch to the Settings tab to adjust your base costs — hourly wage, gas price, overhead, profit margins, and more. These settings affect every calculation.",
-      action: "observe",
+      content: "Click the Settings tab to adjust your base costs — hourly wage, gas price, overhead, profit margins, and more. These settings affect every calculation.",
+      action: "click",
     },
   ],
 };
@@ -252,23 +268,45 @@ export function useTutorials() {
     enabled: !!user,
   });
 
-  const completeMutation = useMutation({
-    mutationFn: async ({ tourId, version }: { tourId: string; version: string }) => {
-      await apiRequest("POST", "/api/tours/complete", { tourId, version });
+  const { data: progressData } = useQuery<{ progress: Record<string, TutorialProgress> }>({
+    queryKey: ["/api/tutorials/progress"],
+    enabled: !!user,
+  });
+
+  const progressMutation = useMutation({
+    mutationFn: async (payload: { tutorialId: string; currentStep: number; completed: boolean; version: string }) => {
+      await apiRequest("POST", "/api/tutorials/progress", payload);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tutorials/progress"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tours/status"] });
     },
   });
 
   const completions = tourStatus?.completions || {};
+  const savedProgress = progressData?.progress || {};
 
   const isTutorialCompleted = useCallback((tutorialId: string) => {
     const tutorial = ALL_TUTORIALS.find(t => t.id === tutorialId);
     if (!tutorial) return false;
     const versionKey = `${tutorialId}_version`;
-    return completions[tutorialId] && completions[versionKey] === tutorial.version;
+    return !!(completions[tutorialId] && completions[versionKey] === tutorial.version);
   }, [completions]);
+
+  const getTutorialProgress = useCallback((tutorialId: string): TutorialProgress | null => {
+    return savedProgress[tutorialId] || null;
+  }, [savedProgress]);
+
+  const saveProgress = useCallback((tutorialId: string, step: number, completed: boolean) => {
+    const tutorial = ALL_TUTORIALS.find(t => t.id === tutorialId);
+    if (!tutorial) return;
+    progressMutation.mutate({
+      tutorialId,
+      currentStep: step,
+      completed,
+      version: tutorial.version,
+    });
+  }, [progressMutation]);
 
   const startTutorial = useCallback((tutorialId: string) => {
     const tutorial = ALL_TUTORIALS.find(t => t.id === tutorialId);
@@ -276,24 +314,29 @@ export function useTutorials() {
     if (tutorial.requiredPage) {
       navigate(tutorial.requiredPage);
     }
+    const existing = savedProgress[tutorialId];
+    const resumeStep = (existing && !existing.completed && existing.version === tutorial.version)
+      ? existing.currentStep
+      : 0;
     setTimeout(() => {
       setActiveTutorialId(tutorialId);
-      setCurrentStep(0);
+      setCurrentStep(resumeStep);
     }, 300);
-  }, [navigate]);
+  }, [navigate, savedProgress]);
 
   const stopTutorial = useCallback(() => {
+    if (activeTutorialId) {
+      saveProgress(activeTutorialId, currentStep, false);
+    }
     setActiveTutorialId(null);
     setCurrentStep(0);
-  }, []);
+  }, [activeTutorialId, currentStep, saveProgress]);
 
   const completeTutorial = useCallback((tutorialId: string) => {
-    const tutorial = ALL_TUTORIALS.find(t => t.id === tutorialId);
-    if (tutorial) {
-      completeMutation.mutate({ tourId: tutorialId, version: tutorial.version });
-    }
-    stopTutorial();
-  }, [completeMutation, stopTutorial]);
+    saveProgress(tutorialId, 0, true);
+    setActiveTutorialId(null);
+    setCurrentStep(0);
+  }, [saveProgress]);
 
   const activeTutorial = activeTutorialId
     ? ALL_TUTORIALS.find(t => t.id === activeTutorialId) || null
@@ -307,6 +350,8 @@ export function useTutorials() {
     stopTutorial,
     completeTutorial,
     isTutorialCompleted,
+    getTutorialProgress,
+    saveProgress,
     allTutorials: ALL_TUTORIALS,
   };
 }
@@ -458,18 +503,27 @@ export function TutorialOverlay({
     const el = document.querySelector(selector) as HTMLElement | null;
     if (!el) return;
 
+    const passesValidation = (targetEl: HTMLElement): boolean => {
+      if (!step.validate) return true;
+      return step.validate(targetEl);
+    };
+
     const handler = (e: Event) => {
+      const targetEl = (e.target as HTMLElement) || el;
       if (step.action === "click") {
-        setActionDetected(true);
-        setTimeout(onNext, 400);
+        if (passesValidation(el)) {
+          setActionDetected(true);
+          setTimeout(onNext, 400);
+        }
       } else if (step.action === "input") {
-        const input = e.target as HTMLInputElement;
-        if (input.value && input.value.length > 0) {
+        if (passesValidation(el)) {
           setActionDetected(true);
         }
       } else if (step.action === "select") {
-        setActionDetected(true);
-        setTimeout(onNext, 400);
+        if (passesValidation(el)) {
+          setActionDetected(true);
+          setTimeout(onNext, 400);
+        }
       }
     };
 
@@ -592,7 +646,15 @@ export function TutorialOverlay({
           </p>
         </div>
 
-        {step.action !== "observe" && !actionDetected && (
+        {step.waitForElement && !targetRect && (
+          <div className="px-4 pb-2">
+            <span className="text-xs text-orange-600 dark:text-orange-400 font-medium animate-pulse">
+              Waiting for element to appear...
+            </span>
+          </div>
+        )}
+
+        {step.action !== "observe" && !actionDetected && targetRect && (
           <div className="px-4 pb-2">
             <span className="text-xs text-primary font-medium">
               {step.action === "click" && "Click the highlighted element to continue"}
@@ -620,6 +682,7 @@ export function TutorialOverlay({
                 size="sm"
                 onClick={isLastStep ? onComplete : onNext}
                 className="text-xs"
+                disabled={step.waitForElement && !targetRect}
                 data-testid="button-tutorial-next"
               >
                 {isLastStep ? "Finish" : "Next"}
@@ -631,6 +694,7 @@ export function TutorialOverlay({
                 size="sm"
                 onClick={isLastStep ? onComplete : onNext}
                 className="text-xs"
+                disabled={step.waitForElement && !targetRect}
                 data-testid="button-tutorial-skip-step"
               >
                 Skip step

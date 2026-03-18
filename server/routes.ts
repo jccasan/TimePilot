@@ -568,6 +568,50 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/tutorials/progress", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId;
+      const user = await getUserById(userId);
+      if (!user) return res.status(401).json({ error: "Not found" });
+      const completions = (user.tourCompletions as Record<string, any>) || {};
+      const progress: Record<string, { currentStep: number; completed: boolean; version: string }> = {};
+      for (const key of Object.keys(completions)) {
+        if (key.endsWith("_progress")) {
+          const tutorialId = key.replace("_progress", "");
+          const stored = completions[key];
+          if (stored && typeof stored === "object") {
+            progress[tutorialId] = stored;
+          }
+        }
+      }
+      return res.json({ progress });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/tutorials/progress", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { tutorialId, currentStep, completed, version } = req.body;
+      if (!tutorialId || typeof tutorialId !== "string") return res.status(400).json({ error: "tutorialId required" });
+      if (typeof currentStep !== "number") return res.status(400).json({ error: "currentStep required" });
+      const user = await getUserById(userId);
+      if (!user) return res.status(401).json({ error: "Not found" });
+      const completions = (user.tourCompletions as Record<string, any>) || {};
+      const progressKey = `${tutorialId}_progress`;
+      completions[progressKey] = {
+        currentStep,
+        completed: !!completed,
+        version: version || "1.0",
+      };
+      if (completed) {
+        completions[tutorialId] = new Date().toISOString();
+        if (version) completions[`${tutorialId}_version`] = version;
+      }
+      await db.update(users).set({ tourCompletions: completions }).where(eq(users.id, userId));
+      return res.json({ ok: true, progress: completions[progressKey] });
+    } catch (err) { handleError(res, err); }
+  });
+
   const resetRateLimits = new Map<string, { count: number; resetAt: number }>();
   function checkResetRateLimit(key: string, maxAttempts: number, windowMs: number): boolean {
     const now = Date.now();
