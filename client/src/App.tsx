@@ -113,6 +113,7 @@ function AuthenticatedLayout() {
     queryKey: ["/api/onboarding/status"],
     enabled: setupState === "ready",
   });
+  const isSetupDoneOrDismissed = onboardingStatus?.isComplete || localStorage.getItem("scoopilot_setup_dismissed") === "true";
 
   const setupMutation = useMutation({
     mutationFn: async () => {
@@ -135,7 +136,7 @@ function AuthenticatedLayout() {
 
   useEffect(() => {
     if (setupState !== "ready" || autoTourChecked || isRunning || !isTourStatusLoaded) return;
-    if (!onboardingStatus || !onboardingStatus.isComplete) return;
+    if (!isSetupDoneOrDismissed) return;
     setAutoTourChecked(true);
     const timer = setTimeout(() => {
       const unseen = getUnseenTours();

@@ -185,8 +185,8 @@ export function useFeatureTour() {
   });
 
   const completeMutation = useMutation({
-    mutationFn: async (tourId: string) => {
-      await apiRequest("POST", "/api/tours/complete", { tourId });
+    mutationFn: async ({ tourId, version }: { tourId: string; version: string }) => {
+      await apiRequest("POST", "/api/tours/complete", { tourId, version });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tours/status"] });
@@ -196,29 +196,50 @@ export function useFeatureTour() {
   const completions = tourStatus?.completions || {};
 
   const startTour = useCallback((tourId: string) => {
+    const sidebar = document.querySelector('[data-sidebar="sidebar"]');
+    if (sidebar) {
+      const isCollapsed = sidebar.getAttribute("data-state") === "collapsed";
+      if (isCollapsed) {
+        const trigger = document.querySelector('[data-testid="button-sidebar-toggle"]') as HTMLElement;
+        if (trigger) trigger.click();
+      }
+    }
     setActiveTourId(tourId);
     setIsRunning(true);
   }, []);
 
   const getUnseenTours = useCallback((): TourDefinition[] => {
-    return ALL_TOURS.filter(t => !completions[t.id]);
+    return ALL_TOURS.filter(t => {
+      const completed = completions[t.id];
+      if (!completed) return true;
+      const completedVersion = completions[`${t.id}_version`];
+      return completedVersion !== t.version;
+    });
   }, [completions]);
 
   const hasCompletedWelcome = !!completions["welcome"];
 
   const handleCallback = useCallback((data: CallBackProps) => {
-    const { status, action } = data;
+    const { status, action, type } = data;
+    if (type === EVENTS.TARGET_NOT_FOUND) {
+      const sidebarTrigger = document.querySelector('[data-testid="button-sidebar-toggle"]') as HTMLElement;
+      if (sidebarTrigger) {
+        sidebarTrigger.click();
+      }
+    }
     if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
       setIsRunning(false);
       if (activeTourId) {
-        completeMutation.mutate(activeTourId);
+        const tour = ALL_TOURS.find(t => t.id === activeTourId);
+        completeMutation.mutate({ tourId: activeTourId, version: tour?.version || "1.0" });
       }
       setActiveTourId(null);
     }
     if (action === ACTIONS.CLOSE) {
       setIsRunning(false);
       if (activeTourId) {
-        completeMutation.mutate(activeTourId);
+        const tour = ALL_TOURS.find(t => t.id === activeTourId);
+        completeMutation.mutate({ tourId: activeTourId, version: tour?.version || "1.0" });
       }
       setActiveTourId(null);
     }

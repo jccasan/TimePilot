@@ -148,7 +148,9 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [activeStep, setActiveStep] = useState(0);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    return localStorage.getItem("scoopilot_setup_dismissed") === "true";
+  });
 
   const [createdContactId, setCreatedContactId] = useState<string | null>(onboarding.firstContact?.id || null);
   const [createdContactName, setCreatedContactName] = useState<string>(
@@ -466,7 +468,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setDismissed(true)}
+            onClick={() => { setDismissed(true); localStorage.setItem("scoopilot_setup_dismissed", "true"); }}
             className="text-muted-foreground"
             data-testid="button-skip-setup"
           >
