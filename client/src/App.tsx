@@ -158,7 +158,7 @@ function AuthenticatedLayout() {
       }
     }, 1500);
     return () => clearTimeout(timer);
-  }, [setupState, autoTourChecked, isRunning, isTourStatusLoaded, onboardingStatus, getUnseenTours, startTour]);
+  }, [setupState, autoTourChecked, isRunning, isTourStatusLoaded, isSetupDoneOrDismissed, getUnseenTours, startTour]);
 
   if (setupState === "loading") {
     return (
