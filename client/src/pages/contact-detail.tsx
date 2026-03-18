@@ -1581,6 +1581,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
 
   const [createSelectedAddOns, setCreateSelectedAddOns] = useState<string[]>([]);
   const [editSelectedAddOns, setEditSelectedAddOns] = useState<string[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
 
   const basePricingForFreq = useCallback((freq: string) => {
     if (!pricingItems) return [];
@@ -1820,6 +1821,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                 onClick={() => {
                   form.setValue("jobType", "one_off");
                   form.setValue("frequency", "onetime");
+                  setSelectedTemplateId("");
                 }}
                 data-testid="button-plan-job-type-one-off"
               >
@@ -1832,6 +1834,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                 onClick={() => {
                   form.setValue("jobType", "recurring");
                   form.setValue("frequency", "weekly");
+                  setSelectedTemplateId("");
                 }}
                 data-testid="button-plan-job-type-recurring"
               >
@@ -1863,7 +1866,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
           <FormField control={form.control} name="frequency" render={({ field }) => (
             <FormItem>
               <FormLabel>Frequency</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
+              <Select onValueChange={(v) => { field.onChange(v); setSelectedTemplateId(""); }} value={field.value}>
                 <FormControl><SelectTrigger data-testid="select-plan-frequency"><SelectValue /></SelectTrigger></FormControl>
                 <SelectContent>
                   <SelectItem value="weekly">Weekly</SelectItem>
@@ -1892,7 +1895,13 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
           {templates.length > 0 && (
             <div>
               <Label className="text-sm">Use Pricing Template</Label>
-              <Select onValueChange={(v) => handlePricingSelect(v, form)}>
+              <Select
+                value={selectedTemplateId}
+                onValueChange={(v) => {
+                  setSelectedTemplateId(v);
+                  handlePricingSelect(v, form);
+                }}
+              >
                 <SelectTrigger data-testid="select-pricing-template">
                   <SelectValue placeholder="Select pricing template" />
                 </SelectTrigger>

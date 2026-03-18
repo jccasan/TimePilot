@@ -147,6 +147,7 @@ export default function TechMobile() {
   const [pendingAdvanceAfter, setPendingAdvanceAfter] = useState<string | null>(null);
 
   const [completeDialogVisit, setCompleteDialogVisit] = useState<TodayVisit | null>(null);
+  const [completeDialogGroupVisits, setCompleteDialogGroupVisits] = useState<TodayVisit[]>([]);
   const [gatePhoto, setGatePhoto] = useState<File | null>(null);
   const [gatePhotoPreview, setGatePhotoPreview] = useState<string | null>(null);
   const [extraFiles, setExtraFiles] = useState<{ file: File; preview: string }[]>([]);
@@ -267,7 +268,13 @@ export default function TechMobile() {
   };
 
   const openCompleteDialog = (visit: TodayVisit) => {
+    const propertyKey = visit.property?.streetAddress || visit.id;
+    const allGroupVisits = (visits || []).filter(v =>
+      (v.property?.streetAddress || v.id) === propertyKey &&
+      (v.status === "in_progress" || v.status === "scheduled")
+    );
     setCompleteDialogVisit(visit);
+    setCompleteDialogGroupVisits(allGroupVisits.length > 1 ? allGroupVisits : []);
     setGatePhoto(null);
     setGatePhotoPreview(null);
     setExtraFiles([]);
@@ -318,13 +325,33 @@ export default function TechMobile() {
         technicianNotes: notes[completeDialogVisit.id] || undefined,
       });
 
+      for (const groupVisit of completeDialogGroupVisits) {
+        if (groupVisit.id !== completeDialogVisit.id && (groupVisit.status === "in_progress" || groupVisit.status === "scheduled")) {
+          try {
+            if (groupVisit.status === "scheduled") {
+              await apiRequest("PATCH", `/api/visits/${groupVisit.id}`, {
+                startedAt: new Date().toISOString(),
+                status: "in_progress",
+              });
+            }
+            await apiRequest("POST", `/api/visits/${groupVisit.id}/complete-notify`, {
+              gateClosedPhoto: gateClosedPath,
+              technicianNotes: notes[completeDialogVisit.id] || undefined,
+            });
+          } catch {
+          }
+        }
+      }
+
       setPendingAdvanceAfter(completeDialogVisit.id);
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
       setCompleteDialogVisit(null);
-      toast({ title: "Visit completed", description: "Customer has been notified." });
+      setCompleteDialogGroupVisits([]);
+      const count = completeDialogGroupVisits.length > 0 ? completeDialogGroupVisits.length : 1;
+      toast({ title: count > 1 ? `${count} visits completed` : "Visit completed", description: "Customer has been notified." });
     } catch (err: any) {
       toast({ title: "Completion failed", description: err.message, variant: "destructive" });
     } finally {
@@ -383,52 +410,56 @@ export default function TechMobile() {
                   {routeGroup.completedCount} of {routeGroup.totalCount} done
                 </span>
               </div>
-          {routeGroup.groups.flatMap((group) => {
+          {routeGroup.groups.map((group) => {
+            const primaryVisit = group.visits[0];
             const isMulti = group.visits.length > 1;
-            return group.visits.map((visit) => {
-            const isExpanded = expandedId === visit.id;
-            const isUploadingBefore = uploadingVisitId === visit.id && uploadingType === "before";
-            const isUploadingAfter = uploadingVisitId === visit.id && uploadingType === "after";
-            const hasBefore = !!visit.proofOfServicePhotoBefore;
-            const hasAfter = !!visit.proofOfServicePhoto;
-            const hasGate = !!visit.gateClosedPhoto;
-            const canUpload = visit.status === "scheduled" || visit.status === "in_progress";
+            const groupKey = group.propertyKey;
+            const isExpanded = expandedId === groupKey;
+            const anyScheduled = group.visits.some(v => v.status === "scheduled");
+            const anyInProgress = group.visits.some(v => v.status === "in_progress");
+            const allCompleted = group.visits.every(v => v.status === "completed" || v.status === "skipped" || v.status === "cancelled");
+            const groupStatus = allCompleted ? "completed" : anyInProgress ? "in_progress" : anyScheduled ? "scheduled" : primaryVisit.status;
+            const hasAnyPhotos = group.visits.some(v => v.proofOfServicePhotoBefore || v.proofOfServicePhoto || v.gateClosedPhoto);
+            const canUploadGroup = anyScheduled || anyInProgress;
+
             return (
-              <Card key={visit.id} data-testid={`card-visit-${visit.id}`}>
+              <Card key={groupKey} data-testid={`card-visit-${primaryVisit.id}`}>
                 <CardHeader
                   className="p-4 pb-2 cursor-pointer"
-                  onClick={() => setExpandedId(isExpanded ? null : visit.id)}
+                  onClick={() => setExpandedId(isExpanded ? null : groupKey)}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <CardTitle className="text-base truncate" data-testid={`text-visit-address-${visit.id}`}>
-                        {visit.property?.streetAddress || "Unknown address"}
+                      <CardTitle className="text-base truncate" data-testid={`text-visit-address-${primaryVisit.id}`}>
+                        {primaryVisit.property?.streetAddress || "Unknown address"}
                         {isMulti && <span className="text-xs font-normal text-muted-foreground ml-2">({group.visits.length} services)</span>}
                       </CardTitle>
-                      <p className="text-sm text-muted-foreground truncate" data-testid={`text-visit-contact-${visit.id}`}>
-                        {visit.contact ? `${visit.contact.firstName} ${visit.contact.lastName}` : "Unknown"}
+                      <p className="text-sm text-muted-foreground truncate" data-testid={`text-visit-contact-${primaryVisit.id}`}>
+                        {primaryVisit.contact ? `${primaryVisit.contact.firstName} ${primaryVisit.contact.lastName}` : "Unknown"}
                       </p>
-                      {(visit.servicePlanName || (visit.addOns && visit.addOns.length > 0)) && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {visit.servicePlanName && (
-                            <Badge variant="outline" className="text-xs capitalize" data-testid={`badge-service-type-${visit.id}`}>
-                              {visit.servicePlanName}
-                            </Badge>
-                          )}
-                          {visit.addOns?.map((a, i) => (
-                            <Badge key={i} variant="outline" className="text-xs bg-muted" data-testid={`badge-addon-${visit.id}-${i}`}>
-                              + {a.name}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {group.visits.map((visit) => (
+                          <span key={visit.id} className="contents">
+                            {visit.servicePlanName && (
+                              <Badge variant="outline" className="text-xs capitalize" data-testid={`badge-service-type-${visit.id}`}>
+                                {visit.servicePlanName}
+                              </Badge>
+                            )}
+                            {visit.addOns?.map((a, i) => (
+                              <Badge key={i} variant="outline" className="text-xs bg-muted" data-testid={`badge-addon-${visit.id}-${i}`}>
+                                + {a.name}
+                              </Badge>
+                            ))}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {(hasBefore || hasAfter || hasGate) && (
+                      {hasAnyPhotos && (
                         <ImageIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
                       )}
-                      <Badge variant="secondary" className={`text-xs ${visitStatusColors[visit.status] || ""}`} data-testid={`badge-visit-status-${visit.id}`}>
-                        {visitStatusLabels[visit.status] || visit.status}
+                      <Badge variant="secondary" className={`text-xs ${visitStatusColors[groupStatus] || ""}`} data-testid={`badge-visit-status-${primaryVisit.id}`}>
+                        {visitStatusLabels[groupStatus] || groupStatus}
                       </Badge>
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </div>
@@ -436,59 +467,48 @@ export default function TechMobile() {
                 </CardHeader>
                 {isExpanded && (
                   <CardContent className="p-4 pt-0 space-y-3">
-                    {visit.property && (
-                      <PropertyImageSection visit={visit} />
+                    {primaryVisit.property && (
+                      <PropertyImageSection visit={primaryVisit} />
                     )}
-                    {visit.property?.gateCode && (
+                    {primaryVisit.property?.gateCode && (
                       <div>
                         <p className="text-xs font-medium text-muted-foreground">Gate Code</p>
-                        <p className="text-sm font-mono" data-testid={`text-gate-code-${visit.id}`}>{visit.property.gateCode}</p>
+                        <p className="text-sm font-mono" data-testid={`text-gate-code-${primaryVisit.id}`}>{primaryVisit.property.gateCode}</p>
                       </div>
                     )}
-                    {visit.property?.specialInstructions && (
+                    {primaryVisit.property?.specialInstructions && (
                       <div>
                         <p className="text-xs font-medium text-muted-foreground">Instructions</p>
-                        <p className="text-sm" data-testid={`text-instructions-${visit.id}`}>{visit.property.specialInstructions}</p>
+                        <p className="text-sm" data-testid={`text-instructions-${primaryVisit.id}`}>{primaryVisit.property.specialInstructions}</p>
                       </div>
                     )}
 
-                    {(hasBefore || hasAfter || hasGate) && (
-                      <div data-testid={`photos-container-${visit.id}`}>
+                    {group.visits.some(v => v.proofOfServicePhotoBefore || v.proofOfServicePhoto || v.gateClosedPhoto) && (
+                      <div data-testid={`photos-container-${primaryVisit.id}`}>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Proof of Service</p>
                         <div className="grid gap-2 grid-cols-2">
-                          {hasBefore && (
-                            <div data-testid={`photo-before-container-${visit.id}`}>
-                              <p className="text-xs font-medium text-center mb-1" data-testid={`text-label-before-${visit.id}`}>Before</p>
-                              <img
-                                src={visit.proofOfServicePhotoBefore!}
-                                alt="Before service"
-                                className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
-                                data-testid={`img-proof-before-${visit.id}`}
-                              />
-                            </div>
-                          )}
-                          {hasAfter && (
-                            <div data-testid={`photo-after-container-${visit.id}`}>
-                              <p className="text-xs font-medium text-center mb-1" data-testid={`text-label-after-${visit.id}`}>After</p>
-                              <img
-                                src={visit.proofOfServicePhoto!}
-                                alt="After service"
-                                className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
-                                data-testid={`img-proof-after-${visit.id}`}
-                              />
-                            </div>
-                          )}
-                          {hasGate && (
-                            <div data-testid={`photo-gate-container-${visit.id}`}>
-                              <p className="text-xs font-medium text-center mb-1">Proof Photo</p>
-                              <img
-                                src={visit.gateClosedPhoto!}
-                                alt="Gate closed"
-                                className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
-                                data-testid={`img-gate-closed-${visit.id}`}
-                              />
-                            </div>
-                          )}
+                          {group.visits.map(v => (
+                            <span key={v.id} className="contents">
+                              {v.proofOfServicePhotoBefore && (
+                                <div data-testid={`photo-before-container-${v.id}`}>
+                                  <p className="text-xs font-medium text-center mb-1" data-testid={`text-label-before-${v.id}`}>Before</p>
+                                  <img src={v.proofOfServicePhotoBefore!} alt="Before service" className="rounded-md max-h-32 sm:max-h-48 w-full object-cover" data-testid={`img-proof-before-${v.id}`} />
+                                </div>
+                              )}
+                              {v.proofOfServicePhoto && (
+                                <div data-testid={`photo-after-container-${v.id}`}>
+                                  <p className="text-xs font-medium text-center mb-1" data-testid={`text-label-after-${v.id}`}>After</p>
+                                  <img src={v.proofOfServicePhoto!} alt="After service" className="rounded-md max-h-32 sm:max-h-48 w-full object-cover" data-testid={`img-proof-after-${v.id}`} />
+                                </div>
+                              )}
+                              {v.gateClosedPhoto && (
+                                <div data-testid={`photo-gate-container-${v.id}`}>
+                                  <p className="text-xs font-medium text-center mb-1">Proof Photo</p>
+                                  <img src={v.gateClosedPhoto!} alt="Gate closed" className="rounded-md max-h-32 sm:max-h-48 w-full object-cover" data-testid={`img-gate-closed-${v.id}`} />
+                                </div>
+                              )}
+                            </span>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -496,55 +516,60 @@ export default function TechMobile() {
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-1">Notes</p>
                       <Textarea
-                        value={notes[visit.id] || visit.technicianNotes || ""}
-                        onChange={(e) => setNotes({ ...notes, [visit.id]: e.target.value })}
+                        value={notes[primaryVisit.id] || primaryVisit.technicianNotes || ""}
+                        onChange={(e) => setNotes({ ...notes, [primaryVisit.id]: e.target.value })}
                         placeholder="Add notes..."
                         className="text-sm"
-                        data-testid={`input-notes-${visit.id}`}
+                        data-testid={`input-notes-${primaryVisit.id}`}
                       />
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {visit.status === "scheduled" && (
+                      {anyScheduled && !anyInProgress && (
                         <Button
-                          onClick={() => startMutation.mutate(visit.id)}
+                          onClick={() => {
+                            const scheduledVisits = group.visits.filter(v => v.status === "scheduled");
+                            for (const v of scheduledVisits) {
+                              startMutation.mutate(v.id);
+                            }
+                          }}
                           disabled={startMutation.isPending}
                           className="flex-1 min-h-[44px]"
-                          data-testid={`button-start-${visit.id}`}
+                          data-testid={`button-start-${primaryVisit.id}`}
                         >
-                          <Play className="mr-1 h-4 w-4" /> Start
+                          <Play className="mr-1 h-4 w-4" /> Start{isMulti ? " All" : ""}
                         </Button>
                       )}
-                      {visit.status === "in_progress" && (
+                      {anyInProgress && (
                         <Button
-                          onClick={() => openCompleteDialog(visit)}
+                          onClick={() => openCompleteDialog(primaryVisit)}
                           variant="outline"
                           className="flex-1 min-h-[44px]"
-                          data-testid={`button-complete-${visit.id}`}
+                          data-testid={`button-complete-${primaryVisit.id}`}
                         >
-                          <CheckCircle className="mr-1 h-4 w-4" /> Complete
+                          <CheckCircle className="mr-1 h-4 w-4" /> Complete{isMulti ? " All" : ""}
                         </Button>
                       )}
-                      {canUpload && (
+                      {canUploadGroup && (
                         <Button
                           variant="outline"
-                          onClick={() => handlePhotoClick(visit.id, "before")}
-                          disabled={isUploadingBefore}
+                          onClick={() => handlePhotoClick(primaryVisit.id, "before")}
+                          disabled={uploadingVisitId === primaryVisit.id && uploadingType === "before"}
                           className="min-h-[44px]"
-                          data-testid={`button-photo-before-${visit.id}`}
+                          data-testid={`button-photo-before-${primaryVisit.id}`}
                         >
-                          {isUploadingBefore ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
+                          {uploadingVisitId === primaryVisit.id && uploadingType === "before" ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
                           Before
                         </Button>
                       )}
                       <Button
                         variant="outline"
-                        onClick={() => handlePhotoClick(visit.id, "after")}
-                        disabled={isUploadingAfter}
+                        onClick={() => handlePhotoClick(primaryVisit.id, "after")}
+                        disabled={uploadingVisitId === primaryVisit.id && uploadingType === "after"}
                         className="min-h-[44px]"
-                        data-testid={`button-photo-after-${visit.id}`}
+                        data-testid={`button-photo-after-${primaryVisit.id}`}
                       >
-                        {isUploadingAfter ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
+                        {uploadingVisitId === primaryVisit.id && uploadingType === "after" ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
                         After
                       </Button>
                     </div>
@@ -552,7 +577,6 @@ export default function TechMobile() {
                 )}
               </Card>
             );
-            });
           })
           }
             </div>
