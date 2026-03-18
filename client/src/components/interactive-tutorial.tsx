@@ -89,10 +89,10 @@ const ROUTE_BUILDER_TUTORIAL: TutorialDefinition = {
       waitForElement: true,
     },
     {
-      target: '[data-testid="dialog-confirm-optimize"]',
+      target: '[data-testid="button-confirm-optimize"]',
       title: "Confirm Optimization",
-      content: "Review the optimization details and confirm. The route will be reordered to minimize total drive time and distance between stops.",
-      action: "observe",
+      content: "Click Confirm to run the optimization. The route will be reordered to minimize total drive time and distance between stops.",
+      action: "click",
       waitForElement: true,
     },
     {
@@ -194,7 +194,7 @@ const IMPORT_WIZARD_TUTORIAL: TutorialDefinition = {
       target: '[data-testid="button-confirm-import"]',
       title: "Review & Confirm Import",
       content: "After mapping columns and reviewing the preview, click Import to add all contacts to your account. You can edit individual contacts after import.",
-      action: "observe",
+      action: "click",
       waitForElement: true,
     },
   ],
