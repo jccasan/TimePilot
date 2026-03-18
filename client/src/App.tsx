@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
+import { useFeatureTour, FeatureTourOverlay } from "@/components/feature-tour";
 import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard } from "lucide-react";
@@ -106,6 +107,8 @@ function AuthenticatedLayout() {
   const [setupState, setSetupState] = useState<"loading" | "ready" | "error">(
     (user as any)?.setupDone ? "ready" : "loading"
   );
+  const { activeTour, isRunning, startTour, handleCallback, hasCompletedWelcome, getUnseenTours, isTourStatusLoaded } = useFeatureTour();
+  const [autoTourChecked, setAutoTourChecked] = useState(false);
 
   const setupMutation = useMutation({
     mutationFn: async () => {
@@ -125,6 +128,24 @@ function AuthenticatedLayout() {
       setupMutation.mutate();
     }
   }, []);
+
+  useEffect(() => {
+    if (setupState !== "ready" || autoTourChecked || isRunning || !isTourStatusLoaded) return;
+    setAutoTourChecked(true);
+    const timer = setTimeout(() => {
+      const unseen = getUnseenTours();
+      if (unseen.length > 0) {
+        const welcomeUnseen = unseen.find(t => t.id === "welcome");
+        const whatsNewUnseen = unseen.find(t => t.id !== "welcome");
+        if (welcomeUnseen) {
+          startTour(welcomeUnseen.id);
+        } else if (whatsNewUnseen) {
+          startTour(whatsNewUnseen.id);
+        }
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [setupState, autoTourChecked, isRunning, isTourStatusLoaded, getUnseenTours, startTour]);
 
   if (setupState === "loading") {
     return (
@@ -148,7 +169,7 @@ function AuthenticatedLayout() {
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full">
-        <AppSidebar />
+        <AppSidebar onStartTour={startTour} />
         <div className="flex flex-col flex-1 min-w-0">
           <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
             <div className="flex items-center gap-2">
@@ -175,6 +196,7 @@ function AuthenticatedLayout() {
           </main>
         </div>
       </div>
+      <FeatureTourOverlay tour={activeTour} isRunning={isRunning} onCallback={handleCallback} />
     </SidebarProvider>
   );
 }

@@ -20,6 +20,7 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   lastLoginAt: timestamp("last_login_at"),
+  tourCompletions: jsonb("tour_completions").$type<Record<string, string>>().default({}),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

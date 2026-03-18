@@ -23,6 +23,9 @@ import {
   Map,
   SlidersHorizontal,
   Briefcase,
+  HelpCircle,
+  Compass,
+  Sparkles,
 } from "lucide-react";
 import {
   Sidebar,
@@ -34,8 +37,18 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { GlobalSearch } from "@/components/global-search";
+import { getAvailableTours } from "@/components/feature-tour";
 
 const menuSections = [
   {
@@ -92,11 +105,12 @@ const menuSections = [
   },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => void }) {
   const [location] = useLocation();
   const { data: company } = useQuery<{ logoUrl: string | null; name: string }>({
     queryKey: ["/api/company"],
   });
+  const tours = getAvailableTours();
 
   return (
     <Sidebar>
@@ -140,6 +154,43 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
+      {onStartTour && (
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton data-testid="button-help-tours">
+                    <HelpCircle />
+                    <span>Take a Tour</span>
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="start" className="w-56">
+                  <DropdownMenuLabel>Guided Tours</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => onStartTour("welcome")}
+                    data-testid="button-tour-welcome"
+                  >
+                    <Compass className="h-4 w-4 mr-2" />
+                    Welcome Tour
+                  </DropdownMenuItem>
+                  {tours.filter(t => t.id !== "welcome").map((tour) => (
+                    <DropdownMenuItem
+                      key={tour.id}
+                      onClick={() => onStartTour(tour.id)}
+                      data-testid={`button-tour-${tour.id}`}
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      {tour.title}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }

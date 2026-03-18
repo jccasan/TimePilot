@@ -542,6 +542,29 @@ export async function registerRoutes(
     });
   });
 
+  app.get("/api/tours/status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId;
+      const user = await getUserById(userId);
+      if (!user) return res.status(401).json({ error: "Not found" });
+      return res.json({ completions: user.tourCompletions || {} });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/tours/complete", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { tourId } = req.body;
+      if (!tourId || typeof tourId !== "string") return res.status(400).json({ error: "tourId is required" });
+      const user = await getUserById(userId);
+      if (!user) return res.status(401).json({ error: "Not found" });
+      const completions = (user.tourCompletions as Record<string, string>) || {};
+      completions[tourId] = new Date().toISOString();
+      await db.update(users).set({ tourCompletions: completions }).where(eq(users.id, userId));
+      return res.json({ ok: true, completions });
+    } catch (err) { handleError(res, err); }
+  });
+
   const resetRateLimits = new Map<string, { count: number; resetAt: number }>();
   function checkResetRateLimit(key: string, maxAttempts: number, windowMs: number): boolean {
     const now = Date.now();
