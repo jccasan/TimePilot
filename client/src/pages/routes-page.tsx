@@ -36,6 +36,8 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
+import { LearnHowButton } from "@/components/interactive-tutorial";
+import { useTutorialContext } from "@/hooks/use-tutorials";
 import RouteMapView, { type RouteStop } from "@/components/route-map-view";
 import { ServiceZoneMap, type ZoneEntry } from "@/components/service-zone-map";
 import {
@@ -836,6 +838,7 @@ function PurchaseCreditsDialog({ open, onOpenChange, onPurchase, isPurchasing }:
 
 export default function RoutesPage() {
   const { toast } = useToast();
+  const { startTutorial, isTutorialCompleted } = useTutorialContext();
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(() => {
     const today = new Date().toLocaleDateString("en-US", { weekday: "long" }).toLowerCase() as DayOfWeek;
     return DAYS.includes(today) ? today : "monday";
@@ -1212,6 +1215,11 @@ export default function RoutesPage() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold" data-testid="text-routes-heading">Route Builder</h1>
+            <LearnHowButton
+              tutorialId="tutorial_route_builder"
+              onStart={startTutorial}
+              isCompleted={isTutorialCompleted("tutorial_route_builder")}
+            />
             <Badge variant="outline" className="flex items-center gap-1.5 text-sm px-3 py-1" data-testid="badge-credits">
               <Coins className="h-4 w-4" />
               Available Credits: {credits}

@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { useFeatureTour, FeatureTourOverlay } from "@/components/feature-tour";
+import { TutorialProvider } from "@/hooks/use-tutorials";
 import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard } from "lucide-react";
@@ -180,37 +181,39 @@ function AuthenticatedLayout() {
   }
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen w-full">
-        <AppSidebar onStartTour={startTour} />
-        <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger data-testid="button-sidebar-toggle" />
-              <img src={logoSquare} alt="ScooPilot" className="h-6 w-6 rounded object-cover" data-testid="img-platform-logo" />
-              <span className="text-sm font-semibold text-muted-foreground hidden sm:inline" data-testid="text-platform-name">ScooPilot</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <NotificationBell />
-              <ThemeToggle />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => logout()}
-                disabled={isLoggingOut}
-                data-testid="button-logout"
-              >
-                <LogOut />
-              </Button>
-            </div>
-          </header>
-          <main className="flex-1 overflow-hidden">
-            <Router />
-          </main>
+    <TutorialProvider>
+      <SidebarProvider>
+        <div className="flex h-screen w-full">
+          <AppSidebar onStartTour={startTour} />
+          <div className="flex flex-col flex-1 min-w-0">
+            <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
+              <div className="flex items-center gap-2">
+                <SidebarTrigger data-testid="button-sidebar-toggle" />
+                <img src={logoSquare} alt="ScooPilot" className="h-6 w-6 rounded object-cover" data-testid="img-platform-logo" />
+                <span className="text-sm font-semibold text-muted-foreground hidden sm:inline" data-testid="text-platform-name">ScooPilot</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <NotificationBell />
+                <ThemeToggle />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => logout()}
+                  disabled={isLoggingOut}
+                  data-testid="button-logout"
+                >
+                  <LogOut />
+                </Button>
+              </div>
+            </header>
+            <main className="flex-1 overflow-hidden">
+              <Router />
+            </main>
+          </div>
         </div>
-      </div>
-      <FeatureTourOverlay tour={activeTour} isRunning={isRunning} onCallback={handleCallback} />
-    </SidebarProvider>
+        <FeatureTourOverlay tour={activeTour} isRunning={isRunning} onCallback={handleCallback} />
+      </SidebarProvider>
+    </TutorialProvider>
   );
 }
 

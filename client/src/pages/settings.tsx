@@ -29,6 +29,8 @@ import { ChevronDown } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useUpload } from "@/hooks/use-upload";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { LearnHowButton } from "@/components/interactive-tutorial";
+import { useTutorialContext } from "@/hooks/use-tutorials";
 
 const companyFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -137,6 +139,7 @@ const ENTITY_TYPES = [
 
 function StripeConnectSection() {
   const { toast } = useToast();
+  const { startTutorial, isTutorialCompleted } = useTutorialContext();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -214,7 +217,14 @@ function StripeConnectSection() {
           <CreditCard className="h-5 w-5" />
           Payment Processing
         </CardTitle>
-        <CardDescription>Connect your Stripe account to receive payments directly from your customers</CardDescription>
+        <div className="flex items-center justify-between gap-2">
+          <CardDescription>Connect your Stripe account to receive payments directly from your customers</CardDescription>
+          <LearnHowButton
+            tutorialId="tutorial_stripe_connect"
+            onStart={startTutorial}
+            isCompleted={isTutorialCompleted("tutorial_stripe_connect")}
+          />
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {loadingStatus ? (

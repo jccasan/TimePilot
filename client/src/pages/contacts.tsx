@@ -47,6 +47,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Trash2, Tags, RefreshCw, Send } from "lucide-react";
 import { DialogFooter } from "@/components/ui/dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { LearnHowButton } from "@/components/interactive-tutorial";
+import { useTutorialContext } from "@/hooks/use-tutorials";
 
 const statusColors: Record<string, string> = {
   lead: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -114,6 +116,7 @@ const CONTACT_FIELDS = [
 
 export default function Contacts() {
   const { toast } = useToast();
+  const { startTutorial, isTutorialCompleted } = useTutorialContext();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -265,7 +268,14 @@ export default function Contacts() {
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold" data-testid="text-contacts-heading">Contacts</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold" data-testid="text-contacts-heading">Contacts</h1>
+          <LearnHowButton
+            tutorialId="tutorial_import_wizard"
+            onStart={startTutorial}
+            isCompleted={isTutorialCompleted("tutorial_import_wizard")}
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => window.open("/api/contacts/export/csv", "_blank")} data-testid="button-export-csv">
             <Download className="mr-1 h-4 w-4" />

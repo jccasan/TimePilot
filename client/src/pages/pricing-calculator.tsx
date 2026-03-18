@@ -5,6 +5,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { LearnHowButton } from "@/components/interactive-tutorial";
+import { useTutorialContext } from "@/hooks/use-tutorials";
 import type { PricingConfig } from "@shared/schema";
 import { DEFAULT_PRICING_CONFIG } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1032,6 +1034,7 @@ function ResultsDisplay({ result }: { result: CalculatorResult }) {
 }
 
 export default function PricingCalculator() {
+  const { startTutorial, isTutorialCompleted } = useTutorialContext();
   const { data: configData, isLoading: configLoading } = useQuery<PricingConfig>({
     queryKey: ["/api/pricing-config"],
   });
@@ -1050,9 +1053,16 @@ export default function PricingCalculator() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-pricing-calculator-heading">Price Calculator</h1>
-        <p className="text-sm text-muted-foreground">Figure out what to charge for each property based on your real costs</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-pricing-calculator-heading">Price Calculator</h1>
+          <p className="text-sm text-muted-foreground">Figure out what to charge for each property based on your real costs</p>
+        </div>
+        <LearnHowButton
+          tutorialId="tutorial_pricing_calculator"
+          onStart={startTutorial}
+          isCompleted={isTutorialCompleted("tutorial_pricing_calculator")}
+        />
       </div>
 
       <Tabs defaultValue="calculator">

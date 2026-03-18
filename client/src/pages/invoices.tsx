@@ -37,6 +37,8 @@ import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, P
 import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
+import { LearnHowButton } from "@/components/interactive-tutorial";
+import { useTutorialContext } from "@/hooks/use-tutorials";
 
 const invoiceStatusLabels: Record<string, string> = {
   draft: "Draft",
@@ -177,6 +179,7 @@ function PaymentHistorySection({ invoiceId, invoiceTotal }: { invoiceId: string;
 
 export default function Invoices() {
   const { toast } = useToast();
+  const { startTutorial, isTutorialCompleted } = useTutorialContext();
   const [statusFilter, setStatusFilter] = useState("all");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
@@ -514,7 +517,14 @@ export default function Invoices() {
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold" data-testid="text-invoices-heading">Invoices</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold" data-testid="text-invoices-heading">Invoices</h1>
+          <LearnHowButton
+            tutorialId="tutorial_invoice_creation"
+            onStart={startTutorial}
+            isCompleted={isTutorialCompleted("tutorial_invoice_creation")}
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => setGenerateDialogOpen(true)} data-testid="button-generate-invoice">
             <Zap className="mr-1 h-4 w-4" /> Generate from Completed Work
