@@ -1174,6 +1174,72 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/company/weather", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      let lat = company?.startLatitude ? parseFloat(String(company.startLatitude)) : null;
+      let lon = company?.startLongitude ? parseFloat(String(company.startLongitude)) : null;
+      if (!lat || !lon) {
+        return res.json({ available: false, reason: "No company location set" });
+      }
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&timezone=auto&forecast_days=5`;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        return res.json({ available: false, reason: "Weather service unavailable" });
+      }
+      const data = await resp.json() as any;
+      const days = (data.daily?.time || []).map((date: string, i: number) => ({
+        date,
+        tempMax: data.daily.temperature_2m_max?.[i] ?? null,
+        tempMin: data.daily.temperature_2m_min?.[i] ?? null,
+        precipProbability: data.daily.precipitation_probability_max?.[i] ?? null,
+        weatherCode: data.daily.weathercode?.[i] ?? null,
+      }));
+      res.json({ available: true, days });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/company/route-map-data", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const tz = company?.timezone || "America/New_York";
+      const today = getCompanyToday(tz);
+      const routes = await storage.getRoutes(companyId);
+      const todayDow = new Date().toLocaleDateString("en-US", { weekday: "long", timeZone: tz });
+      const todayRoutes = routes.filter(r => r.dayOfWeek === todayDow);
+      const allProperties = await storage.getProperties(companyId);
+      const propMap = new Map(allProperties.map(p => [p.id, p]));
+      const routeData = await Promise.all(todayRoutes.map(async (route) => {
+        const stops = await storage.getRouteStops(route.id);
+        const coordinates = stops
+          .sort((a, b) => a.stopOrder - b.stopOrder)
+          .map(s => {
+            const prop = propMap.get(s.propertyId);
+            return prop ? {
+              lat: prop.latitude ? parseFloat(String(prop.latitude)) : null,
+              lng: prop.longitude ? parseFloat(String(prop.longitude)) : null,
+              address: prop.streetAddress || "",
+            } : null;
+          })
+          .filter(c => c && c.lat && c.lng);
+        return {
+          id: route.id,
+          name: route.name,
+          color: route.color || "#4CAF50",
+          stopCount: stops.length,
+          coordinates,
+        };
+      }));
+      res.json({
+        routes: routeData,
+        startLat: company?.startLatitude ? parseFloat(String(company.startLatitude)) : null,
+        startLng: company?.startLongitude ? parseFloat(String(company.startLongitude)) : null,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/company/pipeline", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);

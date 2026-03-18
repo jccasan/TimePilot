@@ -25,7 +25,9 @@ import {
   MessageSquare, Mail, Sliders, ChevronUp, ChevronDown,
   CheckCircle, XCircle, MapPin, BarChart3, Activity,
   StickyNote, Route, GripVertical, X, LayoutGrid,
-  Inbox, ArrowRight, RotateCcw,
+  Inbox, ArrowRight, RotateCcw, Cloud, MapPinned,
+  Sun, CloudRain, CloudSnow, CloudLightning, CloudDrizzle,
+  Cloudy, Snowflake, Wind,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -212,6 +214,8 @@ const WIDGET_DEFS: {
   { id: "route_summary", label: "Route Summary", icon: Route, description: "Active routes overview", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "insights" },
   { id: "quick_notes", label: "Quick Notes", icon: StickyNote, description: "Scratchpad for reminders (synced to account)", defaultW: 4, defaultH: 4, minW: 3, minH: 3, category: "tools" },
   { id: "current_plan", label: "Current Plan", icon: ClipboardList, description: "Your subscription details", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
+  { id: "weather_forecast", label: "Weather Forecast", icon: Cloud, description: "5-day weather forecast for your area", defaultW: 6, defaultH: 3, minW: 4, minH: 3, category: "insights" },
+  { id: "route_map_preview", label: "Route Map", icon: MapPinned, description: "Map preview of today's routes", defaultW: 6, defaultH: 5, minW: 4, minH: 4, category: "insights" },
 ];
 
 const DEFAULT_WIDGET_IDS = [
@@ -1106,6 +1110,255 @@ function QuickNotesWidget() {
   );
 }
 
+type WeatherDay = {
+  date: string;
+  tempMax: number | null;
+  tempMin: number | null;
+  precipProbability: number | null;
+  weatherCode: number | null;
+};
+
+function getWeatherIcon(code: number | null) {
+  if (code === null) return Cloud;
+  if (code === 0) return Sun;
+  if (code <= 3) return Cloudy;
+  if (code <= 49) return Cloud;
+  if (code <= 59) return CloudDrizzle;
+  if (code <= 69) return CloudRain;
+  if (code <= 79) return CloudSnow;
+  if (code <= 82) return CloudRain;
+  if (code <= 86) return Snowflake;
+  if (code <= 99) return CloudLightning;
+  return Cloud;
+}
+
+function getWeatherLabel(code: number | null) {
+  if (code === null) return "Unknown";
+  if (code === 0) return "Clear";
+  if (code <= 3) return "Partly Cloudy";
+  if (code <= 49) return "Foggy";
+  if (code <= 59) return "Drizzle";
+  if (code <= 69) return "Rain";
+  if (code <= 79) return "Snow";
+  if (code <= 82) return "Showers";
+  if (code <= 86) return "Snow Showers";
+  if (code <= 99) return "Thunderstorm";
+  return "Unknown";
+}
+
+function WeatherForecastWidget() {
+  const { data, isLoading } = useQuery<{ available: boolean; days?: WeatherDay[]; reason?: string }>({
+    queryKey: ["/api/company/weather"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="h-full flex flex-col" data-testid="widget-weather-loading">
+        <div className="flex items-center gap-2 mb-3">
+          <Cloud className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Weather Forecast</span>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <Skeleton className="h-16 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!data?.available || !data.days?.length) {
+    return (
+      <div className="h-full flex flex-col" data-testid="widget-weather-unavailable">
+        <div className="flex items-center gap-2 mb-3">
+          <Cloud className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Weather Forecast</span>
+        </div>
+        <p className="text-xs text-muted-foreground">{data?.reason || "Set your company address in Settings to see weather."}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col" data-testid="widget-weather-content">
+      <div className="flex items-center gap-2 mb-3">
+        <Cloud className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">Weather Forecast</span>
+      </div>
+      <div className="flex-1 flex gap-1 overflow-x-auto">
+        {data.days.map((day) => {
+          const Icon = getWeatherIcon(day.weatherCode);
+          const dayName = new Date(day.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
+          return (
+            <div key={day.date} className="flex-1 min-w-[60px] flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/30" data-testid={`weather-day-${day.date}`}>
+              <span className="text-[10px] font-medium text-muted-foreground uppercase">{dayName}</span>
+              <Icon className="h-5 w-5 text-primary" />
+              <span className="text-[10px] text-muted-foreground">{getWeatherLabel(day.weatherCode)}</span>
+              <div className="text-xs font-medium">
+                {day.tempMax !== null ? `${Math.round(day.tempMax)}` : "--"}°
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {day.tempMin !== null ? `${Math.round(day.tempMin)}°` : ""}
+              </div>
+              {day.precipProbability !== null && day.precipProbability > 0 && (
+                <div className="flex items-center gap-0.5">
+                  <CloudRain className="h-2.5 w-2.5 text-blue-500" />
+                  <span className="text-[9px] text-blue-600">{day.precipProbability}%</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+type RouteMapData = {
+  routes: {
+    id: string;
+    name: string;
+    color: string;
+    stopCount: number;
+    coordinates: { lat: number; lng: number; address: string }[];
+  }[];
+  startLat: number | null;
+  startLng: number | null;
+};
+
+function RouteMapPreviewWidget() {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+  const { data: mapData, isLoading } = useQuery<RouteMapData>({
+    queryKey: ["/api/company/route-map-data"],
+  });
+  const { data: tokenData } = useQuery<{ token: string }>({
+    queryKey: ["/api/mapbox-token"],
+  });
+
+  useEffect(() => {
+    if (!mapContainerRef.current || !tokenData?.token || !mapData || mapRef.current) return;
+
+    const loadMap = async () => {
+      const mapboxgl = (await import("mapbox-gl")).default;
+      await import("mapbox-gl/dist/mapbox-gl.css");
+      mapboxgl.accessToken = tokenData.token;
+
+      const centerLat = mapData.startLat || 37.7749;
+      const centerLng = mapData.startLng || -77.4194;
+
+      const map = new mapboxgl.Map({
+        container: mapContainerRef.current!,
+        style: "mapbox://styles/mapbox/light-v11",
+        center: [centerLng, centerLat],
+        zoom: 10,
+        interactive: false,
+      });
+
+      mapRef.current = map;
+
+      map.on("load", () => {
+        const bounds = new mapboxgl.LngLatBounds();
+        let hasCoords = false;
+
+        mapData.routes.forEach((route) => {
+          route.coordinates.forEach((coord, idx) => {
+            hasCoords = true;
+            bounds.extend([coord.lng, coord.lat]);
+            const marker = document.createElement("div");
+            marker.style.width = "12px";
+            marker.style.height = "12px";
+            marker.style.borderRadius = "50%";
+            marker.style.backgroundColor = route.color;
+            marker.style.border = "2px solid white";
+            marker.style.boxShadow = "0 1px 3px rgba(0,0,0,0.3)";
+            new mapboxgl.Marker({ element: marker })
+              .setLngLat([coord.lng, coord.lat])
+              .addTo(map);
+          });
+
+          if (route.coordinates.length >= 2) {
+            map.addSource(`route-${route.id}`, {
+              type: "geojson",
+              data: {
+                type: "Feature",
+                properties: {},
+                geometry: {
+                  type: "LineString",
+                  coordinates: route.coordinates.map(c => [c.lng, c.lat]),
+                },
+              },
+            });
+            map.addLayer({
+              id: `route-line-${route.id}`,
+              type: "line",
+              source: `route-${route.id}`,
+              layout: { "line-join": "round", "line-cap": "round" },
+              paint: { "line-color": route.color, "line-width": 2, "line-opacity": 0.7 },
+            });
+          }
+        });
+
+        if (hasCoords) {
+          map.fitBounds(bounds, { padding: 30, maxZoom: 13 });
+        }
+      });
+    };
+
+    loadMap();
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [mapData, tokenData]);
+
+  if (isLoading) {
+    return (
+      <div className="h-full flex flex-col" data-testid="widget-route-map-loading">
+        <div className="flex items-center gap-2 mb-2">
+          <MapPinned className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Today's Routes</span>
+        </div>
+        <Skeleton className="flex-1 min-h-[120px]" />
+      </div>
+    );
+  }
+
+  const totalStops = mapData?.routes.reduce((sum, r) => sum + r.stopCount, 0) || 0;
+
+  return (
+    <div className="h-full flex flex-col" data-testid="widget-route-map-content">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <MapPinned className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Today's Routes</span>
+        </div>
+        <span className="text-xs text-muted-foreground">{mapData?.routes.length || 0} routes, {totalStops} stops</span>
+      </div>
+      {(!mapData?.routes.length || !tokenData?.token) ? (
+        <div className="flex-1 flex items-center justify-center bg-muted/30 rounded-lg">
+          <p className="text-xs text-muted-foreground text-center px-4">
+            {!tokenData?.token ? "Mapbox token not configured" : "No routes scheduled for today"}
+          </p>
+        </div>
+      ) : (
+        <div className="flex-1 relative rounded-lg overflow-hidden border">
+          <div ref={mapContainerRef} className="absolute inset-0" />
+          <div className="absolute bottom-2 left-2 flex flex-wrap gap-1 z-10">
+            {mapData.routes.map(r => (
+              <div key={r.id} className="flex items-center gap-1 bg-background/90 backdrop-blur-sm rounded px-1.5 py-0.5 text-[10px] shadow-sm">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: r.color }} />
+                <span>{r.name} ({r.stopCount})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WidgetLibraryDrawer({
   open,
   onClose,
@@ -1654,6 +1907,22 @@ export default function Dashboard() {
           <Card className="h-full" data-testid="widget-quick-notes">
             <CardContent className="p-4 h-full">
               <QuickNotesWidget />
+            </CardContent>
+          </Card>
+        );
+      case "weather_forecast":
+        return (
+          <Card className="h-full" data-testid="widget-weather-forecast">
+            <CardContent className="p-4 h-full">
+              <WeatherForecastWidget />
+            </CardContent>
+          </Card>
+        );
+      case "route_map_preview":
+        return (
+          <Card className="h-full" data-testid="widget-route-map-preview">
+            <CardContent className="p-4 h-full">
+              <RouteMapPreviewWidget />
             </CardContent>
           </Card>
         );
