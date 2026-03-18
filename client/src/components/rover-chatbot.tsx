@@ -147,10 +147,10 @@ export default function RoverChatbot() {
       cleanText = cleanText.replace(/SUBJECT:\s*.+/i, "").trim();
     }
 
-    const descMatch = cleanText.match(/DESCRIPTION:\s*(.+)/i);
+    const descMatch = cleanText.match(/DESCRIPTION:\s*([\s\S]+)$/im);
     if (descMatch) {
       suggestedDescription = descMatch[1].trim();
-      cleanText = cleanText.replace(/DESCRIPTION:\s*.+/i, "").trim();
+      cleanText = cleanText.replace(/DESCRIPTION:\s*[\s\S]+$/im, "").trim();
     }
 
     return { cleanText, actions, suggestedSubject, suggestedDescription };
