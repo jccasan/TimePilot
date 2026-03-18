@@ -46,6 +46,13 @@ interface UserContext {
   autoVisitsEnabled: boolean;
   roverAiEnabled: boolean;
   timezone: string;
+  contactCount: number;
+  activeContactCount: number;
+  invoiceCount: number;
+  overdueInvoiceCount: number;
+  mrrDollars: string;
+  teamSize: number;
+  routeCount: number;
 }
 
 export async function buildUserContext(companyId: string, userId: string): Promise<UserContext> {
@@ -58,6 +65,7 @@ export async function buildUserContext(companyId: string, userId: string): Promi
       autoVisitsEnabled: companies.autoVisitsEnabled,
       roverAiEnabled: companies.roverAiEnabled,
       timezone: companies.timezone,
+      mrrCents: companies.mrrCents,
     })
     .from(companies)
     .where(eq(companies.id, companyId));
@@ -72,6 +80,33 @@ export async function buildUserContext(companyId: string, userId: string): Promi
     .from(users)
     .where(eq(users.id, userId));
 
+  const [contactStats] = await db
+    .select({
+      total: count(),
+      active: sql<number>`count(*) filter (where ${contacts.status} = 'active')`,
+    })
+    .from(contacts)
+    .where(eq(contacts.companyId, companyId));
+
+  const today = new Date().toISOString().split("T")[0];
+  const [invoiceStats] = await db
+    .select({
+      total: count(),
+      overdue: sql<number>`count(*) filter (where ${invoices.status} = 'sent' AND ${invoices.dueDate} < ${today})`,
+    })
+    .from(invoices)
+    .where(eq(invoices.companyId, companyId));
+
+  const [teamCount] = await db
+    .select({ count: count() })
+    .from(companyUsers)
+    .where(and(eq(companyUsers.companyId, companyId), eq(companyUsers.isActive, true)));
+
+  const [routeCount] = await db
+    .select({ count: count() })
+    .from(routes)
+    .where(eq(routes.companyId, companyId));
+
   return {
     userName: user ? `${user.firstName} ${user.lastName}`.trim() : "User",
     userRole: membership?.role || "tech",
@@ -82,6 +117,13 @@ export async function buildUserContext(companyId: string, userId: string): Promi
     autoVisitsEnabled: company?.autoVisitsEnabled ?? false,
     roverAiEnabled: company?.roverAiEnabled ?? true,
     timezone: company?.timezone || "America/New_York",
+    contactCount: contactStats?.total || 0,
+    activeContactCount: contactStats?.active || 0,
+    invoiceCount: invoiceStats?.total || 0,
+    overdueInvoiceCount: invoiceStats?.overdue || 0,
+    mrrDollars: company ? `$${(company.mrrCents / 100).toFixed(2)}` : "$0.00",
+    teamSize: teamCount?.count || 0,
+    routeCount: routeCount?.count || 0,
   };
 }
 
@@ -98,6 +140,14 @@ CURRENT USER CONTEXT:
     ctx.autoVisitsEnabled ? "auto visit generation" : null,
     ctx.roverAiEnabled ? "Rover AI" : null,
   ].filter(Boolean).join(", ") || "none"}
+
+${["owner", "admin"].includes(ctx.userRole) ? `ACCOUNT STATS (live snapshot):
+- Total contacts: ${ctx.contactCount} (${ctx.activeContactCount} active)
+- Invoices: ${ctx.invoiceCount} total (${ctx.overdueInvoiceCount} overdue)
+- MRR: ${ctx.mrrDollars}
+- Team members: ${ctx.teamSize}
+- Routes: ${ctx.routeCount}` : `ACCOUNT STATS (limited - tech role):
+- Routes: ${ctx.routeCount}`}
 
 ${KNOWLEDGE_BASE}
 
@@ -340,6 +390,12 @@ export async function streamRoverChat(
   const userCtx = await buildUserContext(companyId, userId);
   const systemPrompt = buildSystemPrompt(userCtx);
 
+  const isPrivileged = ["owner", "admin"].includes(userCtx.userRole);
+  const ADMIN_ONLY_TOOL_NAMES = new Set(["get_business_stats", "get_overdue_invoices"]);
+  const availableTools = isPrivileged
+    ? ROVER_TOOLS
+    : ROVER_TOOLS.filter((t) => !ADMIN_ONLY_TOOL_NAMES.has(t.function.name));
+
   const fullMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
     ...messages,
@@ -349,7 +405,7 @@ export async function streamRoverChat(
     const response = await openai.chat.completions.create({
       model: "gpt-5-mini",
       messages: fullMessages,
-      tools: ROVER_TOOLS,
+      tools: availableTools.length > 0 ? availableTools : undefined,
       stream: true,
       max_completion_tokens: 8192,
     });
@@ -396,8 +452,18 @@ export async function streamRoverChat(
         })),
       });
 
+      const ADMIN_ONLY_TOOLS = new Set(["get_business_stats", "get_overdue_invoices"]);
+
       for (const tc of toolCalls) {
         if (signal?.aborted) return;
+        if (ADMIN_ONLY_TOOLS.has(tc.name) && !["owner", "admin"].includes(userCtx.userRole)) {
+          toolResults.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: JSON.stringify({ error: "Access denied. This data is only available to owners and admins." }),
+          });
+          continue;
+        }
         let args: Record<string, any> = {};
         try {
           args = JSON.parse(tc.arguments || "{}");

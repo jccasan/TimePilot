@@ -8925,9 +8925,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Last message must be a non-empty user message" });
       }
 
+      const aiKeyAvailable = !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY);
       const [company] = await db.select({ roverAiEnabled: companies.roverAiEnabled }).from(companies).where(eq(companies.id, companyId));
 
-      if (!company?.roverAiEnabled) {
+      if (!company?.roverAiEnabled || !aiKeyAvailable) {
         return res.status(400).json({ error: "AI chat is disabled", fallback: true });
       }
 
