@@ -44,7 +44,7 @@ export type TutorialDefinition = {
 
 const ROUTE_BUILDER_TUTORIAL: TutorialDefinition = {
   id: "tutorial_route_builder",
-  version: "1.0",
+  version: "1.1",
   title: "Route Builder",
   description: "Learn how to create routes, add stops, reorder them, and optimize your daily schedule.",
   requiredPage: "/routes",
@@ -60,6 +60,7 @@ const ROUTE_BUILDER_TUTORIAL: TutorialDefinition = {
       title: "Name Your Route",
       content: "Give your route a descriptive name, like 'Monday - North Side' or 'Thursday PM'. This helps you and your team stay organized.",
       action: "input",
+      validate: (el: HTMLElement) => (el as HTMLInputElement).value.length > 0,
     },
     {
       target: '[data-testid="select-route-day"]',
@@ -76,7 +77,7 @@ const ROUTE_BUILDER_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="card-unassigned"]',
       title: "Unassigned Stops",
-      content: "Jobs that match this day but aren't on a route yet appear here. Drag them onto your route to add them as stops.",
+      content: "Jobs that match this day but aren't on a route yet appear here. Drag them onto your route to add them as stops. You can reorder stops by dragging them up or down in the list.",
       action: "observe",
       waitForElement: true,
     },
@@ -91,7 +92,7 @@ const ROUTE_BUILDER_TUTORIAL: TutorialDefinition = {
 
 const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
   id: "tutorial_invoice_creation",
-  version: "1.0",
+  version: "1.1",
   title: "Creating Invoices",
   description: "Learn how to create, customize, and send invoices to your customers.",
   requiredPage: "/invoices",
@@ -121,25 +122,37 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
       content: "Enter a description for this line item. Be specific so customers know exactly what they're paying for.",
       action: "input",
       waitForElement: true,
+      validate: (el: HTMLElement) => (el as HTMLInputElement).value.length > 0,
     },
     {
       target: '[data-testid="input-line-price-0"]',
       title: "Set the Price",
       content: "Enter the price for this line item. You can add multiple line items for different services on the same invoice.",
       action: "input",
+      validate: (el: HTMLElement) => {
+        const val = (el as HTMLInputElement).value;
+        return val !== "" && parseFloat(val) > 0;
+      },
     },
     {
       target: '[data-testid="button-submit-invoice"]',
       title: "Create the Invoice",
-      content: "Click to create the invoice as a draft. You can review it, make edits, and then send it to the customer when ready.",
-      action: "observe",
+      content: "Click to create the invoice as a draft. After creating, you can review it and send it to the customer.",
+      action: "click",
+    },
+    {
+      target: '[data-testid="button-send-invoice-email"]',
+      title: "Send to Customer",
+      content: "Click to email the invoice to your customer. They'll receive a link to view and pay online through the client portal.",
+      action: "click",
+      waitForElement: true,
     },
   ],
 };
 
 const IMPORT_WIZARD_TUTORIAL: TutorialDefinition = {
   id: "tutorial_import_wizard",
-  version: "1.1",
+  version: "1.2",
   title: "Importing Contacts",
   description: "Learn how to bulk-import your customer list from a CSV spreadsheet.",
   requiredPage: "/contacts",
@@ -147,26 +160,28 @@ const IMPORT_WIZARD_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="button-download-sample-csv"]',
       title: "Download a Template",
-      content: "Start by downloading the import template. Click here to get a CSV file with the expected columns. Fill it in with your customer data.",
+      content: "Start by downloading the import template. Click here to get a CSV file with the expected column format. Fill it in with your customer data, or export from your existing CRM.",
       action: "click",
     },
     {
       target: '[data-testid="button-import-csv"]',
-      title: "Import Your Customer List",
-      content: "Click here to upload your CSV file. You can export from another CRM, Google Sheets, or Excel. The wizard will guide you through mapping columns.",
+      title: "Upload Your CSV",
+      content: "Click here to upload your CSV file. The import wizard will open and automatically detect your column headers for mapping.",
       action: "click",
     },
     {
-      target: '[data-testid="button-add-contact"]',
-      title: "Or Add One at a Time",
-      content: "Prefer to add contacts manually? Click here to open the form and fill in details like name, address, yard size, and service day.",
-      action: "click",
+      target: '[data-testid="text-import-title"]',
+      title: "Map Columns",
+      content: "The wizard maps your CSV columns to contact fields. Review the mapping to make sure names, addresses, and service details are matched correctly. AI-assisted matching handles most columns automatically.",
+      action: "observe",
+      waitForElement: true,
     },
     {
-      target: '[data-testid="button-export-csv"]',
-      title: "Export Your Data",
-      content: "Click here to export your current contact list as a CSV file. Useful for backups or sharing data with your team.",
-      action: "click",
+      target: '[data-testid="button-confirm-import"]',
+      title: "Review & Confirm Import",
+      content: "After mapping columns and reviewing the preview, click Import to add all contacts to your account. You can edit individual contacts after import.",
+      action: "observe",
+      waitForElement: true,
     },
   ],
 };
@@ -677,7 +692,7 @@ export function TutorialOverlay({
             Back
           </Button>
           <div className="flex gap-2">
-            {step.action === "observe" || actionDetected ? (
+            {(step.action === "observe" || actionDetected) && (
               <Button
                 size="sm"
                 onClick={isLastStep ? onComplete : onNext}
@@ -687,18 +702,6 @@ export function TutorialOverlay({
               >
                 {isLastStep ? "Finish" : "Next"}
                 {!isLastStep && <ChevronRight className="h-3.5 w-3.5 ml-1" />}
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={isLastStep ? onComplete : onNext}
-                className="text-xs"
-                disabled={step.waitForElement && !targetRect}
-                data-testid="button-tutorial-skip-step"
-              >
-                Skip step
-                <ChevronRight className="h-3.5 w-3.5 ml-1" />
               </Button>
             )}
           </div>
