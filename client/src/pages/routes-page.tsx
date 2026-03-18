@@ -1078,8 +1078,10 @@ export default function RoutesPage() {
   });
 
   const assignStopMutation = useMutation({
-    mutationFn: async ({ stopId, routeId }: { stopId: string; routeId: string | null }) => {
-      await apiRequest("PATCH", `/api/service-plans/${stopId}`, { routeId });
+    mutationFn: async ({ stopId, routeId, dayOfWeek }: { stopId: string; routeId: string | null; dayOfWeek?: string }) => {
+      const body: Record<string, any> = { routeId };
+      if (dayOfWeek) body.dayOfWeek = dayOfWeek;
+      await apiRequest("PATCH", `/api/service-plans/${stopId}`, body);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
@@ -1186,7 +1188,9 @@ export default function RoutesPage() {
     const currentContainer = plan.routeId ? `route-${plan.routeId}` : UNASSIGNED_DROP;
     if (currentContainer === target) return;
     const newRouteId = target === UNASSIGNED_DROP ? null : target.replace("route-", "");
-    assignStopMutation.mutate({ stopId, routeId: newRouteId });
+    const targetRoute = newRouteId ? allRoutes.find(r => r.id === newRouteId) : null;
+    const dayOfWeek = targetRoute ? targetRoute.dayOfWeek : undefined;
+    assignStopMutation.mutate({ stopId, routeId: newRouteId, dayOfWeek });
   }
   function handleDragCancel() { setActiveDragId(null); setOverContainerId(null); }
 

@@ -1804,7 +1804,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     const basePrice = form.watch("pricePerVisit");
     const jobType = form.watch("jobType");
     const anytimeVal = form.watch("anytime");
+    const selectedDayOfWeek = form.watch("dayOfWeek");
     const templates = basePricingForFreq(freq);
+    const filteredRoutes = (routes || []).filter(r => r.dayOfWeek === selectedDayOfWeek);
     const addOnsTotal = (selectedAddOns || []).reduce((sum, id) => {
       const item = addOnPricing.find(p => p.id === id);
       return sum + parseFloat(item?.basePrice || "0");
@@ -1884,7 +1886,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
           <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
               <FormItem>
                 <FormLabel>Day of Week</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select onValueChange={(v) => { field.onChange(v); form.setValue("routeId", ""); }} value={field.value}>
                   <FormControl><SelectTrigger data-testid="select-plan-day"><SelectValue /></SelectTrigger></FormControl>
                   <SelectContent>
                     {daysOfWeek.map((d) => (
@@ -1990,9 +1992,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               <FormItem>
                 <FormLabel>Route (optional)</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger data-testid="select-plan-route"><SelectValue placeholder="No route" /></SelectTrigger></FormControl>
+                  <FormControl><SelectTrigger data-testid="select-plan-route"><SelectValue placeholder={filteredRoutes.length > 0 ? "No route" : `No routes for ${selectedDayOfWeek || "this day"}`} /></SelectTrigger></FormControl>
                   <SelectContent>
-                    {routes?.map((r) => (
+                    {filteredRoutes.map((r) => (
                       <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                     ))}
                   </SelectContent>
