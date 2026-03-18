@@ -1683,10 +1683,11 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
   };
 
   const normalizeJobPayload = (data: ServicePlanFormValues) => {
-    const { assignedUserId, ...rest } = data;
+    const { assignedUserId, routeId, ...rest } = data;
     const isOneOff = rest.jobType === "one_off";
     return {
       ...rest,
+      routeId: (routeId && routeId !== "none") ? routeId : null,
       frequency: isOneOff ? "onetime" as const : rest.frequency,
       assignedUserId: (assignedUserId && assignedUserId !== "none") ? assignedUserId : null,
       startTime: rest.anytime ? null : (rest.startTime || null),
@@ -1994,6 +1995,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl><SelectTrigger data-testid="select-plan-route"><SelectValue placeholder={filteredRoutes.length > 0 ? "No route" : `No routes for ${selectedDayOfWeek || "this day"}`} /></SelectTrigger></FormControl>
                   <SelectContent>
+                    <SelectItem value="none">No route</SelectItem>
                     {filteredRoutes.map((r) => (
                       <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                     ))}
