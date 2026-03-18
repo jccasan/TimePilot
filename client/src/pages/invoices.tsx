@@ -177,10 +177,15 @@ function PaymentHistorySection({ invoiceId, invoiceTotal }: { invoiceId: string;
   );
 }
 
+function getInitialTab(): string {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("tab") || "all";
+}
+
 export default function Invoices() {
   const { toast } = useToast();
   const { startTutorial, isTutorialCompleted } = useTutorialContext();
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(getInitialTab);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
@@ -207,18 +212,23 @@ export default function Invoices() {
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [themeDialogOpen, setThemeDialogOpen] = useState(false);
 
-  const queryParams = statusFilter !== "all" ? `?status=${statusFilter}` : "";
-
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices", statusFilter],
-    queryFn: () => {
+    queryFn: async () => {
       const token = localStorage.getItem("sessionToken");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      return fetch(`/api/invoices${queryParams}`, { credentials: "include", headers }).then(r => {
-        if (!r.ok) throw new Error("Failed to fetch invoices");
-        return r.json();
-      });
+      if (statusFilter === "awaiting") {
+        const [sent, pending] = await Promise.all([
+          fetch("/api/invoices?status=sent", { credentials: "include", headers }).then(r => r.ok ? r.json() : []),
+          fetch("/api/invoices?status=pending", { credentials: "include", headers }).then(r => r.ok ? r.json() : []),
+        ]);
+        return [...sent, ...pending];
+      }
+      const queryParams = statusFilter !== "all" && statusFilter !== "uninvoiced" ? `?status=${statusFilter}` : "";
+      const r = await fetch(`/api/invoices${queryParams}`, { credentials: "include", headers });
+      if (!r.ok) throw new Error("Failed to fetch invoices");
+      return r.json();
     },
   });
 
@@ -228,6 +238,17 @@ export default function Invoices() {
 
   const { data: pricing } = useQuery<ServicePricingItem[]>({
     queryKey: ["/api/pricing"],
+  });
+
+  interface UninvoicedSummary {
+    count: number;
+    totalDollars: number;
+    byContact: { contactId: string; contactName: string; count: number; totalDollars: number }[];
+  }
+
+  const { data: uninvoicedSummary, isLoading: uninvoicedLoading } = useQuery<UninvoicedSummary>({
+    queryKey: ["/api/company/uninvoiced-summary"],
+    enabled: statusFilter === "uninvoiced",
   });
 
   const activePricing = useMemo(() => pricing?.filter(p => p.isActive) || [], [pricing]);
@@ -743,8 +764,10 @@ export default function Invoices() {
       <Tabs value={statusFilter} onValueChange={setStatusFilter}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="all" data-testid="tab-invoice-all">All</TabsTrigger>
+          <TabsTrigger value="uninvoiced" data-testid="tab-invoice-uninvoiced">Uninvoiced</TabsTrigger>
           <TabsTrigger value="draft" data-testid="tab-invoice-draft">Draft</TabsTrigger>
           <TabsTrigger value="sent" data-testid="tab-invoice-sent">Sent</TabsTrigger>
+          <TabsTrigger value="awaiting" data-testid="tab-invoice-awaiting">Awaiting Payment</TabsTrigger>
           <TabsTrigger value="pending" data-testid="tab-invoice-pending">Pending</TabsTrigger>
           <TabsTrigger value="paid" data-testid="tab-invoice-paid">Paid</TabsTrigger>
           <TabsTrigger value="failed" data-testid="tab-invoice-failed">Failed</TabsTrigger>
@@ -756,6 +779,50 @@ export default function Invoices() {
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-20 w-full" />
           ))}
+        </div>
+      ) : statusFilter === "uninvoiced" ? (
+        <div className="space-y-3">
+          {uninvoicedLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+            </div>
+          ) : uninvoicedSummary && uninvoicedSummary.count > 0 ? (
+            <>
+              <Card>
+                <CardContent className="p-4" data-testid="text-uninvoiced-total">
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-semibold text-foreground">{uninvoicedSummary.count}</span> completed visit{uninvoicedSummary.count !== 1 ? "s" : ""} worth{" "}
+                    <span className="font-semibold text-foreground">${uninvoicedSummary.totalDollars.toFixed(2)}</span> need invoicing
+                  </p>
+                </CardContent>
+              </Card>
+              {uninvoicedSummary.byContact.map((entry) => (
+                <Card key={entry.contactId} data-testid={`card-uninvoiced-${entry.contactId}`}>
+                  <CardContent className="flex items-center justify-between p-4">
+                    <div>
+                      <p className="font-medium" data-testid={`text-uninvoiced-name-${entry.contactId}`}>{entry.contactName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {entry.count} visit{entry.count !== 1 ? "s" : ""} -- ${entry.totalDollars.toFixed(2)}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => setGenerateDialogOpen(true)}
+                      data-testid={`button-generate-invoice-${entry.contactId}`}
+                    >
+                      <Zap className="mr-1 h-4 w-4" /> Generate Invoice
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </>
+          ) : (
+            <Card>
+              <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-no-uninvoiced">
+                All completed visits have been invoiced.
+              </CardContent>
+            </Card>
+          )}
         </div>
       ) : invoices && invoices.length > 0 ? (
         <div className="space-y-3">

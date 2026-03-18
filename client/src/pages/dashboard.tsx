@@ -565,7 +565,7 @@ function PipelineBar({ data }: { data: PipelineData }) {
       label: "Requires Invoicing",
       count: data.requiresInvoicing.count,
       value: data.requiresInvoicing.count > 0 ? `$${data.requiresInvoicing.totalDollars.toFixed(2)}` : "All clear",
-      href: "/invoices",
+      href: "/invoices?tab=uninvoiced",
       color: data.requiresInvoicing.count > 0 ? "bg-orange-500 dark:bg-orange-600" : "bg-green-600 dark:bg-green-700",
       textColor: data.requiresInvoicing.count > 0 ? "text-orange-700 dark:text-orange-400" : "text-green-700 dark:text-green-400",
       bgColor: data.requiresInvoicing.count > 0
@@ -576,7 +576,7 @@ function PipelineBar({ data }: { data: PipelineData }) {
       label: "Awaiting Payment",
       count: data.awaitingPayment.count,
       value: data.awaitingPayment.count > 0 ? `$${data.awaitingPayment.totalDollars.toFixed(2)}` : "None",
-      href: "/invoices",
+      href: "/invoices?tab=awaiting",
       color: data.awaitingPayment.count > 0 ? "bg-amber-500 dark:bg-amber-600" : "bg-green-600 dark:bg-green-700",
       textColor: data.awaitingPayment.count > 0 ? "text-amber-700 dark:text-amber-400" : "text-green-700 dark:text-green-400",
       bgColor: data.awaitingPayment.count > 0
@@ -1726,7 +1726,7 @@ export default function Dashboard() {
         );
       case "requires_invoicing":
         return (
-          <Link href="/invoices">
+          <Link href="/invoices?tab=uninvoiced">
             <Card className="h-full cursor-pointer hover:shadow-md transition-shadow" data-testid="widget-requires-invoicing">
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Requires Invoicing</CardTitle>
