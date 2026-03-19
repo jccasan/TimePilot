@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Dog, Phone, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp, Satellite, Play, SkipForward } from "lucide-react";
+import { MapPin, Dog, Phone, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp, Satellite, Play, SkipForward, Navigation, Loader2 } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
@@ -85,12 +85,14 @@ function getTodayDayName(): string {
   return days[new Date().getDay()];
 }
 
-function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpand }: {
+function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpand, onOnMyWay, onMyWaySendingId }: {
   visit: EnrichedVisit;
   onStatusChange: (visitId: string, status: VisitStatus) => void;
   isUpdating: boolean;
   isExpanded: boolean;
   onToggleExpand: () => void;
+  onOnMyWay?: (visitId: string) => void;
+  onMyWaySendingId?: string | null;
 }) {
   const [showSatellite, setShowSatellite] = useState(false);
   const status = visit.status as VisitStatus;
@@ -187,6 +189,19 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
             )}
 
             <div className="flex flex-wrap gap-2">
+              {onOnMyWay && !isTerminal && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => { e.stopPropagation(); onOnMyWay(visit.id); }}
+                  disabled={onMyWaySendingId === visit.id}
+                  className="min-h-[44px]"
+                  data-testid={`button-on-my-way-${visit.id}`}
+                >
+                  {onMyWaySendingId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Navigation className="h-3.5 w-3.5 mr-1" />}
+                  On My Way
+                </Button>
+              )}
               {status === "scheduled" && (
                 <Button
                   size="sm"
@@ -334,6 +349,42 @@ export default function TechRoutes() {
     statusMutation.mutate({ visitId, status });
   };
 
+  const [onMyWaySending, setOnMyWaySending] = useState<string | null>(null);
+  const [onMyWayCooldowns, setOnMyWayCooldowns] = useState<Record<string, number>>({});
+
+  const handleOnMyWay = useCallback((visitId: string) => {
+    if (onMyWayCooldowns[visitId] && Date.now() < onMyWayCooldowns[visitId]) {
+      toast({ title: "SMS already sent", description: "Please wait before sending another on-my-way message." });
+      return;
+    }
+    setOnMyWaySending(visitId);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await apiRequest("POST", `/api/visits/${visitId}/on-my-way`, {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          const data = await res.json();
+          setOnMyWayCooldowns(prev => ({ ...prev, [visitId]: Date.now() + 5 * 60 * 1000 }));
+          queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+          toast({ title: "On-my-way SMS sent", description: `${data.contactName} notified — ETA ~${data.etaMinutes} min` });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Failed to send SMS";
+          toast({ title: "Failed to send SMS", description: msg, variant: "destructive" });
+        } finally {
+          setOnMyWaySending(null);
+        }
+      },
+      (geoErr) => {
+        setOnMyWaySending(null);
+        toast({ title: "Location unavailable", description: geoErr.message || "Could not get your current location", variant: "destructive" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, [onMyWayCooldowns, toast]);
+
   const completedCount = visits?.filter(v => v.status === "completed").length ?? 0;
   const totalCount = visits?.length ?? 0;
 
@@ -400,6 +451,8 @@ export default function TechRoutes() {
                   isUpdating={updatingId === visit.id}
                   isExpanded={expandedId === visit.id}
                   onToggleExpand={() => setExpandedId(expandedId === visit.id ? null : visit.id)}
+                  onOnMyWay={handleOnMyWay}
+                  onMyWaySendingId={onMyWaySending}
                 />
               ))}
             </div>
