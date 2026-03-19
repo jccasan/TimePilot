@@ -308,6 +308,7 @@ export const servicePlans = pgTable("service_plans", {
   visitInstructions: text("visit_instructions"),
   assignedUserId: varchar("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
   estimateId: varchar("estimate_id").references(() => estimates.id, { onDelete: "set null" }),
+  isStopOnly: boolean("is_stop_only").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

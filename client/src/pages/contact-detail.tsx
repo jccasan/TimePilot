@@ -1356,6 +1356,7 @@ const servicePlanFormSchema = z.object({
   endsAfterCount: z.number().optional(),
   endsAfterUnit: z.enum(["days", "weeks", "months", "years"]).optional(),
   endDate: z.string().optional(),
+  isStopOnly: z.boolean().optional(),
 });
 
 type ServicePlanFormValues = z.infer<typeof servicePlanFormSchema>;
@@ -1672,6 +1673,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
         endsAfterCount: editingPlan.endsAfterCount || undefined,
         endsAfterUnit: (editingPlan.endsAfterUnit || undefined) as ServicePlanFormValues["endsAfterUnit"],
         endDate: editingPlan.endDate || "",
+        isStopOnly: editingPlan.isStopOnly || false,
       });
       const planWithAddOns = servicePlans?.find(sp => sp.id === editingPlan.id);
       setEditSelectedAddOns(planWithAddOns?.addOns?.map(a => a.servicePricingId) || []);
@@ -2129,6 +2131,20 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               </FormItem>
             )} />
           )}
+          <FormField control={form.control} name="isStopOnly" render={({ field }) => (
+            <FormItem className="flex items-center gap-2">
+              <FormControl>
+                <input
+                  type="checkbox"
+                  checked={!!field.value}
+                  onChange={(e) => field.onChange(e.target.checked)}
+                  className="accent-primary"
+                  data-testid="checkbox-plan-stop-only"
+                />
+              </FormControl>
+              <FormLabel className="!mt-0 text-sm">Stop only (no service) — excluded from invoicing &amp; revenue</FormLabel>
+            </FormItem>
+          )} />
           <Button type="submit" disabled={isPending} data-testid="button-submit-plan">
             {isPending ? "Saving..." : submitLabel}
           </Button>
@@ -2183,6 +2199,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                     <p className="text-xs text-muted-foreground">Started: {plan.startDate}</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {plan.isStopOnly && (
+                      <Badge variant="outline" className="text-xs" data-testid={`badge-stop-only-${plan.id}`}>Stop Only</Badge>
+                    )}
                     <Badge variant={plan.isActive ? "default" : "secondary"}>
                       {plan.isActive ? "Active" : "Inactive"}
                     </Badge>

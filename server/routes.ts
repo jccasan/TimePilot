@@ -1093,7 +1093,8 @@ export async function registerRoutes(
       const scheduledToday = todaysVisitsList.filter(v => v.status === "scheduled").length;
       const inProgressToday = todaysVisitsList.filter(v => v.status === "in_progress").length;
 
-      const activePlans = await storage.getServicePlans(companyId, { isActive: true });
+      const allActivePlans = await storage.getServicePlans(companyId, { isActive: true });
+      const activePlans = allActivePlans.filter(p => !p.isStopOnly);
       let mrr = 0;
       for (const plan of activePlans) {
         const basePrice = parseFloat(plan.pricePerVisit) || 0;
@@ -1361,7 +1362,7 @@ export async function registerRoutes(
       const dashboardVisits = [...overdueVisits, ...todaysVisitsList];
 
       let activePlansMonthlyValue = 0;
-      for (const plan of activePlans) {
+      for (const plan of activePlans.filter(p => !p.isStopOnly)) {
         const basePrice = parseFloat(plan.pricePerVisit) || 0;
         let visitsPerMonth = 0;
         switch (plan.frequency) {
@@ -1460,7 +1461,7 @@ export async function registerRoutes(
           propertyAddress: propertyCache.get(v.propertyId) || "",
           servicePlanName: plan ? `${frequencyLabel} Service` : "Service",
           serviceType: plan ? `${frequencyLabel} Cleanup` : "Cleanup",
-          amount: plan ? parseFloat(plan.pricePerVisit) || 0 : 0,
+          amount: plan && !plan.isStopOnly ? parseFloat(plan.pricePerVisit) || 0 : 0,
           completedAt: v.completedAt ? v.completedAt.toISOString() : null,
           startedAt: v.startedAt ? v.startedAt.toISOString() : null,
         });
@@ -1473,12 +1474,13 @@ export async function registerRoutes(
       let upcomingWeekValue = 0;
       for (const v of upcomingThisWeek) {
         const plan = planMap.get(v.servicePlanId);
-        upcomingWeekValue += plan ? (parseFloat(plan.pricePerVisit) || 0) : 0;
+        upcomingWeekValue += plan && !plan.isStopOnly ? (parseFloat(plan.pricePerVisit) || 0) : 0;
       }
 
+      const nonStopOnlyPlans = activePlans.filter(p => !p.isStopOnly);
       res.json({
         activePlans: {
-          count: activePlans.length,
+          count: nonStopOnlyPlans.length,
           monthlyValue: Math.round(activePlansMonthlyValue * 100) / 100,
         },
         scheduledVisits: {
@@ -1594,9 +1596,9 @@ export async function registerRoutes(
       let projections: { month: string; revenue: number; projected: boolean }[] = [];
       let projectedMonthlyValue: number | null = null;
       if (projectionMonths > 0) {
-        const activePlans = await storage.getServicePlans(companyId, { isActive: true });
+        const allActivePlansForProjection = await storage.getServicePlans(companyId, { isActive: true });
         let monthlyBookedEstimate = 0;
-        for (const plan of activePlans) {
+        for (const plan of allActivePlansForProjection.filter(p => !p.isStopOnly)) {
           const price = parseFloat(plan.pricePerVisit || "0");
           const planAddOns = await storage.getServicePlanAddOns(plan.id);
           const addOnsPrice = planAddOns.filter(a => a.isActive).reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
@@ -1829,7 +1831,7 @@ export async function registerRoutes(
       const avgInvoiceAmount = paidInvoices.length > 0 ? totalPaidRevenue / paidInvoices.length : 0;
 
       const allServicePlans = await storage.getServicePlans(companyId);
-      const activeServicePlans = allServicePlans.filter(sp => sp.isActive);
+      const activeServicePlans = allServicePlans.filter(sp => sp.isActive && !sp.isStopOnly);
       const avgPricePerVisit = activeServicePlans.length > 0
         ? activeServicePlans.reduce((sum, sp) => sum + parseFloat(sp.pricePerVisit), 0) / activeServicePlans.length
         : 0;

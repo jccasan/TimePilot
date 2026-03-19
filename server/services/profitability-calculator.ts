@@ -91,7 +91,8 @@ export async function calculateCustomerProfitability(
   const contact = contacts.find(c => c.id === contactId);
   if (!contact) return null;
 
-  const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+  const allPlans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+  const plans = allPlans.filter(p => !p.isStopOnly);
   if (plans.length === 0) return null;
 
   const properties = await storage.getProperties(companyId, contactId);

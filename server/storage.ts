@@ -793,8 +793,8 @@ export class DatabaseStorage implements IStorage {
       eq(servicePlans.companyId, companyId),
       eq(servicePlans.contactId, contactId),
     ));
-    const planIds = new Set(contactPlans.map(p => p.id));
-    const contactVisits = allVisits.filter(v => planIds.has(v.servicePlanId));
+    const nonStopOnlyPlanIds = new Set(contactPlans.filter(p => !p.isStopOnly).map(p => p.id));
+    const contactVisits = allVisits.filter(v => nonStopOnlyPlanIds.has(v.servicePlanId));
     const uninvoiced: Visit[] = [];
     for (const v of contactVisits) {
       const invoiced = await this.isVisitInvoiced(v.id);
@@ -860,7 +860,7 @@ export class DatabaseStorage implements IStorage {
 
     for (const v of uninvoiced) {
       const plan = planMap.get(v.servicePlanId);
-      if (!plan) continue;
+      if (!plan || plan.isStopOnly) continue;
       const price = parseFloat(plan.pricePerVisit) || 0;
       totalDollars += price;
       const contact = contactMap.get(plan.contactId);
@@ -874,8 +874,9 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    const totalCount = Array.from(byContactMap.values()).reduce((sum, c) => sum + c.count, 0);
     return {
-      count: uninvoiced.length,
+      count: totalCount,
       totalDollars: Math.round(totalDollars * 100) / 100,
       byContact: Array.from(byContactMap.values()).sort((a, b) => b.totalDollars - a.totalDollars),
     };
@@ -945,13 +946,16 @@ export class DatabaseStorage implements IStorage {
     const uninvoiced = completedVisits.filter(v => !invoicedVisitIds.has(v.id));
 
     const planMap = new Map(contactPlans.map(p => [p.id, p]));
+    const stopOnlyPlanIds = new Set(contactPlans.filter(p => p.isStopOnly).map(p => p.id));
 
     const propertyIds = [...new Set(contactPlans.map(p => p.propertyId))];
     const propsList = propertyIds.length > 0 ? await db.select().from(properties).where(inArray(properties.id, propertyIds)) : [];
     const propMap = new Map(propsList.map(p => [p.id, p]));
 
+    const filteredUninvoiced = uninvoiced.filter(v => !stopOnlyPlanIds.has(v.servicePlanId));
+
     let totalDollars = 0;
-    const enriched = uninvoiced.map(v => {
+    const enriched = filteredUninvoiced.map(v => {
       const plan = planMap.get(v.servicePlanId);
       const prop = plan ? propMap.get(plan.propertyId) : undefined;
       const price = parseFloat(plan?.pricePerVisit || "0");

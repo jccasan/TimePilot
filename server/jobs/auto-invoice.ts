@@ -59,7 +59,7 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, ti
   let invoicesCreated = 0;
 
   const allActiveServicePlans = await storage.getServicePlans(companyId, { isActive: true });
-  const activeServicePlans = allActiveServicePlans.filter(sp => !sp.pausedAt);
+  const activeServicePlans = allActiveServicePlans.filter(sp => !sp.pausedAt && !sp.isStopOnly);
   if (activeServicePlans.length === 0) return { invoicesCreated };
 
   const contactIdSet = new Set(activeServicePlans.map(sp => sp.contactId));

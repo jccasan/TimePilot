@@ -39,7 +39,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 
 ### Key Features
 - **Data Management**: CSV import with AI-assisted mapping, CRM for contacts and properties, activity logs, global search, and audit trail.
-- **Jobs System**: Comprehensive job management for one-off and recurring services, supporting various statuses and end conditions.
+- **Jobs System**: Comprehensive job management for one-off and recurring services, supporting various statuses and end conditions. Service plans support a "Stop Only" flag (`isStopOnly`) for route stops that don't generate revenue — these are excluded from MRR, profitability, uninvoiced summaries, auto-invoicing, projected revenue, and avg price calculations while still appearing on routes.
 - **Scheduling & Routing**: Recurring service plans with add-ons, visit management, drag-and-drop route builder with map visualization, visit completion tracking. One-time service plans integrated into routes.
 - **Financials**: Detailed invoicing with Stripe integration, payment ledger, cost-based automatic price calculator, profitability dashboard, and client tipping. Revenue calculations use `paidAt` for accurate reporting.
 - **Communication**: Integrated email and SMS, client portal, and configurable notification preferences.
