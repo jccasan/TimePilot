@@ -32,7 +32,7 @@ import {
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
   Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
-  CalendarDays, DollarSign, Play
+  CalendarDays, DollarSign, Play, ArrowUpDown
 } from "lucide-react";
 import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
@@ -273,15 +273,16 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 }
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
-  onEdit, onDelete, onOptimize, onDispatch, onUnassignAll, isOptimizing, isDispatching, isUnassigning,
+  onEdit, onDelete, onOptimize, onReverse, onDispatch, onUnassignAll, isOptimizing, isReversing, isDispatching, isUnassigning,
   visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
   onOptimize: (routeId: string, stopCount: number) => void;
+  onReverse: (routeId: string) => void;
   onDispatch: (routeId: string) => void;
   onUnassignAll: (routeId: string) => void;
-  isOptimizing: boolean; isDispatching: boolean; isUnassigning: boolean;
+  isOptimizing: boolean; isReversing: boolean; isDispatching: boolean; isUnassigning: boolean;
   visitsByPlan?: Record<string, Visit>;
   onVisitStatusChange?: (visitId: string, status: string) => void;
   updatingVisitId?: string | null;
@@ -371,6 +372,17 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
           >
             {isOptimizing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Navigation className="h-3 w-3 mr-1" />}
             Optimize ({creditsNeeded} {creditsNeeded === 1 ? "Credit" : "Credits"})
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            onClick={() => onReverse(route.id)}
+            disabled={isReversing || stopCount < 2}
+            title="Reverse route order"
+            data-testid={`button-reverse-${route.id}`}
+          >
+            {isReversing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpDown className="h-3 w-3" />}
           </Button>
           <Button
             size="sm"
@@ -851,6 +863,7 @@ export default function RoutesPage() {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [overContainerId, setOverContainerId] = useState<string | null>(null);
   const [optimizingRouteId, setOptimizingRouteId] = useState<string | null>(null);
+  const [reversingRouteId, setReversingRouteId] = useState<string | null>(null);
   const [dispatchingRouteId, setDispatchingRouteId] = useState<string | null>(null);
   const [unassignedSearch, setUnassignedSearch] = useState("");
   const [confirmOptimize, setConfirmOptimize] = useState<{ routeId: string; stopCount: number } | null>(null);
@@ -1125,6 +1138,28 @@ export default function RoutesPage() {
     },
   });
 
+  const reverseRouteMutation = useMutation({
+    mutationFn: async (routeId: string) => {
+      setReversingRouteId(routeId);
+      const res = await apiRequest("POST", `/api/routes/${routeId}/reverse`);
+      return res.json() as Promise<{ reversed: boolean; message?: string; stopCount?: number }>;
+    },
+    onSuccess: (data, routeId) => {
+      setReversingRouteId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+      setRouteMetrics(prev => { const next = { ...prev }; delete next[routeId]; return next; });
+      if (data.reversed) {
+        toast({ title: "Route reversed", description: `${data.stopCount} stops reordered` });
+      } else {
+        toast({ title: "Could not reverse", description: data.message });
+      }
+    },
+    onError: (err: Error) => {
+      setReversingRouteId(null);
+      toast({ title: "Reverse failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const dispatchMutation = useMutation({
     mutationFn: async (routeId: string) => {
       setDispatchingRouteId(routeId);
@@ -1335,9 +1370,11 @@ export default function RoutesPage() {
                           } else { deleteRouteMutation.mutate(r.id); }
                         }}
                         onOptimize={handleOptimizeClick}
+                        onReverse={(id) => reverseRouteMutation.mutate(id)}
                         onDispatch={(id) => dispatchMutation.mutate(id)}
                         onUnassignAll={(id) => setConfirmUnassignAll(id)}
                         isOptimizing={optimizingRouteId === route.id}
+                        isReversing={reversingRouteId === route.id}
                         isDispatching={dispatchingRouteId === route.id}
                         visitsByPlan={visitsByPlan}
                         onVisitStatusChange={handleVisitStatusChange}

@@ -2744,6 +2744,28 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/routes/:id/reverse", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const route = await storage.getRoute(req.params.id, companyId);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+
+      const plans = await storage.getServicePlans(companyId, { isActive: true });
+      const routePlans = plans.filter(sp => sp.routeId === route.id).sort((a, b) => a.stopOrder - b.stopOrder);
+
+      if (routePlans.length < 2) {
+        return res.json({ reversed: false, message: "Not enough stops to reverse" });
+      }
+
+      const reversed = [...routePlans].reverse();
+      for (let i = 0; i < reversed.length; i++) {
+        await storage.updateServicePlan(reversed[i].id, companyId, { stopOrder: i + 1 });
+      }
+
+      res.json({ reversed: true, stopCount: routePlans.length });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/routes/:id/metrics", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
