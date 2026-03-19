@@ -204,7 +204,8 @@ export interface IStorage {
   deleteServicePackage(id: string, companyId: string): Promise<void>;
 
   // Messages
-  getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string }): Promise<Message[]>;
+  getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean }): Promise<Message[]>;
+  markMessageRead(id: string, companyId: string): Promise<Message>;
   createMessage(data: InsertMessage): Promise<Message>;
   updateMessageStatus(id: string, status: string, errorMessage?: string): Promise<Message>;
 
@@ -1188,12 +1189,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ================ Messages ================
-  async getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string }): Promise<Message[]> {
+  async getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean }): Promise<Message[]> {
     const conditions = [eq(messages.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(messages.contactId, filters.contactId));
     if (filters?.channel) conditions.push(eq(messages.channel, filters.channel as any));
     if (filters?.direction) conditions.push(eq(messages.direction, filters.direction as any));
+    if (filters?.isRead !== undefined) conditions.push(eq(messages.isRead, filters.isRead));
     return db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt));
+  }
+
+  async markMessageRead(id: string, companyId: string): Promise<Message> {
+    const [msg] = await db.update(messages).set({ isRead: true }).where(and(eq(messages.id, id), eq(messages.companyId, companyId))).returning();
+    return msg;
   }
 
   async createMessage(data: InsertMessage): Promise<Message> {

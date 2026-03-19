@@ -279,9 +279,9 @@ function ClientRequestsCard() {
   });
 
   const { data: portalMessages = [], isLoading: msgLoading } = useQuery<PortalMessage[]>({
-    queryKey: ["/api/messages", "inbound"],
+    queryKey: ["/api/messages", "inbound", "unread"],
     queryFn: async () => {
-      const res = await fetch("/api/messages?direction=inbound", { credentials: "include" });
+      const res = await fetch("/api/messages?direction=inbound&unread=true", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load");
       return res.json();
     },
@@ -314,6 +314,17 @@ function ClientRequestsCard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-change-requests"] });
       toast({ title: "Denied", description: "Service change request denied." });
+    },
+  });
+
+  const dismissMessageMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      await apiRequest("PATCH", `/api/messages/${messageId}/read`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+      toast({ title: "Dismissed", description: "Message dismissed." });
     },
   });
 
@@ -526,12 +537,28 @@ function ClientRequestsCard() {
                 {msg.body && (
                   <p className="text-xs text-muted-foreground line-clamp-2">{msg.body}</p>
                 )}
-                <Link href="/communications">
-                  <Button size="sm" variant="outline" data-testid={`button-reply-${msg.id}`}>
-                    <Mail className="h-3.5 w-3.5 mr-1" />
-                    View & Reply
+                <div className="flex gap-2">
+                  <Link href="/communications">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      data-testid={`button-reply-${msg.id}`}
+                      onClick={() => dismissMessageMutation.mutate(msg.id)}
+                    >
+                      <Mail className="h-3.5 w-3.5 mr-1" />
+                      View & Reply
+                    </Button>
+                  </Link>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => dismissMessageMutation.mutate(msg.id)}
+                    disabled={dismissMessageMutation.isPending}
+                    data-testid={`button-dismiss-message-${msg.id}`}
+                  >
+                    Dismiss
                   </Button>
-                </Link>
+                </div>
               </div>
             );
           })}

@@ -536,6 +536,7 @@ export const messages = pgTable("messages", {
   metadata: jsonb("metadata").$type<Record<string, any>>(),
   sentBy: varchar("sent_by").references(() => users.id),
   errorMessage: text("error_message"),
+  isRead: boolean("is_read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_messages_company").on(table.companyId),

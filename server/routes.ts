@@ -5374,10 +5374,11 @@ export async function registerRoutes(
   app.get("/api/messages", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const filters: { contactId?: string; channel?: string; direction?: string } = {};
+      const filters: { contactId?: string; channel?: string; direction?: string; isRead?: boolean } = {};
       if (req.query.contactId) filters.contactId = req.query.contactId as string;
       if (req.query.channel) filters.channel = req.query.channel as string;
       if (req.query.direction) filters.direction = req.query.direction as string;
+      if (req.query.unread === "true") filters.isRead = false;
       const msgs = await storage.getMessages(companyId, filters);
 
       const contactCache = new Map<string, string>();
@@ -5395,6 +5396,15 @@ export async function registerRoutes(
         return { ...m, contactName };
       }));
       res.json(enriched);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/messages/:id/read", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const msg = await storage.markMessageRead(req.params.id, companyId);
+      if (!msg) return res.status(404).json({ error: "Message not found" });
+      res.json(msg);
     } catch (err) { handleError(res, err); }
   });
 
