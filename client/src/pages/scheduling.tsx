@@ -298,8 +298,14 @@ export default function Scheduling() {
       if (!map[v.scheduledDate]) map[v.scheduledDate] = [];
       map[v.scheduledDate].push(v);
     });
+    if (servicePlans) {
+      const planOrderMap = new Map(servicePlans.map(sp => [sp.id, sp.stopOrder ?? 0]));
+      for (const dateKey of Object.keys(map)) {
+        map[dateKey].sort((a, b) => (planOrderMap.get(a.servicePlanId) ?? 0) - (planOrderMap.get(b.servicePlanId) ?? 0));
+      }
+    }
     return map;
-  }, [visits]);
+  }, [visits, servicePlans]);
 
   const navigate = (dir: -1 | 1) => {
     setCurrentDate((prev) => {

@@ -14,7 +14,7 @@ import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordRes
 import type { RequestHandler } from "express";
 import { sendEmail } from "./services/email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
-import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
+import { sendSms, getTwilioPhoneNumber, isTwilioConfigured, logSmsMessage } from "./services/sms";
 import {
   isStripeConfigured,
   createStripeCustomer,
@@ -3457,6 +3457,93 @@ export async function registerRoutes(
       }
 
       res.json(visit);
+    } catch (err) { handleError(res, err); }
+  });
+
+  const onMyWayCooldowns = new Map<string, number>();
+
+  app.post("/api/visits/:id/on-my-way", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId, role } = await getCompanyContext(req);
+      const visit = await storage.getVisit(req.params.id, companyId);
+      if (!visit) return res.status(404).json({ error: "Visit not found" });
+
+      if (role === "tech") {
+        if (!visit.routeId) return res.status(403).json({ error: "Visit has no assigned route" });
+        const route = await storage.getRoute(visit.routeId, companyId);
+        if (!route || route.technicianId !== userId) return res.status(403).json({ error: "You are not assigned to this visit's route" });
+      }
+
+      const lat = Number(req.body.latitude);
+      const lon = Number(req.body.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        return res.status(400).json({ error: "Valid latitude and longitude are required" });
+      }
+
+      const cooldownKey = `${companyId}:${req.params.id}`;
+      const lastSent = onMyWayCooldowns.get(cooldownKey);
+      if (lastSent && Date.now() - lastSent < 5 * 60 * 1000) {
+        const waitSec = Math.ceil((5 * 60 * 1000 - (Date.now() - lastSent)) / 1000);
+        return res.status(429).json({ error: `Please wait ${waitSec} seconds before sending another on-my-way SMS for this stop` });
+      }
+
+      const plan = await storage.getServicePlan(visit.servicePlanId, companyId);
+      if (!plan) return res.status(404).json({ error: "Service plan not found" });
+
+      const contact = await storage.getContact(plan.contactId, companyId);
+      if (!contact?.phone) return res.status(400).json({ error: "Customer has no phone number" });
+
+      const property = await storage.getProperty(visit.propertyId, companyId);
+      if (!property) return res.status(404).json({ error: "Property not found" });
+
+      const destLat = parseFloat(String(property.latitude));
+      const destLon = parseFloat(String(property.longitude));
+      if (!Number.isFinite(destLat) || !Number.isFinite(destLon)) return res.status(400).json({ error: "Property is not geocoded" });
+
+      const company = await storage.getCompany(companyId);
+      const companyName = company?.name || "Your service provider";
+
+      let travelMinutes = 10;
+      const mapbox = await fetchMapboxDirections([
+        { longitude: lon, latitude: lat },
+        { longitude: destLon, latitude: destLat },
+      ]);
+      if (mapbox) {
+        travelMinutes = mapbox.duration;
+      } else {
+        const miles = haversineDistance(lat, lon, destLat, destLon);
+        travelMinutes = (miles / 25) * 60;
+      }
+
+      const roundedMinutes = Math.max(5, Math.ceil(travelMinutes / 5) * 5);
+
+      if (!isTwilioConfigured()) return res.status(503).json({ error: "SMS is not configured" });
+
+      const etaMsg = `Hi ${contact.firstName}, ${companyName} is on the way! Estimated arrival in about ${roundedMinutes} minutes. Please ensure your yard is accessible and any dogs are inside. See you soon!`;
+
+      const smsResult = await sendSms({ to: contact.phone, body: etaMsg });
+      if (!smsResult.success) return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
+
+      onMyWayCooldowns.set(cooldownKey, Date.now());
+
+      try {
+        await storage.createMessage({
+          companyId,
+          contactId: contact.id,
+          channel: "sms",
+          direction: "outbound",
+          status: "sent",
+          fromAddress: getTwilioPhoneNumber(),
+          toAddress: contact.phone,
+          body: etaMsg,
+          externalId: smsResult.messageSid,
+        });
+        await logSmsMessage(companyId, contact.phone, getTwilioPhoneNumber(), "outbound", smsResult.messageSid);
+      } catch (logErr) {
+        console.error("On-my-way message logging failed (SMS was sent):", logErr);
+      }
+
+      res.json({ sent: true, etaMinutes: roundedMinutes, contactName: `${contact.firstName} ${contact.lastName}` });
     } catch (err) { handleError(res, err); }
   });
 

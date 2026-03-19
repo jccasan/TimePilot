@@ -111,12 +111,14 @@ function LegSeparator({ distance, duration }: { distance: number; duration: numb
   );
 }
 
-function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, updatingVisitStatus, onStopClick }: {
+function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, updatingVisitStatus, onStopClick, onOnMyWay, onMyWaySendingId }: {
   stop: ServicePlan; contacts: Contact[]; properties: Property[];
   visit?: Visit | null; onVisitStatusChange?: (visitId: string, status: string) => void;
   updatingVisitId?: string | null;
   updatingVisitStatus?: string | null;
   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
+  onOnMyWay?: (visitId: string) => void;
+  onMyWaySendingId?: string | null;
 }) {
   const contact = contacts.find(c => c.id === stop.contactId);
   const property = properties.find(p => p.id === stop.propertyId);
@@ -212,6 +214,11 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
                         {updatingVisitId === visit.id && updatingVisitStatus === "scheduled" ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Clock className="h-3.5 w-3.5 mr-2 text-blue-600" />} Revert to Scheduled
                       </DropdownMenuItem>
                     )}
+                    {onOnMyWay && visit.status !== "completed" && visit.status !== "cancelled" && (
+                      <DropdownMenuItem onClick={() => onOnMyWay(visit.id)} disabled={onMyWaySendingId === visit.id} data-testid={`menu-on-my-way-${stop.id}`}>
+                        {onMyWaySendingId === visit.id ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Navigation className="h-3.5 w-3.5 mr-2 text-emerald-600" />} On My Way SMS
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -274,7 +281,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
   onEdit, onDelete, onOptimize, onReverse, onDispatch, onUnassignAll, isOptimizing, isReversing, isDispatching, isUnassigning,
-  visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick }: {
+  visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick, onOnMyWay, onMyWaySendingId }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
@@ -290,6 +297,8 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   metrics?: RouteMetrics | null;
   metricsLoading?: boolean;
   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
+  onOnMyWay?: (visitId: string) => void;
+  onMyWaySendingId?: string | null;
 }) {
   const tech = team.find(t => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
@@ -430,6 +439,8 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
                     updatingVisitId={updatingVisitId}
                     updatingVisitStatus={updatingVisitStatus}
                     onStopClick={onStopClick}
+                    onOnMyWay={onOnMyWay}
+                    onMyWaySendingId={onMyWaySendingId}
                   />
                 </div>
               );
@@ -961,6 +972,42 @@ export default function RoutesPage() {
     visitStatusMutation.mutate({ visitId, status });
   }, [visitStatusMutation]);
 
+  const [onMyWaySending, setOnMyWaySending] = useState<string | null>(null);
+  const [onMyWayCooldowns, setOnMyWayCooldowns] = useState<Record<string, number>>({});
+
+  const handleOnMyWay = useCallback((visitId: string) => {
+    if (onMyWayCooldowns[visitId] && Date.now() < onMyWayCooldowns[visitId]) {
+      toast({ title: "SMS already sent", description: "Please wait before sending another on-my-way message." });
+      return;
+    }
+    setOnMyWaySending(visitId);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await apiRequest("POST", `/api/visits/${visitId}/on-my-way`, {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          const data = await res.json();
+          setOnMyWayCooldowns(prev => ({ ...prev, [visitId]: Date.now() + 5 * 60 * 1000 }));
+          queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+          toast({ title: "On-my-way SMS sent", description: `${data.contactName} notified — ETA ~${data.etaMinutes} min` });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Failed to send SMS";
+          toast({ title: "Failed to send SMS", description: msg, variant: "destructive" });
+        } finally {
+          setOnMyWaySending(null);
+        }
+      },
+      (err) => {
+        setOnMyWaySending(null);
+        toast({ title: "Location unavailable", description: err.message || "Could not get your current location", variant: "destructive" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, [onMyWayCooldowns, toast]);
+
   const [routeMetrics, setRouteMetrics] = useState<Record<string, RouteMetrics>>({});
   const [metricsLoadingRoutes, setMetricsLoadingRoutes] = useState<Set<string>>(new Set());
 
@@ -1384,6 +1431,8 @@ export default function RoutesPage() {
                         metricsLoading={metricsLoadingRoutes.has(route.id)}
                         isUnassigning={unassigningRouteId === route.id}
                         onStopClick={handleStopClick}
+                        onOnMyWay={handleOnMyWay}
+                        onMyWaySendingId={onMyWaySending}
                       />
                     ))}
                   </div>

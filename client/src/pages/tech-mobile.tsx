@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed } from "lucide-react";
+import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed, Navigation } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
@@ -155,6 +155,42 @@ export default function TechMobile() {
   const [isCompleting, setIsCompleting] = useState(false);
   const gateFileInputRef = useRef<HTMLInputElement>(null);
   const extraFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [onMyWaySending, setOnMyWaySending] = useState<string | null>(null);
+  const [onMyWayCooldowns, setOnMyWayCooldowns] = useState<Record<string, number>>({});
+
+  const handleOnMyWay = (visitId: string) => {
+    if (onMyWayCooldowns[visitId] && Date.now() < onMyWayCooldowns[visitId]) {
+      toast({ title: "SMS already sent", description: "Please wait before sending another on-my-way message." });
+      return;
+    }
+    setOnMyWaySending(visitId);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await apiRequest("POST", `/api/visits/${visitId}/on-my-way`, {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          const data = await res.json();
+          setOnMyWayCooldowns(prev => ({ ...prev, [visitId]: Date.now() + 5 * 60 * 1000 }));
+          queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+          toast({ title: "On-my-way SMS sent", description: `${data.contactName} notified — ETA ~${data.etaMinutes} min` });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Failed to send SMS";
+          toast({ title: "Failed to send SMS", description: msg, variant: "destructive" });
+        } finally {
+          setOnMyWaySending(null);
+        }
+      },
+      (geoErr) => {
+        setOnMyWaySending(null);
+        toast({ title: "Location unavailable", description: geoErr.message || "Could not get your current location", variant: "destructive" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const { data: company } = useQuery<{ name: string }>({ queryKey: ["/api/company"] });
 
@@ -538,6 +574,17 @@ export default function TechMobile() {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                      {primaryVisit.status !== "completed" && primaryVisit.status !== "cancelled" && (
+                        <Button
+                          variant="outline"
+                          onClick={() => handleOnMyWay(primaryVisit.id)}
+                          disabled={onMyWaySending === primaryVisit.id}
+                          className="min-h-[44px]"
+                          data-testid={`button-on-my-way-${primaryVisit.id}`}
+                        >
+                          {onMyWaySending === primaryVisit.id ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Navigation className="mr-1 h-4 w-4" />} On My Way
+                        </Button>
+                      )}
                       {anyScheduled && !anyInProgress && (
                         <Button
                           onClick={() => {

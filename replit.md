@@ -43,7 +43,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Scheduling & Routing**: Recurring service plans with add-ons, visit management, drag-and-drop route builder with map visualization, visit completion tracking. One-time service plans integrated into routes.
 - **Financials**: Detailed invoicing with Stripe integration, payment ledger, cost-based automatic price calculator, profitability dashboard, and client tipping. Revenue calculations use `paidAt` for accurate reporting.
 - **Communication**: Integrated email and SMS, client portal, and configurable notification preferences.
-- **Field Operations**: Technician mobile interface with proof-of-service photo uploads, time tracking, satellite/aerial views, yard measurement tool, and automated customer notifications (gate closed photo, ETA SMS).
+- **Field Operations**: Technician mobile interface with proof-of-service photo uploads, time tracking, satellite/aerial views, yard measurement tool, automated customer notifications (gate closed photo, ETA SMS), and manual "On my way" SMS with live GPS-based ETA via Mapbox Directions.
 - **Business Intelligence**: Overhead cost tracking, customer profitability, route profit maps, and a pricing simulator. MRR calculation includes add-ons.
 - **Dashboard Widgets**: Customizable drag-and-drop dashboard with various operational and financial widgets, including weather forecast and route map preview.
 - **Onboarding**: Guided 5-step onboarding flow for initial setup including service zones, customer addition, pricing, service plan creation, and route generation.
