@@ -85,7 +85,7 @@ function getTodayDayName(): string {
   return days[new Date().getDay()];
 }
 
-function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpand, onOnMyWay, onMyWaySendingId }: {
+function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpand, onOnMyWay, onMyWaySendingId, onMyWayCooldowns }: {
   visit: EnrichedVisit;
   onStatusChange: (visitId: string, status: VisitStatus) => void;
   isUpdating: boolean;
@@ -93,6 +93,7 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
   onToggleExpand: () => void;
   onOnMyWay?: (visitId: string) => void;
   onMyWaySendingId?: string | null;
+  onMyWayCooldowns?: Record<string, number>;
 }) {
   const [showSatellite, setShowSatellite] = useState(false);
   const status = visit.status as VisitStatus;
@@ -194,7 +195,7 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
                   size="sm"
                   variant="outline"
                   onClick={(e) => { e.stopPropagation(); onOnMyWay(visit.id); }}
-                  disabled={onMyWaySendingId === visit.id}
+                  disabled={onMyWaySendingId === visit.id || !!(onMyWayCooldowns && onMyWayCooldowns[visit.id] && Date.now() < onMyWayCooldowns[visit.id])}
                   className="min-h-[44px]"
                   data-testid={`button-on-my-way-${visit.id}`}
                 >
@@ -453,6 +454,7 @@ export default function TechRoutes() {
                   onToggleExpand={() => setExpandedId(expandedId === visit.id ? null : visit.id)}
                   onOnMyWay={handleOnMyWay}
                   onMyWaySendingId={onMyWaySending}
+                  onMyWayCooldowns={onMyWayCooldowns}
                 />
               ))}
             </div>
