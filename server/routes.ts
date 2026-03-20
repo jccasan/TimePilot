@@ -940,7 +940,7 @@ export async function registerRoutes(
       const validTimezones = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
       const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
         "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "dashboardNotes", "timezone",
-        "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug"];
+        "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug", "leadWebhookSmsTemplate"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -9648,6 +9648,142 @@ export async function registerRoutes(
       res.json({
         name: company.name,
         logoUrl: company.logoUrl,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  const webhookLeadSchema = z.object({
+    firstName: z.string().min(1).max(255),
+    lastName: z.string().max(255).default(""),
+    email: z.string().email().max(255).optional().or(z.literal("")),
+    phone: z.string().max(50).regex(/^[+]?[\d\s\-().]{7,}$/, "Invalid phone number format").optional().or(z.literal("")),
+    streetAddress: z.string().max(255).optional().or(z.literal("")),
+    city: z.string().max(100).optional().or(z.literal("")),
+    state: z.string().max(50).optional().or(z.literal("")),
+    zipCode: z.string().max(20).optional().or(z.literal("")),
+    numberOfDogs: z.union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)]).default(1),
+    yardSize: z.enum(["small", "medium", "large", "extra-large"]).optional(),
+    serviceFrequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
+    serviceDay: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
+    source: z.string().max(100).optional(),
+    notes: z.string().max(2000).optional(),
+  });
+
+  const DEFAULT_SMS_QUOTE_TEMPLATE = "Hi {firstName}! Thanks for your interest in our pet waste removal service. Based on {dogs} dog(s) with {frequency} service, your estimated price is ${price}/visit. Reply YES to get started!";
+
+  async function sendAutoQuoteSms(company: typeof companies.$inferSelect, contact: { firstName: string; phone: string | null; numberOfDogs: number | null; serviceFrequency: string | null }, yardSize?: string): Promise<boolean> {
+    if (!contact.phone || !isTwilioConfigured()) return false;
+
+    const dogs = contact.numberOfDogs ?? 1;
+    const frequency = (contact.serviceFrequency || "weekly") as "weekly" | "biweekly" | "monthly" | "onetime";
+    const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
+    const pricingInputs: PriceCalculatorInputs = {
+      yardSizeAcres: yardSizeMap[yardSize || "medium"] || 0.1,
+      dogCount: dogs,
+      serviceFrequency: frequency,
+      yardDifficulty: "flat",
+      distanceFromNearestStopMiles: 0.5,
+    };
+    const priceResult = calculatePrice(pricingInputs, company.pricingConfig);
+    const priceDollars = (priceResult.recommendedPriceCents / 100).toFixed(2);
+
+    const template = company.leadWebhookSmsTemplate || DEFAULT_SMS_QUOTE_TEMPLATE;
+    const body = template
+      .replace(/\{firstName\}/g, contact.firstName)
+      .replace(/\{dogs\}/g, String(dogs))
+      .replace(/\{frequency\}/g, frequency)
+      .replace(/\{price\}/g, priceDollars);
+
+    const twilioFrom = getTwilioPhoneNumber();
+    const result = await sendSms({ to: contact.phone, body, from: twilioFrom });
+
+    if (result.success) {
+      await logSmsMessage(company.id, contact.phone, twilioFrom, "outbound", result.messageSid, 1);
+      return true;
+    } else {
+      console.error(`[webhook-lead-sms] Failed to send auto-quote SMS to ${contact.phone}:`, result.error);
+      return false;
+    }
+  }
+
+  app.post("/api/webhooks/leads", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const parsed = webhookLeadSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten().fieldErrors });
+      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay, source, notes } = parsed.data;
+
+      const leadSource = source || "webhook";
+
+      const existingSources = await storage.getLeadSources(companyId);
+      const sourceExists = existingSources.some(s => s.name.toLowerCase() === leadSource.toLowerCase());
+      if (!sourceExists) {
+        await storage.createLeadSource({ companyId, name: leadSource });
+      }
+
+      const contact = await storage.createContact({
+        companyId,
+        firstName,
+        lastName,
+        email: email || null,
+        phone: phone || null,
+        streetAddress: streetAddress || null,
+        city: city || null,
+        state: state || null,
+        zipCode: zipCode || null,
+        numberOfDogs,
+        yardSize: yardSize || null,
+        serviceFrequency,
+        serviceDay: serviceDay || null,
+        status: "lead",
+        leadSource,
+        notes: notes || null,
+      });
+
+      const hasFullAddress = !!(streetAddress && city && state && zipCode);
+      if (hasFullAddress) {
+        await createPropertyWithGeocode({
+          companyId,
+          contactId: contact.id,
+          streetAddress: streetAddress!,
+          city: city!,
+          state: state!,
+          zipCode: zipCode!,
+          numberOfDogs,
+          yardSize: yardSize || null,
+        });
+      }
+
+      notify(companyId, "new_lead", "New Lead (Webhook)", `${firstName} ${lastName} submitted via ${leadSource}.`.trim(), `/contacts/${contact.id}`);
+
+      const company = await storage.getCompany(companyId);
+      let smsSent = false;
+      if (phone && company && isTwilioConfigured()) {
+        try {
+          smsSent = await sendAutoQuoteSms(company, { firstName, phone, numberOfDogs, serviceFrequency }, yardSize);
+        } catch (err) {
+          console.error("[webhook-lead] Auto-quote SMS error:", err);
+        }
+      }
+
+      const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
+      const pricingInputs: PriceCalculatorInputs = {
+        yardSizeAcres: yardSizeMap[yardSize || "medium"] || 0.1,
+        dogCount: numberOfDogs,
+        serviceFrequency: serviceFrequency as "weekly" | "biweekly" | "monthly" | "onetime",
+        yardDifficulty: "flat",
+        distanceFromNearestStopMiles: 0.5,
+      };
+      const priceResult = calculatePrice(pricingInputs, company?.pricingConfig ?? null);
+
+      res.status(201).json({
+        contactId: contact.id,
+        leadSource,
+        quote: {
+          recommendedPriceCents: priceResult.recommendedPriceCents,
+          frequency: serviceFrequency,
+        },
+        smsSent,
       });
     } catch (err) { handleError(res, err); }
   });

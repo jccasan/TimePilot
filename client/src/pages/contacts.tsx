@@ -692,6 +692,24 @@ export default function Contacts() {
                           Stop Only
                         </Badge>
                       )}
+                      {contact.leadSource && ["webhook", "facebook_ads", "google_ads"].includes(contact.leadSource.toLowerCase()) && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs border-purple-300 text-purple-700 dark:border-purple-600 dark:text-purple-400"
+                          data-testid={`badge-lead-source-${contact.id}`}
+                        >
+                          {contact.leadSource === "webhook" ? "Webhook" : contact.leadSource.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                        </Badge>
+                      )}
+                      {contact.leadSource === "website_widget" && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs border-teal-300 text-teal-700 dark:border-teal-600 dark:text-teal-400"
+                          data-testid={`badge-lead-source-${contact.id}`}
+                        >
+                          Website
+                        </Badge>
+                      )}
                       <Badge
                         variant="secondary"
                         className={statusColors[contact.status] || ""}

@@ -57,6 +57,7 @@ type Company = {
   startLongitude: string | null;
   logoUrl: string | null;
   slug: string | null;
+  leadWebhookSmsTemplate: string | null;
   subscriptionTier: string;
   subscriptionStatus: string;
   autoVisitsEnabled: boolean;
@@ -635,6 +636,368 @@ function SignupWidgetSection({ company }: { company: { slug: string | null; name
             </Button>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+type ApiKeyData = {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  maskedKey: string;
+  scopes: string[];
+  isActive: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+};
+
+function WebhookLeadSection() {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState<string | null>(null);
+  const [showCreateKey, setShowCreateKey] = useState(false);
+  const [keyName, setKeyName] = useState("");
+  const [newRawKey, setNewRawKey] = useState<string | null>(null);
+
+  const { data: apiKeys = [], isLoading: loadingKeys } = useQuery<ApiKeyData[]>({
+    queryKey: ["/api/api-keys"],
+  });
+
+  const createKeyMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/api-keys", { name, scopes: ["leads:write"] });
+      return res.json();
+    },
+    onSuccess: (data: ApiKeyData & { rawKey: string }) => {
+      setNewRawKey(data.rawKey);
+      setKeyName("");
+      queryClient.invalidateQueries({ queryKey: ["/api/api-keys"] });
+      toast({ title: "API key created", description: "Copy your key now - it won't be shown again." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteKeyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/api-keys/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/api-keys"] });
+      toast({ title: "API key deleted" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const baseUrl = window.location.origin;
+  const webhookUrl = `${baseUrl}/api/webhooks/leads`;
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
+    toast({ title: `${label} copied to clipboard` });
+  };
+
+  const exampleCurl = `curl -X POST "${webhookUrl}" \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: YOUR_API_KEY" \\
+  -d '{
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "email": "jane@example.com",
+    "phone": "+15551234567",
+    "streetAddress": "123 Main St",
+    "city": "Austin",
+    "state": "TX",
+    "zipCode": "78701",
+    "numberOfDogs": 2,
+    "yardSize": "medium",
+    "serviceFrequency": "weekly",
+    "source": "facebook_ads"
+  }'`;
+
+  return (
+    <Card data-testid="card-webhook-leads">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Globe className="h-5 w-5" />
+          Lead Webhook Integration
+        </CardTitle>
+        <CardDescription>
+          Automatically capture leads from Facebook Ads, Google Ads, or any platform that supports webhooks
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="space-y-2">
+          <Label>Webhook URL</Label>
+          <div className="flex gap-2">
+            <Input value={webhookUrl} readOnly className="text-sm font-mono" data-testid="input-webhook-url" />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => copyToClipboard(webhookUrl, "Webhook URL")}
+              data-testid="button-copy-webhook-url"
+            >
+              {copied === "Webhook URL" ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Send a POST request to this URL with an <code className="bg-muted px-1 rounded">x-api-key</code> header.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <Label>API Keys</Label>
+          {loadingKeys ? (
+            <Skeleton className="h-10 w-full" />
+          ) : (
+            <>
+              {apiKeys.length > 0 && (
+                <div className="space-y-2">
+                  {apiKeys.map((key) => (
+                    <div key={key.id} className="flex items-center justify-between gap-2 p-2 border rounded-md" data-testid={`row-api-key-${key.id}`}>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium">{key.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2 font-mono">{key.maskedKey}</span>
+                        {key.lastUsedAt && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            Last used: {new Date(key.lastUsedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => deleteKeyMutation.mutate(key.id)}
+                        disabled={deleteKeyMutation.isPending}
+                        data-testid={`button-delete-api-key-${key.id}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {newRawKey && (
+                <div className="p-3 border border-green-300 bg-green-50 dark:bg-green-950 dark:border-green-800 rounded-md space-y-2" data-testid="container-new-api-key">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium">New API Key (copy now - shown only once)</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input value={newRawKey} readOnly className="text-sm font-mono" data-testid="input-new-api-key" />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => copyToClipboard(newRawKey, "API Key")}
+                      data-testid="button-copy-new-api-key"
+                    >
+                      {copied === "API Key" ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setNewRawKey(null)} data-testid="button-dismiss-api-key">
+                    Dismiss
+                  </Button>
+                </div>
+              )}
+
+              {showCreateKey ? (
+                <div className="flex gap-2">
+                  <Input
+                    value={keyName}
+                    onChange={(e) => setKeyName(e.target.value)}
+                    placeholder="Key name (e.g., Facebook Leads)"
+                    className="max-w-[250px]"
+                    data-testid="input-api-key-name"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!keyName.trim() || createKeyMutation.isPending}
+                    onClick={() => createKeyMutation.mutate(keyName.trim())}
+                    data-testid="button-create-api-key"
+                  >
+                    {createKeyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setShowCreateKey(false); setKeyName(""); }} data-testid="button-cancel-create-key">
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => setShowCreateKey(true)} data-testid="button-add-api-key">
+                  <Plus className="h-4 w-4 mr-1" />
+                  Create API Key
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="flex items-center gap-1" data-testid="button-toggle-webhook-docs">
+              <Info className="h-4 w-4" />
+              Payload Schema & Example
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-2 space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Expected JSON Payload</Label>
+                <div className="bg-muted rounded-md p-3 text-xs font-mono overflow-x-auto whitespace-pre" data-testid="text-webhook-schema">
+{`{
+  "firstName": "string (required)",
+  "lastName": "string",
+  "email": "string (valid email)",
+  "phone": "string (for auto-quote SMS)",
+  "streetAddress": "string",
+  "city": "string",
+  "state": "string",
+  "zipCode": "string",
+  "numberOfDogs": "number (1-20, default: 1)",
+  "yardSize": "small | medium | large | extra-large",
+  "serviceFrequency": "weekly | biweekly | monthly | onetime",
+  "serviceDay": "monday - sunday",
+  "source": "string (lead source label, default: webhook)",
+  "notes": "string (up to 2000 chars)"
+}`}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Example cURL</Label>
+                <div className="relative">
+                  <pre className="bg-muted rounded-md p-3 text-xs font-mono overflow-x-auto whitespace-pre" data-testid="text-webhook-curl">
+                    {exampleCurl}
+                  </pre>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-1 right-1 h-6 w-6"
+                    onClick={() => copyToClipboard(exampleCurl, "cURL")}
+                    data-testid="button-copy-curl"
+                  >
+                    {copied === "cURL" ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>If the lead includes a phone number and Twilio is configured, an auto-quote SMS will be sent immediately using your SMS template.</p>
+                <p>The response includes the created contact ID, calculated price quote, and whether an SMS was sent.</p>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SmsQuoteTemplateSection({ company }: { company: Company | null }) {
+  const { toast } = useToast();
+  const defaultTemplate = "Hi {firstName}! Thanks for your interest in our pet waste removal service. Based on {dogs} dog(s) with {frequency} service, your estimated price is ${price}/visit. Reply YES to get started!";
+  const [template, setTemplate] = useState(company?.leadWebhookSmsTemplate || defaultTemplate);
+
+  useEffect(() => {
+    if (company?.leadWebhookSmsTemplate) {
+      setTemplate(company.leadWebhookSmsTemplate);
+    }
+  }, [company?.leadWebhookSmsTemplate]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (tmpl: string) => {
+      const res = await apiRequest("PATCH", "/api/company", { leadWebhookSmsTemplate: tmpl });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save template");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "SMS quote template saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const previewText = template
+    .replace(/\{firstName\}/g, "Jane")
+    .replace(/\{dogs\}/g, "2")
+    .replace(/\{frequency\}/g, "weekly")
+    .replace(/\{price\}/g, "29.00");
+
+  return (
+    <Card data-testid="card-sms-quote-template">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Mail className="h-5 w-5" />
+          Auto-Quote SMS Template
+        </CardTitle>
+        <CardDescription>
+          Customize the automatic quote text sent to leads who provide a phone number
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label>Message Template</Label>
+          <Textarea
+            value={template}
+            onChange={(e) => setTemplate(e.target.value)}
+            rows={4}
+            className="font-mono text-sm"
+            data-testid="textarea-sms-template"
+          />
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="secondary" className="text-xs cursor-pointer" onClick={() => setTemplate(t => t + "{firstName}")} data-testid="badge-merge-firstName">
+              {"{firstName}"}
+            </Badge>
+            <Badge variant="secondary" className="text-xs cursor-pointer" onClick={() => setTemplate(t => t + "{dogs}")} data-testid="badge-merge-dogs">
+              {"{dogs}"}
+            </Badge>
+            <Badge variant="secondary" className="text-xs cursor-pointer" onClick={() => setTemplate(t => t + "{frequency}")} data-testid="badge-merge-frequency">
+              {"{frequency}"}
+            </Badge>
+            <Badge variant="secondary" className="text-xs cursor-pointer" onClick={() => setTemplate(t => t + "{price}")} data-testid="badge-merge-price">
+              {"{price}"}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Click a merge field above to insert it. These will be replaced with actual values when the SMS is sent.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Preview</Label>
+          <div className="bg-muted rounded-md p-3 text-sm" data-testid="text-sms-preview">
+            {previewText}
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            onClick={() => saveMutation.mutate(template)}
+            disabled={saveMutation.isPending || template === (company?.leadWebhookSmsTemplate || defaultTemplate)}
+            data-testid="button-save-sms-template"
+          >
+            {saveMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+            Save Template
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => setTemplate(defaultTemplate)}
+            disabled={template === defaultTemplate}
+            data-testid="button-reset-sms-template"
+          >
+            Reset to Default
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -1682,6 +2045,10 @@ export default function Settings() {
           <StripeConnectSection />
 
           <SignupWidgetSection company={company ? { slug: company.slug, name: company.name } : null} />
+
+          <WebhookLeadSection />
+
+          <SmsQuoteTemplateSection company={company ?? null} />
 
           <Card>
             <CardHeader>
