@@ -140,7 +140,7 @@ function ConversationThread({
   });
 
   useEffect(() => {
-    if (threadMessages && threadMessages.some(m => m.direction === "inbound" && !m.isRead)) {
+    if (!markReadMutation.isPending && threadMessages && threadMessages.some(m => m.direction === "inbound" && !m.isRead)) {
       markReadMutation.mutate();
     }
   }, [threadKey, threadMessages]);
