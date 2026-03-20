@@ -69,6 +69,7 @@ export default function SignupWidget() {
     state: "",
     zipCode: "",
     numberOfDogs: "1",
+    yardSize: "medium",
     serviceFrequency: "weekly",
     serviceDay: "",
   });
@@ -84,6 +85,7 @@ export default function SignupWidget() {
           ...formData,
           numberOfDogs: parseInt(formData.numberOfDogs, 10) || 1,
           serviceDay: formData.serviceDay || undefined,
+          yardSize: formData.yardSize,
         }),
       });
       if (!res.ok) {
@@ -165,7 +167,11 @@ export default function SignupWidget() {
     );
   }
 
-  const isFormValid = formData.firstName.trim().length > 0;
+  const isFormValid = formData.firstName.trim().length > 0 &&
+    formData.streetAddress.trim().length > 0 &&
+    formData.city.trim().length > 0 &&
+    formData.state.trim().length > 0 &&
+    formData.zipCode.trim().length > 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
@@ -231,49 +237,53 @@ export default function SignupWidget() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="streetAddress">Street Address</Label>
+              <Label htmlFor="streetAddress">Street Address *</Label>
               <Input
                 id="streetAddress"
                 value={formData.streetAddress}
                 onChange={(e) => updateField("streetAddress", e.target.value)}
+                required
                 data-testid="input-street-address"
               />
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="city">City</Label>
+                <Label htmlFor="city">City *</Label>
                 <Input
                   id="city"
                   value={formData.city}
                   onChange={(e) => updateField("city", e.target.value)}
+                  required
                   data-testid="input-city"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="state">State</Label>
+                <Label htmlFor="state">State *</Label>
                 <Input
                   id="state"
                   value={formData.state}
                   onChange={(e) => updateField("state", e.target.value)}
                   maxLength={2}
+                  required
                   data-testid="input-state"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="zipCode">ZIP Code</Label>
+                <Label htmlFor="zipCode">ZIP Code *</Label>
                 <Input
                   id="zipCode"
                   value={formData.zipCode}
                   onChange={(e) => updateField("zipCode", e.target.value)}
+                  required
                   data-testid="input-zip-code"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="numberOfDogs">Number of Dogs</Label>
+                <Label htmlFor="numberOfDogs">Dogs</Label>
                 <Select value={formData.numberOfDogs} onValueChange={(v) => updateField("numberOfDogs", v)}>
                   <SelectTrigger data-testid="select-number-of-dogs">
                     <SelectValue />
@@ -286,7 +296,21 @@ export default function SignupWidget() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="serviceFrequency">Service Frequency</Label>
+                <Label htmlFor="yardSize">Yard Size</Label>
+                <Select value={formData.yardSize} onValueChange={(v) => updateField("yardSize", v)}>
+                  <SelectTrigger data-testid="select-yard-size">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="small">Small</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="large">Large</SelectItem>
+                    <SelectItem value="extra-large">Extra Large</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="serviceFrequency">Frequency</Label>
                 <Select value={formData.serviceFrequency} onValueChange={(v) => updateField("serviceFrequency", v)}>
                   <SelectTrigger data-testid="select-service-frequency">
                     <SelectValue />

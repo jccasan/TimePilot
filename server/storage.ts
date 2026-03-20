@@ -387,6 +387,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCompany(data: InsertCompany): Promise<Company> {
+    if (!data.slug && data.name) {
+      const baseSlug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
+      let slug = baseSlug;
+      let suffix = 1;
+      while (true) {
+        const existing = await this.getCompanyBySlug(slug);
+        if (!existing) break;
+        slug = `${baseSlug}-${suffix++}`;
+      }
+      data = { ...data, slug };
+    }
     const [company] = await db.insert(companies).values(data).returning();
     return company;
   }

@@ -733,16 +733,9 @@ export async function registerRoutes(
     }
     const user = await getUserById(userId);
     const username = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User" : "User";
-    const baseSlug = `${username}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
-    let slug = baseSlug;
-    let slugSuffix = 1;
-    while (await storage.getCompanyBySlug(slug)) {
-      slug = `${baseSlug}-${slugSuffix++}`;
-    }
     const company = await storage.createCompany({
       name: `${username}'s Company`,
       email: "",
-      slug,
       subscriptionTier: "tier_1",
       subscriptionStatus: "active",
     });
@@ -9654,24 +9647,39 @@ export async function registerRoutes(
     lastName: z.string().max(255).default(""),
     email: z.string().email().max(255).optional().or(z.literal("")),
     phone: z.string().max(50).optional().or(z.literal("")),
-    streetAddress: z.string().max(255).optional().or(z.literal("")),
-    city: z.string().max(100).optional().or(z.literal("")),
-    state: z.string().max(50).optional().or(z.literal("")),
-    zipCode: z.string().max(20).optional().or(z.literal("")),
+    streetAddress: z.string().min(1).max(255),
+    city: z.string().min(1).max(100),
+    state: z.string().min(1).max(50),
+    zipCode: z.string().min(1).max(20),
     numberOfDogs: z.union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)]).default(1),
+    yardSize: z.enum(["small", "medium", "large", "extra-large"]).default("medium"),
     serviceFrequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
     serviceDay: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
   });
 
+  const publicLeadRateLimit = new Map<string, { count: number; resetAt: number }>();
+
   app.post("/api/public/leads/:slug", async (req: Request, res: Response) => {
     try {
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const entry = publicLeadRateLimit.get(clientIp);
+      if (entry && entry.resetAt > now) {
+        if (entry.count >= 10) {
+          return res.status(429).json({ error: "Too many requests. Please try again later." });
+        }
+        entry.count++;
+      } else {
+        publicLeadRateLimit.set(clientIp, { count: 1, resetAt: now + 60 * 60 * 1000 });
+      }
+
       const { slug } = req.params;
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
       const parsed = publicLeadSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors });
-      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, serviceFrequency, serviceDay } = parsed.data;
+      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay } = parsed.data;
 
       const contact = await storage.createContact({
         companyId: company.id,
@@ -9679,11 +9687,12 @@ export async function registerRoutes(
         lastName,
         email: email || null,
         phone: phone || null,
-        streetAddress: streetAddress || null,
-        city: city || null,
-        state: state || null,
-        zipCode: zipCode || null,
+        streetAddress,
+        city,
+        state,
+        zipCode,
         numberOfDogs,
+        yardSize,
         serviceFrequency,
         serviceDay: serviceDay || null,
         status: "lead",
@@ -9705,8 +9714,9 @@ export async function registerRoutes(
 
       notify(company.id, "new_lead", "New Lead", `${firstName} ${lastName} signed up via your website widget.`.trim(), `/contacts/${contact.id}`);
 
+      const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
       const pricingInputs: PriceCalculatorInputs = {
-        yardSizeAcres: 0.1,
+        yardSizeAcres: yardSizeMap[yardSize] || 0.1,
         dogCount: numberOfDogs,
         serviceFrequency,
         yardDifficulty: "flat",
