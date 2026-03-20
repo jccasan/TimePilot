@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed, Navigation } from "lucide-react";
+import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed, Navigation, ShieldAlert, Dog } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
@@ -39,6 +39,9 @@ type TodayVisit = {
     specialInstructions: string | null;
     measuredYardSqft: number | null;
     lotSize: string | null;
+    numberOfDogs: number | null;
+    hasDangerousDog: boolean | null;
+    dangerousDogNotes: string | null;
   };
   contact?: {
     firstName: string;
@@ -513,11 +516,28 @@ export default function TechMobile() {
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </div>
                   </div>
+                  {primaryVisit.property?.hasDangerousDog && (
+                    <div className="mt-2 flex items-start gap-2 rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-3 py-2" data-testid={`alert-dangerous-dog-${primaryVisit.id}`}>
+                      <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-red-700 dark:text-red-300">Dangerous Dog Warning</p>
+                        {primaryVisit.property.dangerousDogNotes && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-0.5" data-testid={`text-dangerous-dog-notes-${primaryVisit.id}`}>{primaryVisit.property.dangerousDogNotes}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </CardHeader>
                 {isExpanded && (
                   <CardContent className="p-4 pt-0 space-y-3">
                     {primaryVisit.property && (
                       <PropertyImageSection visit={primaryVisit} />
+                    )}
+                    {primaryVisit.property?.numberOfDogs != null && primaryVisit.property.numberOfDogs > 0 && (
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground" data-testid={`text-dog-count-${primaryVisit.id}`}>
+                        <Dog className="h-4 w-4" />
+                        <span>{primaryVisit.property.numberOfDogs} {primaryVisit.property.numberOfDogs === 1 ? "dog" : "dogs"}</span>
+                      </div>
                     )}
                     {primaryVisit.property?.gateCode && (
                       <div>

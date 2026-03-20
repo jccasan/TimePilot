@@ -47,7 +47,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { StreetViewImage } from "@/components/street-view-image";
@@ -76,6 +77,8 @@ const propertyFormSchema = z.object({
   latitude: z.string().optional(),
   longitude: z.string().optional(),
   specialInstructions: z.string().optional(),
+  hasDangerousDog: z.boolean().optional(),
+  dangerousDogNotes: z.string().optional(),
 });
 
 export default function ContactDetail() {
@@ -161,6 +164,8 @@ export default function ContactDetail() {
       gateCode: "",
       lotSize: "",
       specialInstructions: "",
+      hasDangerousDog: false,
+      dangerousDogNotes: "",
     },
   });
 
@@ -206,6 +211,19 @@ export default function ContactDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       setMeasurePropertyId(null);
       toast({ title: "Measurement saved", description: "Yard area has been recorded." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateDangerousDogMutation = useMutation({
+    mutationFn: async ({ propertyId, hasDangerousDog, dangerousDogNotes }: { propertyId: string; hasDangerousDog: boolean; dangerousDogNotes?: string }) => {
+      await apiRequest("PATCH", `/api/properties/${propertyId}`, { hasDangerousDog, dangerousDogNotes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -604,6 +622,22 @@ export default function ContactDetail() {
                   <FormField control={propertyForm.control} name="specialInstructions" render={({ field }) => (
                     <FormItem><FormLabel>Special Instructions</FormLabel><FormControl><Textarea {...field} data-testid="input-special-instructions" /></FormControl><FormMessage /></FormItem>
                   )} />
+                  <FormField control={propertyForm.control} name="hasDangerousDog" render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert className={`h-4 w-4 ${field.value ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} />
+                        <FormLabel className="text-sm font-medium cursor-pointer">Dangerous Dog</FormLabel>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value || false} onCheckedChange={field.onChange} data-testid="switch-add-dangerous-dog" />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  {propertyForm.watch("hasDangerousDog") && (
+                    <FormField control={propertyForm.control} name="dangerousDogNotes" render={({ field }) => (
+                      <FormItem><FormLabel>Hazard Notes</FormLabel><FormControl><Textarea {...field} placeholder="e.g. Aggressive dog in backyard" data-testid="input-dangerous-dog-notes" /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  )}
                   <Button type="submit" disabled={createPropertyMutation.isPending} data-testid="button-submit-property">
                     {createPropertyMutation.isPending ? "Adding..." : "Add Property"}
                   </Button>
@@ -646,6 +680,12 @@ export default function ContactDetail() {
                         <p className="font-medium">{prop.streetAddress}</p>
                         <p className="text-sm text-muted-foreground">{prop.city}, {prop.state} {prop.zipCode}</p>
                         {prop.gateCode && <p className="text-sm text-muted-foreground">Gate: {prop.gateCode}</p>}
+                        {prop.numberOfDogs != null && prop.numberOfDogs > 0 && (
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Dog className="h-3.5 w-3.5" />
+                            <span>{prop.numberOfDogs} {prop.numberOfDogs === 1 ? "dog" : "dogs"}</span>
+                          </div>
+                        )}
                       </div>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -708,6 +748,43 @@ export default function ContactDetail() {
                         <Ruler className="h-3.5 w-3.5" />
                         {measurePropertyId === prop.id ? "Hide Measure Tool" : prop.measuredYardSqft ? "Re-measure Yard" : "Measure Yard"}
                       </Button>
+                    </div>
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ShieldAlert className={`h-4 w-4 ${prop.hasDangerousDog ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} />
+                          <Label htmlFor={`dangerous-dog-${prop.id}`} className="text-sm font-medium">Dangerous Dog</Label>
+                        </div>
+                        <Switch
+                          id={`dangerous-dog-${prop.id}`}
+                          checked={prop.hasDangerousDog || false}
+                          onCheckedChange={(checked) => updateDangerousDogMutation.mutate({ propertyId: prop.id, hasDangerousDog: checked, dangerousDogNotes: checked ? (prop.dangerousDogNotes || "") : "" })}
+                          data-testid={`switch-dangerous-dog-${prop.id}`}
+                        />
+                      </div>
+                      {prop.hasDangerousDog && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Hazard Notes</Label>
+                          <Textarea
+                            placeholder="e.g. Aggressive German Shepherd in backyard - do not enter without owner present"
+                            defaultValue={prop.dangerousDogNotes || ""}
+                            onBlur={(e) => {
+                              if (e.target.value !== (prop.dangerousDogNotes || "")) {
+                                updateDangerousDogMutation.mutate({ propertyId: prop.id, hasDangerousDog: true, dangerousDogNotes: e.target.value });
+                              }
+                            }}
+                            className="mt-1 text-sm"
+                            rows={2}
+                            data-testid={`textarea-dangerous-dog-notes-${prop.id}`}
+                          />
+                        </div>
+                      )}
+                      {prop.hasDangerousDog && (
+                        <div className="flex items-start gap-2 rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-3 py-2">
+                          <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                          <p className="text-xs text-red-600 dark:text-red-400">This warning will be shown to field technicians on their mobile device before they enter the property.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                   {measurePropertyId === prop.id && propLat != null && propLng != null && (

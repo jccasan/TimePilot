@@ -272,6 +272,8 @@ export const properties = pgTable("properties", {
   yardPolygon: jsonb("yard_polygon"),
   measuredYardSqft: integer("measured_yard_sqft"),
   yardDifficulty: yardDifficultyEnum("yard_difficulty").default("flat"),
+  hasDangerousDog: boolean("has_dangerous_dog").default(false),
+  dangerousDogNotes: text("dangerous_dog_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

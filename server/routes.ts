@@ -3376,6 +3376,8 @@ export async function registerRoutes(
             measuredYardSqft: prop.measuredYardSqft,
             lotSize: prop.lotSize,
             numberOfDogs: prop.numberOfDogs,
+            hasDangerousDog: prop.hasDangerousDog,
+            dangerousDogNotes: prop.dangerousDogNotes,
           } : null,
           contact: contact ? {
             id: contact.id,

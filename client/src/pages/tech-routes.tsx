@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Dog, Phone, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp, Satellite, Play, SkipForward, Navigation, Loader2 } from "lucide-react";
+import { MapPin, Dog, Phone, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp, Satellite, Play, SkipForward, Navigation, Loader2, ShieldAlert } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
@@ -48,6 +48,8 @@ type EnrichedVisit = {
     measuredYardSqft: number | null;
     lotSize: string | null;
     numberOfDogs: number | null;
+    hasDangerousDog: boolean | null;
+    dangerousDogNotes: string | null;
   } | null;
   contact: {
     id: string;
@@ -141,6 +143,18 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
             {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
           </div>
         </div>
+
+        {visit.property?.hasDangerousDog && (
+          <div className="flex items-start gap-2 rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-3 py-2" data-testid={`alert-dangerous-dog-${visit.id}`}>
+            <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-red-700 dark:text-red-300">Dangerous Dog Warning</p>
+              {visit.property.dangerousDogNotes && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-0.5" data-testid={`text-dangerous-dog-notes-${visit.id}`}>{visit.property.dangerousDogNotes}</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {isExpanded && (
           <div className="space-y-3 pt-2 border-t">

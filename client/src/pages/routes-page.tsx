@@ -32,7 +32,7 @@ import {
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
   Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
-  CalendarDays, DollarSign, Play, ArrowUpDown
+  CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert
 } from "lucide-react";
 import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
@@ -238,6 +238,11 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
             </div>
           )}
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {property?.hasDangerousDog && (
+              <span className="flex items-center gap-0.5 text-red-600 dark:text-red-400" title={property.dangerousDogNotes || "Dangerous dog"} data-testid={`icon-dangerous-dog-${stop.id}`}>
+                <ShieldAlert className="h-3 w-3" />
+              </span>
+            )}
             {contact?.numberOfDogs != null && contact.numberOfDogs > 0 && (
               <span className="flex items-center gap-0.5"><Dog className="h-3 w-3" />{contact.numberOfDogs}</span>
             )}
