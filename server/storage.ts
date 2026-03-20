@@ -769,10 +769,9 @@ export class DatabaseStorage implements IStorage {
       total: sql<string>`COALESCE(SUM(${invoices.total}::numeric), 0)`
     }).from(invoices).where(
       sql`${invoices.companyId} = ${companyId}
-        AND ${invoices.status} = 'paid'
-        AND ${invoices.paidAt} IS NOT NULL
-        AND ((${invoices.paidAt} AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})::date >= ${startDate}::date
-        AND ((${invoices.paidAt} AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})::date <= ${endDate}::date`
+        AND ${invoices.status} IN ('sent', 'pending', 'paid', 'failed')
+        AND COALESCE(${invoices.issuedDate}, ((${invoices.createdAt} AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})::date) >= ${startDate}::date
+        AND COALESCE(${invoices.issuedDate}, ((${invoices.createdAt} AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})::date) <= ${endDate}::date`
     );
     return parseFloat(result?.total ?? "0");
   }
