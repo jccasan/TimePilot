@@ -4050,6 +4050,7 @@ export async function registerRoutes(
         await storage.updateVisit(v.id, companyId, { invoiceId: invoice.id });
       }
 
+      qboAutoSync(companyId, invoice.id, "invoice");
       const items = await storage.getInvoiceLineItems(invoice.id);
       res.status(201).json({ ...invoice, lineItems: items });
     } catch (err) { handleError(res, err); }
@@ -4140,6 +4141,7 @@ export async function registerRoutes(
         await storage.updateVisit(visit.id, companyId, { invoiceId: invoice.id });
       }
 
+      qboAutoSync(companyId, invoice.id, "invoice");
       const items = await storage.getInvoiceLineItems(invoice.id);
       res.status(201).json({ ...invoice, lineItems: items });
     } catch (err) { handleError(res, err); }
@@ -4256,9 +4258,7 @@ export async function registerRoutes(
 
       const invoice = await storage.updateInvoice(req.params.id, companyId, invoiceUpdates);
       const updatedLineItems = await storage.getInvoiceLineItems(req.params.id);
-      if (invoice.qboInvoiceId || existing.qboInvoiceId) {
-        qboAutoSync(companyId, invoice.id, "invoice");
-      }
+      qboAutoSync(companyId, invoice.id, "invoice");
       if (invoiceUpdates.status === "paid") {
         qboAutoSync(companyId, invoice.id, "payment");
       }

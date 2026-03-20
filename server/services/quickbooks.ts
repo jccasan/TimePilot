@@ -19,7 +19,13 @@ function getEncryptionKey(): Buffer | null {
 
 export function encryptToken(plaintext: string): string {
   const key = getEncryptionKey();
-  if (!key) return plaintext;
+  if (!key) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("QBO_TOKEN_SECRET is required in production for secure token storage");
+    }
+    console.warn("[QBO] WARNING: QBO_TOKEN_SECRET not set, storing tokens in plaintext. Set QBO_TOKEN_SECRET for encrypted storage.");
+    return plaintext;
+  }
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
