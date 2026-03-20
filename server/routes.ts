@@ -5516,11 +5516,12 @@ export async function registerRoutes(
   app.get("/api/messages", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const filters: { contactId?: string; channel?: string; direction?: string; isRead?: boolean } = {};
+      const filters: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string } = {};
       if (req.query.contactId) filters.contactId = req.query.contactId as string;
       if (req.query.channel) filters.channel = req.query.channel as string;
       if (req.query.direction) filters.direction = req.query.direction as string;
       if (req.query.unread === "true") filters.isRead = false;
+      if (req.query.phone) filters.phone = req.query.phone as string;
       const msgs = await storage.getMessages(companyId, filters);
 
       const contactCache = new Map<string, string>();
@@ -5547,6 +5548,73 @@ export async function registerRoutes(
       const msg = await storage.markMessageRead(req.params.id, companyId);
       if (!msg) return res.status(404).json({ error: "Message not found" });
       res.json(msg);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/messages/read-by-contact/:contactId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      await storage.markMessagesReadByContact(req.params.contactId, companyId);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/messages/read-by-phone", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { phone } = req.body;
+      if (!phone) return res.status(400).json({ error: "phone is required" });
+      await storage.markMessagesReadByPhone(phone, companyId);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/messages/unread-sms-count", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const count = await storage.getUnreadSmsCount(companyId);
+      res.json({ count });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/messages/conversations", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const allSms = await storage.getMessages(companyId, { channel: "sms" });
+      const contacts = await storage.getContacts(companyId);
+      const contactMap = new Map(contacts.map(c => [c.id, c]));
+
+      const threadMap = new Map<string, { contactId: string; contactName: string; phone: string; lastMessage: typeof allSms[0]; unreadCount: number; messageCount: number }>();
+
+      for (const msg of allSms) {
+        const key = msg.contactId || `unknown:${msg.direction === "inbound" ? msg.fromAddress : msg.toAddress}`;
+        const existing = threadMap.get(key);
+        const contact = msg.contactId ? contactMap.get(msg.contactId) : null;
+        const phone = msg.direction === "inbound" ? msg.fromAddress : msg.toAddress;
+        const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : phone;
+
+        if (!existing) {
+          threadMap.set(key, {
+            contactId: msg.contactId || "",
+            contactName,
+            phone,
+            lastMessage: msg,
+            unreadCount: (msg.direction === "inbound" && !msg.isRead) ? 1 : 0,
+            messageCount: 1,
+          });
+        } else {
+          existing.messageCount++;
+          if (msg.direction === "inbound" && !msg.isRead) existing.unreadCount++;
+          if (new Date(msg.createdAt) > new Date(existing.lastMessage.createdAt)) {
+            existing.lastMessage = msg;
+          }
+        }
+      }
+
+      const conversations = Array.from(threadMap.values()).sort((a, b) =>
+        new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()
+      );
+      res.json(conversations);
     } catch (err) { handleError(res, err); }
   });
 
@@ -5669,7 +5737,7 @@ export async function registerRoutes(
         });
 
         if (matchedContact) {
-          notify(companyId, "new_message", "New Text Message", `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`, `/contacts/${matchedContact.id}`);
+          notify(companyId, "new_message", "New Text Message", `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`, `/communications?contactId=${matchedContact.id}`);
         }
       }
 

@@ -204,8 +204,11 @@ export interface IStorage {
   deleteServicePackage(id: string, companyId: string): Promise<void>;
 
   // Messages
-  getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean }): Promise<Message[]>;
+  getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string }): Promise<Message[]>;
   markMessageRead(id: string, companyId: string): Promise<Message>;
+  markMessagesReadByContact(contactId: string, companyId: string): Promise<void>;
+  markMessagesReadByPhone(phone: string, companyId: string): Promise<void>;
+  getUnreadSmsCount(companyId: string): Promise<number>;
   createMessage(data: InsertMessage): Promise<Message>;
   updateMessageStatus(id: string, status: string, errorMessage?: string): Promise<Message>;
 
@@ -1193,18 +1196,59 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ================ Messages ================
-  async getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean }): Promise<Message[]> {
+  async getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string }): Promise<Message[]> {
     const conditions = [eq(messages.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(messages.contactId, filters.contactId));
     if (filters?.channel) conditions.push(eq(messages.channel, filters.channel as any));
     if (filters?.direction) conditions.push(eq(messages.direction, filters.direction as any));
     if (filters?.isRead !== undefined) conditions.push(eq(messages.isRead, filters.isRead));
+    if (filters?.phone) {
+      conditions.push(
+        or(eq(messages.fromAddress, filters.phone), eq(messages.toAddress, filters.phone))!
+      );
+    }
     return db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt));
   }
 
   async markMessageRead(id: string, companyId: string): Promise<Message> {
     const [msg] = await db.update(messages).set({ isRead: true }).where(and(eq(messages.id, id), eq(messages.companyId, companyId))).returning();
     return msg;
+  }
+
+  async markMessagesReadByContact(contactId: string, companyId: string): Promise<void> {
+    await db.update(messages).set({ isRead: true }).where(
+      and(
+        eq(messages.companyId, companyId),
+        eq(messages.contactId, contactId),
+        eq(messages.channel, "sms"),
+        eq(messages.direction, "inbound"),
+        eq(messages.isRead, false),
+      )
+    );
+  }
+
+  async markMessagesReadByPhone(phone: string, companyId: string): Promise<void> {
+    await db.update(messages).set({ isRead: true }).where(
+      and(
+        eq(messages.companyId, companyId),
+        eq(messages.fromAddress, phone),
+        eq(messages.channel, "sms"),
+        eq(messages.direction, "inbound"),
+        eq(messages.isRead, false),
+      )
+    );
+  }
+
+  async getUnreadSmsCount(companyId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)::int` }).from(messages).where(
+      and(
+        eq(messages.companyId, companyId),
+        eq(messages.channel, "sms"),
+        eq(messages.direction, "inbound"),
+        eq(messages.isRead, false),
+      )
+    );
+    return result[0]?.count ?? 0;
   }
 
   async createMessage(data: InsertMessage): Promise<Message> {

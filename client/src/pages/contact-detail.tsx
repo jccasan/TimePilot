@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -80,6 +80,7 @@ const propertyFormSchema = z.object({
 
 export default function ContactDetail() {
   const { id } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
@@ -291,6 +292,16 @@ export default function ContactDetail() {
             <Badge variant="secondary" className={statusColors[contact.status] || ""} data-testid="badge-contact-status">
               {contact.status}
             </Badge>
+            {contact.phone && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/communications?contactId=${id}`)}
+                data-testid="button-text-contact"
+              >
+                <MessageSquare className="mr-1 h-4 w-4" /> Text
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"

@@ -31,6 +31,7 @@ const typeColors: Record<string, string> = {
   invoice_overdue: "text-orange-600 dark:text-orange-400",
   service_paused: "text-yellow-600 dark:text-yellow-400",
   service_resumed: "text-green-600 dark:text-green-400",
+  new_message: "text-emerald-600 dark:text-emerald-400",
   general: "text-muted-foreground",
 };
 

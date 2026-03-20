@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard,
   Users,
@@ -110,6 +111,11 @@ export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => 
   const { data: company } = useQuery<{ logoUrl: string | null; name: string }>({
     queryKey: ["/api/company"],
   });
+  const { data: unreadSmsData } = useQuery<{ count: number }>({
+    queryKey: ["/api/messages/unread-sms-count"],
+    refetchInterval: 30000,
+  });
+  const unreadSmsCount = unreadSmsData?.count || 0;
   const tours = getAvailableTours();
 
   return (
@@ -145,6 +151,11 @@ export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => 
                       <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/[\s/]/g, "-")}`}>
                         <item.icon />
                         <span>{item.title}</span>
+                        {item.title === "Messages" && unreadSmsCount > 0 && (
+                          <Badge variant="default" className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px]" data-testid="badge-sidebar-unread-sms">
+                            {unreadSmsCount > 99 ? "99+" : unreadSmsCount}
+                          </Badge>
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
