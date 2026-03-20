@@ -38,6 +38,7 @@ import {
 import { Mail, MessageSquare, Send, ArrowUpRight, ArrowDownLeft, AlertCircle, CheckCircle2, ArrowLeft, User, Loader2 } from "lucide-react";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { formatDistanceToNow } from "date-fns";
+import { useLocation } from "wouter";
 
 const emailFormSchema = z.object({
   contactId: z.string().optional(),
@@ -158,19 +159,53 @@ function ConversationThread({
         body,
       });
     },
+    onMutate: async (body: string) => {
+      const cacheKey = ["/api/messages", "sms", threadKey];
+      await queryClient.cancelQueries({ queryKey: cacheKey });
+      const previous = queryClient.getQueryData<Message[]>(cacheKey);
+      const optimisticMsg: Message = {
+        id: `optimistic-${Date.now()}`,
+        companyId: "",
+        contactId: contactId || null,
+        channel: "sms",
+        direction: "outbound",
+        status: "queued",
+        fromAddress: "",
+        toAddress: phone,
+        subject: null,
+        body,
+        htmlBody: null,
+        externalId: null,
+        metadata: null,
+        sentBy: null,
+        errorMessage: null,
+        isRead: true,
+        createdAt: new Date().toISOString(),
+      };
+      queryClient.setQueryData<Message[]>(cacheKey, (old) =>
+        old ? [...old, optimisticMsg] : [optimisticMsg]
+      );
+      return { previous, cacheKey };
+    },
+    onError: (error: Error, _body, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(context.cacheKey, context.previous);
+      }
+      toast({ title: "Failed to send", description: error.message, variant: "destructive" });
+    },
     onSuccess: () => {
       setReplyText("");
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Failed to send", description: error.message, variant: "destructive" });
     },
   });
 
   const handleSendReply = useCallback(() => {
     const trimmed = replyText.trim();
     if (!trimmed) return;
+    setReplyText("");
     sendReplyMutation.mutate(trimmed);
   }, [replyText, sendReplyMutation]);
 
@@ -335,8 +370,10 @@ function ConversationList({
 }
 
 function SmsInbox() {
+  const [location] = useLocation();
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [handledContactId, setHandledContactId] = useState<string | null>(null);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -352,13 +389,14 @@ function SmsInbox() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const contactId = params.get("contactId");
-    if (contactId && conversations.length > 0) {
+    if (contactId && conversations.length > 0 && contactId !== handledContactId) {
       const conv = conversations.find(c => c.contactId === contactId);
       if (conv) {
         setSelectedConversation(conv);
+        setHandledContactId(contactId);
       }
     }
-  }, [conversations]);
+  }, [conversations, location, handledContactId]);
 
   const handleSelect = useCallback((conv: Conversation) => {
     setSelectedConversation(conv);
