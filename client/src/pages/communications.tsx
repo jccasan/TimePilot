@@ -386,17 +386,37 @@ function SmsInbox() {
     queryKey: ["/api/messages/conversations"],
   });
 
+  const { data: contacts } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+  });
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const contactId = params.get("contactId");
-    if (contactId && conversations.length > 0 && contactId !== handledContactId) {
-      const conv = conversations.find(c => c.contactId === contactId);
-      if (conv) {
-        setSelectedConversation(conv);
+    if (!contactId || contactId === handledContactId) return;
+
+    const conv = conversations.find(c => c.contactId === contactId);
+    if (conv) {
+      setSelectedConversation(conv);
+      setHandledContactId(contactId);
+      return;
+    }
+
+    if (!isLoading && contacts) {
+      const contact = contacts.find(c => c.id === contactId);
+      if (contact && contact.phone) {
+        setSelectedConversation({
+          contactId: contact.id,
+          contactName: `${contact.firstName} ${contact.lastName}`.trim(),
+          phone: contact.phone,
+          lastMessage: { id: "", body: "", createdAt: new Date().toISOString() } as Message,
+          unreadCount: 0,
+          messageCount: 0,
+        });
         setHandledContactId(contactId);
       }
     }
-  }, [conversations, location, handledContactId]);
+  }, [conversations, contacts, location, handledContactId, isLoading]);
 
   const handleSelect = useCallback((conv: Conversation) => {
     setSelectedConversation(conv);
