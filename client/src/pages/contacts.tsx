@@ -136,7 +136,7 @@ export default function Contacts() {
   if (search) queryParams.set("search", search);
   const queryString = queryParams.toString();
 
-  const { data: contacts, isLoading } = useQuery<Contact[]>({
+  const { data: contacts, isLoading } = useQuery<(Contact & { isStopOnlyContact?: boolean })[]>({
     queryKey: ["/api/contacts" + (queryString ? `?${queryString}` : "")],
   });
 
@@ -682,13 +682,24 @@ export default function Contacts() {
                         </p>
                       )}
                     </div>
-                    <Badge
-                      variant="secondary"
-                      className={statusColors[contact.status] || ""}
-                      data-testid={`badge-status-${contact.id}`}
-                    >
-                      {contact.status}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      {contact.isStopOnlyContact && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs border-amber-300 text-amber-700 dark:border-amber-600 dark:text-amber-400"
+                          data-testid={`badge-stop-only-${contact.id}`}
+                        >
+                          Stop Only
+                        </Badge>
+                      )}
+                      <Badge
+                        variant="secondary"
+                        className={statusColors[contact.status] || ""}
+                        data-testid={`badge-status-${contact.id}`}
+                      >
+                        {contact.status}
+                      </Badge>
+                    </div>
                   </CardContent>
                 </Card>
               </Link>

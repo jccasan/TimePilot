@@ -261,6 +261,23 @@ async function createPropertyWithGeocode(data: {
   return storage.createProperty(data as any);
 }
 
+function getStopOnlyOnlyContactIds(activePlans: { contactId: string; isStopOnly: boolean }[]): Set<string> {
+  const contactHasReal = new Set<string>();
+  const contactHasStopOnly = new Set<string>();
+  for (const p of activePlans) {
+    if (p.isStopOnly) {
+      contactHasStopOnly.add(p.contactId);
+    } else {
+      contactHasReal.add(p.contactId);
+    }
+  }
+  const result = new Set<string>();
+  for (const cid of contactHasStopOnly) {
+    if (!contactHasReal.has(cid)) result.add(cid);
+  }
+  return result;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -1076,14 +1093,12 @@ export async function registerRoutes(
       const monthStart = getCompanyMonthStart(tz);
       const monthEnd = getCompanyMonthEnd(tz);
 
-      const [todaysVisits, todaysVisitsList, failedPayments, activeUsers, overdueInvoices, activeContacts, activeServicePlans, monthRevenue, smsCountThisMonth, emailCountThisMonth] = await Promise.all([
+      const [todaysVisits, todaysVisitsList, failedPayments, activeUsers, overdueInvoices, monthRevenue, smsCountThisMonth, emailCountThisMonth] = await Promise.all([
         storage.getTodaysVisitsCount(companyId, today),
         storage.getTodaysVisits(companyId, today),
         storage.getFailedPaymentsCount(companyId),
         storage.countActiveCompanyUsers(companyId),
         storage.getOverdueInvoicesCount(companyId, today),
-        storage.getActiveContactsCount(companyId),
-        storage.getActiveServicePlansCount(companyId),
         storage.getRevenueForPeriod(companyId, monthStart, monthEnd, tz),
         storage.getSmsCountForPeriod(companyId, monthStart, monthEnd),
         storage.getEmailCountForPeriod(companyId, monthStart, monthEnd),
@@ -1095,6 +1110,11 @@ export async function registerRoutes(
 
       const allActivePlans = await storage.getServicePlans(companyId, { isActive: true });
       const activePlans = allActivePlans.filter(p => !p.isStopOnly);
+
+      const stopOnlyOnlyContactIds = getStopOnlyOnlyContactIds(allActivePlans);
+      const allActiveStatusContacts = await storage.getContacts(companyId, { status: "active" });
+      const activeContacts = allActiveStatusContacts.filter(c => !stopOnlyOnlyContactIds.has(c.id)).length;
+      const activeServicePlans = activePlans.length;
       let mrr = 0;
       for (const plan of activePlans) {
         const basePrice = parseFloat(plan.pricePerVisit) || 0;
@@ -1702,8 +1722,12 @@ export async function registerRoutes(
       const tz = company?.timezone || "America/New_York";
       const now = new Date();
 
-      const allContacts = await storage.getContacts(companyId);
+      const allContactsRaw = await storage.getContacts(companyId);
       const allInvoices = await storage.getInvoices(companyId);
+
+      const allActivePlansForAnalytics = await storage.getServicePlans(companyId, { isActive: true });
+      const stopOnlyContactIds = getStopOnlyOnlyContactIds(allActivePlansForAnalytics);
+      const allContacts = allContactsRaw.filter(c => !stopOnlyContactIds.has(c.id));
 
       // --- Monthly Revenue (last 12 months) ---
       const monthlyRevenue: { month: string; revenue: number }[] = [];
@@ -2228,7 +2252,14 @@ export async function registerRoutes(
       if (req.query.status) filters.status = req.query.status as string;
       if (req.query.search) filters.search = (req.query.search as string).replace(/\0/g, "");
       const contactsList = await storage.getContacts(companyId, filters);
-      res.json(contactsList);
+
+      const activePlans = await storage.getServicePlans(companyId, { isActive: true });
+      const stopOnlyOnlyIds = getStopOnlyOnlyContactIds(activePlans);
+      const enriched = contactsList.map(c => ({
+        ...c,
+        isStopOnlyContact: stopOnlyOnlyIds.has(c.id),
+      }));
+      res.json(enriched);
     } catch (err) { handleError(res, err); }
   });
 
@@ -5090,7 +5121,7 @@ export async function registerRoutes(
 
       const plansByRoute = new Map<string, typeof plans>();
       for (const plan of plans) {
-        if (!plan.routeId) continue;
+        if (!plan.routeId || plan.isStopOnly) continue;
         if (!plansByRoute.has(plan.routeId)) plansByRoute.set(plan.routeId, []);
         plansByRoute.get(plan.routeId)!.push(plan);
       }
