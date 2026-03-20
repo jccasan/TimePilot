@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
 npm install
-npm run db:push
+echo "No, add the constraint without truncating the table" | npx drizzle-kit push
