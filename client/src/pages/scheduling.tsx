@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -179,6 +179,11 @@ export default function Scheduling() {
     return pricingItems.filter((p) => p.category === "recurring_service" && p.isActive);
   }, [pricingItems]);
 
+  const oneTimePricing = useMemo(() => {
+    if (!pricingItems) return [];
+    return pricingItems.filter((p) => p.category === "one_time_service" && p.isActive);
+  }, [pricingItems]);
+
   const form = useForm<ServicePlanFormValues>({
     resolver: zodResolver(servicePlanSchema),
     defaultValues: {
@@ -188,6 +193,13 @@ export default function Scheduling() {
   });
 
   const selectedContactId = form.watch("contactId");
+  const selectedFrequency = form.watch("frequency");
+
+  const templatePricing = useMemo(() => {
+    return selectedFrequency === "monthly" || selectedFrequency === "onetime"
+      ? oneTimePricing
+      : recurringPricing;
+  }, [selectedFrequency, oneTimePricing, recurringPricing]);
 
   const contactProperties = useMemo(() => {
     if (!selectedContactId || !properties) return [];
@@ -204,11 +216,18 @@ export default function Scheduling() {
     }
   }, [selectedContactId, contactProperties, form]);
 
+  const prevFrequencyRef = useRef(selectedFrequency);
   useEffect(() => {
-    if (dialogOpen && recurringPricing.length > 0 && !form.getValues("pricePerVisit")) {
-      form.setValue("pricePerVisit", recurringPricing[0].basePrice);
+    if (!dialogOpen) return;
+    const frequencyChanged = prevFrequencyRef.current !== selectedFrequency;
+    prevFrequencyRef.current = selectedFrequency;
+    if (frequencyChanged) {
+      const defaultPrice = templatePricing.length > 0 ? templatePricing[0].basePrice : "";
+      form.setValue("pricePerVisit", defaultPrice);
+    } else if (templatePricing.length > 0 && !form.getValues("pricePerVisit")) {
+      form.setValue("pricePerVisit", templatePricing[0].basePrice);
     }
-  }, [dialogOpen, recurringPricing, form]);
+  }, [dialogOpen, selectedFrequency, templatePricing, form]);
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -425,12 +444,12 @@ export default function Scheduling() {
                       <FormMessage />
                     </FormItem>
                   )} />
-                  {recurringPricing.length > 0 && (
+                  {templatePricing.length > 0 && (
                     <div>
                       <Label className="text-sm">Use Pricing Template</Label>
                       <Select onValueChange={(v) => { const item = pricingItems?.find((p) => p.id === v); if (item) form.setValue("pricePerVisit", item.basePrice); }}>
                         <SelectTrigger data-testid="select-pricing-template"><SelectValue placeholder="Select pricing template" /></SelectTrigger>
-                        <SelectContent>{recurringPricing.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name} - ${p.basePrice}</SelectItem>))}</SelectContent>
+                        <SelectContent>{templatePricing.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name} - ${p.basePrice}</SelectItem>))}</SelectContent>
                       </Select>
                     </div>
                   )}

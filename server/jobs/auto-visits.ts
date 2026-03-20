@@ -96,10 +96,6 @@ async function generateVisitsFromPlans(companyId: string, plans: Awaited<ReturnT
   const end = new Date(endDate + "T00:00:00Z");
 
   for (const plan of plans) {
-    if (!plan.dayOfWeek) continue;
-    const targetDay = dayMap[plan.dayOfWeek];
-    if (targetDay === undefined) continue;
-
     const planStart = plan.startDate ? new Date(plan.startDate + "T00:00:00Z") : start;
     let computedEndDate: Date | null = plan.endDate ? new Date(plan.endDate + "T00:00:00Z") : null;
     if (!computedEndDate && plan.endsAfterCount && plan.endsAfterUnit && plan.startDate) {
@@ -116,6 +112,46 @@ async function generateVisitsFromPlans(companyId: string, plans: Awaited<ReturnT
     const effectiveStart = planStart > start ? planStart : start;
     const effectiveEnd = planEnd < end ? planEnd : end;
 
+    if (plan.frequency === "monthly") {
+      if (!plan.startDate) continue;
+      const anchorDate = new Date(plan.startDate + "T00:00:00Z");
+      const anchorYear = anchorDate.getUTCFullYear();
+      const anchorMonth = anchorDate.getUTCMonth();
+      const anchorDay = anchorDate.getUTCDate();
+      let monthOffset = 0;
+      while (true) {
+        const targetYear = anchorYear + Math.floor((anchorMonth + monthOffset) / 12);
+        const targetMonth = (anchorMonth + monthOffset) % 12;
+        const lastDayOfMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+        const clampedDay = Math.min(anchorDay, lastDayOfMonth);
+        const candidate = new Date(Date.UTC(targetYear, targetMonth, clampedDay));
+        if (candidate > effectiveEnd) break;
+        if (candidate >= effectiveStart) {
+          const dateStr = candidate.toISOString().split("T")[0];
+          const key = `${plan.id}_${dateStr}`;
+          if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, plan.id, holdsByPlan)) {
+            await storage.createVisit({
+              companyId,
+              servicePlanId: plan.id,
+              propertyId: plan.propertyId,
+              routeId: plan.routeId || null,
+              scheduledDate: dateStr,
+              status: "scheduled",
+            });
+            created++;
+            existingKeys.add(key);
+          }
+        }
+        monthOffset++;
+        if (monthOffset > 1200) break;
+      }
+      continue;
+    }
+
+    if (!plan.dayOfWeek) continue;
+    const targetDay = dayMap[plan.dayOfWeek];
+    if (targetDay === undefined) continue;
+
     const current = new Date(effectiveStart);
     while (current <= effectiveEnd) {
       if (current.getUTCDay() === targetDay) {
@@ -131,18 +167,6 @@ async function generateVisitsFromPlans(companyId: string, plans: Awaited<ReturnT
             const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
             const diffWeeks = Math.floor(diffDays / 7);
             if (diffWeeks % 2 !== 0) shouldGenerate = false;
-          } else if (plan.frequency === "monthly") {
-            const planStartDate = new Date(plan.startDate + "T00:00:00Z");
-            if (current.getUTCMonth() === planStartDate.getUTCMonth() && current.getUTCFullYear() === planStartDate.getUTCFullYear()) {
-              shouldGenerate = true;
-            } else {
-              const firstOfMonth = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1));
-              let firstTargetDay = new Date(firstOfMonth);
-              while (firstTargetDay.getUTCDay() !== targetDay) {
-                firstTargetDay.setUTCDate(firstTargetDay.getUTCDate() + 1);
-              }
-              if (current.getTime() !== firstTargetDay.getTime()) shouldGenerate = false;
-            }
           } else if (plan.frequency === "onetime") {
             if (dateStr !== plan.startDate) {
               shouldGenerate = false;

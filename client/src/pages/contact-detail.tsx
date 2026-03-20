@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
@@ -1534,7 +1534,7 @@ function useInlinePriceCalc(
     const body = {
       yardSizeAcres,
       dogCount: selectedProperty.numberOfDogs || 1,
-      serviceFrequency: frequency,
+      serviceFrequency: frequency === "monthly" ? "onetime" : frequency,
       yardDifficulty: selectedProperty.yardDifficulty || "flat",
       distanceFromNearestStopMiles: 1,
       currentPriceCents,
@@ -1681,7 +1681,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     const categoryMap: Record<string, string> = {
       weekly: "recurring_service",
       biweekly: "recurring_service",
-      monthly: "recurring_service",
+      monthly: "one_time_service",
       onetime: "one_time_service",
     };
     const cat = categoryMap[freq] || "recurring_service";
@@ -1692,13 +1692,6 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     if (!pricingItems) return [];
     return pricingItems.filter((p) => p.category === "add_on" && p.isActive);
   }, [pricingItems]);
-
-  const recurringPricing = useMemo(() => basePricingForFreq("weekly"), [basePricingForFreq]);
-
-  const defaultPrice = useMemo(() => {
-    if (recurringPricing.length > 0) return recurringPricing[0].basePrice;
-    return "";
-  }, [recurringPricing]);
 
   const createForm = useForm<ServicePlanFormValues>({
     resolver: zodResolver(servicePlanFormSchema),
@@ -1729,11 +1722,6 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     },
   });
 
-  useEffect(() => {
-    if (createDialogOpen && defaultPrice && !createForm.getValues("pricePerVisit")) {
-      createForm.setValue("pricePerVisit", defaultPrice);
-    }
-  }, [createDialogOpen, defaultPrice, createForm]);
 
   useEffect(() => {
     if (createDialogOpen && properties.length === 1) {
@@ -1880,6 +1868,22 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
   const { calcResult: editCalcResult, calcLoading: editCalcLoading } = useInlinePriceCalc(
     editPropertyId, editFrequency, editPrice, properties
   );
+
+  const prevCreateFrequencyRef = useRef(createFrequency);
+  useEffect(() => {
+    if (!createDialogOpen) return;
+    const frequencyChanged = prevCreateFrequencyRef.current !== createFrequency;
+    prevCreateFrequencyRef.current = createFrequency;
+    if (frequencyChanged) {
+      const freqTemplates = basePricingForFreq(createFrequency);
+      if (freqTemplates.length > 0) {
+        createForm.setValue("pricePerVisit", freqTemplates[0].basePrice);
+      }
+      setCreateTemplateId("");
+    } else if (!frequencyChanged && basePricingForFreq(createFrequency).length > 0 && !createForm.getValues("pricePerVisit")) {
+      createForm.setValue("pricePerVisit", basePricingForFreq(createFrequency)[0].basePrice);
+    }
+  }, [createFrequency, basePricingForFreq, createDialogOpen, createForm]);
 
   const renderPlanForm = (
     form: ReturnType<typeof useForm<ServicePlanFormValues>>,
