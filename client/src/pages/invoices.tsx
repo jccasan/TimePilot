@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -533,6 +533,14 @@ export default function Invoices() {
       toast({ title: "Error", description: "Failed to load invoice details", variant: "destructive" });
     }
   }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const selectedId = params.get("selected");
+    if (selectedId) {
+      viewInvoiceDetail(selectedId);
+    }
+  }, []);
 
   const contactMap = useMemo(() => {
     const map: Record<string, Contact> = {};

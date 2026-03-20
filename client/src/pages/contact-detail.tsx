@@ -2515,6 +2515,7 @@ type VisitHistoryResult = {
 
 function VisitHistoryCard({ contactId }: { contactId: string }) {
   const [limit, setLimit] = useState(10);
+  const [expandedVisitId, setExpandedVisitId] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery<VisitHistoryResult>({
     queryKey: ["/api/contacts", contactId, "visits", limit],
@@ -2559,44 +2560,103 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
         ) : visits.length > 0 ? (
           <>
             <div className="space-y-2" data-testid="list-visit-history">
-              {visits.map((v) => (
-                <div
-                  key={v.id}
-                  className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg border"
-                  data-testid={`row-visit-${v.id}`}
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-sm font-medium" data-testid={`text-visit-date-${v.id}`}>
-                          {new Date(v.scheduledDate + "T12:00:00").toLocaleDateString("en-US", {
-                            month: "short", day: "numeric", year: "numeric",
-                          })}
-                        </span>
-                        <Badge
-                          variant="secondary"
-                          className={`text-[10px] ${visitStatusColors[v.status] || ""}`}
-                          data-testid={`badge-visit-status-${v.id}`}
-                        >
-                          {visitStatusLabels[v.status] || v.status}
-                        </Badge>
+              {visits.map((v) => {
+                const isExpanded = expandedVisitId === v.id;
+                return (
+                  <div
+                    key={v.id}
+                    className="rounded-lg border overflow-hidden"
+                    data-testid={`row-visit-${v.id}`}
+                  >
+                    <div
+                      className="flex items-center justify-between gap-2 py-2 px-3 cursor-pointer hover:bg-muted/50 transition-colors duration-100 group"
+                      onClick={() => setExpandedVisitId(isExpanded ? null : v.id)}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-sm font-medium" data-testid={`text-visit-date-${v.id}`}>
+                              {new Date(v.scheduledDate + "T12:00:00").toLocaleDateString("en-US", {
+                                month: "short", day: "numeric", year: "numeric",
+                              })}
+                            </span>
+                            <Badge
+                              variant="secondary"
+                              className={`text-[10px] ${visitStatusColors[v.status] || ""}`}
+                              data-testid={`badge-visit-status-${v.id}`}
+                            >
+                              {visitStatusLabels[v.status] || v.status}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-muted-foreground" data-testid={`text-visit-plan-${v.id}`}>
+                              {v.servicePlanName}
+                            </span>
+                            {v.propertyAddress && v.propertyAddress !== "Unknown" && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />
+                                {v.propertyAddress}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-muted-foreground" data-testid={`text-visit-plan-${v.id}`}>
-                          {v.servicePlanName}
-                        </span>
+                      <ChevronDown
+                        className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""} group-hover:text-foreground`}
+                      />
+                    </div>
+                    {isExpanded && (
+                      <div className="px-3 pb-3 pt-1 border-t bg-muted/30 space-y-1.5" data-testid={`visit-details-${v.id}`}>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">Status:</span>
+                          <Badge
+                            variant="secondary"
+                            className={`text-[10px] ${visitStatusColors[v.status] || ""}`}
+                          >
+                            {visitStatusLabels[v.status] || v.status}
+                          </Badge>
+                        </div>
+                        {v.completedAt && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="font-medium text-foreground">Completed:</span>
+                            <span className="text-muted-foreground">
+                              {new Date(v.completedAt).toLocaleString("en-US", {
+                                month: "short", day: "numeric", year: "numeric",
+                                hour: "numeric", minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                        )}
+                        {v.startedAt && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="font-medium text-foreground">Started:</span>
+                            <span className="text-muted-foreground">
+                              {new Date(v.startedAt).toLocaleString("en-US", {
+                                month: "short", day: "numeric", year: "numeric",
+                                hour: "numeric", minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-medium text-foreground">Service Plan:</span>
+                          <span className="text-muted-foreground">{v.servicePlanName}</span>
+                        </div>
                         {v.propertyAddress && v.propertyAddress !== "Unknown" && (
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {v.propertyAddress}
-                          </span>
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="font-medium text-foreground">Location:</span>
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              {v.propertyAddress}
+                            </span>
+                          </div>
                         )}
                       </div>
-                    </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             {hasMore && (
               <Button
@@ -2637,6 +2697,8 @@ type UninvoicedResult = {
 
 function BillingHistoryCard({ contactId }: { contactId: string }) {
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<"outstanding" | "paid" | null>(null);
+  const [, navigate] = useLocation();
 
   const { data: invoicesData } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices", "contact", contactId],
@@ -2674,6 +2736,21 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
     return [...invoicesData].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [invoicesData]);
 
+  const filteredInvoices = useMemo(() => {
+    if (activeFilter === "outstanding") {
+      return sortedInvoices.filter(inv => ["pending", "sent"].includes(inv.status));
+    }
+    if (activeFilter === "paid") {
+      return sortedInvoices.filter(inv => inv.status === "paid");
+    }
+    return sortedInvoices;
+  }, [sortedInvoices, activeFilter]);
+
+  function handleFilterClick(filter: "outstanding" | "paid") {
+    setActiveFilter(prev => prev === filter ? null : filter);
+  }
+
+
   return (
     <>
       <Card data-testid="card-billing-history">
@@ -2688,20 +2765,40 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
-            <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="billing-uninvoiced">
+            <div
+              className="text-center p-3 rounded-lg cursor-pointer transition-all duration-150 select-none bg-muted/50 hover:bg-orange-50 dark:hover:bg-orange-950/20 hover:shadow-sm"
+              onClick={() => setGenerateOpen(true)}
+              data-testid="billing-uninvoiced"
+            >
               <p className="text-xs text-muted-foreground mb-1">Uninvoiced</p>
               <p className="text-lg font-bold text-orange-600 dark:text-orange-400">
                 ${(uninvoicedData?.totalDollars ?? 0).toFixed(2)}
               </p>
               <p className="text-[10px] text-muted-foreground">{uninvoicedData?.visits?.length ?? 0} visits</p>
             </div>
-            <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="billing-outstanding">
+            <div
+              className={`text-center p-3 rounded-lg cursor-pointer transition-all duration-150 select-none ${
+                activeFilter === "outstanding"
+                  ? "bg-amber-100 dark:bg-amber-900/40 ring-2 ring-amber-400 shadow-md"
+                  : "bg-muted/50 hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:shadow-sm"
+              }`}
+              onClick={() => handleFilterClick("outstanding")}
+              data-testid="billing-outstanding"
+            >
               <p className="text-xs text-muted-foreground mb-1">Outstanding</p>
               <p className="text-lg font-bold text-amber-600 dark:text-amber-400">
                 ${totalOutstanding.toFixed(2)}
               </p>
             </div>
-            <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="billing-paid">
+            <div
+              className={`text-center p-3 rounded-lg cursor-pointer transition-all duration-150 select-none ${
+                activeFilter === "paid"
+                  ? "bg-green-100 dark:bg-green-900/40 ring-2 ring-green-400 shadow-md"
+                  : "bg-muted/50 hover:bg-green-50 dark:hover:bg-green-950/20 hover:shadow-sm"
+              }`}
+              onClick={() => handleFilterClick("paid")}
+              data-testid="billing-paid"
+            >
               <p className="text-xs text-muted-foreground mb-1">Paid</p>
               <p className="text-lg font-bold text-green-600 dark:text-green-400">
                 ${totalPaid.toFixed(2)}
@@ -2729,7 +2826,12 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
               </div>
               <div className="space-y-1 mt-1" data-testid="list-uninvoiced-visits">
                 {uninvoicedData.visits.map((v) => (
-                  <div key={v.id} className="flex items-center justify-between gap-2 text-sm py-1 px-2 rounded bg-white/60 dark:bg-black/20" data-testid={`uninvoiced-visit-${v.id}`}>
+                  <div
+                    key={v.id}
+                    className="flex items-center justify-between gap-2 text-sm py-1.5 px-2 rounded bg-white/60 dark:bg-black/20 cursor-pointer hover:bg-white dark:hover:bg-black/40 transition-colors duration-100 group"
+                    onClick={() => setGenerateOpen(true)}
+                    data-testid={`uninvoiced-visit-${v.id}`}
+                  >
                     <div className="flex items-center gap-2 min-w-0">
                       <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <span className="truncate">
@@ -2737,20 +2839,39 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
                       </span>
                       <span className="text-xs text-muted-foreground truncate">{v.servicePlanName}</span>
                     </div>
-                    <span className="font-medium tabular-nums">${parseFloat(v.pricePerVisit).toFixed(2)}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium tabular-nums">${parseFloat(v.pricePerVisit).toFixed(2)}</span>
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {sortedInvoices.length > 0 ? (
-            <div className="space-y-2" data-testid="section-invoice-history">
-              <p className="text-sm font-medium text-muted-foreground">Recent Invoices</p>
-              {sortedInvoices.slice(0, 10).map((inv) => (
+          {activeFilter && (
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-muted-foreground">
+                {activeFilter === "outstanding" ? "Outstanding Invoices" : "Paid Invoices"}
+              </p>
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+                onClick={() => setActiveFilter(null)}
+                data-testid="button-clear-invoice-filter"
+              >
+                Show all
+              </button>
+            </div>
+          )}
+
+          {filteredInvoices.length > 0 ? (
+            <div className="space-y-1" data-testid="section-invoice-history">
+              {!activeFilter && <p className="text-sm font-medium text-muted-foreground">Recent Invoices</p>}
+              {filteredInvoices.slice(0, 10).map((inv) => (
                 <div
                   key={inv.id}
-                  className="flex items-center justify-between gap-2 py-2 border-b last:border-0"
+                  className="flex items-center justify-between gap-2 py-2 px-2 rounded-lg border-b last:border-0 cursor-pointer hover:bg-muted/60 transition-colors duration-100 group"
+                  onClick={() => navigate(`/invoices?selected=${inv.id}`)}
                   data-testid={`row-invoice-${inv.id}`}
                 >
                   <div className="flex items-center gap-2">
@@ -2762,13 +2883,16 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
                       {new Date(inv.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </span>
                   </div>
-                  <span className="text-sm font-medium tabular-nums">${parseFloat(inv.total).toFixed(2)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium tabular-nums">${parseFloat(inv.total).toFixed(2)}</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground text-center py-3" data-testid="text-no-invoices">
-              No invoices yet
+              {activeFilter ? "No invoices match this filter" : "No invoices yet"}
             </p>
           )}
         </CardContent>
