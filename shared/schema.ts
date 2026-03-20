@@ -144,6 +144,12 @@ export const companies = pgTable("companies", {
   voiceAgentGreeting: text("voice_agent_greeting"),
   slug: varchar("slug", { length: 100 }).unique(),
   leadWebhookSmsTemplate: text("lead_webhook_sms_template"),
+  qboRealmId: varchar("qbo_realm_id", { length: 50 }),
+  qboAccessToken: text("qbo_access_token"),
+  qboRefreshToken: text("qbo_refresh_token"),
+  qboTokenExpiresAt: timestamp("qbo_token_expires_at"),
+  qboConnectedAt: timestamp("qbo_connected_at"),
+  qboIncomeAccountRef: varchar("qbo_income_account_ref", { length: 50 }),
   timezone: varchar("timezone", { length: 100 }).notNull().default("America/New_York"),
   lastAutoInvoiceRun: date("last_auto_invoice_run"),
   canceledAt: timestamp("canceled_at"),
@@ -212,6 +218,7 @@ export const contacts = pgTable("contacts", {
   emailVerificationExpiry: timestamp("email_verification_expiry"),
   resetToken: varchar("reset_token", { length: 255 }),
   resetTokenExpiry: timestamp("reset_token_expiry"),
+  qboCustomerId: varchar("qbo_customer_id", { length: 50 }),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -390,6 +397,7 @@ export const invoices = pgTable("invoices", {
   source: varchar("source", { length: 50 }).default("manual"),
   externalSource: varchar("external_source", { length: 100 }),
   externalId: varchar("external_id", { length: 255 }),
+  qboInvoiceId: varchar("qbo_invoice_id", { length: 50 }),
   importRunId: varchar("import_run_id"),
   issuedDate: date("issued_date"),
   notes: text("notes"),
@@ -1326,3 +1334,25 @@ export type InsertServiceZone = z.infer<typeof insertServiceZoneSchema>;
 export const serviceZoneRelations = relations(serviceZones, ({ one }) => ({
   company: one(companies, { fields: [serviceZones.companyId], references: [companies.id] }),
 }));
+
+export const qboSyncStatusEnum = pgEnum("qbo_sync_status", ["pending", "synced", "error"]);
+
+export const qboSyncLogs = pgTable("qbo_sync_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  entityType: varchar("entity_type", { length: 50 }).notNull(),
+  entityId: varchar("entity_id", { length: 255 }).notNull(),
+  qboEntityId: varchar("qbo_entity_id", { length: 50 }),
+  status: qboSyncStatusEnum("status").notNull().default("pending"),
+  action: varchar("action", { length: 20 }).notNull(),
+  errorMessage: text("error_message"),
+  syncedAt: timestamp("synced_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_qbo_sync_company").on(table.companyId),
+  index("idx_qbo_sync_entity").on(table.entityType, table.entityId),
+]);
+
+export const insertQboSyncLogSchema = createInsertSchema(qboSyncLogs).omit({ id: true, createdAt: true });
+export type QboSyncLog = typeof qboSyncLogs.$inferSelect;
+export type InsertQboSyncLog = z.infer<typeof insertQboSyncLogSchema>;

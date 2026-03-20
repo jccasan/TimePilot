@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2 } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -345,6 +345,302 @@ function StripeConnectSection() {
                     Disconnect
                   </Button>
                 </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuickBooksSection() {
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const qboParam = params.get("qbo");
+    if (qboParam === "connected") {
+      toast({ title: "QuickBooks connected", description: "Your QuickBooks Online account has been linked successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/qbo/status"] });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("qbo");
+      window.history.replaceState({}, "", url.toString());
+    } else if (qboParam === "error") {
+      const msg = params.get("msg") || "Connection failed";
+      toast({ title: "QuickBooks connection error", description: msg, variant: "destructive" });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("qbo");
+      url.searchParams.delete("msg");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
+  const { data: qboStatus, isLoading } = useQuery<{
+    configured: boolean;
+    connected: boolean;
+    realmId: string | null;
+    connectedAt: string | null;
+    lastSync: string | null;
+    totalSynced: number;
+    totalErrors: number;
+    recentLogs: { id: string; entityType: string; entityId: string; action: string; status: string; errorMessage: string | null; syncedAt: string | null; createdAt: string }[];
+  }>({
+    queryKey: ["/api/qbo/status"],
+  });
+
+  const connectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("GET", "/api/qbo/connect");
+      return res.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.location.href = data.url;
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to start QuickBooks connection.", variant: "destructive" });
+    },
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/qbo/disconnect");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/qbo/status"] });
+      toast({ title: "QuickBooks disconnected", description: "Your QuickBooks account has been disconnected." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to disconnect.", variant: "destructive" });
+    },
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/qbo/sync");
+      return res.json();
+    },
+    onSuccess: (data: { contactsSynced: number; invoicesSynced: number; errors: string[] }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/qbo/status"] });
+      if (data.errors.length > 0) {
+        toast({
+          title: "Sync completed with errors",
+          description: `${data.contactsSynced} contacts, ${data.invoicesSynced} invoices synced. ${data.errors.length} error(s).`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Sync complete",
+          description: `${data.contactsSynced} contacts and ${data.invoicesSynced} invoices synced to QuickBooks.`,
+        });
+      }
+    },
+    onError: (err: any) => {
+      toast({ title: "Sync failed", description: err.message || "Full sync failed.", variant: "destructive" });
+    },
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: async (logId: string) => {
+      const res = await apiRequest("POST", `/api/qbo/retry/${logId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/qbo/status"] });
+      toast({ title: "Retry successful", description: "The record was synced to QuickBooks." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Retry failed", description: err.message || "Failed to retry sync.", variant: "destructive" });
+    },
+  });
+
+  const [showLogs, setShowLogs] = useState(false);
+
+  return (
+    <Card data-testid="card-quickbooks">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <BookOpen className="h-5 w-5" />
+          QuickBooks Online
+        </CardTitle>
+        <CardDescription>Sync your contacts and invoices to QuickBooks Online for seamless accounting</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-8 w-48" />
+          </div>
+        ) : !qboStatus?.configured ? (
+          <div className="space-y-3">
+            <div className="bg-muted/50 rounded-lg p-4 border">
+              <div className="flex items-start gap-3">
+                <Info className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium mb-1">QuickBooks integration not configured</p>
+                  <p className="text-sm text-muted-foreground">
+                    To enable QuickBooks Online sync, add your QBO_CLIENT_ID and QBO_CLIENT_SECRET environment variables. You can obtain these from the Intuit Developer Portal.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Status:</span>
+                {qboStatus.connected ? (
+                  <Badge variant="default" data-testid="badge-qbo-status">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" data-testid="badge-qbo-status">
+                    Not Connected
+                  </Badge>
+                )}
+              </div>
+              {qboStatus.connected && qboStatus.lastSync && (
+                <span className="text-xs text-muted-foreground" data-testid="text-qbo-last-sync">
+                  Last sync: {new Date(qboStatus.lastSync).toLocaleString()}
+                </span>
+              )}
+            </div>
+
+            {!qboStatus.connected ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Connect your QuickBooks Online account to automatically sync contacts and invoices. Payments marked as paid in Scoopilot will also be recorded in QuickBooks.
+                </p>
+                <Button
+                  onClick={() => connectMutation.mutate()}
+                  disabled={connectMutation.isPending}
+                  data-testid="button-connect-qbo"
+                >
+                  {connectMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <BookOpen className="h-4 w-4 mr-2" />
+                      Connect QuickBooks
+                    </>
+                  )}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="bg-muted/50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold" data-testid="text-qbo-total-synced">{qboStatus.totalSynced}</p>
+                    <p className="text-xs text-muted-foreground">Records Synced</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-destructive" data-testid="text-qbo-total-errors">{qboStatus.totalErrors}</p>
+                    <p className="text-xs text-muted-foreground">Errors</p>
+                  </div>
+                  {qboStatus.connectedAt && (
+                    <div className="bg-muted/50 rounded-lg p-3 text-center col-span-2">
+                      <p className="text-sm font-medium" data-testid="text-qbo-connected-at">
+                        {new Date(qboStatus.connectedAt).toLocaleDateString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Connected Since</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => syncMutation.mutate()}
+                    disabled={syncMutation.isPending}
+                    data-testid="button-qbo-full-sync"
+                  >
+                    {syncMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Syncing...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Full Re-Sync
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => disconnectMutation.mutate()}
+                    disabled={disconnectMutation.isPending}
+                    data-testid="button-disconnect-qbo"
+                  >
+                    {disconnectMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Unlink className="h-4 w-4 mr-2" />
+                    )}
+                    Disconnect
+                  </Button>
+                </div>
+
+                {qboStatus.recentLogs.length > 0 && (
+                  <Collapsible open={showLogs} onOpenChange={setShowLogs}>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="sm" className="w-full justify-between" data-testid="button-toggle-qbo-logs">
+                        <span>Recent Sync Activity ({qboStatus.recentLogs.length})</span>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${showLogs ? "rotate-180" : ""}`} />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-2 space-y-1 max-h-64 overflow-y-auto">
+                        {qboStatus.recentLogs.map((log) => (
+                          <div
+                            key={log.id}
+                            className="flex items-center justify-between gap-2 text-sm p-2 rounded border"
+                            data-testid={`row-qbo-log-${log.id}`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              {log.status === "synced" ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                              ) : log.status === "error" ? (
+                                <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                              ) : (
+                                <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin shrink-0" />
+                              )}
+                              <span className="capitalize">{log.entityType}</span>
+                              <Badge variant="secondary" className="text-xs capitalize">{log.action}</Badge>
+                              {log.errorMessage && (
+                                <span className="text-xs text-destructive truncate" title={log.errorMessage}>
+                                  {log.errorMessage.substring(0, 60)}{log.errorMessage.length > 60 ? "..." : ""}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(log.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                              </span>
+                              {log.status === "error" && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2"
+                                  onClick={() => retryMutation.mutate(log.id)}
+                                  disabled={retryMutation.isPending}
+                                  data-testid={`button-retry-qbo-${log.id}`}
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
               </div>
             )}
           </>
@@ -2043,6 +2339,8 @@ export default function Settings() {
           </Card>
 
           <StripeConnectSection />
+
+          <QuickBooksSection />
 
           <SignupWidgetSection company={company ? { slug: company.slug, name: company.name } : null} />
 

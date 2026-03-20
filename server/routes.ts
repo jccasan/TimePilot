@@ -6,7 +6,7 @@ import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, isNotNull, like, or, inArray, desc } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -243,6 +243,21 @@ function notify(companyId: string, type: string, title: string, message: string,
       dispatchWebhooksForEvent(companyId, webhookEvent, { type, title, message, linkUrl }).catch(console.error);
     });
   }
+}
+
+function qboAutoSync(companyId: string, entityId: string, type: "invoice" | "payment" | "contact") {
+  import("./services/quickbooks").then(async ({ isQboConfigured, syncInvoiceToQbo, syncPaymentToQbo, syncContactToQbo }) => {
+    if (!isQboConfigured()) return;
+    const company = await storage.getCompany(companyId);
+    if (!company?.qboRealmId || !company?.qboAccessToken) return;
+    try {
+      if (type === "invoice") await syncInvoiceToQbo(companyId, entityId);
+      else if (type === "payment") await syncPaymentToQbo(companyId, entityId);
+      else if (type === "contact") await syncContactToQbo(companyId, entityId);
+    } catch (err) {
+      console.error(`[QBO auto-sync] ${type} ${entityId} failed:`, err);
+    }
+  }).catch(console.error);
 }
 
 async function createPropertyWithGeocode(data: {
@@ -3975,6 +3990,7 @@ export async function registerRoutes(
         createdLineItems.push(lineItem);
       }
 
+      qboAutoSync(companyId, invoice.id, "invoice");
       res.status(201).json({ ...invoice, lineItems: createdLineItems });
     } catch (err) { handleError(res, err); }
   });
@@ -6009,6 +6025,7 @@ export async function registerRoutes(
         updateData.paidAt = new Date();
         updateData.stripePaymentIntentId = result.paymentIntentId;
         notify(companyId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+        qboAutoSync(companyId, invoice.id, "payment");
       } else {
         updateData.status = "failed";
         if (result.paymentIntentId) updateData.stripePaymentIntentId = result.paymentIntentId;
@@ -6185,6 +6202,7 @@ export async function registerRoutes(
               });
               const tipNote = parseFloat(tipAmount) > 0 ? ` (includes $${tipAmount} tip)` : "";
               notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
+              qboAutoSync(company.id, invoiceId, "payment");
               break;
             }
           }
@@ -6205,6 +6223,7 @@ export async function registerRoutes(
                 stripePaymentIntentId: pi.id,
               });
               notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+              qboAutoSync(company.id, invoiceId, "payment");
               break;
             }
           }
@@ -9877,6 +9896,131 @@ export async function registerRoutes(
           frequency: serviceFrequency,
         },
       });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ QuickBooks Online Integration ================
+
+  app.get("/api/qbo/status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { isQboConfigured, getQboSyncStatus } = await import("./services/quickbooks");
+      if (!isQboConfigured()) {
+        return res.json({ configured: false, connected: false, realmId: null, connectedAt: null, lastSync: null, totalSynced: 0, totalErrors: 0, recentLogs: [] });
+      }
+      const status = await getQboSyncStatus(companyId);
+      return res.json({ configured: true, ...status });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/qbo/connect", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const { isQboConfigured, getQboAuthUrl, createOAuthState } = await import("./services/quickbooks");
+      if (!isQboConfigured()) {
+        return res.status(503).json({ error: "QuickBooks integration is not configured. Please add QBO_CLIENT_ID and QBO_CLIENT_SECRET." });
+      }
+      const baseUrl = getBaseUrl(req);
+      const redirectUri = `${baseUrl}/api/qbo/callback`;
+      const state = createOAuthState(companyId);
+      const authUrl = getQboAuthUrl(redirectUri, state);
+      return res.json({ url: authUrl });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/qbo/callback", async (req: Request, res: Response) => {
+    try {
+      const { code, state, realmId } = req.query as { code: string; state: string; realmId: string };
+      if (!code || !state || !realmId) {
+        return res.redirect("/settings?qbo=error&msg=missing_params");
+      }
+      const { exchangeQboCode, validateOAuthState } = await import("./services/quickbooks");
+      const companyId = validateOAuthState(state);
+      if (!companyId) {
+        return res.redirect("/settings?qbo=error&msg=invalid_or_expired_state");
+      }
+      const baseUrl = getBaseUrl(req);
+      const redirectUri = `${baseUrl}/api/qbo/callback`;
+      const tokens = await exchangeQboCode(code, redirectUri);
+
+      await db.update(companies).set({
+        qboRealmId: realmId,
+        qboAccessToken: tokens.access_token,
+        qboRefreshToken: tokens.refresh_token,
+        qboTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+        qboConnectedAt: new Date(),
+      }).where(eq(companies.id, companyId));
+
+      return res.redirect("/settings?qbo=connected");
+    } catch (err: any) {
+      console.error("QBO callback error:", err);
+      return res.redirect(`/settings?qbo=error&msg=${encodeURIComponent(err.message || "auth_failed")}`);
+    }
+  });
+
+  app.post("/api/qbo/disconnect", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const { disconnectQbo } = await import("./services/quickbooks");
+      await disconnectQbo(companyId);
+      auditLog(companyId, (await getCompanyContext(req)).userId, "company", companyId, "qbo_disconnect");
+      return res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/qbo/sync", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const { runFullSync } = await import("./services/quickbooks");
+      const result = await runFullSync(companyId);
+      auditLog(companyId, (await getCompanyContext(req)).userId, "company", companyId, "qbo_full_sync", { result });
+      return res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/qbo/sync/contact/:contactId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const { syncContactToQbo } = await import("./services/quickbooks");
+      const result = await syncContactToQbo(companyId, req.params.contactId);
+      return res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/qbo/sync/invoice/:invoiceId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const { syncInvoiceToQbo } = await import("./services/quickbooks");
+      const result = await syncInvoiceToQbo(companyId, req.params.invoiceId);
+      return res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/qbo/retry/:logId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const logId = req.params.logId;
+      const [logEntry] = await db.select().from(qboSyncLogs).where(and(eq(qboSyncLogs.id, logId), eq(qboSyncLogs.companyId, companyId)));
+      if (!logEntry) return res.status(404).json({ error: "Sync log not found" });
+      const { syncContactToQbo, syncInvoiceToQbo, syncPaymentToQbo } = await import("./services/quickbooks");
+      try {
+        if (logEntry.entityType === "contact") {
+          await syncContactToQbo(companyId, logEntry.entityId);
+        } else if (logEntry.entityType === "invoice") {
+          await syncInvoiceToQbo(companyId, logEntry.entityId);
+        } else if (logEntry.entityType === "payment") {
+          await syncPaymentToQbo(companyId, logEntry.entityId);
+        }
+        return res.json({ success: true });
+      } catch (retryErr: any) {
+        return res.status(422).json({ error: retryErr.message });
+      }
     } catch (err) { handleError(res, err); }
   });
 
