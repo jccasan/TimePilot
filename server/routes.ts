@@ -733,9 +733,16 @@ export async function registerRoutes(
     }
     const user = await getUserById(userId);
     const username = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User" : "User";
+    const baseSlug = `${username}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
+    let slug = baseSlug;
+    let slugSuffix = 1;
+    while (await storage.getCompanyBySlug(slug)) {
+      slug = `${baseSlug}-${slugSuffix++}`;
+    }
     const company = await storage.createCompany({
       name: `${username}'s Company`,
       email: "",
+      slug,
       subscriptionTier: "tier_1",
       subscriptionStatus: "active",
     });
@@ -940,13 +947,21 @@ export async function registerRoutes(
       const validTimezones = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
       const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
         "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "dashboardNotes", "timezone",
-        "reminderSettings", "invoiceReminderSettings", "roverAiEnabled"];
+        "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
       }
       if (updates.timezone && !validTimezones.includes(updates.timezone)) {
         return res.status(400).json({ error: "Invalid timezone" });
+      }
+      if (updates.slug !== undefined) {
+        const cleanSlug = String(updates.slug).toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-|-$/g, "");
+        if (!cleanSlug || cleanSlug.length < 3) return res.status(400).json({ error: "Slug must be at least 3 characters" });
+        if (cleanSlug.length > 60) return res.status(400).json({ error: "Slug must be 60 characters or fewer" });
+        const existingSlug = await storage.getCompanyBySlug(cleanSlug);
+        if (existingSlug && existingSlug.id !== companyId) return res.status(409).json({ error: "This slug is already taken" });
+        updates.slug = cleanSlug;
       }
       if (updates.reminderSettings) {
         const validTimings = ["24h_before", "2h_before", "morning_of", "custom"];
@@ -9621,6 +9636,93 @@ export async function registerRoutes(
 </body>
 </html>`;
   }
+
+  app.get("/api/public/company/:slug", async (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+      const company = await storage.getCompanyBySlug(slug);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      res.json({
+        name: company.name,
+        logoUrl: company.logoUrl,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  const publicLeadSchema = z.object({
+    firstName: z.string().min(1).max(255),
+    lastName: z.string().max(255).default(""),
+    email: z.string().email().max(255).optional().or(z.literal("")),
+    phone: z.string().max(50).optional().or(z.literal("")),
+    streetAddress: z.string().max(255).optional().or(z.literal("")),
+    city: z.string().max(100).optional().or(z.literal("")),
+    state: z.string().max(50).optional().or(z.literal("")),
+    zipCode: z.string().max(20).optional().or(z.literal("")),
+    numberOfDogs: z.union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)]).default(1),
+    serviceFrequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
+    serviceDay: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
+  });
+
+  app.post("/api/public/leads/:slug", async (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+      const company = await storage.getCompanyBySlug(slug);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const parsed = publicLeadSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors });
+      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, serviceFrequency, serviceDay } = parsed.data;
+
+      const contact = await storage.createContact({
+        companyId: company.id,
+        firstName,
+        lastName,
+        email: email || null,
+        phone: phone || null,
+        streetAddress: streetAddress || null,
+        city: city || null,
+        state: state || null,
+        zipCode: zipCode || null,
+        numberOfDogs,
+        serviceFrequency,
+        serviceDay: serviceDay || null,
+        status: "lead",
+        leadSource: "website_widget",
+      });
+
+      const hasFullAddress = !!(streetAddress && city && state && zipCode);
+      if (hasFullAddress) {
+        await createPropertyWithGeocode({
+          companyId: company.id,
+          contactId: contact.id,
+          streetAddress: streetAddress!,
+          city,
+          state,
+          zipCode,
+          numberOfDogs,
+        });
+      }
+
+      notify(company.id, "new_lead", "New Lead", `${firstName} ${lastName} signed up via your website widget.`.trim(), `/contacts/${contact.id}`);
+
+      const pricingInputs: PriceCalculatorInputs = {
+        yardSizeAcres: 0.1,
+        dogCount: numberOfDogs,
+        serviceFrequency,
+        yardDifficulty: "flat",
+        distanceFromNearestStopMiles: 0.5,
+      };
+      const priceResult = calculatePrice(pricingInputs, company.pricingConfig);
+
+      res.status(201).json({
+        contactId: contact.id,
+        quote: {
+          recommendedPriceCents: priceResult.recommendedPriceCents,
+          frequency: serviceFrequency,
+        },
+      });
+    } catch (err) { handleError(res, err); }
+  });
 
   const { registerAdminAnalyticsRoutes } = await import("./admin-analytics");
   registerAdminAnalyticsRoutes(app, isAdmin);

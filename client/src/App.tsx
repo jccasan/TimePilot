@@ -57,6 +57,7 @@ import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
 import OverheadCosts from "@/pages/overhead-costs";
 import MigrationPage from "@/pages/migration-page";
 import ResetPassword from "@/pages/reset-password";
+import SignupWidget from "@/pages/signup-widget";
 import Jobs from "@/pages/jobs";
 import { NotificationBell } from "@/components/notification-bell";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
@@ -452,8 +453,15 @@ function AppContent() {
   const isResetPasswordPath = typeof window !== "undefined" &&
     window.location.pathname === "/reset-password";
 
+  const isSignupPath = typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/signup/");
+
   if (isResetPasswordPath) {
     return <ResetPassword />;
+  }
+
+  if (isSignupPath) {
+    return <SignupWidget />;
   }
 
   if (isPortalPath) {

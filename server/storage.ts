@@ -65,6 +65,7 @@ export interface IStorage {
   getCompany(id: string): Promise<Company | undefined>;
   listCompanies(): Promise<Company[]>;
   getCompanyByPhone(phone: string): Promise<Company | undefined>;
+  getCompanyBySlug(slug: string): Promise<Company | undefined>;
   createCompany(data: InsertCompany): Promise<Company>;
   updateCompany(id: string, data: Partial<InsertCompany>): Promise<Company>;
 
@@ -378,6 +379,11 @@ export class DatabaseStorage implements IStorage {
       const cDigits = c.phone.replace(/\D/g, "");
       return cDigits.length >= 10 && digits.length >= 10 && digits.endsWith(cDigits.slice(-10));
     });
+  }
+
+  async getCompanyBySlug(slug: string): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.slug, slug));
+    return company;
   }
 
   async createCompany(data: InsertCompany): Promise<Company> {

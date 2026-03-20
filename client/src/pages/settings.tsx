@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,6 +32,7 @@ import { useUpload } from "@/hooks/use-upload";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
+import { Globe, Copy, Check, Link2 } from "lucide-react";
 
 const companyFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -54,6 +56,7 @@ type Company = {
   startLatitude: string | null;
   startLongitude: string | null;
   logoUrl: string | null;
+  slug: string | null;
   subscriptionTier: string;
   subscriptionStatus: string;
   autoVisitsEnabled: boolean;
@@ -503,6 +506,134 @@ function AuditLogSection() {
               ))}
             </TableBody>
           </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SignupWidgetSection({ company }: { company: { slug: string | null; name: string } | null }) {
+  const { toast } = useToast();
+  const [slugInput, setSlugInput] = useState(company?.slug || "");
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (company?.slug) setSlugInput(company.slug);
+  }, [company?.slug]);
+
+  const slugMutation = useMutation({
+    mutationFn: async (newSlug: string) => {
+      const res = await apiRequest("PATCH", "/api/company", { slug: newSlug });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update slug");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Signup link updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const baseUrl = window.location.origin;
+  const signupUrl = company?.slug ? `${baseUrl}/signup/${company.slug}` : "";
+  const iframeSnippet = company?.slug
+    ? `<iframe src="${signupUrl}" width="100%" height="700" frameborder="0" style="border:none;max-width:500px;"></iframe>`
+    : "";
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
+    toast({ title: `${label} copied to clipboard` });
+  };
+
+  return (
+    <Card data-testid="card-signup-widget">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Globe className="h-5 w-5" />
+          Client Signup Widget
+        </CardTitle>
+        <CardDescription>
+          Let potential clients request a quote and sign up from your website
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label>Your Signup URL Slug</Label>
+          <div className="flex gap-2">
+            <div className="flex items-center gap-1 text-sm text-muted-foreground shrink-0">
+              {baseUrl}/signup/
+            </div>
+            <Input
+              value={slugInput}
+              onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+              placeholder="your-company"
+              className="max-w-[200px]"
+              data-testid="input-company-slug"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!slugInput || slugInput === company?.slug || slugMutation.isPending}
+              onClick={() => slugMutation.mutate(slugInput)}
+              data-testid="button-save-slug"
+            >
+              {slugMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Use lowercase letters, numbers, and hyphens. Minimum 3 characters.
+          </p>
+        </div>
+
+        {company?.slug && (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Direct Link</Label>
+              <div className="flex gap-2">
+                <Input value={signupUrl} readOnly className="text-sm font-mono" data-testid="input-signup-url" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => copyToClipboard(signupUrl, "Link")}
+                  data-testid="button-copy-signup-url"
+                >
+                  {copied === "Link" ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Embed Code</Label>
+              <div className="flex gap-2">
+                <Input value={iframeSnippet} readOnly className="text-sm font-mono" data-testid="input-embed-code" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => copyToClipboard(iframeSnippet, "Embed code")}
+                  data-testid="button-copy-embed-code"
+                >
+                  {copied === "Embed code" ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Paste this HTML into your website to embed the signup form.
+              </p>
+            </div>
+
+            <Button variant="outline" size="sm" asChild data-testid="button-preview-signup">
+              <a href={signupUrl} target="_blank" rel="noopener noreferrer">
+                <Link2 className="h-4 w-4 mr-2" />
+                Preview Signup Page
+              </a>
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -1549,6 +1680,8 @@ export default function Settings() {
           </Card>
 
           <StripeConnectSection />
+
+          <SignupWidgetSection company={company as any} />
 
           <Card>
             <CardHeader>
