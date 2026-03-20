@@ -66,3 +66,14 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **OpenAI**: Used for AI-assisted import wizard and Rover AI chatbot (via Replit AI Integrations).
 - **QuickBooks Online**: Accounting integration via OAuth 2.0 for syncing contacts, invoices, and payments (requires QBO_CLIENT_ID and QBO_CLIENT_SECRET).
 - **Retell AI**: Voice agent integration for lead creation and customer lookup.
+
+### Voice Agent Scheduling API
+Platform-agnostic REST API layer for AI voice agents (Vapi, Retell, Bland, custom Twilio+OpenAI). All endpoints under `/api/voice/*` authenticated via `x-api-key` header (or owner/admin session). Endpoints:
+- `GET /api/voice/lookup?phone=...` — Caller lookup: returns contact, properties, active service plans, upcoming visits, active vacation holds. Returns `{found: false}` (not 404) for unknown callers.
+- `GET /api/voice/availability?dayOfWeek=...` — Route capacity check: returns open slots per day (routes under 30 stops = capacity).
+- `POST /api/voice/book` — Book new service: creates contact + property + service plan + auto-assigns route in one call. Accepts firstName, lastName, phone, email, address fields, frequency (weekly/biweekly/monthly/onetime), dayOfWeek.
+- `POST /api/voice/pause` — Pause service: creates vacation hold(s). Accepts contactId or servicePlanId + startDate + endDate.
+- `POST /api/voice/resume` — Resume service: removes active vacation holds. Accepts contactId or servicePlanId.
+- `POST /api/voice/reschedule` — Reschedule: changes dayOfWeek and auto-assigns to best-fit route. Accepts contactId or servicePlanId + newDayOfWeek.
+- `POST /api/voice/cancel` — Cancel: deactivates service plans and sets contact status to cancelled. Accepts contactId + optional reason.
+All endpoints return flat JSON with `summary` field for voice agent readback. Documentation card with curl examples in Settings page (VoiceApiDocsSection).

@@ -10042,6 +10042,342 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Voice Agent Scheduling API ================
+
+  app.get("/api/voice/lookup", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      const phone = (req.query.phone as string || "").replace(/[^\d+]/g, "");
+      if (!phone || phone.length < 7) {
+        return res.json({ found: false, message: "No matching customer found" });
+      }
+      const allContacts = await storage.getContacts(companyId, { search: phone });
+      const matched = allContacts.find(c => c.phone && c.phone.replace(/[^\d+]/g, "").includes(phone));
+      if (!matched) {
+        return res.json({ found: false, message: "No matching customer found" });
+      }
+      const plans = await storage.getServicePlans(companyId, { contactId: matched.id });
+      const activePlans = plans.filter(p => p.isActive);
+      const props = await storage.getProperties(companyId, matched.id);
+      const today = new Date().toISOString().split("T")[0];
+      let upcomingVisits: { scheduledDate: string; status: string; servicePlanName: string; propertyAddress: string }[] = [];
+      if (activePlans.length > 0) {
+        const visitsResult = await storage.getVisitsForContact(companyId, matched.id, 3, 0);
+        upcomingVisits = visitsResult.visits
+          .filter(v => v.scheduledDate >= today && v.status === "scheduled")
+          .slice(0, 3)
+          .map(v => ({ scheduledDate: v.scheduledDate, status: v.status, servicePlanName: v.servicePlanName, propertyAddress: v.propertyAddress }));
+      }
+      let activeHolds: { id: string; startDate: string; endDate: string; reason: string | null }[] = [];
+      if (activePlans.length > 0) {
+        const allHolds = await Promise.all(activePlans.map(p => storage.getVacationHolds(p.id)));
+        activeHolds = allHolds.flat()
+          .filter(h => h.endDate >= today)
+          .map(h => ({ id: h.id, startDate: h.startDate, endDate: h.endDate, reason: h.reason }));
+      }
+      res.json({
+        found: true,
+        contact: {
+          id: matched.id,
+          firstName: matched.firstName,
+          lastName: matched.lastName,
+          phone: matched.phone,
+          email: matched.email,
+          status: matched.status,
+        },
+        properties: props.map(p => ({
+          id: p.id,
+          streetAddress: p.streetAddress,
+          city: p.city,
+          state: p.state,
+          zipCode: p.zipCode,
+          numberOfDogs: p.numberOfDogs,
+        })),
+        servicePlans: activePlans.map(sp => ({
+          id: sp.id,
+          frequency: sp.frequency,
+          dayOfWeek: sp.dayOfWeek,
+          pricePerVisit: sp.pricePerVisit,
+          propertyId: sp.propertyId,
+          serviceName: sp.serviceName,
+        })),
+        upcomingVisits,
+        activeHolds,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/voice/availability", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      const dayFilter = req.query.dayOfWeek as string | undefined;
+      const allRoutes = await storage.getRoutes(companyId);
+      const activePlans = await storage.getServicePlans(companyId, { isActive: true });
+
+      const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+      const availability = days
+        .filter(d => !dayFilter || d === dayFilter)
+        .map(day => {
+          const dayRoutes = allRoutes.filter(r => r.dayOfWeek === day);
+          const totalStops = dayRoutes.reduce((sum, r) => {
+            return sum + activePlans.filter(sp => sp.routeId === r.id).length;
+          }, 0);
+          const totalCapacity = dayRoutes.length * 30;
+          const openSlots = Math.max(0, totalCapacity - totalStops);
+          return {
+            dayOfWeek: day,
+            routeCount: dayRoutes.length,
+            currentStops: totalStops,
+            openSlots,
+            available: openSlots > 0,
+          };
+        });
+      res.json({ availability });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/voice/book", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      const { firstName, lastName, phone, email, streetAddress, city, state, zipCode, numberOfDogs, frequency, dayOfWeek, notes } = req.body;
+      if (!firstName || typeof firstName !== "string" || !lastName || typeof lastName !== "string" || !phone || typeof phone !== "string") {
+        return res.status(400).json({ error: "firstName, lastName, and phone are required (strings)" });
+      }
+      if (!streetAddress || !city || !state || !zipCode) {
+        return res.status(400).json({ error: "streetAddress, city, state, and zipCode are required" });
+      }
+      const validFrequencies = ["weekly", "biweekly", "monthly", "onetime"];
+      const freq = frequency || "weekly";
+      if (!validFrequencies.includes(freq)) {
+        return res.status(400).json({ error: `frequency must be one of: ${validFrequencies.join(", ")}` });
+      }
+      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+      const day = dayOfWeek || "tbd";
+      if (day !== "tbd" && !validDays.includes(day)) {
+        return res.status(400).json({ error: `dayOfWeek must be one of: ${validDays.join(", ")}, or omit for auto-assignment` });
+      }
+      const dogCount = numberOfDogs && Number.isInteger(Number(numberOfDogs)) && Number(numberOfDogs) > 0 ? Number(numberOfDogs) : 1;
+
+      const contact = await storage.createContact({
+        companyId,
+        firstName,
+        lastName,
+        phone,
+        email: email || null,
+        status: "active",
+        notes: notes || null,
+      });
+
+      const property = await storage.createProperty({
+        companyId,
+        contactId: contact.id,
+        streetAddress,
+        city,
+        state,
+        zipCode,
+        numberOfDogs: dogCount,
+      });
+
+      let routeId: string | null = null;
+      if (day !== "tbd") {
+        const dayRoutes = await storage.getRoutes(companyId, day);
+        if (dayRoutes.length > 0) {
+          const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+          let bestRoute = dayRoutes[0];
+          let bestCount = Infinity;
+          for (const route of dayRoutes) {
+            const stopCount = allPlans.filter(sp => sp.routeId === route.id).length;
+            if (stopCount < bestCount) {
+              bestCount = stopCount;
+              bestRoute = route;
+            }
+          }
+          routeId = bestRoute.id;
+        }
+      }
+
+      const servicePlan = await storage.createServicePlan({
+        companyId,
+        contactId: contact.id,
+        propertyId: property.id,
+        frequency: freq as any,
+        dayOfWeek: day as any,
+        pricePerVisit: "0",
+        isActive: true,
+        startDate: new Date().toISOString().split("T")[0],
+        routeId,
+        stopOrder: 0,
+      });
+
+      res.status(201).json({
+        success: true,
+        contactId: contact.id,
+        propertyId: property.id,
+        servicePlanId: servicePlan.id,
+        routeAssigned: !!routeId,
+        summary: `Booked ${freq} service for ${firstName} ${lastName} at ${streetAddress}, ${city}${day !== "tbd" ? ` on ${day}s` : ""}`,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/voice/pause", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      const { contactId, servicePlanId, startDate, endDate, reason } = req.body;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: "startDate and endDate are required (YYYY-MM-DD)" });
+      }
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+        return res.status(400).json({ error: "Dates must be in YYYY-MM-DD format" });
+      }
+      if (startDate > endDate) {
+        return res.status(400).json({ error: "startDate must be on or before endDate" });
+      }
+      let planIds: string[] = [];
+      if (servicePlanId) {
+        const sp = await storage.getServicePlan(servicePlanId, companyId);
+        if (!sp) return res.status(404).json({ error: "Service plan not found" });
+        planIds = [servicePlanId];
+      } else if (contactId) {
+        const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+        planIds = plans.map(p => p.id);
+      } else {
+        return res.status(400).json({ error: "Provide contactId or servicePlanId" });
+      }
+      if (planIds.length === 0) {
+        return res.status(404).json({ error: "No active service plans found" });
+      }
+      const holds = await Promise.all(planIds.map(pid =>
+        storage.createVacationHold({ servicePlanId: pid, startDate, endDate, reason: reason || null })
+      ));
+      res.status(201).json({
+        success: true,
+        holdsCreated: holds.length,
+        startDate,
+        endDate,
+        summary: `Service paused from ${startDate} to ${endDate}`,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/voice/resume", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      const { contactId, servicePlanId } = req.body;
+      let planIds: string[] = [];
+      if (servicePlanId) {
+        const sp = await storage.getServicePlan(servicePlanId, companyId);
+        if (!sp) return res.status(404).json({ error: "Service plan not found" });
+        planIds = [servicePlanId];
+      } else if (contactId) {
+        const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+        planIds = plans.map(p => p.id);
+      } else {
+        return res.status(400).json({ error: "Provide contactId or servicePlanId" });
+      }
+      const today = new Date().toISOString().split("T")[0];
+      let removedCount = 0;
+      for (const pid of planIds) {
+        const holds = await storage.getVacationHolds(pid);
+        const activeHolds = holds.filter(h => h.endDate >= today);
+        for (const hold of activeHolds) {
+          await storage.deleteVacationHold(hold.id, companyId);
+          removedCount++;
+        }
+      }
+      res.json({
+        success: true,
+        holdsRemoved: removedCount,
+        summary: removedCount > 0 ? `Removed ${removedCount} vacation hold(s). Service resumed.` : "No active holds found to remove.",
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/voice/reschedule", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      const { servicePlanId, contactId, newDayOfWeek } = req.body;
+      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+      if (!newDayOfWeek || !validDays.includes(newDayOfWeek)) {
+        return res.status(400).json({ error: `newDayOfWeek is required and must be one of: ${validDays.join(", ")}` });
+      }
+      let plans: { id: string; dayOfWeek: string | null }[] = [];
+      if (servicePlanId) {
+        const sp = await storage.getServicePlan(servicePlanId, companyId);
+        if (!sp) return res.status(404).json({ error: "Service plan not found" });
+        plans = [sp];
+      } else if (contactId) {
+        const activePlans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+        plans = activePlans;
+      } else {
+        return res.status(400).json({ error: "Provide servicePlanId or contactId" });
+      }
+      if (plans.length === 0) {
+        return res.status(404).json({ error: "No active service plans found" });
+      }
+      let newRouteId: string | null = null;
+      const dayRoutes = await storage.getRoutes(companyId, newDayOfWeek);
+      if (dayRoutes.length > 0) {
+        const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+        let bestRoute = dayRoutes[0];
+        let bestCount = Infinity;
+        for (const route of dayRoutes) {
+          const stopCount = allPlans.filter(sp => sp.routeId === route.id).length;
+          if (stopCount < bestCount) {
+            bestCount = stopCount;
+            bestRoute = route;
+          }
+        }
+        newRouteId = bestRoute.id;
+      }
+      for (const plan of plans) {
+        await storage.updateServicePlan(plan.id, companyId, { dayOfWeek: newDayOfWeek as any, routeId: newRouteId });
+      }
+      res.json({
+        success: true,
+        plansUpdated: plans.length,
+        newDayOfWeek,
+        routeAssigned: !!newRouteId,
+        summary: `Rescheduled ${plans.length} plan(s) to ${newDayOfWeek}s`,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/voice/cancel", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      const { contactId, reason } = req.body;
+      if (!contactId) {
+        return res.status(400).json({ error: "contactId is required" });
+      }
+      const contact = await storage.getContact(contactId, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+      for (const plan of plans) {
+        await storage.updateServicePlan(plan.id, companyId, { isActive: false, jobStatus: "cancelled" as any });
+      }
+      await storage.updateContact(contactId, companyId, {
+        status: "cancelled" as any,
+        notes: contact.notes
+          ? `${contact.notes}\n[Voice agent] Cancelled: ${reason || "No reason provided"}`
+          : `[Voice agent] Cancelled: ${reason || "No reason provided"}`,
+      });
+      res.json({
+        success: true,
+        plansDeactivated: plans.length,
+        summary: `Service cancelled for ${contact.firstName} ${contact.lastName}. ${plans.length} plan(s) deactivated.`,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
   const { registerAdminAnalyticsRoutes } = await import("./admin-analytics");
   registerAdminAnalyticsRoutes(app, isAdmin);
 

@@ -650,6 +650,201 @@ function QuickBooksSection() {
   );
 }
 
+function VoiceApiDocsSection() {
+  const [copiedEndpoint, setCopiedEndpoint] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedEndpoint(label);
+    setTimeout(() => setCopiedEndpoint(null), 2000);
+  };
+
+  const baseUrl = window.location.origin;
+
+  const endpoints = [
+    {
+      label: "Caller Lookup",
+      method: "GET",
+      path: "/api/voice/lookup?phone=5551234567",
+      description: "Look up a customer by phone number. Returns contact details, service plans, properties, upcoming visits, and active vacation holds.",
+      curl: `curl -H "x-api-key: YOUR_API_KEY" "${baseUrl}/api/voice/lookup?phone=5551234567"`,
+      response: `{
+  "found": true,
+  "contact": { "id": "...", "firstName": "Jane", "lastName": "Doe", "phone": "555-123-4567", "email": "jane@example.com", "status": "active" },
+  "properties": [{ "id": "...", "streetAddress": "123 Main St", "city": "Richmond", "state": "VA", "zipCode": "23220", "numberOfDogs": 2 }],
+  "servicePlans": [{ "id": "...", "frequency": "weekly", "dayOfWeek": "tuesday", "pricePerVisit": "35.00" }],
+  "upcomingVisits": [{ "scheduledDate": "2026-03-24", "status": "scheduled", "servicePlanName": "Weekly Cleanup", "propertyAddress": "123 Main St" }],
+  "activeHolds": []
+}`,
+    },
+    {
+      label: "Check Availability",
+      method: "GET",
+      path: "/api/voice/availability",
+      description: "Check which days have route capacity for new customers. Optionally filter by day.",
+      curl: `curl -H "x-api-key: YOUR_API_KEY" "${baseUrl}/api/voice/availability?dayOfWeek=monday"`,
+      response: `{
+  "availability": [
+    { "dayOfWeek": "monday", "routeCount": 2, "currentStops": 18, "openSlots": 42, "available": true }
+  ]
+}`,
+    },
+    {
+      label: "Book New Service",
+      method: "POST",
+      path: "/api/voice/book",
+      description: "Create a new customer with contact, property, and service plan in one call. Auto-assigns to best-fit route.",
+      curl: `curl -X POST -H "x-api-key: YOUR_API_KEY" -H "Content-Type: application/json" -d '{"firstName":"Jane","lastName":"Doe","phone":"555-123-4567","email":"jane@example.com","streetAddress":"123 Main St","city":"Richmond","state":"VA","zipCode":"23220","numberOfDogs":2,"frequency":"weekly","dayOfWeek":"tuesday"}' "${baseUrl}/api/voice/book"`,
+      response: `{
+  "success": true,
+  "contactId": "...",
+  "propertyId": "...",
+  "servicePlanId": "...",
+  "routeAssigned": true,
+  "summary": "Booked weekly service for Jane Doe at 123 Main St, Richmond on tuesdays"
+}`,
+    },
+    {
+      label: "Pause Service",
+      method: "POST",
+      path: "/api/voice/pause",
+      description: "Create a vacation hold on a customer's service. Provide contactId (pauses all plans) or a specific servicePlanId.",
+      curl: `curl -X POST -H "x-api-key: YOUR_API_KEY" -H "Content-Type: application/json" -d '{"contactId":"CONTACT_ID","startDate":"2026-04-01","endDate":"2026-04-15","reason":"Vacation"}' "${baseUrl}/api/voice/pause"`,
+      response: `{
+  "success": true,
+  "holdsCreated": 1,
+  "startDate": "2026-04-01",
+  "endDate": "2026-04-15",
+  "summary": "Service paused from 2026-04-01 to 2026-04-15"
+}`,
+    },
+    {
+      label: "Resume Service",
+      method: "POST",
+      path: "/api/voice/resume",
+      description: "Remove active vacation holds to resume service immediately. Provide contactId or servicePlanId.",
+      curl: `curl -X POST -H "x-api-key: YOUR_API_KEY" -H "Content-Type: application/json" -d '{"contactId":"CONTACT_ID"}' "${baseUrl}/api/voice/resume"`,
+      response: `{
+  "success": true,
+  "holdsRemoved": 1,
+  "summary": "Removed 1 vacation hold(s). Service resumed."
+}`,
+    },
+    {
+      label: "Reschedule Service",
+      method: "POST",
+      path: "/api/voice/reschedule",
+      description: "Change the service day for a customer. Auto-assigns to best-fit route for the new day.",
+      curl: `curl -X POST -H "x-api-key: YOUR_API_KEY" -H "Content-Type: application/json" -d '{"contactId":"CONTACT_ID","newDayOfWeek":"thursday"}' "${baseUrl}/api/voice/reschedule"`,
+      response: `{
+  "success": true,
+  "plansUpdated": 1,
+  "newDayOfWeek": "thursday",
+  "routeAssigned": true,
+  "summary": "Rescheduled 1 plan(s) to thursdays"
+}`,
+    },
+    {
+      label: "Cancel Service",
+      method: "POST",
+      path: "/api/voice/cancel",
+      description: "Cancel a customer's service. Deactivates all active service plans and sets contact status to cancelled.",
+      curl: `curl -X POST -H "x-api-key: YOUR_API_KEY" -H "Content-Type: application/json" -d '{"contactId":"CONTACT_ID","reason":"Moving out of area"}' "${baseUrl}/api/voice/cancel"`,
+      response: `{
+  "success": true,
+  "plansDeactivated": 1,
+  "summary": "Service cancelled for Jane Doe. 1 plan(s) deactivated."
+}`,
+    },
+  ];
+
+  return (
+    <Card data-testid="card-voice-api-docs">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Phone className="h-5 w-5" />
+          Voice Agent API
+        </CardTitle>
+        <CardDescription>
+          Connect your AI voice agent (Vapi, Retell, Bland, or custom) to handle customer calls. Use these endpoints with your existing API key.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="bg-muted/50 rounded-lg p-4 border">
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium mb-1">Authentication</p>
+              <p className="text-sm text-muted-foreground">
+                All endpoints require the <code className="bg-muted px-1 py-0.5 rounded text-xs">x-api-key</code> header. Create an API key in the section below if you haven't already.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {endpoints.map((ep) => (
+            <Collapsible key={ep.label}>
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <Badge variant={ep.method === "GET" ? "secondary" : "default"} className="font-mono text-xs" data-testid={`badge-method-${ep.label.toLowerCase().replace(/\s+/g, "-")}`}>
+                    {ep.method}
+                  </Badge>
+                  <span className="text-sm font-medium" data-testid={`text-endpoint-${ep.label.toLowerCase().replace(/\s+/g, "-")}`}>{ep.label}</span>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2 pb-1 px-3">
+                <p className="text-sm text-muted-foreground mb-3">{ep.description}</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground uppercase">curl example</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => copyToClipboard(ep.curl, ep.label + "-curl")}
+                      data-testid={`button-copy-curl-${ep.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {copiedEndpoint === ep.label + "-curl" ? (
+                        <><Check className="h-3 w-3 mr-1" /> Copied</>
+                      ) : (
+                        <><Copy className="h-3 w-3 mr-1" /> Copy curl</>
+                      )}
+                    </Button>
+                  </div>
+                  <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all font-mono" data-testid={`code-curl-${ep.label.toLowerCase().replace(/\s+/g, "-")}`}>
+                    {ep.curl}
+                  </pre>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground uppercase">example response</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => copyToClipboard(ep.response, ep.label + "-response")}
+                      data-testid={`button-copy-response-${ep.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {copiedEndpoint === ep.label + "-response" ? (
+                        <><Check className="h-3 w-3 mr-1" /> Copied</>
+                      ) : (
+                        <><Copy className="h-3 w-3 mr-1" /> Copy</>
+                      )}
+                    </Button>
+                  </div>
+                  <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap font-mono" data-testid={`code-response-${ep.label.toLowerCase().replace(/\s+/g, "-")}`}>
+                    {ep.response}
+                  </pre>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function AuditLogSection() {
   const [entityTypeFilter, setEntityTypeFilter] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -2341,6 +2536,8 @@ export default function Settings() {
           <StripeConnectSection />
 
           <QuickBooksSection />
+
+          <VoiceApiDocsSection />
 
           <SignupWidgetSection company={company ? { slug: company.slug, name: company.name } : null} />
 
