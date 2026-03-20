@@ -9530,9 +9530,19 @@ export async function registerRoutes(
       const { user, company } = await db.transaction(async (tx) => {
         const txUser = await createUserWithTempPassword(record.email, record.firstName, record.lastName || "", tempPassword);
 
+        const baseSlug = (record.companyName || "company").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
+        let slug = baseSlug;
+        let slugSuffix = 1;
+        while (true) {
+          const existing = await storage.getCompanyBySlug(slug);
+          if (!existing) break;
+          slug = `${baseSlug}-${slugSuffix++}`;
+        }
+
         const [txCompany] = await tx.insert((await import("@shared/schema")).companies).values({
           name: record.companyName,
           email: record.email,
+          slug,
           subscriptionTier: "free_trial",
           subscriptionStatus: "trialing",
         }).returning();
