@@ -1681,7 +1681,7 @@ export default function Settings() {
 
           <StripeConnectSection />
 
-          <SignupWidgetSection company={company as any} />
+          <SignupWidgetSection company={company ? { slug: company.slug, name: company.name } : null} />
 
           <Card>
             <CardHeader>

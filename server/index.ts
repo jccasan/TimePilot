@@ -38,6 +38,14 @@ app.use(helmet({
   frameguard: process.env.NODE_ENV === "production" ? { action: "sameorigin" } : false,
 }));
 
+app.use((req, res, next) => {
+  if (req.path.startsWith("/signup/") || req.path.startsWith("/api/public/")) {
+    res.removeHeader("X-Frame-Options");
+    res.setHeader("Content-Security-Policy", "frame-ancestors *");
+  }
+  next();
+});
+
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",")
   : [];
