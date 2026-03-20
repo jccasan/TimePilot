@@ -681,8 +681,8 @@ function VoiceApiDocsSection() {
       label: "Check Availability",
       method: "GET",
       path: "/api/voice/availability",
-      description: "Check which days have route capacity for new customers. Optionally filter by day.",
-      curl: `curl -H "x-api-key: YOUR_API_KEY" "${baseUrl}/api/voice/availability?dayOfWeek=monday"`,
+      description: "Check which days have route capacity for new customers. Filter by zip code to see only days that serve that area. Optionally filter by a specific day.",
+      curl: `curl -H "x-api-key: YOUR_API_KEY" "${baseUrl}/api/voice/availability?zipCode=23220&dayOfWeek=monday"`,
       response: `{
   "availability": [
     { "dayOfWeek": "monday", "routeCount": 2, "currentStops": 18, "openSlots": 42, "available": true }

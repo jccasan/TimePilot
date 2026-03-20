@@ -6,7 +6,7 @@ import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, isNotNull, like, or, inArray, desc } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -10063,9 +10063,10 @@ export async function registerRoutes(
       const today = new Date().toISOString().split("T")[0];
       let upcomingVisits: { scheduledDate: string; status: string; servicePlanName: string; propertyAddress: string }[] = [];
       if (activePlans.length > 0) {
-        const visitsResult = await storage.getVisitsForContact(companyId, matched.id, 3, 0);
+        const visitsResult = await storage.getVisitsForContact(companyId, matched.id, 50, 0);
         upcomingVisits = visitsResult.visits
           .filter(v => v.scheduledDate >= today && v.status === "scheduled")
+          .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))
           .slice(0, 3)
           .map(v => ({ scheduledDate: v.scheduledDate, status: v.status, servicePlanName: v.servicePlanName, propertyAddress: v.propertyAddress }));
       }
@@ -10113,12 +10114,25 @@ export async function registerRoutes(
       const { companyId, role } = await getCompanyContext(req);
       if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
       const dayFilter = req.query.dayOfWeek as string | undefined;
+      const zipCode = req.query.zipCode as string | undefined;
       const allRoutes = await storage.getRoutes(companyId);
       const activePlans = await storage.getServicePlans(companyId, { isActive: true });
+
+      let servedDays: Set<string> | null = null;
+      if (zipCode) {
+        const zones = await storage.getServiceZones(companyId);
+        const matchingZones = zones.filter(z => z.isActive && z.zipCode === zipCode);
+        if (matchingZones.length === 0) {
+          return res.json({ availability: [], message: `No service zones found for zip code ${zipCode}` });
+        }
+        servedDays = new Set(matchingZones.map(z => z.dayOfWeek).filter(d => d !== "tbd"));
+        if (servedDays.size === 0) servedDays = null;
+      }
 
       const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
       const availability = days
         .filter(d => !dayFilter || d === dayFilter)
+        .filter(d => !servedDays || servedDays.has(d))
         .map(day => {
           const dayRoutes = allRoutes.filter(r => r.dayOfWeek === day);
           const totalStops = dayRoutes.reduce((sum, r) => {
@@ -10161,26 +10175,6 @@ export async function registerRoutes(
       }
       const dogCount = numberOfDogs && Number.isInteger(Number(numberOfDogs)) && Number(numberOfDogs) > 0 ? Number(numberOfDogs) : 1;
 
-      const contact = await storage.createContact({
-        companyId,
-        firstName,
-        lastName,
-        phone,
-        email: email || null,
-        status: "active",
-        notes: notes || null,
-      });
-
-      const property = await storage.createProperty({
-        companyId,
-        contactId: contact.id,
-        streetAddress,
-        city,
-        state,
-        zipCode,
-        numberOfDogs: dogCount,
-      });
-
       let routeId: string | null = null;
       if (day !== "tbd") {
         const dayRoutes = await storage.getRoutes(companyId, day);
@@ -10199,24 +10193,48 @@ export async function registerRoutes(
         }
       }
 
-      const servicePlan = await storage.createServicePlan({
-        companyId,
-        contactId: contact.id,
-        propertyId: property.id,
-        frequency: freq as any,
-        dayOfWeek: day as any,
-        pricePerVisit: "0",
-        isActive: true,
-        startDate: new Date().toISOString().split("T")[0],
-        routeId,
-        stopOrder: 0,
+      const result = await db.transaction(async (tx) => {
+        const [contact] = await tx.insert(contacts).values({
+          companyId,
+          firstName,
+          lastName,
+          phone,
+          email: email || null,
+          status: "active",
+          notes: notes || null,
+        }).returning();
+
+        const [property] = await tx.insert(properties).values({
+          companyId,
+          contactId: contact.id,
+          streetAddress,
+          city,
+          state,
+          zipCode,
+          numberOfDogs: dogCount,
+        }).returning();
+
+        const [servicePlan] = await tx.insert(servicePlansTable).values({
+          companyId,
+          contactId: contact.id,
+          propertyId: property.id,
+          frequency: freq as any,
+          dayOfWeek: day as any,
+          pricePerVisit: "0",
+          isActive: true,
+          startDate: new Date().toISOString().split("T")[0],
+          routeId,
+          stopOrder: 0,
+        }).returning();
+
+        return { contact, property, servicePlan };
       });
 
       res.status(201).json({
         success: true,
-        contactId: contact.id,
-        propertyId: property.id,
-        servicePlanId: servicePlan.id,
+        contactId: result.contact.id,
+        propertyId: result.property.id,
+        servicePlanId: result.servicePlan.id,
         routeAssigned: !!routeId,
         summary: `Booked ${freq} service for ${firstName} ${lastName} at ${streetAddress}, ${city}${day !== "tbd" ? ` on ${day}s` : ""}`,
       });
