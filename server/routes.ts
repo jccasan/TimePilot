@@ -10123,7 +10123,7 @@ export async function registerRoutes(
         const zones = await storage.getServiceZones(companyId);
         const matchingZones = zones.filter(z => z.isActive && z.zipCode === zipCode);
         if (matchingZones.length === 0) {
-          return res.json({ availability: [], message: `No service zones found for zip code ${zipCode}` });
+          return res.json({ availability: [], available_days: [], message: `No service zones found for zip code ${zipCode}` });
         }
         servedDays = new Set(matchingZones.map(z => z.dayOfWeek).filter(d => d !== "tbd"));
         if (servedDays.size === 0) servedDays = null;
@@ -10148,7 +10148,8 @@ export async function registerRoutes(
             available: openSlots > 0,
           };
         });
-      res.json({ availability });
+      const available_days = availability.filter(d => d.available).map(d => d.dayOfWeek);
+      res.json({ availability, available_days });
     } catch (err) { handleError(res, err); }
   });
 
