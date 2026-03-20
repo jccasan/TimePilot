@@ -9,6 +9,38 @@ const QBO_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer
 const QBO_API_BASE = "https://quickbooks.api.intuit.com/v3";
 const QBO_SANDBOX_API_BASE = "https://sandbox-quickbooks.api.intuit.com/v3";
 
+const ENCRYPTION_ALGORITHM = "aes-256-gcm";
+
+function getEncryptionKey(): Buffer | null {
+  const secret = process.env.QBO_TOKEN_SECRET;
+  if (!secret) return null;
+  return crypto.createHash("sha256").update(secret).digest();
+}
+
+export function encryptToken(plaintext: string): string {
+  const key = getEncryptionKey();
+  if (!key) return plaintext;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:${iv.toString("hex")}:${tag.toString("hex")}:${encrypted.toString("hex")}`;
+}
+
+function decryptToken(ciphertext: string): string {
+  if (!ciphertext.startsWith("enc:")) return ciphertext;
+  const key = getEncryptionKey();
+  if (!key) return ciphertext;
+  const parts = ciphertext.split(":");
+  if (parts.length !== 4) return ciphertext;
+  const iv = Buffer.from(parts[1], "hex");
+  const tag = Buffer.from(parts[2], "hex");
+  const encrypted = Buffer.from(parts[3], "hex");
+  const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
+}
+
 const pendingOAuthStates = new Map<string, { companyId: string; expiresAt: number }>();
 
 function getQboApiBase() {
@@ -84,6 +116,7 @@ export async function refreshQboTokens(companyId: string): Promise<{ access_toke
     throw new Error("No QBO refresh token found");
   }
 
+  const decryptedRefreshToken = decryptToken(company.qboRefreshToken);
   const auth = Buffer.from(`${process.env.QBO_CLIENT_ID}:${process.env.QBO_CLIENT_SECRET}`).toString("base64");
   const res = await fetch(QBO_TOKEN_URL, {
     method: "POST",
@@ -94,7 +127,7 @@ export async function refreshQboTokens(companyId: string): Promise<{ access_toke
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: company.qboRefreshToken,
+      refresh_token: decryptedRefreshToken,
     }),
   });
   if (!res.ok) {
@@ -114,8 +147,8 @@ export async function refreshQboTokens(companyId: string): Promise<{ access_toke
   const data = await res.json();
 
   await db.update(companies).set({
-    qboAccessToken: data.access_token,
-    qboRefreshToken: data.refresh_token,
+    qboAccessToken: encryptToken(data.access_token),
+    qboRefreshToken: encryptToken(data.refresh_token),
     qboTokenExpiresAt: new Date(Date.now() + data.expires_in * 1000),
   }).where(eq(companies.id, companyId));
 
@@ -133,7 +166,7 @@ async function getValidAccessToken(companyId: string): Promise<{ token: string; 
     return { token: refreshed.access_token, realmId: company.qboRealmId };
   }
 
-  return { token: company.qboAccessToken, realmId: company.qboRealmId };
+  return { token: decryptToken(company.qboAccessToken), realmId: company.qboRealmId };
 }
 
 async function qboRequest(companyId: string, method: string, path: string, body?: any): Promise<any> {
@@ -300,7 +333,19 @@ export async function syncInvoiceToQbo(companyId: string, invoiceId: string): Pr
     console.error("Failed to query QBO items, using default:", err);
   }
 
-  const qboLines = lineItems.map((li, idx) => ({
+  interface QboInvoiceLine {
+    DetailType: string;
+    Amount: number;
+    Description: string;
+    SalesItemLineDetail: {
+      Qty: number;
+      UnitPrice: number;
+      ItemRef: { value: string; name: string };
+    };
+    LineNum: number;
+  }
+
+  const qboLines: QboInvoiceLine[] = lineItems.map((li, idx) => ({
     DetailType: "SalesItemLineDetail",
     Amount: parseFloat(li.total),
     Description: li.description,
@@ -314,7 +359,7 @@ export async function syncInvoiceToQbo(companyId: string, invoiceId: string): Pr
 
   if (parseFloat(invoice.tax || "0") > 0) {
     qboLines.push({
-      DetailType: "SalesItemLineDetail" as any,
+      DetailType: "SalesItemLineDetail",
       Amount: parseFloat(invoice.tax),
       Description: "Tax",
       SalesItemLineDetail: {
@@ -368,14 +413,46 @@ export async function syncInvoiceToQbo(companyId: string, invoiceId: string): Pr
 export async function syncPaymentToQbo(companyId: string, invoiceId: string): Promise<void> {
   const [invoice] = await db.select().from(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
   if (!invoice?.qboInvoiceId) {
-    const syncResult = await syncInvoiceToQbo(companyId, invoiceId);
+    await syncInvoiceToQbo(companyId, invoiceId);
   }
 
   const freshInvoice = (await db.select().from(invoices).where(eq(invoices.id, invoiceId)))[0];
   if (!freshInvoice?.qboInvoiceId) throw new Error("Could not sync invoice to QBO first");
 
+  const existingPaymentLogs = await db.select().from(qboSyncLogs)
+    .where(and(
+      eq(qboSyncLogs.companyId, companyId),
+      eq(qboSyncLogs.entityType, "payment"),
+      eq(qboSyncLogs.entityId, invoiceId),
+      eq(qboSyncLogs.status, "synced"),
+    ))
+    .limit(1);
+
+  if (existingPaymentLogs.length > 0) {
+    return;
+  }
+
+  try {
+    const safeInvoiceNum = (freshInvoice.invoiceNumber || "").replace(/'/g, "\\'");
+    const paymentQuery = await qboRequest(companyId, "GET",
+      `/query?query=${encodeURIComponent(`SELECT * FROM Payment WHERE PaymentRefNum = '${safeInvoiceNum}'`)}`);
+    const existingPayments = paymentQuery?.QueryResponse?.Payment;
+    if (existingPayments?.length > 0) {
+      const linked = existingPayments.find((p: any) =>
+        p.Line?.some((l: any) => l.LinkedTxn?.some((t: any) => t.TxnId === freshInvoice.qboInvoiceId))
+      );
+      if (linked) {
+        await logSync(companyId, "payment", invoiceId, "match", "synced", String(linked.Id));
+        return;
+      }
+    }
+  } catch {
+  }
+
+  const [contact] = await db.select().from(contacts).where(eq(contacts.id, freshInvoice.contactId));
+
   const paymentRes = await qboRequest(companyId, "POST", `/payment`, {
-    CustomerRef: { value: (await db.select().from(contacts).where(eq(contacts.id, freshInvoice.contactId)))[0]?.qboCustomerId },
+    CustomerRef: { value: contact?.qboCustomerId },
     TotalAmt: parseFloat(freshInvoice.total),
     Line: [{
       Amount: parseFloat(freshInvoice.total),
@@ -486,7 +563,7 @@ export async function disconnectQbo(companyId: string): Promise<void> {
           Authorization: `Basic ${auth}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: new URLSearchParams({ token: company.qboAccessToken }),
+        body: new URLSearchParams({ token: decryptToken(company.qboAccessToken) }),
       });
     } catch (err) {
       console.error("Failed to revoke QBO token:", err);

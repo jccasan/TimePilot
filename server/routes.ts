@@ -254,8 +254,16 @@ function qboAutoSync(companyId: string, entityId: string, type: "invoice" | "pay
       if (type === "invoice") await syncInvoiceToQbo(companyId, entityId);
       else if (type === "payment") await syncPaymentToQbo(companyId, entityId);
       else if (type === "contact") await syncContactToQbo(companyId, entityId);
-    } catch (err) {
+    } catch (err: any) {
       console.error(`[QBO auto-sync] ${type} ${entityId} failed:`, err);
+      db.insert(qboSyncLogs).values({
+        companyId,
+        entityType: type,
+        entityId,
+        action: "auto_sync",
+        status: "error",
+        errorMessage: err?.message || String(err),
+      }).catch(console.error);
     }
   }).catch(console.error);
 }
@@ -2337,6 +2345,7 @@ export async function registerRoutes(
         notify(companyId, "new_lead", "New Lead", `${contact.firstName} ${contact.lastName} was added as a new lead.`, `/contacts/${contact.id}`);
       }
 
+      qboAutoSync(companyId, contact.id, "contact");
       res.status(201).json({ ...contact, _meta: { propertyCreated, hasPartialAddress } });
     } catch (err) { handleError(res, err); }
   });
@@ -2369,6 +2378,7 @@ export async function registerRoutes(
         }
       }
 
+      qboAutoSync(companyId, contact.id, "contact");
       res.json(contact);
     } catch (err) { handleError(res, err); }
   });
@@ -4246,6 +4256,12 @@ export async function registerRoutes(
 
       const invoice = await storage.updateInvoice(req.params.id, companyId, invoiceUpdates);
       const updatedLineItems = await storage.getInvoiceLineItems(req.params.id);
+      if (invoice.qboInvoiceId || existing.qboInvoiceId) {
+        qboAutoSync(companyId, invoice.id, "invoice");
+      }
+      if (invoiceUpdates.status === "paid") {
+        qboAutoSync(companyId, invoice.id, "payment");
+      }
       res.json({ ...invoice, lineItems: updatedLineItems });
     } catch (err) { handleError(res, err); }
   });
@@ -9935,7 +9951,7 @@ export async function registerRoutes(
       if (!code || !state || !realmId) {
         return res.redirect("/settings?qbo=error&msg=missing_params");
       }
-      const { exchangeQboCode, validateOAuthState } = await import("./services/quickbooks");
+      const { exchangeQboCode, validateOAuthState, encryptToken } = await import("./services/quickbooks");
       const companyId = validateOAuthState(state);
       if (!companyId) {
         return res.redirect("/settings?qbo=error&msg=invalid_or_expired_state");
@@ -9946,8 +9962,8 @@ export async function registerRoutes(
 
       await db.update(companies).set({
         qboRealmId: realmId,
-        qboAccessToken: tokens.access_token,
-        qboRefreshToken: tokens.refresh_token,
+        qboAccessToken: encryptToken(tokens.access_token),
+        qboRefreshToken: encryptToken(tokens.refresh_token),
         qboTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
         qboConnectedAt: new Date(),
       }).where(eq(companies.id, companyId));
