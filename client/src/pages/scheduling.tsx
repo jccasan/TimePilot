@@ -173,6 +173,9 @@ export default function Scheduling() {
   const { data: pricingItems } = useQuery<ServicePricingItem[]>({ queryKey: ["/api/pricing"] });
 
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
+  const [quickAddDate, setQuickAddDate] = useState<string | null>(null);
+  const [quickAddPlanId, setQuickAddPlanId] = useState("");
+  const [quickAddRouteId, setQuickAddRouteId] = useState("");
 
   const recurringPricing = useMemo(() => {
     if (!pricingItems) return [];
@@ -259,6 +262,32 @@ export default function Scheduling() {
     },
     onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
   });
+
+  const quickAddMutation = useMutation({
+    mutationFn: async ({ servicePlanId, scheduledDate, routeId }: { servicePlanId: string; scheduledDate: string; routeId?: string }) => {
+      const plan = servicePlans?.find((sp) => sp.id === servicePlanId);
+      if (!plan) throw new Error("Service plan not found");
+      const body: any = { servicePlanId, propertyId: plan.propertyId, scheduledDate, status: "scheduled" };
+      if (routeId) body.routeId = routeId;
+      await apiRequest("POST", "/api/visits", body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      toast({ title: "Visit added", description: `Visit scheduled for ${quickAddDate}.` });
+      setQuickAddDate(null);
+      setQuickAddPlanId("");
+      setQuickAddRouteId("");
+    },
+    onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
+  });
+
+  const activeServicePlans = useMemo(() => {
+    if (!servicePlans) return [];
+    return servicePlans.filter((sp) => sp.status === "active");
+  }, [servicePlans]);
 
   const [activeVisit, setActiveVisit] = useState<Visit | null>(null);
   const [overDateKey, setOverDateKey] = useState<string | null>(null);
@@ -537,6 +566,7 @@ export default function Scheduling() {
               routes={routes}
               servicePlans={servicePlans}
               onVisitClick={setSelectedVisit}
+              onAddVisit={(dateKey) => { setQuickAddDate(dateKey); setQuickAddPlanId(""); setQuickAddRouteId(""); }}
             />
           )}
 
@@ -558,13 +588,29 @@ export default function Scheduling() {
                     <DroppableDayCell key={dateKey} dateKey={dateKey} isOver={overDateKey === dateKey}>
                       <Card className={`h-full ${isToday ? "ring-2 ring-primary" : ""}`} data-testid={`card-day-${dayLabels[i]}`}>
                         <CardHeader className="p-3 pb-1">
-                          <CardTitle className={`text-sm ${isToday ? "text-primary" : ""}`}>
-                            {dayLabels[i]} {day.getDate()}
-                          </CardTitle>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className={`text-sm ${isToday ? "text-primary" : ""}`}>
+                              {dayLabels[i]} {day.getDate()}
+                            </CardTitle>
+                            <button
+                              onClick={() => { setQuickAddDate(dateKey); setQuickAddPlanId(""); setQuickAddRouteId(""); }}
+                              className="h-5 w-5 rounded-full flex items-center justify-center text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
+                              data-testid={`button-quick-add-${dateKey}`}
+                              title="Add visit"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </CardHeader>
                         <CardContent className="p-3 pt-0 space-y-1">
                           {dayVisits.length === 0 ? (
-                            <p className="text-xs text-muted-foreground">No visits</p>
+                            <p
+                              className="text-xs text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+                              onClick={() => { setQuickAddDate(dateKey); setQuickAddPlanId(""); setQuickAddRouteId(""); }}
+                              data-testid={`text-no-visits-${dateKey}`}
+                            >
+                              No visits — click to add
+                            </p>
                           ) : (
                             dayVisits.map((v) => (
                               <DraggableVisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={setSelectedVisit} />
@@ -610,11 +656,20 @@ export default function Scheduling() {
                     return (
                       <DroppableDayCell key={dateKey} dateKey={dateKey} isOver={overDateKey === dateKey}>
                         <div
-                          className={`min-h-[100px] border-b border-r p-1.5 h-full ${!isCurrentMonth ? "bg-muted/30" : ""} ${isToday ? "bg-primary/5" : ""}`}
+                          className={`min-h-[100px] border-b border-r p-1.5 h-full group/cell cursor-pointer ${!isCurrentMonth ? "bg-muted/30" : ""} ${isToday ? "bg-primary/5" : ""}`}
                           data-testid={`cell-month-${dateKey}`}
+                          onClick={(e) => {
+                            if ((e.target as HTMLElement).closest('[data-visit-chip]')) return;
+                            setQuickAddDate(dateKey); setQuickAddPlanId(""); setQuickAddRouteId("");
+                          }}
                         >
-                          <div className={`text-xs font-medium mb-1 ${isToday ? "bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center" : isCurrentMonth ? "text-foreground" : "text-muted-foreground"}`}>
-                            {day.getDate()}
+                          <div className="flex items-center justify-between mb-1">
+                            <div className={`text-xs font-medium ${isToday ? "bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center" : isCurrentMonth ? "text-foreground" : "text-muted-foreground"}`}>
+                              {day.getDate()}
+                            </div>
+                            <div className="h-4 w-4 rounded-full flex items-center justify-center text-muted-foreground opacity-0 group-hover/cell:opacity-100 hover:bg-primary hover:text-primary-foreground transition-all">
+                              <Plus className="h-3 w-3" />
+                            </div>
                           </div>
                           <div className="space-y-0.5">
                             {dayVisits.slice(0, 3).map((v) => (
@@ -659,6 +714,64 @@ export default function Scheduling() {
         startStr={startStr}
         endStr={endStr}
       />
+
+      <Dialog open={!!quickAddDate} onOpenChange={(open) => { if (!open) { setQuickAddDate(null); setQuickAddPlanId(""); setQuickAddRouteId(""); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Visit — {quickAddDate ? new Date(quickAddDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Job (Service Plan)</Label>
+              <Select value={quickAddPlanId} onValueChange={setQuickAddPlanId}>
+                <SelectTrigger data-testid="select-quick-add-plan">
+                  <SelectValue placeholder={activeServicePlans.length === 0 ? "No active jobs" : "Select a job"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeServicePlans.map((sp) => {
+                    const c = contacts?.find((ct) => ct.id === sp.contactId);
+                    const p = properties?.find((pr) => pr.id === sp.propertyId);
+                    return (
+                      <SelectItem key={sp.id} value={sp.id} data-testid={`option-plan-${sp.id}`}>
+                        {c ? `${c.firstName} ${c.lastName}` : "Unknown"} — {p?.streetAddress || "No address"} ({sp.frequency})
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Route (optional)</Label>
+              <Select value={quickAddRouteId} onValueChange={setQuickAddRouteId}>
+                <SelectTrigger data-testid="select-quick-add-route">
+                  <SelectValue placeholder="No route" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No route</SelectItem>
+                  {routes?.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              className="w-full"
+              disabled={!quickAddPlanId || quickAddMutation.isPending}
+              onClick={() => {
+                if (!quickAddPlanId || !quickAddDate) return;
+                quickAddMutation.mutate({
+                  servicePlanId: quickAddPlanId,
+                  scheduledDate: quickAddDate,
+                  routeId: quickAddRouteId && quickAddRouteId !== "none" ? quickAddRouteId : undefined,
+                });
+              }}
+              data-testid="button-quick-add-submit"
+            >
+              {quickAddMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding...</> : <><Plus className="mr-2 h-4 w-4" /> Add Visit</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -929,7 +1042,7 @@ function DraggableVisitChip({ visit, contacts, properties, routes, servicePlans,
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
 
   return (
-    <div ref={setNodeRef} style={style} className={isDragging ? "opacity-30" : ""}>
+    <div ref={setNodeRef} style={style} className={isDragging ? "opacity-30" : ""} data-visit-chip>
       <div className="flex items-start gap-0.5">
         <div
           className="cursor-grab active:cursor-grabbing touch-none pt-0.5 shrink-0 p-0.5"
@@ -985,6 +1098,8 @@ function OverflowVisitsPopover({ dayVisits, dateKey, contacts, properties, route
         <button
           className="text-[10px] text-primary font-medium text-center w-full hover:underline cursor-pointer py-0.5"
           data-testid={`button-more-visits-${dateKey}`}
+          data-visit-chip
+          onClick={(e) => e.stopPropagation()}
         >
           +{overflowCount} more
         </button>
@@ -1026,6 +1141,7 @@ function VisitChip({ visit, contacts, properties, routes, servicePlans, compact,
       <div
         className="text-xs border rounded-md p-1.5 space-y-0.5 cursor-pointer hover:bg-muted/50 hover:shadow-sm transition-all"
         data-testid={`text-visit-${visit.id}`}
+        data-visit-chip
         onClick={handleClick}
         role="button"
         tabIndex={0}
@@ -1077,7 +1193,7 @@ function VisitChip({ visit, contacts, properties, routes, servicePlans, compact,
   );
 }
 
-function DayView({ date, visits, contacts, properties, routes, servicePlans, onVisitClick }: {
+function DayView({ date, visits, contacts, properties, routes, servicePlans, onVisitClick, onAddVisit }: {
   date: Date;
   visits: Visit[];
   contacts?: Contact[];
@@ -1085,6 +1201,7 @@ function DayView({ date, visits, contacts, properties, routes, servicePlans, onV
   routes?: Route[];
   servicePlans?: ServicePlan[];
   onVisitClick?: (visit: Visit) => void;
+  onAddVisit?: (dateKey: string) => void;
 }) {
   const statusGroups = useMemo(() => {
     const groups: Record<string, Visit[]> = { scheduled: [], in_progress: [], completed: [], skipped: [], cancelled: [] };
@@ -1099,10 +1216,15 @@ function DayView({ date, visits, contacts, properties, routes, servicePlans, onV
     <div className="space-y-4" data-testid="day-view">
       <div className="flex items-center gap-3">
         <div className="text-4xl font-bold text-primary" data-testid="text-day-number">{date.getDate()}</div>
-        <div>
+        <div className="flex-1">
           <p className="text-sm font-medium">{date.toLocaleDateString(undefined, { weekday: "long" })}</p>
           <p className="text-xs text-muted-foreground">{visits.length} visit{visits.length !== 1 ? "s" : ""}</p>
         </div>
+        {onAddVisit && (
+          <Button variant="outline" size="sm" onClick={() => onAddVisit(formatDate(date))} data-testid="button-day-add-visit">
+            <Plus className="mr-1 h-4 w-4" /> Add Visit
+          </Button>
+        )}
       </div>
 
       {visits.length === 0 ? (
