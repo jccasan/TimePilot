@@ -121,19 +121,19 @@ export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => 
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1">
+        <Link href="/" className="flex items-center gap-2 px-2 py-3 cursor-pointer hover:bg-muted/50 rounded-lg transition-colors" data-testid="link-sidebar-logo">
           {company?.logoUrl ? (
-            <img src={company.logoUrl} alt={company.name || "Company"} className="h-8 w-8 rounded-md object-cover" data-testid="img-tenant-logo" />
+            <img src={company.logoUrl} alt={company.name || "Company"} className="h-9 w-9 rounded-md object-cover" data-testid="img-tenant-logo" />
           ) : (
-            <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center" data-testid="img-tenant-placeholder">
+            <div className="h-9 w-9 rounded-md bg-muted flex items-center justify-center" data-testid="img-tenant-placeholder">
               <Building2 className="h-5 w-5 text-muted-foreground" />
             </div>
           )}
           <span className="text-lg font-bold truncate" data-testid="text-company-name">{company?.name || "My Company"}</span>
-        </div>
+        </Link>
       </SidebarHeader>
       <SidebarContent>
-        <div className="px-3 py-2">
+        <div className="px-3 pt-1 pb-3">
           <GlobalSearch />
         </div>
         {menuSections.map((section) => (
