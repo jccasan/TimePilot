@@ -6266,6 +6266,153 @@ export async function registerRoutes(
         }
       }
 
+      if (event.type === "customer.subscription.created") {
+        const subscription = event.data.object as any;
+        const meta = subscription.metadata || {};
+        const companyName = meta.company_name;
+        const email = meta.email;
+        const firstName = meta.first_name || meta.firstName || "";
+        const lastName = meta.last_name || meta.lastName || "";
+        const phone = meta.phone || "";
+        const tierMap: Record<string, string> = {
+          free_trial: "free_trial",
+          tier_1: "tier_1",
+          tier_1_3: "tier_1_3",
+          tier_3_5: "tier_3_5",
+          tier_6_10: "tier_6_10",
+          tier_10_plus: "tier_10_plus",
+        };
+        const planTier = tierMap[meta.plan_tier] || "tier_1";
+
+        if (companyName && email && firstName) {
+          const existingUser = await getUserByEmail(email);
+
+          if (existingUser) {
+            const existingCompanies = await storage.getCompaniesForUser(existingUser.id);
+            if (existingCompanies.length > 0) {
+              const company = await storage.getCompany(existingCompanies[0].companyId);
+              if (company) {
+                await storage.updateCompany(company.id, {
+                  stripeCustomerId: subscription.customer,
+                  stripeSubscriptionId: subscription.id,
+                  subscriptionTier: planTier,
+                  subscriptionStatus: "active",
+                } as any);
+                console.log(`[Stripe Subscription] Updated existing company "${company.name}" (${company.id}) for subscription ${subscription.id}`);
+              }
+            } else {
+              const company = await storage.createCompany({
+                name: companyName.trim(),
+                email,
+                phone,
+                subscriptionTier: planTier,
+                subscriptionStatus: "active",
+                stripeCustomerId: subscription.customer,
+                stripeSubscriptionId: subscription.id,
+              } as any);
+              await storage.addUserToCompany(existingUser.id, company.id, "owner");
+              await seedDefaultLeadSources(company.id);
+              await storage.seedDefaultPricing(company.id);
+              console.log(`[Stripe Subscription] Created company "${companyName}" (${company.id}) for existing user ${email}`);
+            }
+          } else {
+            const crypto = await import("crypto");
+            const tempPassword = crypto.randomBytes(6).toString("base64url");
+            const user = await createUserWithTempPassword(email, firstName, lastName, tempPassword);
+
+            const company = await storage.createCompany({
+              name: companyName.trim(),
+              email,
+              phone,
+              subscriptionTier: planTier,
+              subscriptionStatus: "active",
+              stripeCustomerId: subscription.customer,
+              stripeSubscriptionId: subscription.id,
+            } as any);
+            await storage.addUserToCompany(user.id, company.id, "owner");
+            await seedDefaultLeadSources(company.id);
+            await storage.seedDefaultPricing(company.id);
+
+            try {
+              const protocol = req.headers["x-forwarded-proto"] || "https";
+              const host = req.headers.host || "localhost:5000";
+              const appUrl = `${protocol}://${host}`;
+              await sendEmail({
+                to: email,
+                subject: `Your ScooPilot account is ready`,
+                text: `Hi ${firstName},\n\nYour ScooPilot account "${companyName}" has been created.\n\nLog in at: ${appUrl}\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
+                html: `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                      <h1 style="color: white; margin: 0;">ScooPilot</h1>
+                    </div>
+                    <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                      <h2 style="margin-top: 0;">Welcome to ScooPilot!</h2>
+                      <p>Hi ${firstName},</p>
+                      <p>Your account <strong>"${companyName}"</strong> has been created and is ready to use.</p>
+                      <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                        <p style="margin: 4px 0;"><strong>Email:</strong> ${email}</p>
+                        <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+                      </div>
+                      <a href="${appUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Log In Now</a>
+                    </div>
+                  </div>`,
+              });
+              console.log(`[Stripe Subscription] Welcome email sent to ${email}`);
+            } catch (emailErr) {
+              console.error(`[Stripe Subscription] Failed to send welcome email to ${email}:`, emailErr);
+            }
+
+            console.log(`[Stripe Subscription] Provisioned new tenant "${companyName}" (${company.id}) for ${email}, subscription ${subscription.id}`);
+          }
+        } else {
+          console.warn(`[Stripe Subscription] Missing required metadata (company_name, email, first_name) on subscription ${subscription.id}`);
+        }
+      }
+
+      if (event.type === "customer.subscription.updated") {
+        const subscription = event.data.object as any;
+        const stripeSubId = subscription.id;
+        const allCompanies = await storage.listCompanies();
+        for (const company of allCompanies) {
+          if (company.stripeSubscriptionId === stripeSubId) {
+            const statusMap: Record<string, string> = {
+              active: "active",
+              past_due: "past_due",
+              canceled: "cancelled",
+              trialing: "trialing",
+              unpaid: "past_due",
+            };
+            const newStatus = statusMap[subscription.status] || "active";
+            const meta = subscription.metadata || {};
+            const tierMap: Record<string, string> = {
+              free_trial: "free_trial", tier_1: "tier_1", tier_1_3: "tier_1_3",
+              tier_3_5: "tier_3_5", tier_6_10: "tier_6_10", tier_10_plus: "tier_10_plus",
+            };
+            const updates: any = { subscriptionStatus: newStatus };
+            if (meta.plan_tier && tierMap[meta.plan_tier]) {
+              updates.subscriptionTier = tierMap[meta.plan_tier];
+            }
+            await storage.updateCompany(company.id, updates);
+            console.log(`[Stripe Subscription] Updated company "${company.name}" status=${newStatus}`);
+            break;
+          }
+        }
+      }
+
+      if (event.type === "customer.subscription.deleted") {
+        const subscription = event.data.object as any;
+        const stripeSubId = subscription.id;
+        const allCompanies = await storage.listCompanies();
+        for (const company of allCompanies) {
+          if (company.stripeSubscriptionId === stripeSubId) {
+            await storage.updateCompany(company.id, { subscriptionStatus: "cancelled" } as any);
+            console.log(`[Stripe Subscription] Company "${company.name}" subscription cancelled`);
+            break;
+          }
+        }
+      }
+
       if (event.type === "payment_intent.payment_failed") {
         const pi = event.data.object as any;
         const invoiceId = pi.metadata?.invoiceId;
