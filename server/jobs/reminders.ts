@@ -382,7 +382,7 @@ async function sendServiceRemindersForRule(
 
       if (needSms) {
         try {
-          const smsRes = await sendSms({ to: contact.phone!, body: message });
+          const smsRes = await sendSms({ to: contact.phone!, body: message, companyId });
           smsOk = smsRes.success;
           if (!smsOk) console.error(`[reminders] SMS delivery failed for ${contact.phone}: ${smsRes.error}`);
         } catch (err) {
@@ -572,7 +572,7 @@ async function sendInvoiceReminders(
 
     if (needSms) {
       try {
-        const smsRes = await sendSms({ to: contact.phone!, body: message });
+        const smsRes = await sendSms({ to: contact.phone!, body: message, companyId });
         if (smsRes.success) {
           smsOk = true;
         } else {

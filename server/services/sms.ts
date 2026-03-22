@@ -10,6 +10,7 @@ interface SendSmsOptions {
   body: string;
   from?: string;
   mediaUrl?: string;
+  companyId?: string;
 }
 
 interface SendSmsResult {
@@ -65,6 +66,10 @@ export async function sendSms(options: SendSmsOptions): Promise<SendSmsResult> {
       };
     }
 
+    if (options.companyId) {
+      logSmsUsage(options.companyId, to, options.from || TWILIO_PHONE_NUMBER, data.sid).catch(() => {});
+    }
+
     return {
       success: true,
       messageSid: data.sid,
@@ -72,6 +77,22 @@ export async function sendSms(options: SendSmsOptions): Promise<SendSmsResult> {
   } catch (err: any) {
     console.error("Twilio SMS error:", err.message);
     return { success: false, error: err.message };
+  }
+}
+
+async function logSmsUsage(companyId: string, to: string, from: string, twilioSid?: string): Promise<void> {
+  try {
+    await db.insert(smsMessages).values({ companyId, toNumber: to, fromNumber: from, direction: "outbound", twilioSid, segments: 1 });
+    await db.insert(usageEvents).values({ companyId, eventType: "sms_segment", quantity: 1, metadata: { twilioSid, to } });
+    const { reportMeteredUsage } = await import("./stripe");
+    const { storage } = await import("../storage");
+    const company = await storage.getCompany(companyId);
+    if (company?.stripeSubscriptionId) {
+      reportMeteredUsage(company.stripeSubscriptionId, "sms_segment", 1).catch(() => {});
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[Usage] Failed to log SMS usage:", message);
   }
 }
 

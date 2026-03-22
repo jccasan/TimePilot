@@ -32,6 +32,7 @@ import {
   createSubscriptionCheckout,
   createCustomerPortalSession,
   reportMeteredUsage,
+  reportMeteredUsageSet,
 } from "./services/stripe";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress } from "./services/geocode";
@@ -1166,17 +1167,25 @@ export async function registerRoutes(
         });
       }
 
-      storage.createUsageEvent({
-        companyId,
-        eventType: "user_seat",
-        quantity: 1,
-        metadata: { userId: existingUser.id, email, role: targetRole || "tech" },
-      }).then(async () => {
-        const company = await storage.getCompany(companyId);
-        if (company?.stripeSubscriptionId) {
-          reportMeteredUsage(company.stripeSubscriptionId, "user_seat", 1).catch(() => {});
+      (async () => {
+        try {
+          await storage.createUsageEvent({
+            companyId,
+            eventType: "user_seat",
+            quantity: 1,
+            metadata: { userId: existingUser.id, email, role: targetRole || "tech" },
+          });
+          const activeMembers = await storage.getCompanyUsers(companyId);
+          const activeCount = activeMembers.filter(m => m.isActive !== false).length;
+          const company = await storage.getCompany(companyId);
+          if (company?.stripeSubscriptionId) {
+            reportMeteredUsageSet(company.stripeSubscriptionId, "user_seat", activeCount).catch(() => {});
+          }
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error("[Usage] Failed to log user seat event:", message);
         }
-      }).catch(err => console.error("[Usage] Failed to log user seat event:", err.message));
+      })();
 
       res.json({ success: true, userId: existingUser.id, email, role: targetRole || "tech" });
     } catch (err) { handleError(res, err); }
@@ -1304,17 +1313,25 @@ export async function registerRoutes(
         }
       }
 
-      storage.createUsageEvent({
-        companyId,
-        eventType: "user_seat",
-        quantity: -1,
-        metadata: { userId: targetUserId, action: "removed" },
-      }).then(async () => {
-        const company = await storage.getCompany(companyId);
-        if (company?.stripeSubscriptionId) {
-          reportMeteredUsage(company.stripeSubscriptionId, "user_seat", -1).catch(() => {});
+      (async () => {
+        try {
+          await storage.createUsageEvent({
+            companyId,
+            eventType: "user_seat",
+            quantity: -1,
+            metadata: { userId: targetUserId, action: "removed" },
+          });
+          const activeMembers = await storage.getCompanyUsers(companyId);
+          const activeCount = activeMembers.filter(m => m.isActive !== false).length;
+          const company = await storage.getCompany(companyId);
+          if (company?.stripeSubscriptionId) {
+            reportMeteredUsageSet(company.stripeSubscriptionId, "user_seat", activeCount).catch(() => {});
+          }
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error("[Usage] Failed to log seat removal:", message);
         }
-      }).catch(err => console.error("[Usage] Failed to log seat removal:", err.message));
+      })();
 
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
@@ -3838,7 +3855,7 @@ export async function registerRoutes(
 
       const etaMsg = `Hi ${contact.firstName}, ${companyName} is on the way! Estimated arrival in about ${roundedMinutes} minutes. Please ensure your yard is accessible and any dogs are inside. See you soon!`;
 
-      const smsResult = await sendSms({ to: contact.phone, body: etaMsg });
+      const smsResult = await sendSms({ to: contact.phone, body: etaMsg, companyId });
       if (!smsResult.success) return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
 
       onMyWayCooldowns.set(cooldownKey, Date.now());
@@ -3951,6 +3968,7 @@ export async function registerRoutes(
           to: contact.phone,
           body: completionMsg,
           mediaUrl: gatePhotoFullUrl,
+          companyId,
         });
 
         if (completionSmsResult.success) {
@@ -4024,6 +4042,7 @@ export async function registerRoutes(
                 etaSmsResult = await sendSms({
                   to: nextContact.phone,
                   body: etaMsg,
+                  companyId,
                 });
 
                 if (etaSmsResult.success) {
@@ -5980,7 +5999,7 @@ export async function registerRoutes(
         sentBy: userId,
       });
 
-      const result = await sendSms({ to, body });
+      const result = await sendSms({ to, body, companyId });
 
       if (result.success) {
         const updated = await storage.updateMessageStatus(msg.id, "sent");
@@ -10205,10 +10224,9 @@ export async function registerRoutes(
       .replace(/\{price\}/g, priceDollars);
 
     const twilioFrom = getTwilioPhoneNumber();
-    const result = await sendSms({ to: contact.phone, body, from: twilioFrom });
+    const result = await sendSms({ to: contact.phone, body, from: twilioFrom, companyId: company.id });
 
     if (result.success) {
-      await logSmsMessage(company.id, contact.phone, twilioFrom, "outbound", result.messageSid, 1);
       return true;
     } else {
       console.error(`[webhook-lead-sms] Failed to send auto-quote SMS to ${contact.phone}:`, result.error);
@@ -10759,6 +10777,14 @@ export async function registerRoutes(
       const holds = await Promise.all(planIds.map(pid =>
         storage.createVacationHold({ servicePlanId: pid, startDate, endDate, reason: reason || null })
       ));
+      storage.createUsageEvent({
+        companyId, eventType: "voice_minute", quantity: 1,
+        metadata: { action: "pause", startDate, endDate },
+      }).then(async () => {
+        const company = await storage.getCompany(companyId);
+        if (company?.stripeSubscriptionId) reportMeteredUsage(company.stripeSubscriptionId, "voice_minute", 1).catch(() => {});
+      }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
+
       res.status(201).json({
         success: true,
         holdsCreated: holds.length,
@@ -10795,6 +10821,14 @@ export async function registerRoutes(
           removedCount++;
         }
       }
+      storage.createUsageEvent({
+        companyId, eventType: "voice_minute", quantity: 1,
+        metadata: { action: "resume", holdsRemoved: removedCount },
+      }).then(async () => {
+        const company = await storage.getCompany(companyId);
+        if (company?.stripeSubscriptionId) reportMeteredUsage(company.stripeSubscriptionId, "voice_minute", 1).catch(() => {});
+      }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
+
       res.json({
         success: true,
         holdsRemoved: removedCount,
@@ -10844,6 +10878,14 @@ export async function registerRoutes(
       for (const plan of plans) {
         await storage.updateServicePlan(plan.id, companyId, { dayOfWeek: newDayOfWeek as any, routeId: newRouteId });
       }
+      storage.createUsageEvent({
+        companyId, eventType: "voice_minute", quantity: 1,
+        metadata: { action: "reschedule", newDayOfWeek, plansUpdated: plans.length },
+      }).then(async () => {
+        const company = await storage.getCompany(companyId);
+        if (company?.stripeSubscriptionId) reportMeteredUsage(company.stripeSubscriptionId, "voice_minute", 1).catch(() => {});
+      }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
+
       res.json({
         success: true,
         plansUpdated: plans.length,
@@ -10874,6 +10916,14 @@ export async function registerRoutes(
           ? `${contact.notes}\n[Voice agent] Cancelled: ${reason || "No reason provided"}`
           : `[Voice agent] Cancelled: ${reason || "No reason provided"}`,
       });
+      storage.createUsageEvent({
+        companyId, eventType: "voice_minute", quantity: 1,
+        metadata: { action: "cancel", contactId },
+      }).then(async () => {
+        const company = await storage.getCompany(companyId);
+        if (company?.stripeSubscriptionId) reportMeteredUsage(company.stripeSubscriptionId, "voice_minute", 1).catch(() => {});
+      }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
+
       res.json({
         success: true,
         plansDeactivated: plans.length,

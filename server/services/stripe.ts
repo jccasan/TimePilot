@@ -331,13 +331,34 @@ export async function createCustomerPortalSession(params: {
   return session.url;
 }
 
-export async function createUsageRecord(subscriptionItemId: string, quantity: number, timestamp?: number): Promise<void> {
+export async function createUsageRecord(subscriptionItemId: string, quantity: number, timestamp?: number, action: "increment" | "set" = "increment"): Promise<void> {
   const stripe = getStripe();
   await stripe.subscriptionItems.createUsageRecord(subscriptionItemId, {
     quantity,
     timestamp: timestamp || Math.floor(Date.now() / 1000),
-    action: "increment",
+    action,
   });
+}
+
+export async function reportMeteredUsageSet(stripeSubscriptionId: string, eventType: string, quantity: number): Promise<void> {
+  if (!isStripeConfigured() || !stripeSubscriptionId) return;
+  try {
+    const stripe = getStripe();
+    const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    const meteredItem = subscription.items.data.find(item => {
+      const price = item.price;
+      const lookupKey = price.lookup_key || price.nickname || "";
+      if (eventType === "user_seat" && (lookupKey.toLowerCase().includes("seat") || lookupKey.toLowerCase().includes("user"))) return true;
+      return false;
+    });
+    if (meteredItem) {
+      await createUsageRecord(meteredItem.id, quantity, undefined, "set");
+      console.log(`[Stripe Usage] Set ${eventType} to ${quantity} on subscription item ${meteredItem.id}`);
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[Stripe Usage] Failed to set ${eventType}: ${message}`);
+  }
 }
 
 export async function reportMeteredUsage(stripeSubscriptionId: string, eventType: string, quantity: number): Promise<void> {
