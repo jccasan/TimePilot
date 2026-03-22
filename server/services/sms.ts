@@ -102,8 +102,8 @@ async function logSmsUsage(companyId: string, to: string, from: string, twilioSi
   }
 }
 
-export function getTwilioPhoneNumber(): string | undefined {
-  return TWILIO_PHONE_NUMBER;
+export function getTwilioPhoneNumber(): string {
+  return TWILIO_PHONE_NUMBER || "";
 }
 
 export function isTwilioConfigured(): boolean {
