@@ -10958,6 +10958,11 @@ export async function registerRoutes(
     startWebhookRetryJob();
   });
 
+  import("./jobs/trial-expiration").then(({ runTrialExpirationCheck }) => {
+    setTimeout(() => runTrialExpirationCheck().catch(console.error), 90000);
+    setInterval(() => runTrialExpirationCheck().catch(console.error), 60 * 60 * 1000);
+  });
+
   async function syncSeatUsageToStripe(): Promise<void> {
     try {
       const allCompanies = await storage.listCompanies();
