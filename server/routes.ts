@@ -6652,23 +6652,63 @@ export async function registerRoutes(
 
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as any;
-        const invoiceId = session.metadata?.invoiceId;
+        const meta = session.metadata || {};
+        const tenantId = meta.tenant_id;
+
+        if (meta.checkout_type === "voice_addon" && tenantId) {
+          const voicePlan = meta.voice_plan as "voice_starter" | "voice_pro";
+          if (voicePlan && VOICE_PLAN_CONFIG[voicePlan]) {
+            const company = await storage.getCompany(tenantId);
+            if (company) {
+              const planConfig = VOICE_PLAN_CONFIG[voicePlan];
+              await storage.updateCompany(company.id, {
+                voicePlanTier: voicePlan,
+                voicePlanStatus: "active",
+                voicePlanIncludedMinutes: planConfig.includedMinutes,
+                voicePlanOverageRate: String(planConfig.overageRate),
+              } as Partial<typeof companies.$inferInsert>);
+              console.log(`[Stripe Voice] checkout.session.completed: activated ${voicePlan} for company "${company.name}" (${company.id})`);
+            }
+          }
+        }
+
+        const invoiceId = meta.invoiceId;
         if (invoiceId) {
-          const tipAmount = session.metadata?.tipAmount || "0";
-          const allCompanies = await storage.listCompanies();
-          for (const company of allCompanies) {
-            const invoice = await storage.getInvoice(invoiceId, company.id);
+          const tipAmount = meta.tipAmount || "0";
+          let resolved = false;
+
+          if (tenantId) {
+            const invoice = await storage.getInvoice(invoiceId, tenantId);
             if (invoice && invoice.status !== "paid") {
-              await storage.updateInvoice(invoiceId, company.id, {
+              await storage.updateInvoice(invoiceId, tenantId, {
                 status: "paid",
                 paidAt: new Date(),
                 stripePaymentIntentId: session.payment_intent,
                 tipAmount,
               });
               const tipNote = parseFloat(tipAmount) > 0 ? ` (includes $${tipAmount} tip)` : "";
-              notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
-              qboAutoSync(company.id, invoiceId, "payment");
-              break;
+              notify(tenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
+              qboAutoSync(tenantId, invoiceId, "payment");
+              resolved = true;
+            }
+          }
+
+          if (!resolved) {
+            const allCompanies = await storage.listCompanies();
+            for (const company of allCompanies) {
+              const invoice = await storage.getInvoice(invoiceId, company.id);
+              if (invoice && invoice.status !== "paid") {
+                await storage.updateInvoice(invoiceId, company.id, {
+                  status: "paid",
+                  paidAt: new Date(),
+                  stripePaymentIntentId: session.payment_intent,
+                  tipAmount,
+                });
+                const tipNote = parseFloat(tipAmount) > 0 ? ` (includes $${tipAmount} tip)` : "";
+                notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
+                qboAutoSync(company.id, invoiceId, "payment");
+                break;
+              }
             }
           }
         }
@@ -6678,18 +6718,37 @@ export async function registerRoutes(
         const pi = event.data.object as any;
         const invoiceId = pi.metadata?.invoiceId;
         if (invoiceId) {
-          const allCompanies = await storage.listCompanies();
-          for (const company of allCompanies) {
-            const invoice = await storage.getInvoice(invoiceId, company.id);
+          const piTenantId = pi.metadata?.tenant_id;
+          let resolved = false;
+
+          if (piTenantId) {
+            const invoice = await storage.getInvoice(invoiceId, piTenantId);
             if (invoice && invoice.status !== "paid") {
-              await storage.updateInvoice(invoiceId, company.id, {
+              await storage.updateInvoice(invoiceId, piTenantId, {
                 status: "paid",
                 paidAt: new Date(),
                 stripePaymentIntentId: pi.id,
               });
-              notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
-              qboAutoSync(company.id, invoiceId, "payment");
-              break;
+              notify(piTenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+              qboAutoSync(piTenantId, invoiceId, "payment");
+              resolved = true;
+            }
+          }
+
+          if (!resolved) {
+            const allCompanies = await storage.listCompanies();
+            for (const company of allCompanies) {
+              const invoice = await storage.getInvoice(invoiceId, company.id);
+              if (invoice && invoice.status !== "paid") {
+                await storage.updateInvoice(invoiceId, company.id, {
+                  status: "paid",
+                  paidAt: new Date(),
+                  stripePaymentIntentId: pi.id,
+                });
+                notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+                qboAutoSync(company.id, invoiceId, "payment");
+                break;
+              }
             }
           }
         }
@@ -6876,7 +6935,7 @@ export async function registerRoutes(
       }
 
       if (event.type === "customer.subscription.updated") {
-        const subscription = event.data.object as { id: string; status: string; metadata: Record<string, string>; trial_end?: number | null };
+        const subscription = event.data.object as { id: string; status: string; metadata: Record<string, string>; trial_end?: number | null; items?: { data?: Array<{ id: string; price?: { id: string } }> } };
         const stripeSubId = subscription.id;
         const meta = subscription.metadata || {};
 
@@ -6889,9 +6948,20 @@ export async function registerRoutes(
               };
               const newVoiceStatus = statusMap[subscription.status] || subscription.status;
               const voiceUpdates: Record<string, unknown> = { voicePlanStatus: newVoiceStatus };
-              if (meta.voice_plan && VOICE_PLAN_CONFIG[meta.voice_plan as keyof typeof VOICE_PLAN_CONFIG]) {
-                const vc = VOICE_PLAN_CONFIG[meta.voice_plan as keyof typeof VOICE_PLAN_CONFIG];
-                voiceUpdates.voicePlanTier = meta.voice_plan;
+
+              const voicePriceEnvMap: Record<string, string> = {};
+              if (process.env.STRIPE_PRICE_VOICE_STARTER) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_STARTER] = "voice_starter";
+              if (process.env.STRIPE_PRICE_VOICE_STARTER_SUBSCRIBER) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_STARTER_SUBSCRIBER] = "voice_starter";
+              if (process.env.STRIPE_PRICE_VOICE_PRO) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_PRO] = "voice_pro";
+              if (process.env.STRIPE_PRICE_VOICE_PRO_SUBSCRIBER) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_PRO_SUBSCRIBER] = "voice_pro";
+
+              const currentPriceId = subscription.items?.data?.[0]?.price?.id;
+              const derivedPlan = currentPriceId ? voicePriceEnvMap[currentPriceId] : null;
+              const resolvedPlan = derivedPlan || meta.voice_plan;
+
+              if (resolvedPlan && VOICE_PLAN_CONFIG[resolvedPlan as keyof typeof VOICE_PLAN_CONFIG]) {
+                const vc = VOICE_PLAN_CONFIG[resolvedPlan as keyof typeof VOICE_PLAN_CONFIG];
+                voiceUpdates.voicePlanTier = resolvedPlan;
                 voiceUpdates.voicePlanIncludedMinutes = vc.includedMinutes;
                 voiceUpdates.voicePlanOverageRate = String(vc.overageRate);
               }
@@ -6903,7 +6973,7 @@ export async function registerRoutes(
                 voiceUpdates.stripeVoiceSubscriptionId = null;
               }
               await storage.updateCompany(company.id, voiceUpdates as Partial<typeof companies.$inferInsert>);
-              console.log(`[Stripe Voice] Updated company "${company.name}" voice status=${newVoiceStatus}`);
+              console.log(`[Stripe Voice] Updated company "${company.name}" voice status=${newVoiceStatus} plan=${resolvedPlan || "unchanged"}`);
               break;
             }
           }
