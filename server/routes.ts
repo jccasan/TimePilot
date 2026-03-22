@@ -580,6 +580,7 @@ export async function registerRoutes(
       }
       const result: Record<string, { name: string; price: number; maxUsers: number }> = {};
       for (const [tier, config] of Object.entries(TIER_CONFIG)) {
+        if (!config.visible) continue;
         result[tier] = {
           name: config.name,
           price: stripePrices?.[tier] ?? config.price,
