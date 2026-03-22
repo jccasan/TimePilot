@@ -16,6 +16,7 @@ type VoicePlanInfo = {
   status: string;
   includedMinutes: number;
   overageRate: number;
+  dedicatedPhoneNumber: string | null;
 };
 
 type SubscriptionInfo = {
@@ -291,6 +292,15 @@ export default function Billing() {
               <p className="text-sm text-muted-foreground">
                 ${subscription.voicePlan.overageRate.toFixed(2)}/min overage
               </p>
+              {subscription.voicePlan.dedicatedPhoneNumber ? (
+                <p className="text-sm font-medium" data-testid="text-dedicated-phone">
+                  Dedicated Number: {subscription.voicePlan.dedicatedPhoneNumber}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground" data-testid="text-dedicated-phone-pending">
+                  Dedicated number: pending provisioning
+                </p>
+              )}
               <Button
                 variant="outline"
                 size="sm"

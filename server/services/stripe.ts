@@ -538,6 +538,15 @@ export async function createVoicePlanCheckout(params: {
     line_items: [{ price: params.priceId, quantity: 1 }],
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
+    custom_fields: [
+      {
+        key: "preferred_area_code",
+        label: { type: "custom", custom: "Preferred Area Code" },
+        type: "text",
+        optional: true,
+        text: { maximum_length: 3, minimum_length: 3 },
+      },
+    ],
     metadata: {
       tenant_id: params.tenantId,
       voice_plan: params.voicePlan,

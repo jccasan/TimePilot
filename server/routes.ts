@@ -39,6 +39,7 @@ import {
   createVoicePlanCheckout,
 } from "./services/stripe";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
+import { provisionRetellNumber } from "./services/retell";
 import { geocodeAddress } from "./services/geocode";
 import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
@@ -563,6 +564,7 @@ export async function registerRoutes(
           status: company.voicePlanStatus || "inactive",
           includedMinutes: company.voicePlanIncludedMinutes || 0,
           overageRate: company.voicePlanOverageRate ? parseFloat(company.voicePlanOverageRate) : 0,
+          dedicatedPhoneNumber: company.dedicatedPhoneNumber || null,
         } : null,
       });
     } catch (err) {
@@ -6719,12 +6721,35 @@ export async function registerRoutes(
             const company = await storage.getCompany(tenantId);
             if (company) {
               const planConfig = VOICE_PLAN_CONFIG[voicePlan];
-              await storage.updateCompany(company.id, {
+              const companyUpdates: Partial<typeof companies.$inferInsert> = {
                 voicePlanTier: voicePlan,
                 voicePlanStatus: "active",
                 voicePlanIncludedMinutes: planConfig.includedMinutes,
                 voicePlanOverageRate: String(planConfig.overageRate),
-              } as Partial<typeof companies.$inferInsert>);
+              };
+
+              if (!company.dedicatedPhoneNumber) {
+                const customFields = (session.custom_fields ?? []) as Array<{ key: string; text?: { value?: string } }>;
+                const areaCodeField = customFields.find((f) => f.key === "preferred_area_code");
+                const areaCode = areaCodeField?.text?.value?.trim() || "703";
+
+                try {
+                  const dedicatedPhoneNumber = await provisionRetellNumber({ areaCode });
+                  companyUpdates.dedicatedPhoneNumber = dedicatedPhoneNumber;
+                  console.log(`[Retell] Provisioned number ${dedicatedPhoneNumber} for company "${company.name}" (${company.id})`);
+                } catch (provisionErr: unknown) {
+                  const message = provisionErr instanceof Error ? provisionErr.message : String(provisionErr);
+                  console.error(`[Retell] Number provisioning failed for company "${company.name}" (${company.id}):`, message);
+                  notify(
+                    company.id,
+                    "general",
+                    "Voice Number Provisioning Failed",
+                    `Your ${planConfig.name} plan is active but we could not automatically provision a phone number (area code ${areaCode}). Please contact support to resolve this.`,
+                  );
+                }
+              }
+
+              await storage.updateCompany(company.id, companyUpdates);
               console.log(`[Stripe Voice] checkout.session.completed: activated ${voicePlan} for company "${company.name}" (${company.id})`);
             }
           }

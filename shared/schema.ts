@@ -167,6 +167,7 @@ export const companies = pgTable("companies", {
   voicePlanIncludedMinutes: integer("voice_plan_included_minutes"),
   voicePlanOverageRate: decimal("voice_plan_overage_rate", { precision: 5, scale: 2 }),
   stripeVoiceSubscriptionId: varchar("stripe_voice_subscription_id", { length: 255 }),
+  dedicatedPhoneNumber: varchar("dedicated_phone_number", { length: 20 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
