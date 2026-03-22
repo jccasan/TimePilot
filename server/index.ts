@@ -222,15 +222,23 @@ async function applyAdminCredentialMigration() {
   }
 }
 
+interface SubscriptionTierRow {
+  tier_key: string;
+  name: string;
+  max_users: number;
+  price: string;
+  is_active: boolean;
+}
+
 async function syncSubscriptionTiers() {
   try {
     const { TIER_CONFIG } = await import("@shared/schema");
     const { Pool } = await import("pg");
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    const { rows } = await pool.query("SELECT tier_key, name, max_users, price, is_active FROM subscription_tiers");
+    const { rows } = await pool.query<SubscriptionTierRow>("SELECT tier_key, name, max_users, price, is_active FROM subscription_tiers");
     if (rows.length > 0) {
       for (const [key, cfg] of Object.entries(TIER_CONFIG)) {
-        const existing = rows.find((r: any) => r.tier_key === key);
+        const existing = rows.find((r) => r.tier_key === key);
         if (existing) {
           const needsUpdate = existing.name !== cfg.name ||
             existing.max_users !== cfg.maxUsers ||
