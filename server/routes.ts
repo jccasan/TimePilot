@@ -309,19 +309,32 @@ export async function registerRoutes(
 ): Promise<Server> {
   registerObjectStorageRoutes(app, isAuthenticated);
 
-  const SUBSCRIPTION_EXEMPT_PATHS = new Set([
-    "/api/auth", "/api/login", "/api/register", "/api/logout",
-    "/api/billing", "/api/subscriptions", "/api/webhooks",
-    "/api/company/stats", "/api/admin", "/api/portal",
-    "/api/password",
-  ]);
+  const GATE_EXEMPT_PREFIXES = [
+    "/api/auth/", "/api/auth/login", "/api/auth/register", "/api/auth/user",
+    "/api/billing/", "/api/subscriptions/",
+    "/api/webhooks/", "/api/portal/",
+    "/api/password/",
+  ];
+  const GATE_READ_EXEMPT_PREFIXES = [
+    "/api/company/stats",
+  ];
+
+  function isGateExempt(path: string, method: string): boolean {
+    const p = path.toLowerCase();
+    for (const exempt of GATE_EXEMPT_PREFIXES) {
+      if (p === exempt.replace(/\/$/, "") || p.startsWith(exempt)) return true;
+    }
+    if (method === "GET" || method === "OPTIONS") {
+      for (const exempt of GATE_READ_EXEMPT_PREFIXES) {
+        if (p === exempt || p.startsWith(exempt)) return true;
+      }
+    }
+    return false;
+  }
 
   const subscriptionGate: RequestHandler = async (req, res, next) => {
-    if (req.method === "GET" || req.method === "OPTIONS") return next();
-    const pathLower = req.path.toLowerCase();
-    for (const exempt of SUBSCRIPTION_EXEMPT_PATHS) {
-      if (pathLower.startsWith(exempt)) return next();
-    }
+    if (req.method === "OPTIONS") return next();
+    if (isGateExempt(req.path, req.method)) return next();
     const userId = (req.session as any)?.userId;
     const hasApiKey = !!req.headers["x-api-key"];
     if (!userId && !hasApiKey) return next();
@@ -352,7 +365,8 @@ export async function registerRoutes(
           });
         }
       }
-    } catch (_) {
+    } catch (gateErr) {
+      console.error("[SubscriptionGate] Error checking subscription status:", gateErr);
     }
     return next();
   };
@@ -418,12 +432,14 @@ export async function registerRoutes(
   app.get("/api/billing/usage", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
       const summary = await storage.getUsageSummary(companyId, startOfMonth, endOfMonth);
       const activeUsers = await storage.countActiveCompanyUsers(companyId);
+      const tierConfig = company ? TIER_CONFIG[company.subscriptionTier as keyof typeof TIER_CONFIG] : null;
 
       res.json({
         period: {
@@ -434,6 +450,11 @@ export async function registerRoutes(
           smsSegments: summary.smsSegments,
           voiceMinutes: summary.voiceMinutes,
           activeUsers,
+        },
+        allowances: {
+          maxUsers: tierConfig?.maxUsers ?? 1,
+          smsSegmentsIncluded: 500,
+          voiceMinutesIncluded: 100,
         },
       });
     } catch (err) {
@@ -1099,6 +1120,13 @@ export async function registerRoutes(
           `,
         });
       }
+
+      storage.createUsageEvent({
+        companyId,
+        eventType: "user_seat",
+        quantity: 1,
+        metadata: { userId: existingUser.id, email, role: targetRole || "tech" },
+      }).catch(err => console.error("[Usage] Failed to log user seat event:", err.message));
 
       res.json({ success: true, userId: existingUser.id, email, role: targetRole || "tech" });
     } catch (err) { handleError(res, err); }
@@ -6587,7 +6615,7 @@ export async function registerRoutes(
         const allCompanies = await storage.listCompanies();
         for (const company of allCompanies) {
           if (company.stripeSubscriptionId === stripeSubId) {
-            await storage.updateCompany(company.id, { subscriptionStatus: "cancelled", canceledAt: new Date() } as any);
+            await storage.updateCompany(company.id, { subscriptionStatus: "cancelled", canceledAt: new Date() } as Partial<typeof companies.$inferInsert>);
             console.log(`[Stripe Subscription] Company "${company.name}" subscription cancelled`);
             break;
           }
@@ -6628,28 +6656,20 @@ export async function registerRoutes(
 
       if (event.type === "invoice.payment_failed") {
         const invoice = event.data.object as any;
-        const stripeCustomerId = invoice.customer;
+        const stripeCustomerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
         if (stripeCustomerId) {
           const allCompanies = await storage.listCompanies();
           for (const company of allCompanies) {
             if (company.stripeCustomerId === stripeCustomerId) {
+              await storage.updateCompany(company.id, {
+                subscriptionStatus: "suspended",
+                frozenAt: new Date(),
+              } as Partial<typeof companies.$inferInsert>);
               const attemptCount = invoice.attempt_count || 1;
-              if (attemptCount >= 3) {
-                await storage.updateCompany(company.id, {
-                  subscriptionStatus: "suspended",
-                  frozenAt: new Date(),
-                } as any);
-                console.log(`[Stripe Subscription] Company "${company.name}" SUSPENDED after ${attemptCount} failed payment attempts`);
-                notify(company.id, "payment_failed", "Account Suspended",
-                  "Your subscription payment has failed multiple times. Please update your payment method to restore access.",
-                  "/billing");
-              } else {
-                await storage.updateCompany(company.id, { subscriptionStatus: "past_due" } as any);
-                console.log(`[Stripe Subscription] Company "${company.name}" marked past_due (attempt ${attemptCount})`);
-                notify(company.id, "payment_failed", "Payment Failed",
-                  `Subscription payment attempt ${attemptCount} failed. Please update your payment method.`,
-                  "/billing");
-              }
+              console.log(`[Stripe Subscription] Company "${company.name}" SUSPENDED after payment failure (attempt ${attemptCount})`);
+              notify(company.id, "payment_failed", "Account Suspended",
+                "Your subscription payment has failed. Please update your payment method to restore access.",
+                "/billing");
               break;
             }
           }
@@ -10620,6 +10640,13 @@ export async function registerRoutes(
 
         return { contact, property, servicePlan };
       });
+
+      storage.createUsageEvent({
+        companyId,
+        eventType: "voice_minute",
+        quantity: 1,
+        metadata: { action: "book", contactId: result.contact.id },
+      }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
 
       res.status(201).json({
         success: true,
