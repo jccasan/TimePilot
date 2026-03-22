@@ -192,17 +192,27 @@ async function applyAdminCredentialMigration() {
       }
     }
 
-    const adminCheck = await pool.query("SELECT id, password_hash FROM admin_users WHERE email = 'jeremy@scoopilot.com' OR email = 'jeremy@doocrewva.com'");
-    if (adminCheck.rows.length > 0) {
-      const adminRow = adminCheck.rows[0];
+    const adminTarget = await pool.query("SELECT id, password_hash FROM admin_users WHERE email = $1", [targetEmail]);
+    if (adminTarget.rows.length > 0) {
+      const adminRow = adminTarget.rows[0];
       if (adminRow.password_hash !== targetHash) {
         await pool.query(
-          "UPDATE admin_users SET email = $1, password_hash = $2 WHERE id = $3",
-          [targetEmail, targetHash, adminRow.id]
+          "UPDATE admin_users SET password_hash = $1 WHERE id = $2",
+          [targetHash, adminRow.id]
         );
         console.log("[Migration] Platform admin credentials updated successfully");
       } else {
         console.log("[Migration] Platform admin credentials already up to date");
+      }
+      await pool.query("DELETE FROM admin_users WHERE email = 'jeremy@scoopilot.com' AND id != $1", [adminRow.id]);
+    } else {
+      const adminOld = await pool.query("SELECT id FROM admin_users WHERE email = 'jeremy@scoopilot.com'");
+      if (adminOld.rows.length > 0) {
+        await pool.query(
+          "UPDATE admin_users SET email = $1, password_hash = $2 WHERE id = $3",
+          [targetEmail, targetHash, adminOld.rows[0].id]
+        );
+        console.log("[Migration] Platform admin credentials migrated successfully");
       }
     }
 
