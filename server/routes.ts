@@ -9105,9 +9105,9 @@ export async function registerRoutes(
         companyName: companyName.trim(),
         ownerEmail,
         ownerName: [ownerFirstName, ownerLastName].filter(Boolean).join(" "),
-        tier: tier === "free_trial" ? "Free Trial" : tier,
+        tier,
         source: "Admin Created",
-      }).catch(() => {});
+      }).catch((err) => console.error("[Signup Notification] Failed during admin creation:", err));
 
       res.status(201).json({
         id: company.id,
@@ -10518,9 +10518,9 @@ export async function registerRoutes(
         companyName: record.companyName,
         ownerEmail: record.email,
         ownerName: [record.firstName, record.lastName].filter(Boolean).join(" "),
-        tier: "Free Trial",
+        tier: "free_trial",
         source: "Public Signup",
-      }).catch(() => {});
+      }).catch((err) => console.error("[Signup Notification] Failed during public signup:", err));
 
       res.send(verificationResultPage(true, null, appUrl));
     } catch (err) {

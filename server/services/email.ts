@@ -58,6 +58,15 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
 
 const ADMIN_NOTIFICATION_EMAIL = "jeremy@scoopilot.com";
 
+const TIER_LABELS: Record<string, string> = {
+  free_trial: "Free Trial",
+  tier_1: "Solo ($29/mo)",
+  tier_1_3: "Walk ($49/mo)",
+  tier_3_5: "Run ($99/mo)",
+  tier_6_10: "Grow ($149/mo)",
+  tier_10_plus: "Enterprise",
+};
+
 export async function sendAdminSignupNotification(details: {
   companyName: string;
   ownerEmail: string;
@@ -66,8 +75,9 @@ export async function sendAdminSignupNotification(details: {
   source: string;
 }): Promise<void> {
   const timestamp = new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" });
+  const tierLabel = TIER_LABELS[details.tier] || details.tier;
   const subject = `New ScooPilot Signup: ${details.companyName}`;
-  const text = `New signup!\n\nCompany: ${details.companyName}\nOwner: ${details.ownerName}\nEmail: ${details.ownerEmail}\nTier: ${details.tier}\nSource: ${details.source}\nTime: ${timestamp}`;
+  const text = `New signup!\n\nCompany: ${details.companyName}\nOwner: ${details.ownerName}\nEmail: ${details.ownerEmail}\nPlan: ${tierLabel}\nSource: ${details.source}\nTime: ${timestamp}`;
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
@@ -79,7 +89,7 @@ export async function sendAdminSignupNotification(details: {
           <p style="margin: 4px 0;"><strong>Company:</strong> ${details.companyName}</p>
           <p style="margin: 4px 0;"><strong>Owner:</strong> ${details.ownerName}</p>
           <p style="margin: 4px 0;"><strong>Email:</strong> ${details.ownerEmail}</p>
-          <p style="margin: 4px 0;"><strong>Plan:</strong> ${details.tier}</p>
+          <p style="margin: 4px 0;"><strong>Plan:</strong> ${tierLabel}</p>
           <p style="margin: 4px 0;"><strong>Source:</strong> ${details.source}</p>
           <p style="margin: 4px 0;"><strong>Time:</strong> ${timestamp}</p>
         </div>
