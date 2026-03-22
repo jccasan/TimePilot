@@ -546,6 +546,12 @@ export async function createVoicePlanCheckout(params: {
         optional: true,
         text: { maximum_length: 3, minimum_length: 3 },
       },
+      {
+        key: "business_website",
+        label: { type: "custom", custom: "Business Website (for AI training)" },
+        type: "text",
+        optional: true,
+      },
     ],
     metadata: {
       tenant_id: params.tenantId,

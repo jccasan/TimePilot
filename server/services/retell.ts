@@ -64,3 +64,42 @@ export async function provisionRetellNumber(params: {
 
   return provisionedNumber;
 }
+
+export async function seedRetellKnowledgeBase(params: {
+  tenantId: string;
+  agentId: string;
+  websiteUrl: string;
+}): Promise<string> {
+  const kbName = `${params.tenantId}_KB`;
+
+  const createRes = await retellFetch("/create-knowledge-base", {
+    method: "POST",
+    body: JSON.stringify({
+      knowledge_base_name: kbName,
+      knowledge_base_urls: [params.websiteUrl],
+      enable_auto_refresh: true,
+    }),
+  });
+
+  if (!createRes.ok) {
+    const body = await createRes.text();
+    throw new Error(`Retell create-knowledge-base failed (${createRes.status}): ${body}`);
+  }
+
+  const kbData = await createRes.json() as { knowledge_base_id: string };
+  const knowledgeBaseId = kbData.knowledge_base_id;
+
+  const patchRes = await retellFetch(`/update-agent/${params.agentId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      knowledge_base_ids: [knowledgeBaseId],
+    }),
+  });
+
+  if (!patchRes.ok) {
+    const body = await patchRes.text();
+    throw new Error(`Retell update-agent failed (${patchRes.status}): ${body}`);
+  }
+
+  return knowledgeBaseId;
+}

@@ -38,8 +38,8 @@ import {
   getCachedStripePrices,
   createVoicePlanCheckout,
 } from "./services/stripe";
+import { seedRetellKnowledgeBase, provisionRetellNumber } from "./services/retell";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
-import { provisionRetellNumber } from "./services/retell";
 import { geocodeAddress } from "./services/geocode";
 import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
@@ -6750,8 +6750,9 @@ export async function registerRoutes(
                 voicePlanOverageRate: String(planConfig.overageRate),
               };
 
+              const customFields = (session.custom_fields ?? []) as Array<{ key: string; text?: { value?: string } }>;
+
               if (!company.dedicatedPhoneNumber) {
-                const customFields = (session.custom_fields ?? []) as Array<{ key: string; text?: { value?: string } }>;
                 const areaCodeField = customFields.find((f) => f.key === "preferred_area_code");
                 const areaCode = areaCodeField?.text?.value?.trim() || "703";
 
@@ -6772,7 +6773,30 @@ export async function registerRoutes(
               }
 
               await storage.updateCompany(company.id, companyUpdates);
+
+              const websiteField = customFields.find((f) => f.key === "business_website");
+              const businessWebsite = websiteField?.text?.value?.trim() || "";
               console.log(`[Stripe Voice] checkout.session.completed: activated ${voicePlan} for company "${company.name}" (${company.id})`);
+
+              if (businessWebsite && company.retellAgentId) {
+                try {
+                  const kbId = await seedRetellKnowledgeBase({
+                    tenantId: company.id,
+                    agentId: company.retellAgentId,
+                    websiteUrl: businessWebsite,
+                  });
+                  await storage.updateCompany(company.id, {
+                    retellKnowledgeBaseId: kbId,
+                  } as Partial<typeof companies.$inferInsert>);
+                  console.log(`[Retell KB] Created knowledge base "${kbId}" for company "${company.name}" (${company.id}) from ${businessWebsite}`);
+                } catch (kbErr: any) {
+                  console.warn(`[Retell KB] Failed to seed knowledge base for company "${company.name}" (${company.id}): ${kbErr.message}`);
+                  notify(tenantId, "system_warning", "Knowledge Base Setup Failed", `Voice plan activated but knowledge base creation from "${businessWebsite}" failed. Please set it up manually. Error: ${kbErr.message}`, `/settings`);
+                }
+              } else if (businessWebsite && !company.retellAgentId) {
+                console.warn(`[Retell KB] Business website provided but no Retell agent ID found for company "${company.name}" (${company.id}). Skipping KB creation.`);
+                notify(tenantId, "system_warning", "Knowledge Base Setup Skipped", `A business website was provided during checkout but no Retell agent is linked to your account. Please contact support to set up the knowledge base.`, `/settings`);
+              }
             }
           }
         }

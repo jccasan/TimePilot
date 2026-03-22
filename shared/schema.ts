@@ -168,6 +168,8 @@ export const companies = pgTable("companies", {
   voicePlanOverageRate: decimal("voice_plan_overage_rate", { precision: 5, scale: 2 }),
   stripeVoiceSubscriptionId: varchar("stripe_voice_subscription_id", { length: 255 }),
   dedicatedPhoneNumber: varchar("dedicated_phone_number", { length: 20 }),
+  retellAgentId: varchar("retell_agent_id", { length: 255 }),
+  retellKnowledgeBaseId: varchar("retell_knowledge_base_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
