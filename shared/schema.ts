@@ -100,12 +100,12 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
 };
 
 export const TIER_CONFIG = {
-  free_trial: { name: "Free Trial (14 days)", maxUsers: 1, price: 0 },
-  tier_1: { name: "Solo", maxUsers: 1, price: 49.99 },
-  tier_1_3: { name: "Starter", maxUsers: 3, price: 99.99 },
-  tier_3_5: { name: "Growing", maxUsers: 5, price: 199.99 },
-  tier_6_10: { name: "Professional", maxUsers: 10, price: 349.99 },
-  tier_10_plus: { name: "Enterprise", maxUsers: 999, price: 599.99 },
+  free_trial: { name: "Free Trial (14 days)", maxUsers: 1, price: 0, additionalUserPrice: 7, visible: true },
+  tier_1: { name: "Solo", maxUsers: 1, price: 29, additionalUserPrice: 7, visible: true },
+  tier_1_3: { name: "Walk", maxUsers: 3, price: 49, additionalUserPrice: 7, visible: true },
+  tier_3_5: { name: "Run", maxUsers: 6, price: 99, additionalUserPrice: 7, visible: true },
+  tier_6_10: { name: "Grow", maxUsers: 12, price: 149, additionalUserPrice: 7, visible: true },
+  tier_10_plus: { name: "Enterprise", maxUsers: 999, price: 599, additionalUserPrice: 7, visible: false },
 } as const;
 
 export const VOICE_PLAN_CONFIG = {

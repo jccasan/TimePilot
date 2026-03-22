@@ -1339,7 +1339,7 @@ export class DatabaseStorage implements IStorage {
 
   async getPlatformStats(): Promise<{ totalCompanies: number; totalUsers: number; totalContacts: number; totalVisits: number; mrr: number }> {
     const tierPricing: Record<string, number> = {
-      tier_1: 49.99, tier_1_3: 99.99, tier_3_5: 199.99, tier_6_10: 349.99, tier_10_plus: 599.99,
+      tier_1: 29, tier_1_3: 49, tier_3_5: 99, tier_6_10: 149, tier_10_plus: 599,
     };
     const allCompanies = await db.select().from(companies);
     const [usersCount] = await db.select({ count: count() }).from(companyUsers);

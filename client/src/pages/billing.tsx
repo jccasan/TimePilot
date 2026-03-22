@@ -56,7 +56,7 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
 
 type TierPrices = Record<string, { name: string; price: number; maxUsers: number }>;
 
-const tierKeys = Object.keys(TIER_CONFIG).filter(k => k !== "free_trial") as Array<keyof typeof TIER_CONFIG>;
+const tierKeys = (Object.keys(TIER_CONFIG) as Array<keyof typeof TIER_CONFIG>).filter(k => k !== "free_trial" && TIER_CONFIG[k].visible);
 
 export default function Billing() {
   const { toast } = useToast();

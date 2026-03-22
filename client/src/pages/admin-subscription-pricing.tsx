@@ -25,10 +25,10 @@ interface SubscriptionTier {
 const tierKeyLabels: Record<string, string> = {
   free_trial: "Free Trial",
   tier_1: "Solo",
-  tier_1_3: "Starter",
-  tier_3_5: "Growing",
-  tier_6_10: "Professional",
-  tier_10_plus: "Enterprise",
+  tier_1_3: "Walk",
+  tier_3_5: "Run",
+  tier_6_10: "Grow",
+  tier_10_plus: "Enterprise (inactive)",
 };
 
 const tierColors: Record<string, string> = {
