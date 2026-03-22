@@ -29,6 +29,8 @@ import {
   createConnectAccountLink,
   getConnectAccountStatus,
   createConnectLoginLink,
+  createSubscriptionCheckout,
+  createCustomerPortalSession,
 } from "./services/stripe";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress } from "./services/geocode";
@@ -306,6 +308,164 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   registerObjectStorageRoutes(app, isAuthenticated);
+
+  const SUBSCRIPTION_EXEMPT_PATHS = new Set([
+    "/api/auth", "/api/login", "/api/register", "/api/logout",
+    "/api/billing", "/api/subscriptions", "/api/webhooks",
+    "/api/company/stats", "/api/admin", "/api/portal",
+    "/api/password",
+  ]);
+
+  const subscriptionGate: RequestHandler = async (req, res, next) => {
+    if (req.method === "GET" || req.method === "OPTIONS") return next();
+    const pathLower = req.path.toLowerCase();
+    for (const exempt of SUBSCRIPTION_EXEMPT_PATHS) {
+      if (pathLower.startsWith(exempt)) return next();
+    }
+    const userId = (req.session as any)?.userId;
+    const hasApiKey = !!req.headers["x-api-key"];
+    if (!userId && !hasApiKey) return next();
+    try {
+      let companyId: string | null = null;
+      if (userId) {
+        const memberships = await storage.getCompaniesForUser(userId);
+        if (memberships.length > 0) companyId = memberships[0].companyId;
+      }
+      if (!companyId && hasApiKey) {
+        const apiKeyHeader = req.headers["x-api-key"] as string;
+        if (apiKeyHeader && apiKeyHeader.length >= 8) {
+          const prefix = apiKeyHeader.substring(0, 8);
+          const keyHash = crypto.createHash("sha256").update(apiKeyHeader).digest("hex");
+          const apiKey = await storage.getApiKeyByPrefix(prefix);
+          if (apiKey && apiKey.keyHash === keyHash && apiKey.isActive) {
+            companyId = apiKey.companyId;
+          }
+        }
+      }
+      if (companyId) {
+        const company = await storage.getCompany(companyId);
+        if (company && (company.subscriptionStatus === "suspended" || company.subscriptionStatus === "cancelled")) {
+          return res.status(402).json({
+            error: "Account suspended",
+            message: "Your subscription is inactive. Please update your billing to continue.",
+            subscriptionStatus: company.subscriptionStatus,
+          });
+        }
+      }
+    } catch (_) {
+    }
+    return next();
+  };
+
+  app.use("/api", subscriptionGate);
+
+  // ================ Subscription Billing ================
+
+  app.post("/api/subscriptions/create-checkout", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
+
+      const { priceId, tier } = req.body;
+      if (!priceId) return res.status(400).json({ error: "priceId is required" });
+
+      const baseUrl = getBaseUrl(req);
+      const trialDays = company.subscriptionStatus === "trialing" ? 14 : 0;
+
+      const result = await createSubscriptionCheckout({
+        customerEmail: company.email || "",
+        customerId: company.stripeCustomerId || undefined,
+        priceId,
+        successUrl: `${baseUrl}/billing?success=1`,
+        cancelUrl: `${baseUrl}/billing?cancelled=1`,
+        trialDays,
+        metadata: {
+          company_id: company.id,
+          plan_tier: tier || "tier_1",
+          company_name: company.name,
+          email: company.email || "",
+        },
+      });
+      res.json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/billing/portal", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!company.stripeCustomerId) return res.status(400).json({ error: "No Stripe customer linked" });
+      if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
+
+      const baseUrl = getBaseUrl(req);
+      const url = await createCustomerPortalSession({
+        customerId: company.stripeCustomerId,
+        returnUrl: `${baseUrl}/billing`,
+      });
+      res.json({ url });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.get("/api/billing/usage", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+
+      const summary = await storage.getUsageSummary(companyId, startOfMonth, endOfMonth);
+      const activeUsers = await storage.countActiveCompanyUsers(companyId);
+
+      res.json({
+        period: {
+          start: startOfMonth,
+          end: endOfMonth,
+        },
+        usage: {
+          smsSegments: summary.smsSegments,
+          voiceMinutes: summary.voiceMinutes,
+          activeUsers,
+        },
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.get("/api/billing/subscription", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const tierConfig = TIER_CONFIG[company.subscriptionTier as keyof typeof TIER_CONFIG] || null;
+      const activeUsers = await storage.countActiveCompanyUsers(companyId);
+
+      res.json({
+        tier: company.subscriptionTier,
+        tierName: tierConfig?.name || "Unknown",
+        status: company.subscriptionStatus,
+        price: tierConfig?.price || 0,
+        maxUsers: tierConfig?.maxUsers || 1,
+        activeUsers,
+        frozenAt: company.frozenAt,
+        trialEndsAt: company.trialEndsAt,
+        stripeCustomerId: company.stripeCustomerId,
+        hasStripeSubscription: !!company.stripeSubscriptionId,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
 
   // ================ Geocode Proxy (Mapbox) ================
 
@@ -6292,43 +6452,58 @@ export async function registerRoutes(
             if (existingCompanies.length > 0) {
               const company = await storage.getCompany(existingCompanies[0].companyId);
               if (company) {
-                await storage.updateCompany(company.id, {
+                const subStatus = subscription.status === "trialing" ? "trialing" : "active";
+                const updateData: any = {
                   stripeCustomerId: subscription.customer,
                   stripeSubscriptionId: subscription.id,
                   subscriptionTier: planTier,
-                  subscriptionStatus: "active",
-                } as any);
-                console.log(`[Stripe Subscription] Updated existing company "${company.name}" (${company.id}) for subscription ${subscription.id}`);
+                  subscriptionStatus: subStatus,
+                };
+                if (subscription.trial_end) {
+                  updateData.trialEndsAt = new Date(subscription.trial_end * 1000);
+                }
+                await storage.updateCompany(company.id, updateData);
+                console.log(`[Stripe Subscription] Updated existing company "${company.name}" (${company.id}) for subscription ${subscription.id} status=${subStatus}`);
               }
             } else {
-              const company = await storage.createCompany({
+              const subStatus2 = subscription.status === "trialing" ? "trialing" : "active";
+              const createData: any = {
                 name: companyName.trim(),
                 email,
                 phone,
                 subscriptionTier: planTier,
-                subscriptionStatus: "active",
+                subscriptionStatus: subStatus2,
                 stripeCustomerId: subscription.customer,
                 stripeSubscriptionId: subscription.id,
-              } as any);
+              };
+              if (subscription.trial_end) {
+                createData.trialEndsAt = new Date(subscription.trial_end * 1000);
+              }
+              const company = await storage.createCompany(createData);
               await storage.addUserToCompany(existingUser.id, company.id, "owner");
               await seedDefaultLeadSources(company.id);
               await storage.seedDefaultPricing(company.id);
-              console.log(`[Stripe Subscription] Created company "${companyName}" (${company.id}) for existing user ${email}`);
+              console.log(`[Stripe Subscription] Created company "${companyName}" (${company.id}) for existing user ${email} status=${subStatus2}`);
             }
           } else {
             const crypto = await import("crypto");
             const tempPassword = crypto.randomBytes(6).toString("base64url");
             const user = await createUserWithTempPassword(email, firstName, lastName, tempPassword);
 
-            const company = await storage.createCompany({
+            const subStatus3 = subscription.status === "trialing" ? "trialing" : "active";
+            const createData2: any = {
               name: companyName.trim(),
               email,
               phone,
               subscriptionTier: planTier,
-              subscriptionStatus: "active",
+              subscriptionStatus: subStatus3,
               stripeCustomerId: subscription.customer,
               stripeSubscriptionId: subscription.id,
-            } as any);
+            };
+            if (subscription.trial_end) {
+              createData2.trialEndsAt = new Date(subscription.trial_end * 1000);
+            }
+            const company = await storage.createCompany(createData2);
             await storage.addUserToCompany(user.id, company.id, "owner");
             await seedDefaultLeadSources(company.id);
             await storage.seedDefaultPricing(company.id);
@@ -6381,7 +6556,7 @@ export async function registerRoutes(
               past_due: "past_due",
               canceled: "cancelled",
               trialing: "trialing",
-              unpaid: "past_due",
+              unpaid: "suspended",
             };
             const newStatus = statusMap[subscription.status] || "active";
             const meta = subscription.metadata || {};
@@ -6392,6 +6567,12 @@ export async function registerRoutes(
             const updates: any = { subscriptionStatus: newStatus };
             if (meta.plan_tier && tierMap[meta.plan_tier]) {
               updates.subscriptionTier = tierMap[meta.plan_tier];
+            }
+            if (newStatus === "active" && company.frozenAt) {
+              updates.frozenAt = null;
+            }
+            if (subscription.trial_end) {
+              updates.trialEndsAt = new Date(subscription.trial_end * 1000);
             }
             await storage.updateCompany(company.id, updates);
             console.log(`[Stripe Subscription] Updated company "${company.name}" status=${newStatus}`);
@@ -6406,9 +6587,71 @@ export async function registerRoutes(
         const allCompanies = await storage.listCompanies();
         for (const company of allCompanies) {
           if (company.stripeSubscriptionId === stripeSubId) {
-            await storage.updateCompany(company.id, { subscriptionStatus: "cancelled" } as any);
+            await storage.updateCompany(company.id, { subscriptionStatus: "cancelled", canceledAt: new Date() } as any);
             console.log(`[Stripe Subscription] Company "${company.name}" subscription cancelled`);
             break;
+          }
+        }
+      }
+
+      if (event.type === "customer.subscription.trial_will_end") {
+        const subscription = event.data.object as any;
+        const meta = subscription.metadata || {};
+        const email = meta.email;
+        const companyName = meta.company_name || "your company";
+        if (email) {
+          try {
+            const baseUrl = process.env.REPLIT_DEPLOYMENT_URL
+              ? `https://${process.env.REPLIT_DEPLOYMENT_URL}`
+              : process.env.REPLIT_DEV_DOMAIN
+                ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+                : "https://scoopilot.replit.app";
+            await sendEmail({
+              to: email,
+              subject: `Your ScooPilot trial ends soon`,
+              text: `Hi,\n\nYour 14-day free trial for "${companyName}" ends in 3 days. Add a payment method to keep your account active.\n\nVisit ${baseUrl}/billing to update your billing.`,
+              html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+                <div style="background-color:#2d8a5e;padding:20px;text-align:center"><h1 style="color:white;margin:0">ScooPilot</h1></div>
+                <div style="padding:20px;border:1px solid #e5e7eb">
+                  <h2 style="margin-top:0">Your trial ends in 3 days</h2>
+                  <p>Your free trial for <strong>${companyName}</strong> is ending soon.</p>
+                  <p>Add a payment method to keep your account active and avoid any service interruption.</p>
+                  <a href="${baseUrl}/billing" style="display:inline-block;background-color:#2d8a5e;color:white;padding:12px 24px;text-decoration:none;border-radius:6px">Update Billing</a>
+                </div></div>`,
+            });
+            console.log(`[Stripe Subscription] Trial ending email sent to ${email}`);
+          } catch (e) {
+            console.error(`[Stripe Subscription] Failed to send trial ending email to ${email}:`, e);
+          }
+        }
+      }
+
+      if (event.type === "invoice.payment_failed") {
+        const invoice = event.data.object as any;
+        const stripeCustomerId = invoice.customer;
+        if (stripeCustomerId) {
+          const allCompanies = await storage.listCompanies();
+          for (const company of allCompanies) {
+            if (company.stripeCustomerId === stripeCustomerId) {
+              const attemptCount = invoice.attempt_count || 1;
+              if (attemptCount >= 3) {
+                await storage.updateCompany(company.id, {
+                  subscriptionStatus: "suspended",
+                  frozenAt: new Date(),
+                } as any);
+                console.log(`[Stripe Subscription] Company "${company.name}" SUSPENDED after ${attemptCount} failed payment attempts`);
+                notify(company.id, "payment_failed", "Account Suspended",
+                  "Your subscription payment has failed multiple times. Please update your payment method to restore access.",
+                  "/billing");
+              } else {
+                await storage.updateCompany(company.id, { subscriptionStatus: "past_due" } as any);
+                console.log(`[Stripe Subscription] Company "${company.name}" marked past_due (attempt ${attemptCount})`);
+                notify(company.id, "payment_failed", "Payment Failed",
+                  `Subscription payment attempt ${attemptCount} failed. Please update your payment method.`,
+                  "/billing");
+              }
+              break;
+            }
           }
         }
       }

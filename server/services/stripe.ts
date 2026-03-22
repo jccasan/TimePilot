@@ -284,3 +284,58 @@ export async function createConnectLoginLink(accountId: string): Promise<string>
   const loginLink = await stripe.accounts.createLoginLink(accountId);
   return loginLink.url;
 }
+
+export async function createSubscriptionCheckout(params: {
+  customerEmail: string;
+  priceId: string;
+  successUrl: string;
+  cancelUrl: string;
+  trialDays?: number;
+  metadata?: Record<string, string>;
+  customerId?: string;
+}): Promise<{ url: string; sessionId: string }> {
+  const stripe = getStripe();
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    mode: "subscription",
+    line_items: [{ price: params.priceId, quantity: 1 }],
+    success_url: params.successUrl,
+    cancel_url: params.cancelUrl,
+    metadata: params.metadata || {},
+  };
+  if (params.customerId) {
+    sessionParams.customer = params.customerId;
+  } else {
+    sessionParams.customer_email = params.customerEmail;
+  }
+  if (params.trialDays && params.trialDays > 0) {
+    sessionParams.subscription_data = {
+      trial_period_days: params.trialDays,
+      metadata: params.metadata || {},
+    };
+  } else {
+    sessionParams.subscription_data = { metadata: params.metadata || {} };
+  }
+  const session = await stripe.checkout.sessions.create(sessionParams);
+  return { url: session.url!, sessionId: session.id };
+}
+
+export async function createCustomerPortalSession(params: {
+  customerId: string;
+  returnUrl: string;
+}): Promise<string> {
+  const stripe = getStripe();
+  const session = await stripe.billingPortal.sessions.create({
+    customer: params.customerId,
+    return_url: params.returnUrl,
+  });
+  return session.url;
+}
+
+export async function createUsageRecord(subscriptionItemId: string, quantity: number, timestamp?: number): Promise<void> {
+  const stripe = getStripe();
+  await stripe.subscriptionItems.createUsageRecord(subscriptionItemId, {
+    quantity,
+    timestamp: timestamp || Math.floor(Date.now() / 1000),
+    action: "increment",
+  });
+}

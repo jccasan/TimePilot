@@ -21,7 +21,7 @@ export const invoiceTimingEnum = pgEnum("invoice_timing", ["before_service", "af
 export const invoiceFrequencyEnum = pgEnum("invoice_frequency", ["per_service", "per_week", "per_month"]);
 export const discountTypeEnum = pgEnum("discount_type", ["percent", "amount"]);
 export const subscriptionTierEnum = pgEnum("subscription_tier", ["free_trial", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"]);
-export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "past_due", "cancelled", "trialing"]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "past_due", "cancelled", "trialing", "suspended"]);
 export const automationTriggerEnum = pgEnum("automation_trigger", ["lead_created", "service_completed", "payment_failed", "invoice_created"]);
 
 export const yardDifficultyEnum = pgEnum("yard_difficulty", ["flat", "moderate", "difficult"]);
@@ -152,6 +152,8 @@ export const companies = pgTable("companies", {
   qboIncomeAccountRef: varchar("qbo_income_account_ref", { length: 50 }),
   timezone: varchar("timezone", { length: 100 }).notNull().default("America/New_York"),
   lastAutoInvoiceRun: date("last_auto_invoice_run"),
+  frozenAt: timestamp("frozen_at"),
+  trialEndsAt: timestamp("trial_ends_at"),
   canceledAt: timestamp("canceled_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
   churnNotes: text("churn_notes"),
@@ -842,11 +844,27 @@ export const costConfig = pgTable("cost_config", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const usageEventTypeEnum = pgEnum("usage_event_type", ["sms_segment", "voice_minute", "user_seat"]);
+
+export const usageEvents = pgTable("usage_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  eventType: usageEventTypeEnum("event_type").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_usage_company").on(table.companyId),
+  index("idx_usage_type").on(table.eventType),
+  index("idx_usage_recorded").on(table.recordedAt),
+]);
+
 export const insertSmsMessageSchema = createInsertSchema(smsMessages).omit({ id: true, createdAt: true });
 export const insertEmailSentSchema = createInsertSchema(emailsSent).omit({ id: true, createdAt: true });
 export const insertAccountDailyMetricsSchema = createInsertSchema(accountDailyMetrics).omit({ id: true, createdAt: true });
 export const insertSaasCostsMonthlySchema = createInsertSchema(saasCostsMonthly).omit({ id: true, createdAt: true });
 export const insertCostConfigSchema = createInsertSchema(costConfig).omit({ id: true, updatedAt: true });
+export const insertUsageEventSchema = createInsertSchema(usageEvents).omit({ id: true, recordedAt: true });
 
 export type SmsMessage = typeof smsMessages.$inferSelect;
 export type InsertSmsMessage = z.infer<typeof insertSmsMessageSchema>;
@@ -858,6 +876,8 @@ export type SaasCostMonthly = typeof saasCostsMonthly.$inferSelect;
 export type InsertSaasCostMonthly = z.infer<typeof insertSaasCostsMonthlySchema>;
 export type CostConfigItem = typeof costConfig.$inferSelect;
 export type InsertCostConfig = z.infer<typeof insertCostConfigSchema>;
+export type UsageEvent = typeof usageEvents.$inferSelect;
+export type InsertUsageEvent = z.infer<typeof insertUsageEventSchema>;
 
 export const adminNotes = pgTable("admin_notes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

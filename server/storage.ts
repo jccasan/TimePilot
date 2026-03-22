@@ -7,6 +7,7 @@ import {
   automationEventLogs, apiKeys, webhooks, webhookDeliveries, attachments,
   servicePricing, servicePackages, messages, portalSessions, adminNotes,
   smsMessages, emailsSent, accountDailyMetrics, saasCostsMonthly, costConfig,
+  usageEvents,
   notifications, timeEntries, activityLog, auditTrail,
   importRuns, invoicePayments,
   estimates, serviceChangeRequests,
@@ -53,6 +54,7 @@ import {
   type Estimate, type InsertEstimate,
   type ServiceChangeRequest, type InsertServiceChangeRequest,
   type ServiceZone, type InsertServiceZone,
+  type UsageEvent, type InsertUsageEvent,
   priceRecommendations,
   profitabilitySnapshots,
   overheadCosts,
@@ -354,6 +356,11 @@ export interface IStorage {
 
   // Jobs
   createJobFromEstimate(estimate: Estimate, contactId: string): Promise<ServicePlan>;
+
+  // Usage Events
+  createUsageEvent(data: InsertUsageEvent): Promise<UsageEvent>;
+  getUsageEvents(companyId: string, startDate: string, endDate: string): Promise<UsageEvent[]>;
+  getUsageSummary(companyId: string, startDate: string, endDate: string): Promise<{ smsSegments: number; voiceMinutes: number; userSeats: number }>;
 
   // Referral helpers
   getContactByReferralCode(code: string): Promise<Contact | undefined>;
@@ -2050,6 +2057,42 @@ export class DatabaseStorage implements IStorage {
 
   async deleteServiceZone(id: string, companyId: string): Promise<void> {
     await db.delete(serviceZones).where(and(eq(serviceZones.id, id), eq(serviceZones.companyId, companyId)));
+  }
+
+  // ================ Usage Events ================
+  async createUsageEvent(data: InsertUsageEvent): Promise<UsageEvent> {
+    const [event] = await db.insert(usageEvents).values(data).returning();
+    return event;
+  }
+
+  async getUsageEvents(companyId: string, startDate: string, endDate: string): Promise<UsageEvent[]> {
+    return db.select().from(usageEvents)
+      .where(and(
+        eq(usageEvents.companyId, companyId),
+        gte(usageEvents.recordedAt, new Date(startDate)),
+        lte(usageEvents.recordedAt, new Date(endDate)),
+      ))
+      .orderBy(desc(usageEvents.recordedAt));
+  }
+
+  async getUsageSummary(companyId: string, startDate: string, endDate: string): Promise<{ smsSegments: number; voiceMinutes: number; userSeats: number }> {
+    const rows = await db.select({
+      eventType: usageEvents.eventType,
+      total: sql<number>`coalesce(sum(${usageEvents.quantity}), 0)`,
+    }).from(usageEvents)
+      .where(and(
+        eq(usageEvents.companyId, companyId),
+        gte(usageEvents.recordedAt, new Date(startDate)),
+        lte(usageEvents.recordedAt, new Date(endDate)),
+      ))
+      .groupBy(usageEvents.eventType);
+    const map: Record<string, number> = {};
+    for (const r of rows) map[r.eventType] = Number(r.total);
+    return {
+      smsSegments: map["sms_segment"] || 0,
+      voiceMinutes: map["voice_minute"] || 0,
+      userSeats: map["user_seat"] || 0,
+    };
   }
 
   async createJobFromEstimate(estimate: Estimate, contactId: string): Promise<ServicePlan> {

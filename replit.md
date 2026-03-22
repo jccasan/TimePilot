@@ -54,6 +54,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Access Control**: Multi-tenant architecture with Owner, Admin, and Technician roles.
 - **Admin Security Center**: Tools for managing admin accounts, active sessions, and audit logs. Includes password policy enforcement.
 - **Subscription Pricing Management**: Admin interface for managing DB-backed subscription tiers.
+- **Subscription Billing Lifecycle**: Stripe Checkout for subscription creation, 14-day free trial, automatic account freeze on failed payments (3 attempts = suspended), Stripe Customer Portal for self-service billing management, usage metering (SMS segments, voice minutes, user seats), subscription gate middleware (402 for suspended/cancelled accounts on write operations). Schema: `frozenAt` and `trialEndsAt` on companies, `usage_events` table, `suspended` status in subscription_status enum. Webhooks: `invoice.payment_failed`, `customer.subscription.trial_will_end`. Routes: `/api/subscriptions/create-checkout`, `/api/billing/portal`, `/api/billing/usage`, `/api/billing/subscription`.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

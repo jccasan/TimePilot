@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { smsMessages } from "@shared/schema";
+import { smsMessages, usageEvents } from "@shared/schema";
 
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
@@ -84,12 +84,21 @@ export function isTwilioConfigured(): boolean {
 }
 
 export async function logSmsMessage(companyId: string, to: string, from: string, direction: "inbound" | "outbound", twilioSid?: string, segments?: number): Promise<void> {
+  const segCount = segments ?? 1;
   await db.insert(smsMessages).values({
     companyId,
     toNumber: to,
     fromNumber: from,
     direction,
     twilioSid,
-    segments: segments ?? 1,
+    segments: segCount,
   });
+  if (direction === "outbound") {
+    db.insert(usageEvents).values({
+      companyId,
+      eventType: "sms_segment",
+      quantity: segCount,
+      metadata: { twilioSid, to },
+    }).catch((err) => console.error("[Usage] Failed to log SMS usage:", err.message));
+  }
 }
