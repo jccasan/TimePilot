@@ -42,7 +42,7 @@ function decryptToken(ciphertext: string): string {
   const iv = Buffer.from(parts[1], "hex");
   const tag = Buffer.from(parts[2], "hex");
   const encrypted = Buffer.from(parts[3], "hex");
-  const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv);
+  const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv, { authTagLength: 16 });
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 }
