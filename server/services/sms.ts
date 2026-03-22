@@ -66,8 +66,10 @@ export async function sendSms(options: SendSmsOptions): Promise<SendSmsResult> {
       };
     }
 
+    const segmentCount = parseInt(data.num_segments, 10) || 1;
+
     if (options.companyId) {
-      logSmsUsage(options.companyId, to, options.from || TWILIO_PHONE_NUMBER, data.sid).catch(() => {});
+      logSmsUsage(options.companyId, to, options.from || TWILIO_PHONE_NUMBER, data.sid, segmentCount).catch(() => {});
     }
 
     return {
@@ -80,15 +82,15 @@ export async function sendSms(options: SendSmsOptions): Promise<SendSmsResult> {
   }
 }
 
-async function logSmsUsage(companyId: string, to: string, from: string, twilioSid?: string): Promise<void> {
+async function logSmsUsage(companyId: string, to: string, from: string, twilioSid?: string, segments: number = 1): Promise<void> {
   try {
-    await db.insert(smsMessages).values({ companyId, toNumber: to, fromNumber: from, direction: "outbound", twilioSid, segments: 1 });
-    await db.insert(usageEvents).values({ companyId, eventType: "sms_segment", quantity: 1, metadata: { twilioSid, to } });
+    await db.insert(smsMessages).values({ companyId, toNumber: to, fromNumber: from, direction: "outbound", twilioSid, segments });
+    await db.insert(usageEvents).values({ companyId, eventType: "sms_segment", quantity: segments, metadata: { twilioSid, to, segments } });
     const { reportMeteredUsage } = await import("./stripe");
     const { storage } = await import("../storage");
     const company = await storage.getCompany(companyId);
     if (company?.stripeSubscriptionId) {
-      reportMeteredUsage(company.stripeSubscriptionId, "sms_segment", 1).catch(() => {});
+      reportMeteredUsage(company.stripeSubscriptionId, "sms_segment", segments).catch(() => {});
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
