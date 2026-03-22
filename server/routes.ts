@@ -525,7 +525,10 @@ export async function registerRoutes(
 
       const tierConfig = TIER_CONFIG[company.subscriptionTier as keyof typeof TIER_CONFIG] || null;
       const activeUsers = await storage.countActiveCompanyUsers(companyId);
-      const stripePrices = getCachedStripePrices();
+      let stripePrices = getCachedStripePrices();
+      if (!stripePrices && isStripeConfigured()) {
+        stripePrices = await fetchStripePrices();
+      }
       const displayPrice = stripePrices?.[company.subscriptionTier] ?? tierConfig?.price ?? 0;
 
       res.json({
@@ -549,7 +552,10 @@ export async function registerRoutes(
 
   app.get("/api/billing/prices", isAuthenticated, async (_req: Request, res: Response) => {
     try {
-      const stripePrices = getCachedStripePrices();
+      let stripePrices = getCachedStripePrices();
+      if (!stripePrices && isStripeConfigured()) {
+        stripePrices = await fetchStripePrices();
+      }
       const result: Record<string, { name: string; price: number; maxUsers: number }> = {};
       for (const [tier, config] of Object.entries(TIER_CONFIG)) {
         result[tier] = {
