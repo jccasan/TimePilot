@@ -14,7 +14,7 @@ import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordRes
 import type { RequestHandler } from "express";
 import { sendEmail } from "./services/email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
-import { sendSms, getTwilioPhoneNumber, isTwilioConfigured, logSmsMessage } from "./services/sms";
+import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
 import {
   isStripeConfigured,
   createStripeCustomer,
@@ -3872,7 +3872,6 @@ export async function registerRoutes(
           body: etaMsg,
           externalId: smsResult.messageSid,
         });
-        await logSmsMessage(companyId, contact.phone, getTwilioPhoneNumber(), "outbound", smsResult.messageSid);
       } catch (logErr) {
         console.error("On-my-way message logging failed (SMS was sent):", logErr);
       }
