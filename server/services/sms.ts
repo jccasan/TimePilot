@@ -76,9 +76,10 @@ export async function sendSms(options: SendSmsOptions): Promise<SendSmsResult> {
       success: true,
       messageSid: data.sid,
     };
-  } catch (err: any) {
-    console.error("Twilio SMS error:", err.message);
-    return { success: false, error: err.message };
+  } catch (err: unknown) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    console.error("Twilio SMS error:", errMessage);
+    return { success: false, error: errMessage };
   }
 }
 

@@ -6736,18 +6736,18 @@ export async function registerRoutes(
       }
 
       if (event.type === "invoice.payment_failed") {
-        const invoice = event.data.object as { customer: string | { id: string }; attempt_count?: number };
+        const invoice = event.data.object as { customer: string | { id: string }; attempt_count?: number; subscription?: string | null; billing_reason?: string };
         const stripeCustomerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
-        if (stripeCustomerId) {
+        if (stripeCustomerId && invoice.subscription) {
           const allCompanies = await storage.listCompanies();
           for (const company of allCompanies) {
-            if (company.stripeCustomerId === stripeCustomerId) {
+            if (company.stripeCustomerId === stripeCustomerId && company.stripeSubscriptionId === invoice.subscription) {
               await storage.updateCompany(company.id, {
                 subscriptionStatus: "suspended",
                 frozenAt: new Date(),
               } as Partial<typeof companies.$inferInsert>);
               const attemptCount = invoice.attempt_count || 1;
-              console.log(`[Stripe Subscription] Company "${company.name}" SUSPENDED after payment failure (attempt ${attemptCount})`);
+              console.log(`[Stripe Subscription] Company "${company.name}" SUSPENDED after subscription payment failure (attempt ${attemptCount})`);
               notify(company.id, "payment_failed", "Account Suspended",
                 "Your subscription payment has failed. Please update your payment method to restore access.",
                 "/billing");
@@ -10957,6 +10957,24 @@ export async function registerRoutes(
   import("./services/webhook-dispatcher").then(({ startWebhookRetryJob }) => {
     startWebhookRetryJob();
   });
+
+  async function syncSeatUsageToStripe(): Promise<void> {
+    try {
+      const allCompanies = await storage.listCompanies();
+      for (const company of allCompanies) {
+        if (!company.stripeSubscriptionId || company.subscriptionStatus === "cancelled") continue;
+        const members = await storage.getCompanyUsers(company.id);
+        const activeCount = members.filter(m => m.isActive !== false).length;
+        await reportMeteredUsageSet(company.stripeSubscriptionId, "user_seat", activeCount).catch(() => {});
+      }
+      console.log(`[Seat Sync] Reported seat counts for ${allCompanies.filter(c => c.stripeSubscriptionId).length} companies`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[Seat Sync] Error:", message);
+    }
+  }
+  setTimeout(() => syncSeatUsageToStripe().catch(console.error), 120000);
+  setInterval(() => syncSeatUsageToStripe().catch(console.error), 24 * 60 * 60 * 1000);
 
   return httpServer;
 }
