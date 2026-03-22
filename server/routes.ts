@@ -346,11 +346,22 @@ export async function registerRoutes(
       let resolvedUserId = sessionUserId;
       if (!resolvedUserId && hasBearerToken) {
         const token = authHeader!.substring(7);
-        const prefix = token.substring(0, 8);
-        const keyHash = crypto.createHash("sha256").update(token).digest("hex");
-        const apiKey = await storage.getApiKeyByPrefix(prefix);
-        if (apiKey && apiKey.keyHash === keyHash && apiKey.isActive) {
-          companyId = apiKey.companyId;
+        const sessionRow = await db.execute(sql`SELECT sess FROM sessions WHERE sid = ${token} AND expire > NOW()`);
+        if (sessionRow.rows.length > 0) {
+          const sess = sessionRow.rows[0].sess as { userId?: string };
+          if (sess?.userId) {
+            resolvedUserId = sess.userId;
+          }
+        }
+        if (!resolvedUserId) {
+          if (token.length >= 8) {
+            const prefix = token.substring(0, 8);
+            const keyHash = crypto.createHash("sha256").update(token).digest("hex");
+            const apiKey = await storage.getApiKeyByPrefix(prefix);
+            if (apiKey && apiKey.keyHash === keyHash && apiKey.isActive) {
+              companyId = apiKey.companyId;
+            }
+          }
         }
       }
       if (!companyId && resolvedUserId) {
