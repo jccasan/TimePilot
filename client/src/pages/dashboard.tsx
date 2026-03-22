@@ -603,7 +603,7 @@ function CommMessageRow({ msg }: { msg: RecentCommMessage }) {
 
   const row = (
     <div
-      className="flex items-start gap-3 py-2.5 px-1 rounded-md hover:bg-muted/50 transition-colors cursor-pointer"
+      className={`flex items-start gap-3 py-2.5 px-1 rounded-md transition-colors ${msg.contactId ? "hover:bg-muted/50 cursor-pointer" : ""}`}
       data-testid={`comm-message-${msg.id}`}
     >
       <div className={`mt-0.5 rounded-full p-1.5 ${msg.direction === "inbound" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-green-100 dark:bg-green-900/30"}`}>
@@ -649,9 +649,19 @@ function CommMessageRow({ msg }: { msg: RecentCommMessage }) {
 }
 
 function RecentCommunications() {
-  const { data, isLoading } = useQuery<RecentCommsData>({
+  const { data, isLoading, isError } = useQuery<RecentCommsData>({
     queryKey: ["/api/company/recent-communications"],
   });
+
+  if (isError) {
+    return (
+      <Card data-testid="recent-comms-error">
+        <CardContent className="p-4 text-center text-sm text-muted-foreground">
+          Unable to load recent communications. Please refresh to try again.
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (isLoading) {
     return (
