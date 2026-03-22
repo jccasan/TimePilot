@@ -291,17 +291,15 @@ export default function Billing() {
               <p className="text-sm text-muted-foreground">
                 ${subscription.voicePlan.overageRate.toFixed(2)}/min overage
               </p>
-              {subscription.hasStripeSubscription && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => portalMutation.mutate()}
-                  disabled={portalMutation.isPending}
-                  data-testid="button-manage-voice"
-                >
-                  <ExternalLink className="h-4 w-4 mr-1" /> Manage Voice Plan
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => portalMutation.mutate()}
+                disabled={portalMutation.isPending}
+                data-testid="button-manage-voice"
+              >
+                <ExternalLink className="h-4 w-4 mr-1" /> Manage Voice Plan
+              </Button>
             </CardContent>
           </Card>
         ) : (
