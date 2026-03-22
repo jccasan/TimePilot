@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { eq, and, lt } from "drizzle-orm";
-import { companies, companyUsers, users, type InsertCompany } from "@shared/schema";
+import { companies, companyUsers, users } from "@shared/schema";
 import { storage } from "../storage";
 import { sendEmail } from "../services/email";
 
@@ -28,10 +28,26 @@ export async function runTrialExpirationCheck(): Promise<void> {
 
     for (const company of expiredTrials) {
       try {
-        await storage.updateCompany(company.id, {
-          subscriptionStatus: "suspended",
-          frozenAt: new Date(),
-        } as Partial<InsertCompany>);
+        const updated = await db
+          .update(companies)
+          .set({
+            subscriptionStatus: "suspended",
+            frozenAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(companies.id, company.id),
+              eq(companies.subscriptionStatus, "trialing"),
+              lt(companies.trialEndsAt, now)
+            )
+          )
+          .returning({ id: companies.id });
+
+        if (updated.length === 0) {
+          console.log(`[Trial Expiration] Skipped company "${company.name}" (${company.id}) — status changed since query`);
+          continue;
+        }
 
         storage
           .createNotification({
@@ -67,7 +83,7 @@ export async function runTrialExpirationCheck(): Promise<void> {
               ? `https://${process.env.REPLIT_DEV_DOMAIN}`
               : "https://scoopilot.replit.app";
 
-          sendEmail({
+          const emailResult = await sendEmail({
             to: ownerRow[0].email,
             subject: "Your ScooPilot trial has ended",
             text: `Hi,\n\nYour 14-day free trial for "${company.name}" has ended. Subscribe now to restore access to your account.\n\nVisit ${baseUrl}/billing to choose a plan.`,
@@ -83,10 +99,11 @@ export async function runTrialExpirationCheck(): Promise<void> {
               </div>
               <div style="background-color:#f5f5f5;padding:15px;text-align:center;font-size:12px;color:#666">ScooPilot - Pet Waste Removal Software</div>
             </div>`,
-          }).catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.error(`[Trial Expiration] Email error for ${company.id}:`, msg);
           });
+
+          if (!emailResult.success) {
+            console.error(`[Trial Expiration] Email delivery failed for ${company.id} (${ownerRow[0].email}): ${emailResult.error}`);
+          }
         }
 
         suspended++;
