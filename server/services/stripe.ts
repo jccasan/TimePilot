@@ -185,6 +185,7 @@ export async function createCheckoutSession(params: {
   cancelUrl: string;
   tipAmount?: string;
   stripeConnectAccountId?: string | null;
+  tenantId?: string;
 }): Promise<{ url: string; sessionId: string }> {
   const stripe = getStripe();
   const amountCents = Math.round(params.amount * 100);
@@ -208,6 +209,7 @@ export async function createCheckoutSession(params: {
       invoiceId: params.invoiceId,
       invoiceNumber: params.invoiceNumber,
       tipAmount: params.tipAmount || "0",
+      ...(params.tenantId ? { tenant_id: params.tenantId } : {}),
     },
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
@@ -422,6 +424,21 @@ export function validateStripeConfig(): void {
     console.warn(`[Stripe Config] ⚠ Missing price tier env vars: ${missingPrices.join(", ")}`);
   }
 
+  const voicePriceVars = [
+    "STRIPE_PRICE_VOICE_STARTER",
+    "STRIPE_PRICE_VOICE_STARTER_SUBSCRIBER",
+    "STRIPE_PRICE_VOICE_PRO",
+    "STRIPE_PRICE_VOICE_PRO_SUBSCRIBER",
+  ];
+  const missingVoice = voicePriceVars.filter(v => !process.env[v]);
+  const presentVoice = voicePriceVars.filter(v => !!process.env[v]);
+  if (presentVoice.length > 0) {
+    console.log(`[Stripe Config] ✓ ${presentVoice.length}/${voicePriceVars.length} voice plan price env vars set`);
+  }
+  if (missingVoice.length > 0) {
+    console.warn(`[Stripe Config] ⚠ Missing voice plan price env vars: ${missingVoice.join(", ")}`);
+  }
+
   console.log("[Stripe Config] Required webhook events for your Stripe dashboard:");
   for (const event of REQUIRED_WEBHOOK_EVENTS) {
     console.log(`[Stripe Config]   • ${event}`);
@@ -477,6 +494,43 @@ export async function fetchStripePrices(): Promise<Record<string, number>> {
 
 export function getCachedStripePrices(): Record<string, number> | null {
   return cachedStripePrices;
+}
+
+export async function createVoicePlanCheckout(params: {
+  tenantId: string;
+  voicePlan: "voice_starter" | "voice_pro";
+  priceId: string;
+  customerEmail: string;
+  successUrl: string;
+  cancelUrl: string;
+  customerId?: string;
+}): Promise<{ url: string; sessionId: string }> {
+  const stripe = getStripe();
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    mode: "subscription",
+    line_items: [{ price: params.priceId, quantity: 1 }],
+    success_url: params.successUrl,
+    cancel_url: params.cancelUrl,
+    metadata: {
+      tenant_id: params.tenantId,
+      voice_plan: params.voicePlan,
+      checkout_type: "voice_addon",
+    },
+    subscription_data: {
+      metadata: {
+        tenant_id: params.tenantId,
+        voice_plan: params.voicePlan,
+        checkout_type: "voice_addon",
+      },
+    },
+  };
+  if (params.customerId) {
+    sessionParams.customer = params.customerId;
+  } else {
+    sessionParams.customer_email = params.customerEmail;
+  }
+  const session = await stripe.checkout.sessions.create(sessionParams);
+  return { url: session.url!, sessionId: session.id };
 }
 
 export async function reportMeteredUsage(stripeSubscriptionId: string, eventType: string, quantity: number): Promise<void> {

@@ -1,14 +1,22 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { TIER_CONFIG } from "@shared/schema";
+import { TIER_CONFIG, VOICE_PLAN_CONFIG } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CreditCard, Users, CheckCircle, ExternalLink, AlertTriangle, MessageSquare, Phone, Clock } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { CreditCard, Users, CheckCircle, ExternalLink, AlertTriangle, MessageSquare, Phone, Clock, Mic } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+type VoicePlanInfo = {
+  tier: string;
+  name: string;
+  status: string;
+  includedMinutes: number;
+  overageRate: number;
+};
 
 type SubscriptionInfo = {
   tier: string;
@@ -21,6 +29,7 @@ type SubscriptionInfo = {
   trialEndsAt: string | null;
   stripeCustomerId: string | null;
   hasStripeSubscription: boolean;
+  voicePlan: VoicePlanInfo | null;
 };
 
 type UsageInfo = {
@@ -62,6 +71,19 @@ export default function Billing() {
 
   const { data: tierPrices } = useQuery<TierPrices>({
     queryKey: ["/api/billing/prices"],
+  });
+
+  const voiceCheckoutMutation = useMutation({
+    mutationFn: async (plan: string) => {
+      const res = await apiRequest("POST", "/api/billing/voice-checkout", { plan });
+      return res.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.open(data.url, "_self");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message || "Could not start voice plan checkout", variant: "destructive" });
+    },
   });
 
   const portalMutation = useMutation({
@@ -245,6 +267,86 @@ export default function Billing() {
             );
           })}
         </div>
+      </div>
+
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Voice Agent Add-on</h2>
+        {subscription?.voicePlan?.status === "active" ? (
+          <Card className="border-primary" data-testid="card-voice-plan-active">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Mic className="h-5 w-5" />
+                  {subscription.voicePlan.name}
+                </CardTitle>
+                <Badge data-testid="badge-voice-active">
+                  <CheckCircle className="mr-1 h-3 w-3" /> Active
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                {subscription.voicePlan.includedMinutes} minutes included/mo
+              </p>
+              <p className="text-sm text-muted-foreground">
+                ${subscription.voicePlan.overageRate.toFixed(2)}/min overage
+              </p>
+              {subscription.hasStripeSubscription && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => portalMutation.mutate()}
+                  disabled={portalMutation.isPending}
+                  data-testid="button-manage-voice"
+                >
+                  <ExternalLink className="h-4 w-4 mr-1" /> Manage Voice Plan
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {(Object.entries(VOICE_PLAN_CONFIG) as Array<[string, typeof VOICE_PLAN_CONFIG[keyof typeof VOICE_PLAN_CONFIG]]>).map(([key, config]) => {
+              const isSubscriber = subscription?.status === "active";
+              const displayPrice = isSubscriber ? config.subscriberPrice : config.price;
+              return (
+                <Card key={key} data-testid={`card-voice-${key}`}>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Mic className="h-5 w-5" />
+                      {config.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div>
+                      <p className="text-2xl font-bold" data-testid={`text-voice-price-${key}`}>
+                        ${displayPrice}
+                        <span className="text-sm font-normal text-muted-foreground">/mo</span>
+                      </p>
+                      {isSubscriber && (
+                        <p className="text-xs text-green-600 dark:text-green-400">
+                          Subscriber discount (reg. ${config.price}/mo)
+                        </p>
+                      )}
+                    </div>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>{config.includedMinutes} minutes included</li>
+                      <li>${config.overageRate.toFixed(2)}/min overage</li>
+                    </ul>
+                    <Button
+                      className="w-full"
+                      onClick={() => voiceCheckoutMutation.mutate(key)}
+                      disabled={voiceCheckoutMutation.isPending}
+                      data-testid={`button-voice-checkout-${key}`}
+                    >
+                      {voiceCheckoutMutation.isPending ? "Processing..." : `Get ${config.name}`}
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {(isSuspended || isCancelled) && (

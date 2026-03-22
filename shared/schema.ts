@@ -108,6 +108,11 @@ export const TIER_CONFIG = {
   tier_10_plus: { name: "Enterprise", maxUsers: 999, price: 599.99 },
 } as const;
 
+export const VOICE_PLAN_CONFIG = {
+  voice_starter: { name: "Voice Starter", price: 59, subscriberPrice: 49, includedMinutes: 60, overageRate: 0.50 },
+  voice_pro: { name: "Voice Pro", price: 119, subscriberPrice: 99, includedMinutes: 200, overageRate: 0.50 },
+} as const;
+
 export const companies = pgTable("companies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name", { length: 255 }).notNull(),
@@ -157,6 +162,11 @@ export const companies = pgTable("companies", {
   canceledAt: timestamp("canceled_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
   churnNotes: text("churn_notes"),
+  voicePlanTier: varchar("voice_plan_tier", { length: 50 }),
+  voicePlanStatus: varchar("voice_plan_status", { length: 50 }),
+  voicePlanIncludedMinutes: integer("voice_plan_included_minutes"),
+  voicePlanOverageRate: decimal("voice_plan_overage_rate", { precision: 5, scale: 2 }),
+  stripeVoiceSubscriptionId: varchar("stripe_voice_subscription_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

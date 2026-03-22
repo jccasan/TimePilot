@@ -36,6 +36,7 @@ import {
   validateStripeConfig,
   fetchStripePrices,
   getCachedStripePrices,
+  createVoicePlanCheckout,
 } from "./services/stripe";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress } from "./services/geocode";
@@ -43,6 +44,7 @@ import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import {
   TIER_CONFIG,
+  VOICE_PLAN_CONFIG,
   insertContactSchema,
   insertTagSchema,
   insertPropertySchema,
@@ -442,6 +444,12 @@ export async function registerRoutes(
       } catch (_noAuth) {
       }
 
+      let tenantId = "";
+      try {
+        const ctx = await getCompanyContext(req);
+        tenantId = ctx.companyId;
+      } catch (_noAuth) {}
+
       const result = await createSubscriptionCheckout({
         customerEmail: email,
         customerId,
@@ -456,6 +464,7 @@ export async function registerRoutes(
           first_name: firstName,
           last_name: lastName || "",
           phone: phone || "",
+          ...(tenantId ? { tenant_id: tenantId } : {}),
         },
       });
       res.json(result);
@@ -496,6 +505,8 @@ export async function registerRoutes(
       const activeUsers = await storage.countActiveCompanyUsers(companyId);
       const tierConfig = company ? TIER_CONFIG[company.subscriptionTier as keyof typeof TIER_CONFIG] : null;
 
+      const voiceMinutesAllowance = company?.voicePlanIncludedMinutes ?? 100;
+
       res.json({
         period: {
           start: startOfMonth,
@@ -509,7 +520,7 @@ export async function registerRoutes(
         allowances: {
           maxUsers: tierConfig?.maxUsers ?? 1,
           smsSegmentsIncluded: 500,
-          voiceMinutesIncluded: 100,
+          voiceMinutesIncluded: voiceMinutesAllowance,
         },
       });
     } catch (err) {
@@ -531,6 +542,10 @@ export async function registerRoutes(
       }
       const displayPrice = stripePrices?.[company.subscriptionTier] ?? tierConfig?.price ?? 0;
 
+      const voicePlanConfig = company.voicePlanTier
+        ? VOICE_PLAN_CONFIG[company.voicePlanTier as keyof typeof VOICE_PLAN_CONFIG] || null
+        : null;
+
       res.json({
         tier: company.subscriptionTier,
         tierName: tierConfig?.name || "Unknown",
@@ -542,6 +557,13 @@ export async function registerRoutes(
         trialEndsAt: company.trialEndsAt,
         stripeCustomerId: company.stripeCustomerId,
         hasStripeSubscription: !!company.stripeSubscriptionId,
+        voicePlan: company.voicePlanTier ? {
+          tier: company.voicePlanTier,
+          name: voicePlanConfig?.name || company.voicePlanTier,
+          status: company.voicePlanStatus || "inactive",
+          includedMinutes: company.voicePlanIncludedMinutes || 0,
+          overageRate: company.voicePlanOverageRate ? parseFloat(company.voicePlanOverageRate) : 0,
+        } : null,
       });
     } catch (err) {
       handleError(res, err);
@@ -565,6 +587,126 @@ export async function registerRoutes(
         };
       }
       res.json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  const VOICE_PRICE_MAP: Record<string, Record<string, string | undefined>> = {
+    voice_starter: {
+      regular: process.env.STRIPE_PRICE_VOICE_STARTER,
+      subscriber: process.env.STRIPE_PRICE_VOICE_STARTER_SUBSCRIBER,
+    },
+    voice_pro: {
+      regular: process.env.STRIPE_PRICE_VOICE_PRO,
+      subscriber: process.env.STRIPE_PRICE_VOICE_PRO_SUBSCRIBER,
+    },
+  };
+
+  app.post("/api/billing/voice-checkout", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (company.voicePlanStatus === "active") return res.status(400).json({ error: "Voice plan already active" });
+
+      const { plan } = req.body;
+      if (!plan || !VOICE_PRICE_MAP[plan]) {
+        return res.status(400).json({ error: `Invalid voice plan. Valid: ${Object.keys(VOICE_PRICE_MAP).join(", ")}` });
+      }
+
+      const isSubscriber = company.subscriptionStatus === "active";
+      const priceId = isSubscriber
+        ? VOICE_PRICE_MAP[plan].subscriber
+        : VOICE_PRICE_MAP[plan].regular;
+
+      if (!priceId) {
+        return res.status(400).json({ error: "Voice plan pricing not configured. Contact support." });
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const result = await createVoicePlanCheckout({
+        tenantId: companyId,
+        voicePlan: plan as "voice_starter" | "voice_pro",
+        priceId,
+        customerEmail: company.email || "",
+        successUrl: `${baseUrl}/billing?voice_success=1`,
+        cancelUrl: `${baseUrl}/billing`,
+        customerId: company.stripeCustomerId || undefined,
+      });
+
+      res.json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/voice-signup/:slug/checkout", async (req: Request, res: Response) => {
+    try {
+      if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
+      const { slug } = req.params;
+      const company = await storage.getCompanyBySlug(slug);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const { plan, email } = req.body;
+      if (!plan || !VOICE_PRICE_MAP[plan]) {
+        return res.status(400).json({ error: `Invalid voice plan. Valid: ${Object.keys(VOICE_PRICE_MAP).join(", ")}` });
+      }
+      if (!email) return res.status(400).json({ error: "email is required" });
+
+      if (company.voicePlanStatus === "active") {
+        return res.status(400).json({ error: "Company already has an active voice plan" });
+      }
+
+      const isSubscriber = company.subscriptionStatus === "active";
+      const priceId = isSubscriber
+        ? VOICE_PRICE_MAP[plan].subscriber
+        : VOICE_PRICE_MAP[plan].regular;
+
+      if (!priceId) {
+        return res.status(400).json({ error: "Voice plan pricing not configured" });
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const result = await createVoicePlanCheckout({
+        tenantId: company.id,
+        voicePlan: plan as "voice_starter" | "voice_pro",
+        priceId,
+        customerEmail: email,
+        successUrl: `${baseUrl}/voice-signup/${slug}?success=1`,
+        cancelUrl: `${baseUrl}/voice-signup/${slug}`,
+        customerId: company.stripeCustomerId || undefined,
+      });
+
+      res.json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.get("/api/voice-signup/:slug/info", async (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+      const company = await storage.getCompanyBySlug(slug);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const isSubscriber = company.subscriptionStatus === "active";
+
+      res.json({
+        companyName: company.name,
+        isSubscriber,
+        plans: Object.entries(VOICE_PLAN_CONFIG).map(([key, cfg]) => ({
+          key,
+          name: cfg.name,
+          price: isSubscriber ? cfg.subscriberPrice : cfg.price,
+          subscriberPrice: cfg.subscriberPrice,
+          regularPrice: cfg.price,
+          includedMinutes: cfg.includedMinutes,
+          overageRate: cfg.overageRate,
+        })),
+        currentVoicePlan: company.voicePlanTier || null,
+      });
     } catch (err) {
       handleError(res, err);
     }
@@ -6129,6 +6271,7 @@ export async function registerRoutes(
             successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
             cancelUrl: `${baseUrl}/portal`,
             stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
+            tenantId: companyId,
           });
           paymentUrl = checkoutResult.url;
         } catch (stripeErr) {
@@ -6388,6 +6531,7 @@ export async function registerRoutes(
         successUrl: `${baseUrl}/invoices?paid=${invoice.id}`,
         cancelUrl: `${baseUrl}/invoices`,
         stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
+        tenantId: companyId,
       });
 
       res.json(result);
@@ -6572,6 +6716,29 @@ export async function registerRoutes(
       if (event.type === "customer.subscription.created") {
         const subscription = event.data.object as { id: string; customer: string; status: string; metadata: Record<string, string>; trial_end?: number | null; items?: { data?: Array<{ id: string }> } };
         const meta = subscription.metadata || {};
+
+        if (meta.checkout_type === "voice_addon") {
+          const tenantId = meta.tenant_id;
+          const voicePlan = meta.voice_plan as "voice_starter" | "voice_pro";
+          if (tenantId && voicePlan) {
+            const company = await storage.getCompany(tenantId);
+            if (company) {
+              const planConfig = VOICE_PLAN_CONFIG[voicePlan];
+              const isSubscriber = company.subscriptionStatus === "active";
+              await storage.updateCompany(company.id, {
+                voicePlanTier: voicePlan,
+                voicePlanStatus: "active",
+                voicePlanIncludedMinutes: planConfig.includedMinutes,
+                voicePlanOverageRate: String(planConfig.overageRate),
+                stripeVoiceSubscriptionId: subscription.id,
+              } as Partial<typeof companies.$inferInsert>);
+              console.log(`[Stripe Voice] Activated ${voicePlan} for company "${company.name}" (${company.id}), subscriber=${isSubscriber}`);
+            }
+          }
+          res.json({ received: true });
+          return;
+        }
+
         const companyName = meta.company_name;
         const email = meta.email;
         const firstName = meta.first_name || "";
@@ -6586,6 +6753,26 @@ export async function registerRoutes(
           tier_10_plus: "tier_10_plus",
         };
         const planTier = tierMap[meta.plan_tier] || "tier_1";
+
+        if (meta.tenant_id) {
+          const company = await storage.getCompany(meta.tenant_id);
+          if (company) {
+            const subStatus = subscription.status === "trialing" ? "trialing" : "active";
+            const updateData: Record<string, unknown> = {
+              stripeCustomerId: subscription.customer,
+              stripeSubscriptionId: subscription.id,
+              subscriptionTier: planTier,
+              subscriptionStatus: subStatus,
+            };
+            if (subscription.trial_end) {
+              updateData.trialEndsAt = new Date(subscription.trial_end * 1000);
+            }
+            await storage.updateCompany(company.id, updateData as Partial<typeof companies.$inferInsert>);
+            console.log(`[Stripe Subscription] Updated company "${company.name}" via tenant_id (${company.id}) status=${subStatus}`);
+            res.json({ received: true });
+            return;
+          }
+        }
 
         if (companyName && email && firstName) {
           const existingUser = await getUserByEmail(email);
@@ -6691,48 +6878,95 @@ export async function registerRoutes(
       if (event.type === "customer.subscription.updated") {
         const subscription = event.data.object as { id: string; status: string; metadata: Record<string, string>; trial_end?: number | null };
         const stripeSubId = subscription.id;
-        const allCompanies = await storage.listCompanies();
-        for (const company of allCompanies) {
-          if (company.stripeSubscriptionId === stripeSubId) {
-            const statusMap: Record<string, string> = {
-              active: "active",
-              past_due: "past_due",
-              canceled: "cancelled",
-              trialing: "trialing",
-              unpaid: "suspended",
-            };
-            const newStatus = statusMap[subscription.status] || "active";
-            const meta = subscription.metadata || {};
-            const tierMap: Record<string, string> = {
-              free_trial: "free_trial", tier_1: "tier_1", tier_1_3: "tier_1_3",
-              tier_3_5: "tier_3_5", tier_6_10: "tier_6_10", tier_10_plus: "tier_10_plus",
-            };
-            const updates: Record<string, unknown> = { subscriptionStatus: newStatus };
-            if (meta.plan_tier && tierMap[meta.plan_tier]) {
-              updates.subscriptionTier = tierMap[meta.plan_tier];
+        const meta = subscription.metadata || {};
+
+        if (meta.checkout_type === "voice_addon") {
+          const allCompanies = await storage.listCompanies();
+          for (const company of allCompanies) {
+            if (company.stripeVoiceSubscriptionId === stripeSubId) {
+              const statusMap: Record<string, string> = {
+                active: "active", past_due: "past_due", canceled: "cancelled", unpaid: "suspended",
+              };
+              const newVoiceStatus = statusMap[subscription.status] || subscription.status;
+              const voiceUpdates: Record<string, unknown> = { voicePlanStatus: newVoiceStatus };
+              if (meta.voice_plan && VOICE_PLAN_CONFIG[meta.voice_plan as keyof typeof VOICE_PLAN_CONFIG]) {
+                const vc = VOICE_PLAN_CONFIG[meta.voice_plan as keyof typeof VOICE_PLAN_CONFIG];
+                voiceUpdates.voicePlanTier = meta.voice_plan;
+                voiceUpdates.voicePlanIncludedMinutes = vc.includedMinutes;
+                voiceUpdates.voicePlanOverageRate = String(vc.overageRate);
+              }
+              if (newVoiceStatus === "cancelled") {
+                voiceUpdates.voicePlanTier = null;
+                voiceUpdates.voicePlanStatus = null;
+                voiceUpdates.voicePlanIncludedMinutes = null;
+                voiceUpdates.voicePlanOverageRate = null;
+                voiceUpdates.stripeVoiceSubscriptionId = null;
+              }
+              await storage.updateCompany(company.id, voiceUpdates as Partial<typeof companies.$inferInsert>);
+              console.log(`[Stripe Voice] Updated company "${company.name}" voice status=${newVoiceStatus}`);
+              break;
             }
-            if (newStatus === "active" && company.frozenAt) {
-              updates.frozenAt = null;
+          }
+        } else {
+          const allCompanies = await storage.listCompanies();
+          for (const company of allCompanies) {
+            if (company.stripeSubscriptionId === stripeSubId) {
+              const statusMap: Record<string, string> = {
+                active: "active",
+                past_due: "past_due",
+                canceled: "cancelled",
+                trialing: "trialing",
+                unpaid: "suspended",
+              };
+              const newStatus = statusMap[subscription.status] || "active";
+              const tierMap: Record<string, string> = {
+                free_trial: "free_trial", tier_1: "tier_1", tier_1_3: "tier_1_3",
+                tier_3_5: "tier_3_5", tier_6_10: "tier_6_10", tier_10_plus: "tier_10_plus",
+              };
+              const updates: Record<string, unknown> = { subscriptionStatus: newStatus };
+              if (meta.plan_tier && tierMap[meta.plan_tier]) {
+                updates.subscriptionTier = tierMap[meta.plan_tier];
+              }
+              if (newStatus === "active" && company.frozenAt) {
+                updates.frozenAt = null;
+              }
+              if (subscription.trial_end) {
+                updates.trialEndsAt = new Date(subscription.trial_end * 1000);
+              }
+              await storage.updateCompany(company.id, updates as Partial<typeof companies.$inferInsert>);
+              console.log(`[Stripe Subscription] Updated company "${company.name}" status=${newStatus}`);
+              break;
             }
-            if (subscription.trial_end) {
-              updates.trialEndsAt = new Date(subscription.trial_end * 1000);
-            }
-            await storage.updateCompany(company.id, updates as Partial<typeof companies.$inferInsert>);
-            console.log(`[Stripe Subscription] Updated company "${company.name}" status=${newStatus}`);
-            break;
           }
         }
       }
 
       if (event.type === "customer.subscription.deleted") {
-        const subscription = event.data.object as { id: string };
+        const subscription = event.data.object as { id: string; metadata?: Record<string, string> };
         const stripeSubId = subscription.id;
         const allCompanies = await storage.listCompanies();
+        let handled = false;
         for (const company of allCompanies) {
-          if (company.stripeSubscriptionId === stripeSubId) {
-            await storage.updateCompany(company.id, { subscriptionStatus: "cancelled", canceledAt: new Date() } as Partial<typeof companies.$inferInsert>);
-            console.log(`[Stripe Subscription] Company "${company.name}" subscription cancelled`);
+          if (company.stripeVoiceSubscriptionId === stripeSubId) {
+            await storage.updateCompany(company.id, {
+              voicePlanTier: null,
+              voicePlanStatus: null,
+              voicePlanIncludedMinutes: null,
+              voicePlanOverageRate: null,
+              stripeVoiceSubscriptionId: null,
+            } as Partial<typeof companies.$inferInsert>);
+            console.log(`[Stripe Voice] Company "${company.name}" voice plan cancelled`);
+            handled = true;
             break;
+          }
+        }
+        if (!handled) {
+          for (const company of allCompanies) {
+            if (company.stripeSubscriptionId === stripeSubId) {
+              await storage.updateCompany(company.id, { subscriptionStatus: "cancelled", canceledAt: new Date() } as Partial<typeof companies.$inferInsert>);
+              console.log(`[Stripe Subscription] Company "${company.name}" subscription cancelled`);
+              break;
+            }
           }
         }
       }
@@ -7143,6 +7377,7 @@ export async function registerRoutes(
         cancelUrl: `${baseUrl}/portal/client`,
         tipAmount: tipAmount.toFixed(2),
         stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
+        tenantId: companyId,
       });
 
       res.json(result);
@@ -7491,6 +7726,7 @@ export async function registerRoutes(
         payment_method_types: ["card"],
         success_url: `${baseUrl}/portal/client?card_added=1`,
         cancel_url: `${baseUrl}/portal/client`,
+        metadata: { tenant_id: companyId, checkout_type: "portal_setup" },
       });
 
       res.json({ url: session.url });

@@ -58,6 +58,7 @@ import OverheadCosts from "@/pages/overhead-costs";
 import MigrationPage from "@/pages/migration-page";
 import ResetPassword from "@/pages/reset-password";
 import SignupWidget from "@/pages/signup-widget";
+import VoiceSignup from "@/pages/voice-signup";
 import Jobs from "@/pages/jobs";
 import { NotificationBell } from "@/components/notification-bell";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
@@ -456,12 +457,19 @@ function AppContent() {
   const isSignupPath = typeof window !== "undefined" &&
     window.location.pathname.startsWith("/signup/");
 
+  const isVoiceSignupPath = typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/voice-signup/");
+
   if (isResetPasswordPath) {
     return <ResetPassword />;
   }
 
   if (isSignupPath) {
     return <SignupWidget />;
+  }
+
+  if (isVoiceSignupPath) {
+    return <VoiceSignup />;
   }
 
   if (isPortalPath) {
