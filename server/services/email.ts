@@ -56,6 +56,44 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
   }
 }
 
+const ADMIN_NOTIFICATION_EMAIL = "jeremy@scoopilot.com";
+
+export async function sendAdminSignupNotification(details: {
+  companyName: string;
+  ownerEmail: string;
+  ownerName: string;
+  tier: string;
+  source: string;
+}): Promise<void> {
+  const timestamp = new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" });
+  const subject = `New ScooPilot Signup: ${details.companyName}`;
+  const text = `New signup!\n\nCompany: ${details.companyName}\nOwner: ${details.ownerName}\nEmail: ${details.ownerEmail}\nTier: ${details.tier}\nSource: ${details.source}\nTime: ${timestamp}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+        <h1 style="color: white; margin: 0;">ScooPilot</h1>
+      </div>
+      <div style="padding: 20px; border: 1px solid #e5e7eb;">
+        <h2 style="margin-top: 0;">New Signup</h2>
+        <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 4px 0;"><strong>Company:</strong> ${details.companyName}</p>
+          <p style="margin: 4px 0;"><strong>Owner:</strong> ${details.ownerName}</p>
+          <p style="margin: 4px 0;"><strong>Email:</strong> ${details.ownerEmail}</p>
+          <p style="margin: 4px 0;"><strong>Plan:</strong> ${details.tier}</p>
+          <p style="margin: 4px 0;"><strong>Source:</strong> ${details.source}</p>
+          <p style="margin: 4px 0;"><strong>Time:</strong> ${timestamp}</p>
+        </div>
+      </div>
+    </div>
+  `;
+  try {
+    await sendEmail({ to: ADMIN_NOTIFICATION_EMAIL, subject, text, html });
+    console.log(`[Signup Notification] Admin notified of new signup: ${details.companyName} (${details.ownerEmail})`);
+  } catch (err) {
+    console.error("[Signup Notification] Failed to send admin notification:", err);
+  }
+}
+
 export function generateInvoiceEmailHtml(data: {
   companyName: string;
   contactName: string;

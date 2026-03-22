@@ -12,7 +12,7 @@ import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
-import { sendEmail } from "./services/email";
+import { sendEmail, sendAdminSignupNotification } from "./services/email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
 import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
 import {
@@ -933,6 +933,14 @@ export async function registerRoutes(
           </div>
         `,
       }).catch((err) => console.error("Failed to send welcome email:", err));
+
+      sendAdminSignupNotification({
+        companyName: "New Registration",
+        ownerEmail: email,
+        ownerName: displayName,
+        tier: "Free Trial",
+        source: "Direct Registration",
+      }).catch(() => {});
 
       return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
     } catch (err) { handleError(res, err); }
@@ -9083,6 +9091,14 @@ export async function registerRoutes(
         console.error("[Admin] Failed to send welcome email:", emailErr);
       }
 
+      sendAdminSignupNotification({
+        companyName: companyName.trim(),
+        ownerEmail,
+        ownerName: [ownerFirstName, ownerLastName].filter(Boolean).join(" "),
+        tier: tier === "free_trial" ? "Free Trial" : tier,
+        source: "Admin Created",
+      }).catch(() => {});
+
       res.status(201).json({
         id: company.id,
         name: companyName.trim(),
@@ -10487,6 +10503,14 @@ export async function registerRoutes(
       } catch (emailErr) {
         console.error("[Signup] Failed to send welcome email:", emailErr);
       }
+
+      sendAdminSignupNotification({
+        companyName: record.companyName,
+        ownerEmail: record.email,
+        ownerName: [record.firstName, record.lastName].filter(Boolean).join(" "),
+        tier: "Free Trial",
+        source: "Public Signup",
+      }).catch(() => {});
 
       res.send(verificationResultPage(true, null, appUrl));
     } catch (err) {
