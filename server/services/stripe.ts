@@ -371,7 +371,6 @@ const REQUIRED_WEBHOOK_EVENTS = [
   "customer.subscription.deleted",
   "customer.subscription.trial_will_end",
   "invoice.payment_failed",
-  "invoice.paid",
 ];
 
 const REQUIRED_PRICE_VARS = [
