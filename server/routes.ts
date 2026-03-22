@@ -936,14 +936,20 @@ export async function registerRoutes(
       }).catch((err) => console.error("Failed to send welcome email:", err));
 
       if (companyInfo && !companyInfo.alreadySetup) {
-        const companyData = await storage.getCompany(companyInfo.companyId);
-        sendAdminSignupNotification({
-          companyName: companyData?.name || "Unknown Company",
-          ownerEmail: email,
-          ownerName: displayName,
-          tier: companyData?.subscriptionTier || "tier_1",
-          source: "Direct Registration",
-        }).catch(() => {});
+        (async () => {
+          try {
+            const companyData = await storage.getCompany(companyInfo!.companyId);
+            await sendAdminSignupNotification({
+              companyName: companyData?.name || "Unknown Company",
+              ownerEmail: email,
+              ownerName: displayName,
+              tier: companyData?.subscriptionTier || "tier_1",
+              source: "Direct Registration",
+            });
+          } catch (err) {
+            console.error("[Signup Notification] Failed during direct registration:", err);
+          }
+        })();
       }
 
       return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
