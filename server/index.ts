@@ -222,8 +222,41 @@ async function applyAdminCredentialMigration() {
   }
 }
 
+async function syncSubscriptionTiers() {
+  try {
+    const { TIER_CONFIG } = await import("@shared/schema");
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const { rows } = await pool.query("SELECT tier_key, name, max_users, price, is_active FROM subscription_tiers");
+    if (rows.length > 0) {
+      for (const [key, cfg] of Object.entries(TIER_CONFIG)) {
+        const existing = rows.find((r: any) => r.tier_key === key);
+        if (existing) {
+          const needsUpdate = existing.name !== cfg.name ||
+            existing.max_users !== cfg.maxUsers ||
+            parseFloat(existing.price) !== cfg.price ||
+            existing.is_active !== cfg.visible;
+          if (needsUpdate) {
+            await pool.query(
+              "UPDATE subscription_tiers SET name = $1, max_users = $2, price = $3, is_active = $4, updated_at = NOW() WHERE tier_key = $5",
+              [cfg.name, cfg.maxUsers, cfg.price.toFixed(2), cfg.visible, key]
+            );
+          }
+        }
+      }
+      console.log("[Migration] Subscription tiers synced with TIER_CONFIG");
+    } else {
+      console.log("[Migration] No subscription_tiers rows to sync (will be seeded on first admin access)");
+    }
+    await pool.end();
+  } catch (err) {
+    console.error("[Migration] Failed to sync subscription tiers:", err);
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
+  await syncSubscriptionTiers();
   setupSession(app);
   await registerRoutes(httpServer, app);
 

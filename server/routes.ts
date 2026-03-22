@@ -9493,27 +9493,7 @@ export async function registerRoutes(
         const seeded = await db.select().from(subscriptionTiers).orderBy(sql`${subscriptionTiers.price} ASC`);
         return res.json(seeded);
       }
-      for (const [key, cfg] of Object.entries(TIER_CONFIG)) {
-        const existing = tiers.find(t => t.tierKey === key);
-        if (existing) {
-          const needsUpdate = existing.name !== cfg.name ||
-            existing.maxUsers !== cfg.maxUsers ||
-            parseFloat(existing.price) !== cfg.price ||
-            existing.isActive !== cfg.visible;
-          if (needsUpdate) {
-            await db.update(subscriptionTiers)
-              .set({ name: cfg.name, maxUsers: cfg.maxUsers, price: cfg.price.toFixed(2), isActive: cfg.visible, updatedAt: new Date() })
-              .where(eq(subscriptionTiers.tierKey, key));
-          }
-        } else {
-          await db.insert(subscriptionTiers).values({
-            tierKey: key, name: cfg.name, maxUsers: cfg.maxUsers,
-            price: cfg.price.toFixed(2), isActive: cfg.visible,
-          }).onConflictDoNothing();
-        }
-      }
-      const synced = await db.select().from(subscriptionTiers).orderBy(sql`${subscriptionTiers.price} ASC`);
-      res.json(synced);
+      res.json(tiers);
     } catch (err) { handleError(res, err); }
   });
 
