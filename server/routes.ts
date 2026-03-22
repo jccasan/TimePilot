@@ -2849,6 +2849,12 @@ export async function registerRoutes(
         notify(companyId, "new_lead", "New Lead", `${contact.firstName} ${contact.lastName} was added as a new lead.`, `/contacts/${contact.id}`);
       }
 
+      if (contact.email && contact.status !== "lead") {
+        provisionPortalAccess(contact.id, companyId, getBaseUrl(req)).catch((err) =>
+          console.error("[auto-portal] Failed to provision portal access for new contact:", err)
+        );
+      }
+
       qboAutoSync(companyId, contact.id, "contact");
       res.status(201).json({ ...contact, _meta: { propertyCreated, hasPartialAddress } });
     } catch (err) { handleError(res, err); }
@@ -2880,6 +2886,17 @@ export async function registerRoutes(
             yardSize: contact.yardSize ?? null,
           });
         }
+      }
+
+      if (
+        req.body.status === "active" &&
+        existing.status !== "active" &&
+        contact.email &&
+        !contact.hasPortalAccess
+      ) {
+        provisionPortalAccess(contact.id, companyId, getBaseUrl(req)).catch((err) =>
+          console.error("[auto-portal] Failed to provision portal access on status change:", err)
+        );
       }
 
       qboAutoSync(companyId, contact.id, "contact");
@@ -3556,6 +3573,11 @@ export async function registerRoutes(
       const contact = await storage.getContact(parsed.contactId, companyId);
       if (contact && (contact.status === "lead" || contact.status === "estimate")) {
         await storage.updateContact(parsed.contactId, companyId, { status: "active" });
+        if (contact.email && !contact.hasPortalAccess) {
+          provisionPortalAccess(parsed.contactId, companyId, getBaseUrl(req)).catch((err) =>
+            console.error("[auto-portal] Failed to provision portal access on service plan creation:", err)
+          );
+        }
       }
 
       if (req.body.addOns && Array.isArray(req.body.addOns)) {
@@ -8451,6 +8473,49 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  async function provisionPortalAccess(contactId: string, companyId: string, portalBaseUrl: string): Promise<void> {
+    const contact = await storage.getContact(contactId, companyId);
+    if (!contact || !contact.email) return;
+
+    const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
+    const salt = crypto.randomBytes(16).toString("hex");
+    const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+      crypto.scrypt(tempPassword, salt, 64, (err, key) => {
+        if (err) reject(err);
+        resolve(`${salt}:${key.toString("hex")}`);
+      });
+    });
+
+    await storage.updateContact(contactId, companyId, { hasPortalAccess: true, portalPasswordHash });
+
+    const company = await storage.getCompany(companyId);
+    const portalUrl = `${portalBaseUrl}/portal/login`;
+    sendEmail({
+      to: contact.email,
+      subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
+      text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password.\n\nThank you!`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0;">${company?.name || "ScooPilot"}</h1>
+          </div>
+          <div style="padding: 20px; border: 1px solid #e5e7eb;">
+            <p>Hi ${contact.firstName},</p>
+            <p>You now have access to the client portal.</p>
+            <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+              <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
+              <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>
+              <p style="margin: 0;">Temporary Password: <strong>${tempPassword}</strong></p>
+            </div>
+            <a href="${portalUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Log In to Portal</a>
+            <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${portalUrl}</p>
+            <p style="color: #6b7280; font-size: 14px;">View your service schedule, invoices, and manage your account.</p>
+          </div>
+        </div>
+      `,
+    }).catch((err) => console.error("Failed to send portal access email:", err));
+  }
+
   // Admin route: generate portal invite link
   app.post("/api/contacts/:id/portal-access", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -8460,43 +8525,7 @@ export async function registerRoutes(
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       if (!contact.email) return res.status(400).json({ error: "Contact must have an email address to enable portal access" });
 
-      const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
-      const salt = crypto.randomBytes(16).toString("hex");
-      const portalPasswordHash = await new Promise<string>((resolve, reject) => {
-        crypto.scrypt(tempPassword, salt, 64, (err, key) => {
-          if (err) reject(err);
-          resolve(`${salt}:${key.toString("hex")}`);
-        });
-      });
-
-      await storage.updateContact(req.params.id, companyId, { hasPortalAccess: true, portalPasswordHash });
-
-      const company = await storage.getCompany(companyId);
-      const portalUrl = `${getBaseUrl(req)}/portal/login`;
-      sendEmail({
-        to: contact.email,
-        subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
-        text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password.\n\nThank you!`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-              <h1 style="color: white; margin: 0;">${company?.name || "ScooPilot"}</h1>
-            </div>
-            <div style="padding: 20px; border: 1px solid #e5e7eb;">
-              <p>Hi ${contact.firstName},</p>
-              <p>You now have access to the client portal.</p>
-              <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
-                <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
-                <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>
-                <p style="margin: 0;">Temporary Password: <strong>${tempPassword}</strong></p>
-              </div>
-              <a href="${portalUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Log In to Portal</a>
-              <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${portalUrl}</p>
-              <p style="color: #6b7280; font-size: 14px;">View your service schedule, invoices, and manage your account.</p>
-            </div>
-          </div>
-        `,
-      }).catch((err) => console.error("Failed to send portal access email:", err));
+      await provisionPortalAccess(req.params.id, companyId, getBaseUrl(req));
 
       res.json({ success: true, message: "Portal access enabled. Temporary password has been emailed to the customer." });
     } catch (err) { handleError(res, err); }
