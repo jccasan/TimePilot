@@ -45,6 +45,8 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
   cancelled: { label: "Cancelled", variant: "outline" },
 };
 
+type TierPrices = Record<string, { name: string; price: number; maxUsers: number }>;
+
 const tierKeys = Object.keys(TIER_CONFIG).filter(k => k !== "free_trial") as Array<keyof typeof TIER_CONFIG>;
 
 export default function Billing() {
@@ -56,6 +58,10 @@ export default function Billing() {
 
   const { data: usage, isLoading: usageLoading } = useQuery<UsageInfo>({
     queryKey: ["/api/billing/usage"],
+  });
+
+  const { data: tierPrices } = useQuery<TierPrices>({
+    queryKey: ["/api/billing/prices"],
   });
 
   const portalMutation = useMutation({
@@ -204,7 +210,11 @@ export default function Billing() {
         <h2 className="text-lg font-semibold mb-3">Available Plans</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {tierKeys.map((key) => {
-            const tier = TIER_CONFIG[key];
+            const fallback = TIER_CONFIG[key];
+            const dynamic = tierPrices?.[key];
+            const displayName = dynamic?.name ?? fallback.name;
+            const displayPrice = dynamic?.price ?? fallback.price;
+            const displayMaxUsers = dynamic?.maxUsers ?? fallback.maxUsers;
             const isCurrent = key === subscription?.tier;
             return (
               <Card
@@ -214,7 +224,7 @@ export default function Billing() {
               >
                 <CardHeader>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <CardTitle className="text-lg">{tier.name}</CardTitle>
+                    <CardTitle className="text-lg">{displayName}</CardTitle>
                     {isCurrent && (
                       <Badge data-testid={`badge-current-${key}`}>
                         <CheckCircle className="mr-1 h-3 w-3" /> Current
@@ -224,11 +234,11 @@ export default function Billing() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <p className="text-2xl font-bold" data-testid={`text-price-${key}`}>
-                    ${tier.price.toFixed(2)}
+                    ${displayPrice.toFixed(2)}
                     <span className="text-sm font-normal text-muted-foreground">/mo</span>
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Up to {tier.maxUsers === 999 ? "unlimited" : tier.maxUsers} team members
+                    Up to {displayMaxUsers === 999 ? "unlimited" : displayMaxUsers} team members
                   </p>
                 </CardContent>
               </Card>

@@ -361,6 +361,118 @@ export async function reportMeteredUsageSet(stripeSubscriptionId: string, eventT
   }
 }
 
+const REQUIRED_WEBHOOK_EVENTS = [
+  "checkout.session.completed",
+  "payment_intent.succeeded",
+  "payment_intent.payment_failed",
+  "account.updated",
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "customer.subscription.trial_will_end",
+  "invoice.payment_failed",
+  "invoice.paid",
+];
+
+const REQUIRED_PRICE_VARS = [
+  "STRIPE_PRICE_TIER_1",
+  "STRIPE_PRICE_TIER_1_3",
+  "STRIPE_PRICE_TIER_3_5",
+  "STRIPE_PRICE_TIER_6_10",
+  "STRIPE_PRICE_TIER_10_PLUS",
+];
+
+let cachedStripePrices: Record<string, number> | null = null;
+
+export function validateStripeConfig(): void {
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("[Stripe Config] Startup validation");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    console.warn("[Stripe Config] ⚠ STRIPE_SECRET_KEY is NOT set — Stripe features disabled");
+  } else {
+    const mode = secretKey.startsWith("sk_live_") ? "LIVE" : secretKey.startsWith("sk_test_") ? "TEST" : "UNKNOWN";
+    console.log(`[Stripe Config] ✓ STRIPE_SECRET_KEY present — running in ${mode} mode`);
+  }
+
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.warn("[Stripe Config] ⚠ STRIPE_WEBHOOK_SECRET is NOT set — webhook signature verification disabled");
+  } else {
+    console.log("[Stripe Config] ✓ STRIPE_WEBHOOK_SECRET present");
+  }
+
+  const missingPrices: string[] = [];
+  const presentPrices: string[] = [];
+  for (const envVar of REQUIRED_PRICE_VARS) {
+    if (process.env[envVar]) {
+      presentPrices.push(envVar);
+    } else {
+      missingPrices.push(envVar);
+    }
+  }
+
+  if (presentPrices.length > 0) {
+    console.log(`[Stripe Config] ✓ ${presentPrices.length}/${REQUIRED_PRICE_VARS.length} price tier env vars set`);
+  }
+  if (missingPrices.length > 0) {
+    console.warn(`[Stripe Config] ⚠ Missing price tier env vars: ${missingPrices.join(", ")}`);
+  }
+
+  console.log("[Stripe Config] Required webhook events for your Stripe dashboard:");
+  for (const event of REQUIRED_WEBHOOK_EVENTS) {
+    console.log(`[Stripe Config]   • ${event}`);
+  }
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+}
+
+export async function fetchStripePrices(): Promise<Record<string, number>> {
+  if (cachedStripePrices) return cachedStripePrices;
+
+  const prices: Record<string, number> = {};
+  if (!isStripeConfigured()) return prices;
+
+  const tierToEnv: Record<string, string> = {
+    tier_1: "STRIPE_PRICE_TIER_1",
+    tier_1_3: "STRIPE_PRICE_TIER_1_3",
+    tier_3_5: "STRIPE_PRICE_TIER_3_5",
+    tier_6_10: "STRIPE_PRICE_TIER_6_10",
+    tier_10_plus: "STRIPE_PRICE_TIER_10_PLUS",
+  };
+
+  try {
+    const stripe = getStripe();
+    for (const [tier, envVar] of Object.entries(tierToEnv)) {
+      const priceId = process.env[envVar];
+      if (!priceId) continue;
+      try {
+        const price = await stripe.prices.retrieve(priceId);
+        if (price.unit_amount !== null) {
+          prices[tier] = price.unit_amount / 100;
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[Stripe Prices] Failed to fetch price for ${tier} (${priceId}): ${message}`);
+      }
+    }
+    if (Object.keys(prices).length > 0) {
+      cachedStripePrices = prices;
+      console.log(`[Stripe Prices] Cached ${Object.keys(prices).length} tier prices from Stripe`);
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[Stripe Prices] Failed to fetch prices: ${message}`);
+  }
+
+  return prices;
+}
+
+export function getCachedStripePrices(): Record<string, number> | null {
+  return cachedStripePrices;
+}
+
 export async function reportMeteredUsage(stripeSubscriptionId: string, eventType: string, quantity: number): Promise<void> {
   if (!isStripeConfigured() || !stripeSubscriptionId) return;
   try {

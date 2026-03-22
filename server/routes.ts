@@ -33,6 +33,9 @@ import {
   createCustomerPortalSession,
   reportMeteredUsage,
   reportMeteredUsageSet,
+  validateStripeConfig,
+  fetchStripePrices,
+  getCachedStripePrices,
 } from "./services/stripe";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress } from "./services/geocode";
@@ -311,6 +314,12 @@ export async function registerRoutes(
 ): Promise<Server> {
   registerObjectStorageRoutes(app, isAuthenticated);
 
+  validateStripeConfig();
+  fetchStripePrices().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Stripe Prices] Startup price fetch failed:", msg);
+  });
+
   const GATE_EXEMPT_PREFIXES = [
     "/api/auth/", "/api/auth/login", "/api/auth/register", "/api/auth/user",
     "/api/billing/", "/api/subscriptions/",
@@ -516,12 +525,14 @@ export async function registerRoutes(
 
       const tierConfig = TIER_CONFIG[company.subscriptionTier as keyof typeof TIER_CONFIG] || null;
       const activeUsers = await storage.countActiveCompanyUsers(companyId);
+      const stripePrices = getCachedStripePrices();
+      const displayPrice = stripePrices?.[company.subscriptionTier] ?? tierConfig?.price ?? 0;
 
       res.json({
         tier: company.subscriptionTier,
         tierName: tierConfig?.name || "Unknown",
         status: company.subscriptionStatus,
-        price: tierConfig?.price || 0,
+        price: displayPrice,
         maxUsers: tierConfig?.maxUsers || 1,
         activeUsers,
         frozenAt: company.frozenAt,
@@ -535,6 +546,23 @@ export async function registerRoutes(
   });
 
   // ================ Geocode Proxy (Mapbox) ================
+
+  app.get("/api/billing/prices", isAuthenticated, async (_req: Request, res: Response) => {
+    try {
+      const stripePrices = getCachedStripePrices();
+      const result: Record<string, { name: string; price: number; maxUsers: number }> = {};
+      for (const [tier, config] of Object.entries(TIER_CONFIG)) {
+        result[tier] = {
+          name: config.name,
+          price: stripePrices?.[tier] ?? config.price,
+          maxUsers: config.maxUsers,
+        };
+      }
+      res.json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
 
   app.get("/api/geocode/autocomplete", isAuthenticated, async (req: Request, res: Response) => {
     try {
