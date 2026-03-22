@@ -456,6 +456,20 @@ export function validateStripeConfig(): void {
     console.log(`[Stripe Config]   • ${event}`);
   }
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+  console.log("[Twilio Config] Startup validation");
+  const twilioVars = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER"];
+  const missingTwilio = twilioVars.filter(v => !process.env[v]);
+  const presentTwilio = twilioVars.filter(v => !!process.env[v]);
+  if (presentTwilio.length === twilioVars.length) {
+    console.log(`[Twilio Config] ✓ All ${twilioVars.length} Twilio env vars set`);
+  } else {
+    if (presentTwilio.length > 0) {
+      console.log(`[Twilio Config] ✓ ${presentTwilio.length}/${twilioVars.length} Twilio env vars set`);
+    }
+    console.warn(`[Twilio Config] ⚠ Missing Twilio env vars: ${missingTwilio.join(", ")} — SMS features disabled`);
+  }
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 
 export async function fetchStripePrices(): Promise<Record<string, number>> {

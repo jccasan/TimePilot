@@ -3,7 +3,7 @@ import { smsMessages, usageEvents } from "@shared/schema";
 
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER || "+15715824054";
+const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
 
 interface SendSmsOptions {
   to: string;
@@ -28,8 +28,8 @@ function formatPhoneNumber(phone: string): string {
 }
 
 export async function sendSms(options: SendSmsOptions): Promise<SendSmsResult> {
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-    return { success: false, error: "Twilio credentials not configured" };
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
+    return { success: false, error: "Twilio credentials not configured (missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_PHONE_NUMBER)" };
   }
 
   try {
@@ -99,12 +99,12 @@ async function logSmsUsage(companyId: string, to: string, from: string, twilioSi
   }
 }
 
-export function getTwilioPhoneNumber(): string {
+export function getTwilioPhoneNumber(): string | undefined {
   return TWILIO_PHONE_NUMBER;
 }
 
 export function isTwilioConfigured(): boolean {
-  return !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN);
+  return !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_PHONE_NUMBER);
 }
 
 export async function logSmsMessage(companyId: string, to: string, from: string, direction: "inbound" | "outbound", twilioSid?: string, segments?: number): Promise<void> {
