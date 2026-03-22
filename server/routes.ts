@@ -7095,6 +7095,31 @@ export async function registerRoutes(
         }
       }
 
+      if (event.type === "invoice.payment_succeeded") {
+        const stripeInvoice = event.data.object as { customer: string | { id: string }; subscription?: string | null; billing_reason?: string };
+        const stripeCustomerId = typeof stripeInvoice.customer === "string" ? stripeInvoice.customer : stripeInvoice.customer?.id;
+        if (stripeCustomerId && stripeInvoice.subscription) {
+          const allCompanies = await storage.listCompanies();
+          for (const company of allCompanies) {
+            if (company.stripeCustomerId === stripeCustomerId && company.stripeSubscriptionId === stripeInvoice.subscription) {
+              if (company.subscriptionStatus === "suspended" || company.frozenAt) {
+                await storage.updateCompany(company.id, {
+                  subscriptionStatus: "active",
+                  frozenAt: null,
+                } as Partial<typeof companies.$inferInsert>);
+                console.log(`[Stripe Subscription] Company "${company.name}" REACTIVATED after successful subscription payment`);
+                notify(company.id, "general", "Payment Received",
+                  "Your subscription payment was successful. Your account has been reactivated.",
+                  "/billing");
+              } else {
+                console.log(`[Stripe Subscription] Company "${company.name}" subscription payment succeeded (status=${company.subscriptionStatus})`);
+              }
+              break;
+            }
+          }
+        }
+      }
+
       if (event.type === "payment_intent.payment_failed") {
         const pi = event.data.object as { metadata?: Record<string, string> };
         const invoiceId = pi.metadata?.invoiceId;
