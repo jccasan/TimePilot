@@ -383,6 +383,8 @@ const REQUIRED_PRICE_VARS = [
 ];
 
 let cachedStripePrices: Record<string, number> | null = null;
+let lastPriceFetchAttempt = 0;
+const PRICE_FETCH_RETRY_MS = 5 * 60 * 1000;
 
 export function validateStripeConfig(): void {
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -399,7 +401,7 @@ export function validateStripeConfig(): void {
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.warn("[Stripe Config] ⚠ STRIPE_WEBHOOK_SECRET is NOT set — webhook signature verification disabled");
+    console.warn("[Stripe Config] ⚠ STRIPE_WEBHOOK_SECRET is NOT set — webhook events will be rejected");
   } else {
     console.log("[Stripe Config] ✓ STRIPE_WEBHOOK_SECRET present");
   }
@@ -430,6 +432,11 @@ export function validateStripeConfig(): void {
 
 export async function fetchStripePrices(): Promise<Record<string, number>> {
   if (cachedStripePrices) return cachedStripePrices;
+
+  if (Date.now() - lastPriceFetchAttempt < PRICE_FETCH_RETRY_MS) {
+    return {};
+  }
+  lastPriceFetchAttempt = Date.now();
 
   const prices: Record<string, number> = {};
   if (!isStripeConfigured()) return prices;
