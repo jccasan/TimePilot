@@ -6,7 +6,7 @@ import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, isNotNull, like, or, inArray, desc } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -1739,6 +1739,46 @@ export async function registerRoutes(
         isRead: n.isRead,
         createdAt: n.createdAt,
       })));
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/company/recent-communications", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+
+      const [smsRows, emailRows] = await Promise.all([
+        db.select().from(messagesTable).where(and(eq(messagesTable.companyId, companyId), eq(messagesTable.channel, "sms"))).orderBy(desc(messagesTable.createdAt)).limit(5),
+        db.select().from(messagesTable).where(and(eq(messagesTable.companyId, companyId), eq(messagesTable.channel, "email"))).orderBy(desc(messagesTable.createdAt)).limit(5),
+      ]);
+
+      const contactCache = new Map<string, string>();
+      async function enrichWithContact(m: any) {
+        let contactName = "";
+        if (m.contactId) {
+          if (contactCache.has(m.contactId)) {
+            contactName = contactCache.get(m.contactId)!;
+          } else {
+            const contact = await storage.getContact(m.contactId, companyId);
+            contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : "";
+            contactCache.set(m.contactId, contactName);
+          }
+        }
+        return {
+          id: m.id,
+          contactId: m.contactId,
+          contactName,
+          channel: m.channel,
+          direction: m.direction,
+          subject: m.subject,
+          body: m.body?.substring(0, 120) || "",
+          createdAt: m.createdAt,
+        };
+      }
+
+      const recentSms = await Promise.all(smsRows.map(enrichWithContact));
+      const recentEmails = await Promise.all(emailRows.map(enrichWithContact));
+
+      res.json({ sms: recentSms, emails: recentEmails });
     } catch (err) { handleError(res, err); }
   });
 

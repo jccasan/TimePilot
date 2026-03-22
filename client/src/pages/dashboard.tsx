@@ -176,6 +176,22 @@ type LayoutItem = {
   minH?: number;
 };
 
+type RecentCommMessage = {
+  id: string;
+  contactId: string | null;
+  contactName: string;
+  channel: string;
+  direction: string;
+  subject: string | null;
+  body: string;
+  createdAt: string;
+};
+
+type RecentCommsData = {
+  sms: RecentCommMessage[];
+  emails: RecentCommMessage[];
+};
+
 const REQUEST_TYPE_LABELS: Record<string, string> = {
   frequency_change: "Frequency Change",
   day_change: "Day Change",
@@ -565,6 +581,162 @@ function ClientRequestsCard() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const diff = now - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function CommMessageRow({ msg }: { msg: RecentCommMessage }) {
+  const content = msg.channel === "email" && msg.subject ? msg.subject : msg.body;
+  const truncated = content.length > 80 ? content.substring(0, 80) + "..." : content;
+
+  const row = (
+    <div
+      className="flex items-start gap-3 py-2.5 px-1 rounded-md hover:bg-muted/50 transition-colors cursor-pointer"
+      data-testid={`comm-message-${msg.id}`}
+    >
+      <div className={`mt-0.5 rounded-full p-1.5 ${msg.direction === "inbound" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-green-100 dark:bg-green-900/30"}`}>
+        {msg.channel === "sms" ? (
+          <MessageSquare className={`h-3.5 w-3.5 ${msg.direction === "inbound" ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"}`} />
+        ) : (
+          <Mail className={`h-3.5 w-3.5 ${msg.direction === "inbound" ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"}`} />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium truncate" data-testid={`text-comm-contact-${msg.id}`}>
+            {msg.contactName || (msg.direction === "inbound" ? "Unknown" : "System")}
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Badge
+              variant="outline"
+              className={`text-[10px] px-1.5 py-0 ${msg.direction === "inbound" ? "border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300" : "border-green-200 text-green-700 dark:border-green-800 dark:text-green-300"}`}
+              data-testid={`badge-direction-${msg.id}`}
+            >
+              {msg.direction === "inbound" ? "In" : "Out"}
+            </Badge>
+            <span className="text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-comm-time-${msg.id}`}>
+              {formatRelativeTime(msg.createdAt)}
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5 truncate" data-testid={`text-comm-preview-${msg.id}`}>
+          {truncated}
+        </p>
+      </div>
+    </div>
+  );
+
+  if (msg.contactId) {
+    return (
+      <Link href={`/contacts/${msg.contactId}`} key={msg.id}>
+        {row}
+      </Link>
+    );
+  }
+  return <div key={msg.id}>{row}</div>;
+}
+
+function RecentCommunications() {
+  const { data, isLoading } = useQuery<RecentCommsData>({
+    queryKey: ["/api/company/recent-communications"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-testid="loading-recent-comms">
+        {[0, 1].map(i => (
+          <Card key={i}>
+            <CardHeader className="pb-2">
+              <Skeleton className="h-5 w-32" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {[0, 1, 2].map(j => (
+                  <div key={j} className="flex gap-3">
+                    <Skeleton className="h-8 w-8 rounded-full shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  const smsList = data?.sms ?? [];
+  const emailList = data?.emails ?? [];
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-testid="recent-communications">
+      <Card data-testid="card-recent-sms">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base">Recent SMS</CardTitle>
+            </div>
+            <Button asChild variant="ghost" size="sm" className="text-xs h-7" data-testid="link-view-all-sms">
+              <Link href="/communications">View all</Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {smsList.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-6 text-muted-foreground" data-testid="empty-recent-sms">
+              <MessageSquare className="h-8 w-8 mb-2 opacity-30" />
+              <p className="text-sm">No recent text messages</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {smsList.map(msg => <CommMessageRow key={msg.id} msg={msg} />)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-recent-emails">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base">Recent Emails</CardTitle>
+            </div>
+            <Button asChild variant="ghost" size="sm" className="text-xs h-7" data-testid="link-view-all-emails">
+              <Link href="/communications">View all</Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {emailList.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-6 text-muted-foreground" data-testid="empty-recent-emails">
+              <Mail className="h-8 w-8 mb-2 opacity-30" />
+              <p className="text-sm">No recent emails</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {emailList.map(msg => <CommMessageRow key={msg.id} msg={msg} />)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -2144,6 +2316,8 @@ export default function Dashboard() {
           ) : null}
         </div>
       </div>
+
+      <RecentCommunications />
 
       <GridWidgetsSection
         gridLayouts={gridLayouts}
