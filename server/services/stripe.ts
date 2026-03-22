@@ -427,9 +427,7 @@ export function validateStripeConfig(): void {
 
   const voicePriceVars = [
     "STRIPE_PRICE_VOICE_STARTER",
-    "STRIPE_PRICE_VOICE_STARTER_SUBSCRIBER",
     "STRIPE_PRICE_VOICE_PRO",
-    "STRIPE_PRICE_VOICE_PRO_SUBSCRIBER",
   ];
   const missingVoice = voicePriceVars.filter(v => !process.env[v]);
   const presentVoice = voicePriceVars.filter(v => !!process.env[v]);
@@ -505,6 +503,7 @@ export async function createVoicePlanCheckout(params: {
   successUrl: string;
   cancelUrl: string;
   customerId?: string;
+  couponId?: string;
 }): Promise<{ url: string; sessionId: string }> {
   const stripe = getStripe();
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
@@ -525,6 +524,9 @@ export async function createVoicePlanCheckout(params: {
       },
     },
   };
+  if (params.couponId) {
+    sessionParams.discounts = [{ coupon: params.couponId }];
+  }
   if (params.customerId) {
     sessionParams.customer = params.customerId;
   } else {

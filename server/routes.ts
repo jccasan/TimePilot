@@ -592,15 +592,14 @@ export async function registerRoutes(
     }
   });
 
-  const VOICE_PRICE_MAP: Record<string, Record<string, string | undefined>> = {
-    voice_starter: {
-      regular: process.env.STRIPE_PRICE_VOICE_STARTER,
-      subscriber: process.env.STRIPE_PRICE_VOICE_STARTER_SUBSCRIBER,
-    },
-    voice_pro: {
-      regular: process.env.STRIPE_PRICE_VOICE_PRO,
-      subscriber: process.env.STRIPE_PRICE_VOICE_PRO_SUBSCRIBER,
-    },
+  const VOICE_PRICE_MAP: Record<string, string | undefined> = {
+    voice_starter: process.env.STRIPE_PRICE_VOICE_STARTER,
+    voice_pro: process.env.STRIPE_PRICE_VOICE_PRO,
+  };
+
+  const VOICE_COUPON_MAP: Record<string, string | undefined> = {
+    voice_starter: process.env.STRIPE_COUPON_VOICE_STARTER_SUBSCRIBER,
+    voice_pro: process.env.STRIPE_COUPON_VOICE_PRO_SUBSCRIBER,
   };
 
   app.post("/api/billing/voice-checkout", isAuthenticated, async (req: Request, res: Response) => {
@@ -617,14 +616,13 @@ export async function registerRoutes(
         return res.status(400).json({ error: `Invalid voice plan. Valid: ${Object.keys(VOICE_PRICE_MAP).join(", ")}` });
       }
 
-      const isSubscriber = company.subscriptionStatus === "active";
-      const priceId = isSubscriber
-        ? VOICE_PRICE_MAP[plan].subscriber
-        : VOICE_PRICE_MAP[plan].regular;
-
+      const priceId = VOICE_PRICE_MAP[plan];
       if (!priceId) {
         return res.status(400).json({ error: "Voice plan pricing not configured. Contact support." });
       }
+
+      const isSubscriber = company.subscriptionStatus === "active";
+      const couponId = isSubscriber ? VOICE_COUPON_MAP[plan] : undefined;
 
       const baseUrl = getBaseUrl(req);
       const result = await createVoicePlanCheckout({
@@ -635,6 +633,7 @@ export async function registerRoutes(
         successUrl: `${baseUrl}/billing?voice_success=1`,
         cancelUrl: `${baseUrl}/billing`,
         customerId: company.stripeCustomerId || undefined,
+        couponId,
       });
 
       res.json(result);
@@ -660,14 +659,13 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Company already has an active voice plan" });
       }
 
-      const isSubscriber = company.subscriptionStatus === "active";
-      const priceId = isSubscriber
-        ? VOICE_PRICE_MAP[plan].subscriber
-        : VOICE_PRICE_MAP[plan].regular;
-
+      const priceId = VOICE_PRICE_MAP[plan];
       if (!priceId) {
         return res.status(400).json({ error: "Voice plan pricing not configured" });
       }
+
+      const isSubscriber = company.subscriptionStatus === "active";
+      const couponId = isSubscriber ? VOICE_COUPON_MAP[plan] : undefined;
 
       const baseUrl = getBaseUrl(req);
       const result = await createVoicePlanCheckout({
@@ -678,6 +676,7 @@ export async function registerRoutes(
         successUrl: `${baseUrl}/voice-signup/${slug}?success=1`,
         cancelUrl: `${baseUrl}/voice-signup/${slug}`,
         customerId: company.stripeCustomerId || undefined,
+        couponId,
       });
 
       res.json(result);
@@ -6951,9 +6950,7 @@ export async function registerRoutes(
 
               const voicePriceEnvMap: Record<string, string> = {};
               if (process.env.STRIPE_PRICE_VOICE_STARTER) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_STARTER] = "voice_starter";
-              if (process.env.STRIPE_PRICE_VOICE_STARTER_SUBSCRIBER) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_STARTER_SUBSCRIBER] = "voice_starter";
               if (process.env.STRIPE_PRICE_VOICE_PRO) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_PRO] = "voice_pro";
-              if (process.env.STRIPE_PRICE_VOICE_PRO_SUBSCRIBER) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_PRO_SUBSCRIBER] = "voice_pro";
 
               const currentPriceId = subscription.items?.data?.[0]?.price?.id;
               const derivedPlan = currentPriceId ? voicePriceEnvMap[currentPriceId] : null;
