@@ -28,8 +28,11 @@ function formatPhoneNumber(phone: string): string {
 }
 
 export async function sendSms(options: SendSmsOptions): Promise<SendSmsResult> {
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
-    return { success: false, error: "Twilio credentials not configured (missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_PHONE_NUMBER)" };
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    return { success: false, error: "Twilio credentials not configured" };
+  }
+  if (!TWILIO_PHONE_NUMBER) {
+    return { success: false, error: "Twilio phone number not configured" };
   }
 
   try {
