@@ -350,6 +350,7 @@ export async function reportMeteredUsage(stripeSubscriptionId: string, eventType
       const lookupKey = price.lookup_key || price.nickname || "";
       if (eventType === "sms_segment" && lookupKey.toLowerCase().includes("sms")) return true;
       if (eventType === "voice_minute" && lookupKey.toLowerCase().includes("voice")) return true;
+      if (eventType === "user_seat" && (lookupKey.toLowerCase().includes("seat") || lookupKey.toLowerCase().includes("user"))) return true;
       return false;
     });
     if (meteredItem) {

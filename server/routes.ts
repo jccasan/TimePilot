@@ -336,13 +336,25 @@ export async function registerRoutes(
   const subscriptionGate: RequestHandler = async (req, res, next) => {
     if (req.method === "OPTIONS") return next();
     if (isGateExempt(req.path, req.method)) return next();
-    const userId = (req.session as any)?.userId;
+    const sessionUserId = (req.session as any)?.userId;
     const hasApiKey = !!req.headers["x-api-key"];
-    if (!userId && !hasApiKey) return next();
+    const authHeader = req.headers.authorization;
+    const hasBearerToken = authHeader?.startsWith("Bearer ");
+    if (!sessionUserId && !hasApiKey && !hasBearerToken) return next();
     try {
       let companyId: string | null = null;
-      if (userId) {
-        const memberships = await storage.getCompaniesForUser(userId);
+      let resolvedUserId = sessionUserId;
+      if (!resolvedUserId && hasBearerToken) {
+        const token = authHeader!.substring(7);
+        const prefix = token.substring(0, 8);
+        const keyHash = crypto.createHash("sha256").update(token).digest("hex");
+        const apiKey = await storage.getApiKeyByPrefix(prefix);
+        if (apiKey && apiKey.keyHash === keyHash && apiKey.isActive) {
+          companyId = apiKey.companyId;
+        }
+      }
+      if (!companyId && resolvedUserId) {
+        const memberships = await storage.getCompaniesForUser(resolvedUserId);
         if (memberships.length > 0) companyId = memberships[0].companyId;
       }
       if (!companyId && hasApiKey) {
@@ -376,15 +388,28 @@ export async function registerRoutes(
 
   // ================ Subscription Billing ================
 
+  const TIER_PRICE_MAP: Record<string, string> = {
+    tier_1: process.env.STRIPE_PRICE_TIER_1 || "",
+    tier_1_3: process.env.STRIPE_PRICE_TIER_1_3 || "",
+    tier_3_5: process.env.STRIPE_PRICE_TIER_3_5 || "",
+    tier_6_10: process.env.STRIPE_PRICE_TIER_6_10 || "",
+    tier_10_plus: process.env.STRIPE_PRICE_TIER_10_PLUS || "",
+  };
+
   app.post("/api/subscriptions/create-checkout", async (req: Request, res: Response) => {
     try {
       if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
 
-      const { priceId, tier, email, companyName, firstName, lastName, phone } = req.body;
-      if (!priceId) return res.status(400).json({ error: "priceId is required" });
+      const { tier, email, companyName, firstName, lastName, phone } = req.body;
+      if (!tier) return res.status(400).json({ error: "tier is required" });
       if (!email) return res.status(400).json({ error: "email is required" });
       if (!companyName) return res.status(400).json({ error: "companyName is required" });
       if (!firstName) return res.status(400).json({ error: "firstName is required" });
+
+      const resolvedPriceId = TIER_PRICE_MAP[tier];
+      if (!resolvedPriceId) {
+        return res.status(400).json({ error: `Invalid tier: ${tier}. Valid tiers: ${Object.keys(TIER_PRICE_MAP).join(", ")}` });
+      }
 
       const baseUrl = getBaseUrl(req);
 
@@ -399,12 +424,12 @@ export async function registerRoutes(
       const result = await createSubscriptionCheckout({
         customerEmail: email,
         customerId,
-        priceId,
+        priceId: resolvedPriceId,
         successUrl: `${baseUrl}/billing?success=1`,
         cancelUrl: `${baseUrl}/billing?cancelled=1`,
         trialDays: 14,
         metadata: {
-          plan_tier: tier || "tier_1",
+          plan_tier: tier,
           company_name: companyName,
           email,
           first_name: firstName,
@@ -1135,6 +1160,11 @@ export async function registerRoutes(
         eventType: "user_seat",
         quantity: 1,
         metadata: { userId: existingUser.id, email, role: targetRole || "tech" },
+      }).then(async () => {
+        const company = await storage.getCompany(companyId);
+        if (company?.stripeSubscriptionId) {
+          reportMeteredUsage(company.stripeSubscriptionId, "user_seat", 1).catch(() => {});
+        }
       }).catch(err => console.error("[Usage] Failed to log user seat event:", err.message));
 
       res.json({ success: true, userId: existingUser.id, email, role: targetRole || "tech" });
@@ -1262,6 +1292,19 @@ export async function registerRoutes(
           await storage.updateRoute(route.id, companyId, { technicianId: null });
         }
       }
+
+      storage.createUsageEvent({
+        companyId,
+        eventType: "user_seat",
+        quantity: -1,
+        metadata: { userId: targetUserId, action: "removed" },
+      }).then(async () => {
+        const company = await storage.getCompany(companyId);
+        if (company?.stripeSubscriptionId) {
+          reportMeteredUsage(company.stripeSubscriptionId, "user_seat", -1).catch(() => {});
+        }
+      }).catch(err => console.error("[Usage] Failed to log seat removal:", err.message));
+
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
