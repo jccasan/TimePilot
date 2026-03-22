@@ -640,7 +640,7 @@ function CommMessageRow({ msg }: { msg: RecentCommMessage }) {
 
   if (msg.contactId) {
     return (
-      <Link href={`/contacts/${msg.contactId}`} key={msg.id}>
+      <Link href={`/communications?contactId=${msg.contactId}`} key={msg.id}>
         {row}
       </Link>
     );
