@@ -438,6 +438,19 @@ export function validateStripeConfig(): void {
     console.warn(`[Stripe Config] ⚠ Missing voice plan price env vars: ${missingVoice.join(", ")}`);
   }
 
+  const voiceCouponVars = [
+    "STRIPE_COUPON_VOICE_STARTER_SUBSCRIBER",
+    "STRIPE_COUPON_VOICE_PRO_SUBSCRIBER",
+  ];
+  const missingCoupons = voiceCouponVars.filter(v => !process.env[v]);
+  const presentCoupons = voiceCouponVars.filter(v => !!process.env[v]);
+  if (presentCoupons.length > 0) {
+    console.log(`[Stripe Config] ✓ ${presentCoupons.length}/${voiceCouponVars.length} voice subscriber coupon env vars set`);
+  }
+  if (missingCoupons.length > 0) {
+    console.warn(`[Stripe Config] ⚠ Missing voice subscriber coupon env vars: ${missingCoupons.join(", ")}`);
+  }
+
   console.log("[Stripe Config] Required webhook events for your Stripe dashboard:");
   for (const event of REQUIRED_WEBHOOK_EVENTS) {
     console.log(`[Stripe Config]   • ${event}`);

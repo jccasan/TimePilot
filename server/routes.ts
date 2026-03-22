@@ -612,7 +612,7 @@ export async function registerRoutes(
       if (company.voicePlanStatus === "active") return res.status(400).json({ error: "Voice plan already active" });
 
       const { plan } = req.body;
-      if (!plan || !VOICE_PRICE_MAP[plan]) {
+      if (!plan || !(plan in VOICE_PRICE_MAP)) {
         return res.status(400).json({ error: `Invalid voice plan. Valid: ${Object.keys(VOICE_PRICE_MAP).join(", ")}` });
       }
 
@@ -650,7 +650,7 @@ export async function registerRoutes(
       if (!company) return res.status(404).json({ error: "Company not found" });
 
       const { plan, email } = req.body;
-      if (!plan || !VOICE_PRICE_MAP[plan]) {
+      if (!plan || !(plan in VOICE_PRICE_MAP)) {
         return res.status(400).json({ error: `Invalid voice plan. Valid: ${Object.keys(VOICE_PRICE_MAP).join(", ")}` });
       }
       if (!email) return res.status(400).json({ error: "email is required" });
