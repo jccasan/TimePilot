@@ -263,18 +263,19 @@ async function syncSubscriptionTiers() {
 }
 
 async function ensureCompanyColumns() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    const { Pool } = await import("pg");
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     await pool.query(`
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS dedicated_phone_number VARCHAR(20);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS retell_agent_id VARCHAR(255);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS retell_knowledge_base_id VARCHAR(255);
     `);
     console.log("[Migration] Company voice columns verified");
-    await pool.end();
   } catch (err) {
     console.error("[Migration] Failed to ensure company columns:", err);
+  } finally {
+    await pool.end();
   }
 }
 
