@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { eq, and, lt, sql } from "drizzle-orm";
-import { companies, companyUsers, users } from "@shared/schema";
+import { eq, and, lt } from "drizzle-orm";
+import { companies, companyUsers, users, type InsertCompany } from "@shared/schema";
 import { storage } from "../storage";
 import { sendEmail } from "../services/email";
 
@@ -31,12 +31,12 @@ export async function runTrialExpirationCheck(): Promise<void> {
         await storage.updateCompany(company.id, {
           subscriptionStatus: "suspended",
           frozenAt: new Date(),
-        } as Record<string, unknown>);
+        } as Partial<InsertCompany>);
 
         storage
           .createNotification({
             companyId: company.id,
-            type: "payment_failed" as "payment_failed",
+            type: "payment_failed",
             title: "Trial Expired",
             message:
               "Your 14-day free trial has ended. Please subscribe to continue using ScooPilot.",
