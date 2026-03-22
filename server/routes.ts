@@ -907,8 +907,9 @@ export async function registerRoutes(
       const { passwordHash, ...safeUser } = result.user;
 
       let setupDone = false;
+      let companyInfo: { companyId: string; alreadySetup: boolean } | null = null;
       try {
-        await ensureCompanySetup(result.user.id);
+        companyInfo = await ensureCompanySetup(result.user.id);
         setupDone = true;
       } catch (err) {
         console.error("Setup during register failed:", err);
@@ -934,13 +935,16 @@ export async function registerRoutes(
         `,
       }).catch((err) => console.error("Failed to send welcome email:", err));
 
-      sendAdminSignupNotification({
-        companyName: "New Registration",
-        ownerEmail: email,
-        ownerName: displayName,
-        tier: "Free Trial",
-        source: "Direct Registration",
-      }).catch(() => {});
+      if (companyInfo && !companyInfo.alreadySetup) {
+        const companyData = await storage.getCompany(companyInfo.companyId);
+        sendAdminSignupNotification({
+          companyName: companyData?.name || "Unknown Company",
+          ownerEmail: email,
+          ownerName: displayName,
+          tier: companyData?.subscriptionTier || "tier_1",
+          source: "Direct Registration",
+        }).catch(() => {});
+      }
 
       return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
     } catch (err) { handleError(res, err); }

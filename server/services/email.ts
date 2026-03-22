@@ -87,8 +87,12 @@ export async function sendAdminSignupNotification(details: {
     </div>
   `;
   try {
-    await sendEmail({ to: ADMIN_NOTIFICATION_EMAIL, subject, text, html });
-    console.log(`[Signup Notification] Admin notified of new signup: ${details.companyName} (${details.ownerEmail})`);
+    const result = await sendEmail({ to: ADMIN_NOTIFICATION_EMAIL, subject, text, html });
+    if (result.success) {
+      console.log(`[Signup Notification] Admin notified of new signup: ${details.companyName} (${details.ownerEmail})`);
+    } else {
+      console.error(`[Signup Notification] Failed to send admin notification: ${result.error}`);
+    }
   } catch (err) {
     console.error("[Signup Notification] Failed to send admin notification:", err);
   }
