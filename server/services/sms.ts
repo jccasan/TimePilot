@@ -99,6 +99,13 @@ export async function logSmsMessage(companyId: string, to: string, from: string,
       eventType: "sms_segment",
       quantity: segCount,
       metadata: { twilioSid, to },
+    }).then(async () => {
+      const { reportMeteredUsage } = await import("./stripe");
+      const { storage } = await import("../storage");
+      const company = await storage.getCompany(companyId);
+      if (company?.stripeSubscriptionId) {
+        reportMeteredUsage(company.stripeSubscriptionId, "sms_segment", segCount).catch(() => {});
+      }
     }).catch((err) => console.error("[Usage] Failed to log SMS usage:", err.message));
   }
 }

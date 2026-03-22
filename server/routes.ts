@@ -31,6 +31,7 @@ import {
   createConnectLoginLink,
   createSubscriptionCheckout,
   createCustomerPortalSession,
+  reportMeteredUsage,
 } from "./services/stripe";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress } from "./services/geocode";
@@ -375,32 +376,40 @@ export async function registerRoutes(
 
   // ================ Subscription Billing ================
 
-  app.post("/api/subscriptions/create-checkout", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/subscriptions/create-checkout", async (req: Request, res: Response) => {
     try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role, ["owner", "admin"]);
-      const company = await storage.getCompany(companyId);
-      if (!company) return res.status(404).json({ error: "Company not found" });
       if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
 
-      const { priceId, tier } = req.body;
+      const { priceId, tier, email, companyName, firstName, lastName, phone } = req.body;
       if (!priceId) return res.status(400).json({ error: "priceId is required" });
+      if (!email) return res.status(400).json({ error: "email is required" });
+      if (!companyName) return res.status(400).json({ error: "companyName is required" });
+      if (!firstName) return res.status(400).json({ error: "firstName is required" });
 
       const baseUrl = getBaseUrl(req);
-      const trialDays = company.subscriptionStatus === "trialing" ? 14 : 0;
+
+      let customerId: string | undefined;
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const company = await storage.getCompany(companyId);
+        if (company?.stripeCustomerId) customerId = company.stripeCustomerId;
+      } catch (_noAuth) {
+      }
 
       const result = await createSubscriptionCheckout({
-        customerEmail: company.email || "",
-        customerId: company.stripeCustomerId || undefined,
+        customerEmail: email,
+        customerId,
         priceId,
         successUrl: `${baseUrl}/billing?success=1`,
         cancelUrl: `${baseUrl}/billing?cancelled=1`,
-        trialDays,
+        trialDays: 14,
         metadata: {
-          company_id: company.id,
           plan_tier: tier || "tier_1",
-          company_name: company.name,
-          email: company.email || "",
+          company_name: companyName,
+          email,
+          first_name: firstName,
+          last_name: lastName || "",
+          phone: phone || "",
         },
       });
       res.json(result);
@@ -6455,12 +6464,12 @@ export async function registerRoutes(
       }
 
       if (event.type === "customer.subscription.created") {
-        const subscription = event.data.object as any;
+        const subscription = event.data.object as { id: string; customer: string; status: string; metadata: Record<string, string>; trial_end?: number | null; items?: { data?: Array<{ id: string }> } };
         const meta = subscription.metadata || {};
         const companyName = meta.company_name;
         const email = meta.email;
-        const firstName = meta.first_name || meta.firstName || "";
-        const lastName = meta.last_name || meta.lastName || "";
+        const firstName = meta.first_name || "";
+        const lastName = meta.last_name || "";
         const phone = meta.phone || "";
         const tierMap: Record<string, string> = {
           free_trial: "free_trial",
@@ -6481,7 +6490,7 @@ export async function registerRoutes(
               const company = await storage.getCompany(existingCompanies[0].companyId);
               if (company) {
                 const subStatus = subscription.status === "trialing" ? "trialing" : "active";
-                const updateData: any = {
+                const updateData: Record<string, unknown> = {
                   stripeCustomerId: subscription.customer,
                   stripeSubscriptionId: subscription.id,
                   subscriptionTier: planTier,
@@ -6490,12 +6499,12 @@ export async function registerRoutes(
                 if (subscription.trial_end) {
                   updateData.trialEndsAt = new Date(subscription.trial_end * 1000);
                 }
-                await storage.updateCompany(company.id, updateData);
+                await storage.updateCompany(company.id, updateData as Partial<typeof companies.$inferInsert>);
                 console.log(`[Stripe Subscription] Updated existing company "${company.name}" (${company.id}) for subscription ${subscription.id} status=${subStatus}`);
               }
             } else {
               const subStatus2 = subscription.status === "trialing" ? "trialing" : "active";
-              const createData: any = {
+              const createData: Record<string, unknown> = {
                 name: companyName.trim(),
                 email,
                 phone,
@@ -6507,7 +6516,7 @@ export async function registerRoutes(
               if (subscription.trial_end) {
                 createData.trialEndsAt = new Date(subscription.trial_end * 1000);
               }
-              const company = await storage.createCompany(createData);
+              const company = await storage.createCompany(createData as typeof companies.$inferInsert);
               await storage.addUserToCompany(existingUser.id, company.id, "owner");
               await seedDefaultLeadSources(company.id);
               await storage.seedDefaultPricing(company.id);
@@ -6519,7 +6528,7 @@ export async function registerRoutes(
             const user = await createUserWithTempPassword(email, firstName, lastName, tempPassword);
 
             const subStatus3 = subscription.status === "trialing" ? "trialing" : "active";
-            const createData2: any = {
+            const createData2: Record<string, unknown> = {
               name: companyName.trim(),
               email,
               phone,
@@ -6531,7 +6540,7 @@ export async function registerRoutes(
             if (subscription.trial_end) {
               createData2.trialEndsAt = new Date(subscription.trial_end * 1000);
             }
-            const company = await storage.createCompany(createData2);
+            const company = await storage.createCompany(createData2 as typeof companies.$inferInsert);
             await storage.addUserToCompany(user.id, company.id, "owner");
             await seedDefaultLeadSources(company.id);
             await storage.seedDefaultPricing(company.id);
@@ -6574,7 +6583,7 @@ export async function registerRoutes(
       }
 
       if (event.type === "customer.subscription.updated") {
-        const subscription = event.data.object as any;
+        const subscription = event.data.object as { id: string; status: string; metadata: Record<string, string>; trial_end?: number | null };
         const stripeSubId = subscription.id;
         const allCompanies = await storage.listCompanies();
         for (const company of allCompanies) {
@@ -6592,7 +6601,7 @@ export async function registerRoutes(
               free_trial: "free_trial", tier_1: "tier_1", tier_1_3: "tier_1_3",
               tier_3_5: "tier_3_5", tier_6_10: "tier_6_10", tier_10_plus: "tier_10_plus",
             };
-            const updates: any = { subscriptionStatus: newStatus };
+            const updates: Record<string, unknown> = { subscriptionStatus: newStatus };
             if (meta.plan_tier && tierMap[meta.plan_tier]) {
               updates.subscriptionTier = tierMap[meta.plan_tier];
             }
@@ -6602,7 +6611,7 @@ export async function registerRoutes(
             if (subscription.trial_end) {
               updates.trialEndsAt = new Date(subscription.trial_end * 1000);
             }
-            await storage.updateCompany(company.id, updates);
+            await storage.updateCompany(company.id, updates as Partial<typeof companies.$inferInsert>);
             console.log(`[Stripe Subscription] Updated company "${company.name}" status=${newStatus}`);
             break;
           }
@@ -6610,7 +6619,7 @@ export async function registerRoutes(
       }
 
       if (event.type === "customer.subscription.deleted") {
-        const subscription = event.data.object as any;
+        const subscription = event.data.object as { id: string };
         const stripeSubId = subscription.id;
         const allCompanies = await storage.listCompanies();
         for (const company of allCompanies) {
@@ -6623,7 +6632,7 @@ export async function registerRoutes(
       }
 
       if (event.type === "customer.subscription.trial_will_end") {
-        const subscription = event.data.object as any;
+        const subscription = event.data.object as { id: string; metadata: Record<string, string> };
         const meta = subscription.metadata || {};
         const email = meta.email;
         const companyName = meta.company_name || "your company";
@@ -6655,7 +6664,7 @@ export async function registerRoutes(
       }
 
       if (event.type === "invoice.payment_failed") {
-        const invoice = event.data.object as any;
+        const invoice = event.data.object as { customer: string | { id: string }; attempt_count?: number };
         const stripeCustomerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
         if (stripeCustomerId) {
           const allCompanies = await storage.listCompanies();
@@ -6677,7 +6686,7 @@ export async function registerRoutes(
       }
 
       if (event.type === "payment_intent.payment_failed") {
-        const pi = event.data.object as any;
+        const pi = event.data.object as { metadata?: Record<string, string> };
         const invoiceId = pi.metadata?.invoiceId;
         if (invoiceId) {
           const allCompanies = await storage.listCompanies();
@@ -10646,6 +10655,11 @@ export async function registerRoutes(
         eventType: "voice_minute",
         quantity: 1,
         metadata: { action: "book", contactId: result.contact.id },
+      }).then(async () => {
+        const company = await storage.getCompany(companyId);
+        if (company?.stripeSubscriptionId) {
+          reportMeteredUsage(company.stripeSubscriptionId, "voice_minute", 1).catch(() => {});
+        }
       }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
 
       res.status(201).json({

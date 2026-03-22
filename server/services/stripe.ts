@@ -339,3 +339,25 @@ export async function createUsageRecord(subscriptionItemId: string, quantity: nu
     action: "increment",
   });
 }
+
+export async function reportMeteredUsage(stripeSubscriptionId: string, eventType: string, quantity: number): Promise<void> {
+  if (!isStripeConfigured() || !stripeSubscriptionId) return;
+  try {
+    const stripe = getStripe();
+    const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    const meteredItem = subscription.items.data.find(item => {
+      const price = item.price;
+      const lookupKey = price.lookup_key || price.nickname || "";
+      if (eventType === "sms_segment" && lookupKey.toLowerCase().includes("sms")) return true;
+      if (eventType === "voice_minute" && lookupKey.toLowerCase().includes("voice")) return true;
+      return false;
+    });
+    if (meteredItem) {
+      await createUsageRecord(meteredItem.id, quantity);
+      console.log(`[Stripe Usage] Reported ${quantity} ${eventType} to subscription item ${meteredItem.id}`);
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[Stripe Usage] Failed to report ${eventType}: ${message}`);
+  }
+}
