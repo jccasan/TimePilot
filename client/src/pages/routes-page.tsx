@@ -391,21 +391,21 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 text-xs"
+            className={`flex-1 text-xs ${route.isLocked ? "opacity-50" : ""}`}
             onClick={() => onOptimize(route.id, stopCount)}
             disabled={isOptimizing || stopCount < 2 || isOverMax || credits < creditsNeeded}
             data-testid={`button-optimize-${route.id}`}
           >
-            {isOptimizing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Navigation className="h-3 w-3 mr-1" />}
+            {isOptimizing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : route.isLocked ? <Lock className="h-3 w-3 mr-1 text-amber-500" /> : <Navigation className="h-3 w-3 mr-1" />}
             Optimize ({creditsNeeded} {creditsNeeded === 1 ? "Credit" : "Credits"})
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="text-xs"
+            className={`text-xs ${route.isLocked ? "opacity-50" : ""}`}
             onClick={() => onReverse(route.id)}
             disabled={isReversing || stopCount < 2}
-            title="Reverse route order"
+            title={route.isLocked ? "Route is locked" : "Reverse route order"}
             data-testid={`button-reverse-${route.id}`}
           >
             {isReversing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpDown className="h-3 w-3" />}
