@@ -9749,9 +9749,9 @@ export async function registerRoutes(
       const tierKey = company.subscriptionTier as keyof typeof tierCfg;
       const maxUsers = tierCfg[tierKey]?.maxUsers || 1;
 
-      const apiCallResult = await db.select({ total: sql<number>`count(*)` })
+      const apiCallResult = await db.select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
         .from(usageEvents)
-        .where(and(eq(usageEvents.companyId, companyId), gte(usageEvents.recordedAt, periodStart)));
+        .where(and(eq(usageEvents.companyId, companyId), eq(usageEvents.eventType, "api_call"), gte(usageEvents.recordedAt, periodStart)));
 
       const msgCount = await db.select({ total: sql<number>`count(*)` })
         .from(messagesTable)
@@ -9845,7 +9845,7 @@ export async function registerRoutes(
         messages: allMessages,
       };
 
-      auditLog(companyId, "admin", "company", companyId, "export", { tables: Object.keys(exportData).filter(k => k !== "exportedAt") }, req.ip || undefined);
+      auditLog(companyId, "admin", "data_export", companyId, "create", { tables: Object.keys(exportData).filter(k => k !== "exportedAt") }, req.ip || undefined);
 
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Content-Disposition", `attachment; filename="tenant-export-${companyId}-${new Date().toISOString().slice(0,10)}.json"`);
