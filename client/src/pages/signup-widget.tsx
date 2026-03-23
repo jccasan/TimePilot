@@ -73,6 +73,7 @@ export default function SignupWidget() {
     serviceFrequency: "weekly",
     serviceDay: "",
   });
+  const [smsOptIn, setSmsOptIn] = useState(false);
 
   const [quoteResult, setQuoteResult] = useState<QuoteResult | null>(null);
 
@@ -171,7 +172,8 @@ export default function SignupWidget() {
     formData.streetAddress.trim().length > 0 &&
     formData.city.trim().length > 0 &&
     formData.state.trim().length > 0 &&
-    formData.zipCode.trim().length > 0;
+    formData.zipCode.trim().length > 0 &&
+    smsOptIn;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
@@ -338,6 +340,25 @@ export default function SignupWidget() {
               </Select>
             </div>
 
+            <div className="mt-2">
+              <label className="flex items-start gap-2.5 cursor-pointer" data-testid="label-sms-opt-in">
+                <input
+                  type="checkbox"
+                  checked={smsOptIn}
+                  onChange={(e) => setSmsOptIn(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-green-700"
+                  data-testid="checkbox-sms-opt-in"
+                />
+                <span className="text-xs text-muted-foreground leading-relaxed">
+                  I agree to receive recurring automated marketing and informational text messages
+                  (e.g., service alerts and project updates) from <strong>{company.name}</strong> at the
+                  phone number provided. Consent is not a condition of purchase. Msg &amp; data rates
+                  may apply. Msg frequency varies. Reply HELP for help and STOP to cancel.
+                  View our <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline text-green-700 hover:text-green-800">Privacy Policy</a> and <a href="/sms-terms" target="_blank" rel="noopener noreferrer" className="underline text-green-700 hover:text-green-800">SMS Terms</a>.
+                </span>
+              </label>
+            </div>
+
             {submitMutation.isError && (
               <p className="text-sm text-destructive" data-testid="text-submit-error">
                 {(submitMutation.error as Error).message || "Something went wrong. Please try again."}
@@ -359,10 +380,6 @@ export default function SignupWidget() {
                 "Get My Free Quote"
               )}
             </Button>
-
-            <p className="text-xs text-center text-muted-foreground">
-              By submitting, you agree to be contacted by {company.name} about their services.
-            </p>
           </form>
         </CardContent>
       </Card>
