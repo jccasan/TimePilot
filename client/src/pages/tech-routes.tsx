@@ -385,13 +385,14 @@ export default function TechRoutes() {
             queryClient.setQueryData<EnrichedVisit[]>(["/api/visits/today", selectedDate], updated);
           }
           toast({ title: "Visit updated (offline)", description: "Will sync when connection returns." });
-          return { visitId, status };
+          return { visitId, status, queuedOffline: true };
         }
         throw err;
       }
-      return { visitId, status };
+      return { visitId, status, queuedOffline: false };
     },
     onSuccess: (data) => {
+      if (data?.queuedOffline) return;
       if (data && (data.status === "completed" || data.status === "skipped")) {
         setPendingAdvanceAfter(data.visitId);
       }

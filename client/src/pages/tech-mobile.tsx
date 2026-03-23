@@ -285,7 +285,7 @@ export default function TechMobile() {
   }, [visits, pendingAdvanceAfter, allVisitsFlat]);
 
   const startMutation = useMutation({
-    mutationFn: async (visitId: string) => {
+    mutationFn: async (visitId: string): Promise<{ queuedOffline: boolean }> => {
       const body = {
         startedAt: new Date().toISOString(),
         status: "in_progress",
@@ -303,12 +303,14 @@ export default function TechMobile() {
             return updated;
           });
           toast({ title: "Visit started (offline)", description: "Will sync when connection returns." });
-          return;
+          return { queuedOffline: true };
         }
         throw err;
       }
+      return { queuedOffline: false };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      if (result?.queuedOffline) return;
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
       toast({ title: "Visit started" });
     },
