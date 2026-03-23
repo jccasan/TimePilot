@@ -3534,6 +3534,128 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/service-plans/all", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const allPlans = await storage.getServicePlans(companyId);
+      const allContacts = await storage.getContacts(companyId);
+      const allProperties = await storage.getProperties(companyId);
+      const allRoutes = await storage.getRoutes(companyId);
+
+      const contactMap = new Map(allContacts.map(c => [c.id, c]));
+      const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+      const routeMap = new Map(allRoutes.map(r => [r.id, r]));
+
+      const enriched = await Promise.all(allPlans.map(async (plan) => {
+        const addOns = await storage.getServicePlanAddOns(plan.id);
+        const contact = contactMap.get(plan.contactId);
+        const property = propertyMap.get(plan.propertyId);
+        const route = plan.routeId ? routeMap.get(plan.routeId) : null;
+        return {
+          ...plan,
+          addOns,
+          contactName: contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown",
+          propertyAddress: property ? `${property.streetAddress || ""}${property.city ? `, ${property.city}` : ""}`.trim() : "Unknown",
+          routeName: route?.name || null,
+        };
+      }));
+
+      res.json(enriched);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/service-plans/bulk", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { ids, updates } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: "ids must be a non-empty array" });
+      }
+      if (!updates || typeof updates !== "object") {
+        return res.status(400).json({ error: "updates must be an object" });
+      }
+
+      const allowedFields = ["priceAdjustment", "dayOfWeek", "isActive", "routeId"];
+      const unknownFields = Object.keys(updates).filter(k => !allowedFields.includes(k));
+      if (unknownFields.length > 0) {
+        return res.status(400).json({ error: `Invalid fields: ${unknownFields.join(", ")}. Allowed: ${allowedFields.join(", ")}` });
+      }
+
+      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+      if (updates.dayOfWeek && !validDays.includes(updates.dayOfWeek)) {
+        return res.status(400).json({ error: `Invalid dayOfWeek. Must be one of: ${validDays.join(", ")}` });
+      }
+
+      if (updates.routeId && updates.routeId !== "") {
+        const companyRoutes = await storage.getRoutes(companyId);
+        const routeExists = companyRoutes.some(r => r.id === updates.routeId);
+        if (!routeExists) {
+          return res.status(400).json({ error: "Route not found or does not belong to your company" });
+        }
+      }
+
+      const allPlans = await storage.getServicePlans(companyId);
+      const planMap = new Map(allPlans.map(p => [p.id, p]));
+      const activePlans = allPlans.filter(p => p.isActive);
+
+      let dayRoutes: Awaited<ReturnType<typeof storage.getRoutes>> | null = null;
+      if (updates.dayOfWeek && !updates.routeId) {
+        dayRoutes = await storage.getRoutes(companyId, updates.dayOfWeek);
+      }
+
+      const results: any[] = [];
+      for (const planId of ids) {
+        const existing = planMap.get(planId);
+        if (!existing) continue;
+
+        const safeUpdates: Record<string, any> = {};
+
+        if (updates.priceAdjustment) {
+          const currentPrice = parseFloat(existing.pricePerVisit);
+          if (updates.priceAdjustment.type === "flat") {
+            safeUpdates.pricePerVisit = Math.max(0, currentPrice + updates.priceAdjustment.amount).toFixed(2);
+          } else if (updates.priceAdjustment.type === "percentage") {
+            safeUpdates.pricePerVisit = Math.max(0, currentPrice * (1 + updates.priceAdjustment.amount / 100)).toFixed(2);
+          }
+        }
+
+        if (updates.isActive !== undefined) {
+          safeUpdates.isActive = updates.isActive;
+        }
+
+        if (updates.routeId !== undefined) {
+          safeUpdates.routeId = updates.routeId === "" ? null : updates.routeId;
+        }
+
+        if (updates.dayOfWeek) {
+          safeUpdates.dayOfWeek = updates.dayOfWeek;
+          if (updates.dayOfWeek !== existing.dayOfWeek && !updates.routeId) {
+            if (dayRoutes && dayRoutes.length > 0) {
+              let bestRoute = dayRoutes[0];
+              let bestCount = Infinity;
+              for (const route of dayRoutes) {
+                const stopCount = activePlans.filter(sp => sp.routeId === route.id && sp.id !== planId).length;
+                if (stopCount < bestCount) {
+                  bestCount = stopCount;
+                  bestRoute = route;
+                }
+              }
+              safeUpdates.routeId = bestRoute.id;
+            } else {
+              safeUpdates.routeId = null;
+            }
+          }
+        }
+
+        if (Object.keys(safeUpdates).length === 0) continue;
+        const plan = await storage.updateServicePlan(planId, companyId, safeUpdates);
+        results.push(plan);
+      }
+
+      res.json({ updated: results.length, results });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/service-plans/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);

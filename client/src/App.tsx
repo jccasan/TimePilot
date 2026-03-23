@@ -60,6 +60,7 @@ import ResetPassword from "@/pages/reset-password";
 import SignupWidget from "@/pages/signup-widget";
 import VoiceSignup from "@/pages/voice-signup";
 import Jobs from "@/pages/jobs";
+import ServicePlansPage from "@/pages/service-plans";
 import { NotificationBell } from "@/components/notification-bell";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
@@ -82,6 +83,7 @@ function Router() {
       <Route path="/scheduling" component={Scheduling} />
       <Route path="/routes" component={RoutesPage} />
       <Route path="/jobs" component={Jobs} />
+      <Route path="/service-plans" component={ServicePlansPage} />
       <Route path="/m/today" component={TechMobile} />
       <Route path="/invoices" component={Invoices} />
       <Route path="/billing" component={Billing} />
