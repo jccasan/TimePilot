@@ -3521,46 +3521,46 @@ export async function registerRoutes(
   app.get("/api/service-plans", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const hasFilters = req.query.contactId || req.query.propertyId || req.query.isActive !== undefined;
+      const enriched = req.query.enriched === "true" || !hasFilters;
+
       const filters: { contactId?: string; propertyId?: string; isActive?: boolean } = {};
       if (req.query.contactId) filters.contactId = req.query.contactId as string;
       if (req.query.propertyId) filters.propertyId = req.query.propertyId as string;
       if (req.query.isActive !== undefined) filters.isActive = req.query.isActive === "true";
-      const plans = await storage.getServicePlans(companyId, filters);
-      const plansWithAddOns = await Promise.all(plans.map(async (plan) => {
-        const addOns = await storage.getServicePlanAddOns(plan.id);
-        return { ...plan, addOns };
-      }));
-      res.json(plansWithAddOns);
-    } catch (err) { handleError(res, err); }
-  });
 
-  app.get("/api/service-plans/all", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const allPlans = await storage.getServicePlans(companyId);
-      const allContacts = await storage.getContacts(companyId);
-      const allProperties = await storage.getProperties(companyId);
-      const allRoutes = await storage.getRoutes(companyId);
+      const plans = await storage.getServicePlans(companyId, hasFilters ? filters : undefined);
 
-      const contactMap = new Map(allContacts.map(c => [c.id, c]));
-      const propertyMap = new Map(allProperties.map(p => [p.id, p]));
-      const routeMap = new Map(allRoutes.map(r => [r.id, r]));
+      if (enriched && !hasFilters) {
+        const allContacts = await storage.getContacts(companyId);
+        const allProperties = await storage.getProperties(companyId);
+        const allRoutes = await storage.getRoutes(companyId);
 
-      const enriched = await Promise.all(allPlans.map(async (plan) => {
-        const addOns = await storage.getServicePlanAddOns(plan.id);
-        const contact = contactMap.get(plan.contactId);
-        const property = propertyMap.get(plan.propertyId);
-        const route = plan.routeId ? routeMap.get(plan.routeId) : null;
-        return {
-          ...plan,
-          addOns,
-          contactName: contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown",
-          propertyAddress: property ? `${property.streetAddress || ""}${property.city ? `, ${property.city}` : ""}`.trim() : "Unknown",
-          routeName: route?.name || null,
-        };
-      }));
+        const contactMap = new Map(allContacts.map(c => [c.id, c]));
+        const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+        const routeMap = new Map(allRoutes.map(r => [r.id, r]));
 
-      res.json(enriched);
+        const enrichedPlans = await Promise.all(plans.map(async (plan) => {
+          const addOns = await storage.getServicePlanAddOns(plan.id);
+          const contact = contactMap.get(plan.contactId);
+          const property = propertyMap.get(plan.propertyId);
+          const route = plan.routeId ? routeMap.get(plan.routeId) : null;
+          return {
+            ...plan,
+            addOns,
+            contactName: contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown",
+            propertyAddress: property ? `${property.streetAddress || ""}${property.city ? `, ${property.city}` : ""}`.trim() : "Unknown",
+            routeName: route?.name || null,
+          };
+        }));
+        res.json(enrichedPlans);
+      } else {
+        const plansWithAddOns = await Promise.all(plans.map(async (plan) => {
+          const addOns = await storage.getServicePlanAddOns(plan.id);
+          return { ...plan, addOns };
+        }));
+        res.json(plansWithAddOns);
+      }
     } catch (err) { handleError(res, err); }
   });
 

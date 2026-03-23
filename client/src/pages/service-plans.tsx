@@ -89,7 +89,7 @@ export default function ServicePlans() {
   const [bulkRouteId, setBulkRouteId] = useState("");
 
   const { data: plans, isLoading } = useQuery<EnrichedPlan[]>({
-    queryKey: ["/api/service-plans/all"],
+    queryKey: ["/api/service-plans"],
   });
 
   const { data: routes } = useQuery<Route[]>({
@@ -108,7 +108,6 @@ export default function ServicePlans() {
     },
     onSuccess: (data) => {
       toast({ title: "Bulk Update Complete", description: `${data.updated} service plan(s) updated.` });
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans/all"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       setSelectedIds(new Set());
       setBulkDialogOpen(false);
