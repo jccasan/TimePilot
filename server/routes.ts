@@ -14,7 +14,7 @@ import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordRes
 import type { RequestHandler } from "express";
 import { sendEmail, sendAdminSignupNotification } from "./services/email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
-import { sendSms, getTwilioPhoneNumber, isTwilioConfigured } from "./services/sms";
+import { sendSms, getTwilioPhoneNumber, isTwilioConfigured, sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "./services/sms";
 import {
   isStripeConfigured,
   createStripeCustomer,
@@ -1389,12 +1389,18 @@ export async function registerRoutes(
 
   // ================ Company Routes ================
 
+  function sanitizeCompany(company: any) {
+    if (!company) return company;
+    const { telnyxApiKey, qboAccessToken, qboRefreshToken, ...safe } = company;
+    return { ...safe, telnyxApiKey: telnyxApiKey ? "••••••••" : null };
+  }
+
   app.get("/api/company", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
-      res.json(company);
+      res.json(sanitizeCompany(company));
     } catch (err) { handleError(res, err); }
   });
 
@@ -1406,7 +1412,8 @@ export async function registerRoutes(
       const validTimezones = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
       const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
         "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "dashboardNotes", "timezone",
-        "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug", "leadWebhookSmsTemplate"];
+        "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug", "leadWebhookSmsTemplate",
+        "smsProvider", "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -1421,6 +1428,19 @@ export async function registerRoutes(
         const existingSlug = await storage.getCompanyBySlug(cleanSlug);
         if (existingSlug && existingSlug.id !== companyId) return res.status(409).json({ error: "This slug is already taken" });
         updates.slug = cleanSlug;
+      }
+      if (updates.smsProvider !== undefined) {
+        if (!["twilio", "telnyx"].includes(updates.smsProvider)) {
+          return res.status(400).json({ error: "smsProvider must be 'twilio' or 'telnyx'" });
+        }
+        if (updates.smsProvider === "telnyx") {
+          const telnyxKey = updates.telnyxApiKey || existing?.telnyxApiKey;
+          const telnyxPhone = updates.telnyxPhoneNumber || existing?.telnyxPhoneNumber;
+          const telnyxProfile = updates.telnyxMessagingProfileId || existing?.telnyxMessagingProfileId;
+          if (!telnyxKey || !telnyxPhone || !telnyxProfile) {
+            return res.status(400).json({ error: "Telnyx API key, phone number, and messaging profile ID are all required when using Telnyx" });
+          }
+        }
       }
       if (updates.reminderSettings) {
         const validTimings = ["24h_before", "2h_before", "morning_of", "custom"];
@@ -1452,7 +1472,7 @@ export async function registerRoutes(
       }
       const company = await storage.updateCompany(companyId, updates);
       auditLog(companyId, userId, "company", companyId, "update", { old: existing, new: company }, req.ip);
-      res.json(company);
+      res.json(sanitizeCompany(company));
     } catch (err) { handleError(res, err); }
   });
 
@@ -4264,23 +4284,25 @@ export async function registerRoutes(
 
       const roundedMinutes = Math.max(5, Math.ceil(travelMinutes / 5) * 5);
 
-      if (!isTwilioConfigured()) return res.status(503).json({ error: "SMS is not configured" });
+      const smsReady = await isSmsConfiguredForCompany(companyId);
+      if (!smsReady) return res.status(503).json({ error: "SMS is not configured" });
 
       const etaMsg = `Hi ${contact.firstName}, ${companyName} is on the way! Estimated arrival in about ${roundedMinutes} minutes. Please ensure your yard is accessible and any dogs are inside. See you soon!`;
 
-      const smsResult = await sendSms({ to: contact.phone, body: etaMsg, companyId });
+      const smsResult = await sendSmsForCompany({ to: contact.phone, body: etaMsg, companyId });
       if (!smsResult.success) return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
 
       onMyWayCooldowns.set(cooldownKey, Date.now());
 
       try {
+        const fromPhone = await getFromPhoneForCompany(companyId);
         await storage.createMessage({
           companyId,
           contactId: contact.id,
           channel: "sms",
           direction: "outbound",
           status: "sent",
-          fromAddress: getTwilioPhoneNumber(),
+          fromAddress: fromPhone,
           toAddress: contact.phone,
           body: etaMsg,
           externalId: smsResult.messageSid,
@@ -4374,9 +4396,10 @@ export async function registerRoutes(
       const appBaseUrl = `https://${req.get("host")}`;
       const gatePhotoFullUrl = gateClosedPhoto ? `${appBaseUrl}${gateClosedPhoto}` : undefined;
 
-      if (contact.phone && isTwilioConfigured()) {
+      const completionSmsReady = await isSmsConfiguredForCompany(companyId);
+      if (contact.phone && completionSmsReady) {
         const completionMsg = `Hi ${contact.firstName}. ${company.name} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`;
-        completionSmsResult = await sendSms({
+        completionSmsResult = await sendSmsForCompany({
           to: contact.phone,
           body: completionMsg,
           mediaUrl: gatePhotoFullUrl,
@@ -4384,13 +4407,14 @@ export async function registerRoutes(
         });
 
         if (completionSmsResult.success) {
+          const completionFrom = await getFromPhoneForCompany(companyId);
           await storage.createMessage({
             companyId,
             contactId: contact.id,
             channel: "sms",
             direction: "outbound",
             status: "sent",
-            fromAddress: getTwilioPhoneNumber(),
+            fromAddress: completionFrom,
             toAddress: contact.phone,
             body: completionMsg,
             externalId: completionSmsResult.messageSid,
@@ -4425,7 +4449,8 @@ export async function registerRoutes(
               const currentProperty = await storage.getProperty(visit.propertyId, companyId);
               const nextProperty = await storage.getProperty(nextVisit.propertyId, companyId);
 
-              if (nextContact?.phone && currentProperty && nextProperty && isTwilioConfigured()) {
+              const nextSmsReady = await isSmsConfiguredForCompany(companyId);
+              if (nextContact?.phone && currentProperty && nextProperty && nextSmsReady) {
                 let travelMinutes = 10;
 
                 const curLat = currentProperty.latitude ? parseFloat(currentProperty.latitude) : null;
@@ -4451,20 +4476,21 @@ export async function registerRoutes(
 
                 const etaMsg = `Hi ${nextContact.firstName}, ${company.name} is on its way to your house for your poop scoop appointment. We'll be there in about ${roundedMinutes} minutes. Please ensure your yard is accessible and any dogs are inside. See you soon!`;
 
-                etaSmsResult = await sendSms({
+                etaSmsResult = await sendSmsForCompany({
                   to: nextContact.phone,
                   body: etaMsg,
                   companyId,
                 });
 
                 if (etaSmsResult.success) {
+                  const etaFrom = await getFromPhoneForCompany(companyId);
                   await storage.createMessage({
                     companyId,
                     contactId: nextContact.id,
                     channel: "sms",
                     direction: "outbound",
                     status: "sent",
-                    fromAddress: getTwilioPhoneNumber(),
+                    fromAddress: etaFrom,
                     toAddress: nextContact.phone,
                     body: etaMsg,
                     externalId: etaSmsResult.messageSid,
@@ -6421,7 +6447,7 @@ export async function registerRoutes(
         if (!contact) return res.status(400).json({ error: "Contact not found in your company" });
       }
 
-      const fromPhone = getTwilioPhoneNumber();
+      const fromPhone = await getFromPhoneForCompany(companyId);
 
       const msg = await storage.createMessage({
         companyId,
@@ -6435,7 +6461,7 @@ export async function registerRoutes(
         sentBy: userId,
       });
 
-      const result = await sendSms({ to, body, companyId });
+      const result = await sendSmsForCompany({ to, body, companyId });
 
       if (result.success) {
         const updated = await storage.updateMessageStatus(msg.id, "sent");
@@ -6447,11 +6473,15 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/messages/config", isAuthenticated, async (_req: Request, res: Response) => {
-    res.json({
-      email: { configured: !!process.env.SENDGRID_API_KEY },
-      sms: { configured: isTwilioConfigured(), phoneNumber: getTwilioPhoneNumber() },
-    });
+  app.get("/api/messages/config", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const smsConfig = await getCompanySmsConfig(companyId);
+      res.json({
+        email: { configured: !!process.env.SENDGRID_API_KEY },
+        sms: { configured: smsConfig.configured, phoneNumber: smsConfig.phoneNumber, provider: smsConfig.provider },
+      });
+    } catch (err) { handleError(res, err); }
   });
 
   // Twilio incoming SMS webhook
@@ -6493,6 +6523,75 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Twilio webhook error:", err);
       res.type("text/xml").send("<Response></Response>");
+    }
+  });
+
+  app.post("/api/webhooks/telnyx/sms", async (req: Request, res: Response) => {
+    try {
+      const eventType = req.body?.data?.event_type;
+      if (eventType !== "message.received") {
+        return res.status(200).json({ ok: true });
+      }
+
+      const payload = req.body?.data?.payload;
+      if (!payload) return res.status(200).json({ ok: true });
+
+      const fromNumber = payload.from?.phone_number;
+      const textBody = payload.text;
+      const toNumbers = payload.to || [];
+      const toNumber = toNumbers[0]?.phone_number || "";
+      const messageId = payload.id;
+
+      if (!fromNumber || !textBody) {
+        return res.status(200).json({ ok: true });
+      }
+
+      const toDigits = toNumber.replace(/\D/g, "");
+      const allCompanies = await storage.listCompanies();
+      let matchedCompany = allCompanies.find(c => {
+        const cDigits = (c.telnyxPhoneNumber || "").replace(/\D/g, "");
+        return cDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
+      });
+      if (!matchedCompany) {
+        matchedCompany = allCompanies.find(c => {
+          const cDigits = (c.dedicatedPhoneNumber || "").replace(/\D/g, "");
+          return cDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
+        });
+      }
+
+      if (matchedCompany) {
+        const companyId = matchedCompany.id;
+        const allContacts = await storage.getContacts(companyId);
+        const fromDigits = fromNumber.replace(/\D/g, "");
+        const matchedContact = allContacts.find(c => {
+          const cDigits = (c.phone || "").replace(/\D/g, "");
+          return cDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
+        });
+
+        await storage.createMessage({
+          companyId,
+          contactId: matchedContact?.id || null,
+          channel: "sms",
+          direction: "inbound",
+          status: "received",
+          fromAddress: fromNumber,
+          toAddress: toNumber,
+          body: textBody,
+          externalId: messageId,
+        });
+
+        if (matchedContact) {
+          notify(companyId, "new_message", "New Text Message", `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`, `/communications?contactId=${matchedContact.id}`);
+        }
+
+        const { logSmsMessage } = await import("./services/sms");
+        logSmsMessage(companyId, toNumber, fromNumber, "inbound", messageId, 1).catch(() => {});
+      }
+
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error("Telnyx webhook error:", err);
+      res.status(200).json({ ok: true });
     }
   });
 
@@ -11070,7 +11169,9 @@ export async function registerRoutes(
   const DEFAULT_SMS_QUOTE_TEMPLATE = "Hi {firstName}! Thanks for your interest in our pet waste removal service. Based on {dogs} dog(s) with {frequency} service, your estimated price is ${price}/visit. Reply YES to get started!";
 
   async function sendAutoQuoteSms(company: typeof companies.$inferSelect, contact: { firstName: string; phone: string | null; numberOfDogs: number | null; serviceFrequency: string | null }, yardSize?: string): Promise<boolean> {
-    if (!contact.phone || !isTwilioConfigured()) return false;
+    if (!contact.phone) return false;
+    const smsOk = await isSmsConfiguredForCompany(company.id);
+    if (!smsOk) return false;
 
     const dogs = contact.numberOfDogs ?? 1;
     const frequency = (contact.serviceFrequency || "weekly") as "weekly" | "biweekly" | "monthly" | "onetime";
@@ -11092,8 +11193,7 @@ export async function registerRoutes(
       .replace(/\{frequency\}/g, frequency)
       .replace(/\{price\}/g, priceDollars);
 
-    const twilioFrom = getTwilioPhoneNumber();
-    const result = await sendSms({ to: contact.phone, body, from: twilioFrom, companyId: company.id });
+    const result = await sendSmsForCompany({ to: contact.phone, body, companyId: company.id });
 
     if (result.success) {
       return true;
@@ -11155,7 +11255,7 @@ export async function registerRoutes(
 
       const company = await storage.getCompany(companyId);
       let smsSent = false;
-      if (phone && company && isTwilioConfigured()) {
+      if (phone && company) {
         try {
           smsSent = await sendAutoQuoteSms(company, { firstName, phone, numberOfDogs, serviceFrequency }, yardSize);
         } catch (err) {

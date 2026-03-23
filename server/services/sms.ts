@@ -110,6 +110,74 @@ export function isTwilioConfigured(): boolean {
   return !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_PHONE_NUMBER);
 }
 
+interface CompanySmsConfig {
+  provider: "twilio" | "telnyx";
+  configured: boolean;
+  phoneNumber: string;
+}
+
+export async function getCompanySmsConfig(companyId: string): Promise<CompanySmsConfig> {
+  const { storage } = await import("../storage");
+  const company = await storage.getCompany(companyId);
+  if (!company) return { provider: "twilio", configured: isTwilioConfigured(), phoneNumber: getTwilioPhoneNumber() };
+
+  if (company.smsProvider === "telnyx") {
+    const configured = !!(company.telnyxApiKey && company.telnyxPhoneNumber && company.telnyxMessagingProfileId);
+    return { provider: "telnyx", configured, phoneNumber: company.telnyxPhoneNumber || "" };
+  }
+
+  return { provider: "twilio", configured: isTwilioConfigured(), phoneNumber: getTwilioPhoneNumber() };
+}
+
+export async function isSmsConfiguredForCompany(companyId: string): Promise<boolean> {
+  const config = await getCompanySmsConfig(companyId);
+  return config.configured;
+}
+
+export async function getFromPhoneForCompany(companyId: string): Promise<string> {
+  const config = await getCompanySmsConfig(companyId);
+  return config.phoneNumber;
+}
+
+interface SendSmsForCompanyOptions {
+  to: string;
+  body: string;
+  companyId: string;
+  mediaUrl?: string;
+}
+
+export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Promise<SendSmsResult> {
+  const config = await getCompanySmsConfig(options.companyId);
+  if (!config.configured) {
+    return { success: false, error: `SMS provider (${config.provider}) is not configured` };
+  }
+
+  if (config.provider === "telnyx") {
+    const { storage } = await import("../storage");
+    const company = await storage.getCompany(options.companyId);
+    if (!company?.telnyxApiKey || !company?.telnyxPhoneNumber || !company?.telnyxMessagingProfileId) {
+      return { success: false, error: "Telnyx credentials not configured" };
+    }
+    const { sendTelnyxSms } = await import("./telnyx-sms");
+    return sendTelnyxSms({
+      to: options.to,
+      body: options.body,
+      from: company.telnyxPhoneNumber,
+      apiKey: company.telnyxApiKey,
+      messagingProfileId: company.telnyxMessagingProfileId,
+      companyId: options.companyId,
+      mediaUrl: options.mediaUrl,
+    });
+  }
+
+  return sendSms({
+    to: options.to,
+    body: options.body,
+    mediaUrl: options.mediaUrl,
+    companyId: options.companyId,
+  });
+}
+
 export async function logSmsMessage(companyId: string, to: string, from: string, direction: "inbound" | "outbound", twilioSid?: string, segments?: number): Promise<void> {
   const segCount = segments ?? 1;
   await db.insert(smsMessages).values({

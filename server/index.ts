@@ -268,6 +268,10 @@ async function ensureCompanyColumns() {
   try {
     await pool.query(`
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS dedicated_phone_number VARCHAR(20);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS sms_provider VARCHAR(20) NOT NULL DEFAULT 'twilio';
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS telnyx_api_key TEXT;
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS telnyx_phone_number VARCHAR(20);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS telnyx_messaging_profile_id VARCHAR(255);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS retell_agent_id VARCHAR(255);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS retell_knowledge_base_id VARCHAR(255);
       ALTER TABLE routes ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false;

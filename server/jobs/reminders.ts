@@ -3,7 +3,7 @@ import { eq, and, lte, sql, isNull, lt, inArray, desc } from "drizzle-orm";
 import { contacts, visits, invoices, servicePlans, properties, routes, reminderLogs, type ReminderRule, type InvoiceReminderSettings } from "@shared/schema";
 import { storage } from "../storage";
 import { sendEmail } from "../services/email";
-import { sendSms, isTwilioConfigured } from "../services/sms";
+import { sendSmsForCompany, isSmsConfiguredForCompany } from "../services/sms";
 import { getCompanyToday } from "../utils/company-date";
 import { users } from "@shared/schema";
 
@@ -315,7 +315,7 @@ async function sendServiceRemindersForRule(
     const effectiveChannel = contactChannel || rule.channel;
 
     const wantsEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
-    const wantsSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && isTwilioConfigured();
+    const wantsSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && await isSmsConfiguredForCompany(companyId);
 
     if (!wantsEmail && !wantsSms) continue;
 
@@ -382,7 +382,7 @@ async function sendServiceRemindersForRule(
 
       if (needSms) {
         try {
-          const smsRes = await sendSms({ to: contact.phone!, body: message, companyId });
+          const smsRes = await sendSmsForCompany({ to: contact.phone!, body: message, companyId });
           smsOk = smsRes.success;
           if (!smsOk) console.error(`[reminders] SMS delivery failed for ${contact.phone}: ${smsRes.error}`);
         } catch (err) {
@@ -505,7 +505,7 @@ async function sendInvoiceReminders(
     const effectiveChannel = contactChannel || "email";
 
     const canEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
-    const canSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && isTwilioConfigured();
+    const canSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && await isSmsConfiguredForCompany(companyId);
 
     if (!canEmail && canSms && smsQuiet) continue;
 
@@ -572,7 +572,7 @@ async function sendInvoiceReminders(
 
     if (needSms) {
       try {
-        const smsRes = await sendSms({ to: contact.phone!, body: message, companyId });
+        const smsRes = await sendSmsForCompany({ to: contact.phone!, body: message, companyId });
         if (smsRes.success) {
           smsOk = true;
         } else {
