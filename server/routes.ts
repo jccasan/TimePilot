@@ -170,8 +170,8 @@ function handleError(res: Response, err: any) {
   return res.status(500).json({ error: "Internal server error" });
 }
 
-function auditLog(companyId: string, userId: string, entityType: string, entityId: string, action: string, changes?: any, ipAddress?: string) {
-  storage.createAuditEntry({ companyId, userId, entityType, entityId, action, changes: changes || {}, ipAddress: ipAddress || null }).catch(console.error);
+function auditLog(companyId: string, userId: string | null, entityType: string, entityId: string, action: string, changes?: any, ipAddress?: string) {
+  storage.createAuditEntry({ companyId, userId: userId || null, entityType, entityId, action, changes: changes || {}, ipAddress: ipAddress || null }).catch(console.error);
 }
 
 const EMAIL_NOTIFY_TYPES = new Set([
@@ -6758,6 +6758,11 @@ export async function registerRoutes(
       }
 
       const updated = await storage.updateInvoice(invoice.id, companyId, updateData);
+      const { userId: chargeUserId } = await getCompanyContext(req);
+      auditLog(companyId, chargeUserId, "invoice", invoice.id, "update", {
+        old: { status: invoice.status, paymentAttempts: invoice.paymentAttempts },
+        new: { status: updated.status, paymentAttempts: updated.paymentAttempts, chargeResult: result.status },
+      }, req.ip || undefined);
       res.json({ ...updated, chargeResult: result });
     } catch (err) { handleError(res, err); }
   });
@@ -7037,6 +7042,11 @@ export async function registerRoutes(
                 paidAt: new Date(),
                 stripePaymentIntentId: pi.id,
               });
+              auditLog(piTenantId, null, "invoice", invoiceId, "update", {
+                old: { status: invoice.status },
+                new: { status: "paid", paymentMethod: "stripe_webhook" },
+                actor: "stripe_webhook",
+              });
               notify(piTenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
               qboAutoSync(piTenantId, invoiceId, "payment");
               resolved = true;
@@ -7052,6 +7062,11 @@ export async function registerRoutes(
                   status: "paid",
                   paidAt: new Date(),
                   stripePaymentIntentId: pi.id,
+                });
+                auditLog(company.id, null, "invoice", invoiceId, "update", {
+                  old: { status: invoice.status },
+                  new: { status: "paid", paymentMethod: "stripe_webhook" },
+                  actor: "stripe_webhook",
                 });
                 notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
                 qboAutoSync(company.id, invoiceId, "payment");
@@ -9667,7 +9682,7 @@ export async function registerRoutes(
       if (lastName !== undefined) { oldData.lastName = cu.lastName; newData.lastName = lastName?.trim() || null; }
       if (email !== undefined) { oldData.email = cu.email; newData.email = email.toLowerCase().trim(); }
       if (role !== undefined) { oldData.role = cu.role; newData.role = role; }
-      auditLog(companyId, "admin", "user", userId, "update", { old: oldData, new: newData }, req.ip || undefined);
+      auditLog(companyId, null, "user", userId, "update", { old: oldData, new: newData, actor: "platform_admin", adminEmail: (req as any).adminUser?.email }, req.ip || undefined);
 
       console.log(`[Admin] User ${userId} in company ${companyId} updated by ${(req as any).adminUser?.email}`);
       res.json({ ok: true });
@@ -9845,7 +9860,7 @@ export async function registerRoutes(
         messages: allMessages,
       };
 
-      auditLog(companyId, "admin", "data_export", companyId, "create", { tables: Object.keys(exportData).filter(k => k !== "exportedAt") }, req.ip || undefined);
+      auditLog(companyId, null, "data_export", companyId, "create", { tables: Object.keys(exportData).filter(k => k !== "exportedAt"), actor: "platform_admin", adminEmail: (req as any).adminUser?.email }, req.ip || undefined);
 
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Content-Disposition", `attachment; filename="tenant-export-${companyId}-${new Date().toISOString().slice(0,10)}.json"`);
