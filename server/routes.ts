@@ -5053,8 +5053,10 @@ export async function registerRoutes(
     try {
       const { companyId, role, userId } = await getCompanyContext(req);
       requireRole(role);
+      const existingKeys = await storage.getApiKeys(companyId);
+      const existingKey = existingKeys.find(k => k.id === req.params.id);
       await storage.deleteApiKey(req.params.id, companyId);
-      auditLog(companyId, userId, "api_key", req.params.id, "delete", {}, req.ip || undefined);
+      auditLog(companyId, userId, "api_key", req.params.id, "delete", { deleted: { name: existingKey?.name, keyPrefix: existingKey?.keyPrefix } }, req.ip || undefined);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -5410,9 +5412,11 @@ export async function registerRoutes(
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
+      const allWebhooks = await storage.getWebhooks(companyId);
+      const whToDelete = allWebhooks.find(w => w.id === req.params.id);
       await storage.deleteWebhook(req.params.id, companyId);
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "webhook", req.params.id, "delete", {}, req.ip || undefined);
+      auditLog(companyId, userId, "webhook", req.params.id, "delete", { deleted: { url: whToDelete?.url, events: whToDelete?.events } }, req.ip || undefined);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -9657,6 +9661,14 @@ export async function registerRoutes(
           .where(and(eq(companyUsersTable.userId, userId), eq(companyUsersTable.companyId, companyId)));
       }
 
+      const oldData: Record<string, any> = {};
+      const newData: Record<string, any> = {};
+      if (firstName !== undefined) { oldData.firstName = cu.firstName; newData.firstName = firstName?.trim() || null; }
+      if (lastName !== undefined) { oldData.lastName = cu.lastName; newData.lastName = lastName?.trim() || null; }
+      if (email !== undefined) { oldData.email = cu.email; newData.email = email.toLowerCase().trim(); }
+      if (role !== undefined) { oldData.role = cu.role; newData.role = role; }
+      auditLog(companyId, "admin", "user", userId, "update", { old: oldData, new: newData }, req.ip || undefined);
+
       console.log(`[Admin] User ${userId} in company ${companyId} updated by ${(req as any).adminUser?.email}`);
       res.json({ ok: true });
     } catch (err) { handleError(res, err); }
@@ -9745,6 +9757,13 @@ export async function registerRoutes(
         .from(messagesTable)
         .where(and(eq(messagesTable.companyId, companyId), gte(messagesTable.createdAt, periodStart)));
 
+      const contactCount = await db.select({ total: sql<number>`count(*)` })
+        .from(contacts)
+        .where(eq(contacts.companyId, companyId));
+      const visitCount = await db.select({ total: sql<number>`count(*)` })
+        .from(visits)
+        .where(eq(visits.companyId, companyId));
+
       res.json({
         periodStart: periodStart.toISOString(),
         smsSegments: Number(smsResult[0]?.total || 0),
@@ -9753,6 +9772,8 @@ export async function registerRoutes(
         maxUsers,
         apiCalls: Number(apiCallResult[0]?.total || 0),
         messagesSent: Number(msgCount[0]?.total || 0),
+        totalContacts: Number(contactCount[0]?.total || 0),
+        totalVisits: Number(visitCount[0]?.total || 0),
       });
     } catch (err) { handleError(res, err); }
   });
@@ -9807,7 +9828,7 @@ export async function registerRoutes(
       const plans = await storage.getServicePlans(companyId, {});
       const invoiceList = await storage.getInvoices(companyId);
       const allVisits = await db.select().from(visits).where(eq(visits.companyId, companyId));
-      const allMessages = await db.select().from(messages).where(eq(messages.companyId, companyId)).limit(5000);
+      const allMessages = await db.select().from(messages).where(eq(messages.companyId, companyId));
       const companyUsersList = await storage.getCompanyUsers(companyId);
       const allRoutes = await db.select().from(routes).where(eq(routes.companyId, companyId));
 

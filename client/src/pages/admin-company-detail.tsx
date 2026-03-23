@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X, MessageSquare, Phone, Activity, Download, Clock, Filter } from "lucide-react";
+import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X, MessageSquare, Phone, Activity, Download, Clock, Filter, Database } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
@@ -23,6 +23,8 @@ interface UsageData {
   maxUsers: number;
   apiCalls: number;
   messagesSent: number;
+  totalContacts: number;
+  totalVisits: number;
 }
 
 interface AuditLogEntry {
@@ -369,7 +371,7 @@ export default function AdminCompanyDetail() {
       {activeTab === "overview" && (
         <>
           {usage && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="usage-dashboard">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3" data-testid="usage-dashboard">
               <Card>
                 <CardContent className="pt-4 pb-3 px-4">
                   <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -409,10 +411,22 @@ export default function AdminCompanyDetail() {
                 <CardContent className="pt-4 pb-3 px-4">
                   <div className="flex items-center gap-2 text-muted-foreground mb-1">
                     <Activity className="h-3.5 w-3.5" />
-                    <span className="text-xs font-medium">Messages</span>
+                    <span className="text-xs font-medium">API Calls</span>
                   </div>
-                  <p className="text-2xl font-bold" data-testid="text-usage-messages">{usage.messagesSent}</p>
+                  <p className="text-2xl font-bold" data-testid="text-usage-api-calls">{usage.apiCalls}</p>
                   <p className="text-xs text-muted-foreground">This month</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 pb-3 px-4">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <Database className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">Data Storage</span>
+                  </div>
+                  <p className="text-lg font-bold" data-testid="text-usage-storage">
+                    {usage.totalContacts} contacts / {usage.totalVisits} visits
+                  </p>
+                  <p className="text-xs text-muted-foreground">{usage.messagesSent} messages this month</p>
                 </CardContent>
               </Card>
             </div>
