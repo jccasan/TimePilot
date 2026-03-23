@@ -296,12 +296,12 @@ export default function TechMobile() {
         if (isNetworkError(err)) {
           await addPendingMutation({ method: "PATCH", url: `/api/visits/${visitId}`, body });
           offline.refreshPendingCount();
-          if (visits) {
-            const updated = visits.map(v => v.id === visitId ? { ...v, status: "in_progress" as const, startedAt: body.startedAt } : v);
+          queryClient.setQueryData<TodayVisit[]>(["/api/visits/today"], (old) => {
+            const updated = (old || []).map(v => v.id === visitId ? { ...v, status: "in_progress" as const, startedAt: body.startedAt } : v);
             cacheRouteData("visits-today", updated);
             setCachedVisits(updated);
-            queryClient.setQueryData<TodayVisit[]>(["/api/visits/today"], updated);
-          }
+            return updated;
+          });
           toast({ title: "Visit started (offline)", description: "Will sync when connection returns." });
           return;
         }
@@ -398,6 +398,47 @@ export default function TechMobile() {
     setExtraFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const queueGroupVisitsOffline = async (gatePath: string) => {
+    if (!completeDialogVisit) return;
+    const groupVisits = completeDialogGroupVisits.filter(v => v.id !== completeDialogVisit.id && (v.status === "in_progress" || v.status === "scheduled"));
+    for (const gv of groupVisits) {
+      if (gv.status === "scheduled") {
+        await addPendingMutation({
+          method: "PATCH",
+          url: `/api/visits/${gv.id}`,
+          body: { startedAt: new Date().toISOString(), status: "in_progress" },
+        });
+      }
+      await addPendingMutation({
+        method: "POST",
+        url: `/api/visits/${gv.id}/complete-notify`,
+        body: {
+          gateClosedPhoto: gatePath,
+          technicianNotes: notes[completeDialogVisit.id] || undefined,
+        },
+      });
+    }
+  };
+
+  const finishCompletionOffline = () => {
+    if (!completeDialogVisit) return;
+    const groupVisits = completeDialogGroupVisits.filter(v => v.id !== completeDialogVisit.id && (v.status === "in_progress" || v.status === "scheduled"));
+    const allVisitIds = [completeDialogVisit.id, ...groupVisits.map(v => v.id)];
+    offline.refreshPendingCount();
+    if (visits) {
+      const completedIds = new Set(allVisitIds);
+      const updated = visits.map(v => completedIds.has(v.id) ? { ...v, status: "completed", completedAt: new Date().toISOString() } : v);
+      cacheRouteData("visits-today", updated);
+      setCachedVisits(updated);
+      queryClient.setQueryData<TodayVisit[]>(["/api/visits/today"], updated);
+    }
+    setPendingAdvanceAfter(completeDialogVisit.id);
+    setCompleteDialogVisit(null);
+    setCompleteDialogGroupVisits([]);
+    toast({ title: "Visit completed (offline)", description: "Photos and notification will sync when connection returns." });
+    setIsCompleting(false);
+  };
+
   const handleCompleteAndSend = async () => {
     if (!completeDialogVisit || !gatePhoto) return;
     setIsCompleting(true);
@@ -409,6 +450,7 @@ export default function TechMobile() {
       } catch (uploadErr) {
         if (isNetworkError(uploadErr)) {
           const gatePhotoId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "gate", blob: gatePhoto });
+          const gateRef = `__pending_photo_${gatePhotoId}__`;
           const extraPhotoRefs: string[] = [];
           for (const extra of extraFiles) {
             const extraId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "extra", blob: extra.file });
@@ -418,59 +460,71 @@ export default function TechMobile() {
             method: "POST",
             url: `/api/visits/${completeDialogVisit.id}/complete-notify`,
             body: {
-              gateClosedPhoto: `__pending_photo_${gatePhotoId}__`,
+              gateClosedPhoto: gateRef,
               extraPhotos: extraPhotoRefs.length > 0 ? extraPhotoRefs : undefined,
               technicianNotes: notes[completeDialogVisit.id] || undefined,
             },
           });
-          const groupVisits = completeDialogGroupVisits.filter(v => v.id !== completeDialogVisit.id && (v.status === "in_progress" || v.status === "scheduled"));
-          for (const gv of groupVisits) {
-            if (gv.status === "scheduled") {
-              await addPendingMutation({
-                method: "PATCH",
-                url: `/api/visits/${gv.id}`,
-                body: { startedAt: new Date().toISOString(), status: "in_progress" },
-              });
-            }
-            await addPendingMutation({
-              method: "POST",
-              url: `/api/visits/${gv.id}/complete-notify`,
-              body: {
-                gateClosedPhoto: `__pending_photo_${gatePhotoId}__`,
-                technicianNotes: notes[completeDialogVisit.id] || undefined,
-              },
-            });
-          }
-          const allVisitIds = [completeDialogVisit.id, ...groupVisits.map(v => v.id)];
-          offline.refreshPendingCount();
-          if (visits) {
-            const completedIds = new Set(allVisitIds);
-            const updated = visits.map(v => completedIds.has(v.id) ? { ...v, status: "completed", completedAt: new Date().toISOString() } : v);
-            cacheRouteData("visits-today", updated);
-            setCachedVisits(updated);
-            queryClient.setQueryData<TodayVisit[]>(["/api/visits/today"], updated);
-          }
-          setPendingAdvanceAfter(completeDialogVisit.id);
-          setCompleteDialogVisit(null);
-          setCompleteDialogGroupVisits([]);
-          toast({ title: "Visit completed (offline)", description: "Photos and notification will sync when connection returns." });
-          setIsCompleting(false);
+          await queueGroupVisitsOffline(gateRef);
+          finishCompletionOffline();
           return;
         }
         throw uploadErr;
       }
 
       const extraPaths: string[] = [];
-      for (const extra of extraFiles) {
-        const path = await uploadFileDirect(extra.file);
-        extraPaths.push(path);
+      try {
+        for (const extra of extraFiles) {
+          const path = await uploadFileDirect(extra.file);
+          extraPaths.push(path);
+        }
+      } catch (extraUploadErr) {
+        if (isNetworkError(extraUploadErr)) {
+          const extraPhotoRefs: string[] = [];
+          for (let i = extraPaths.length; i < extraFiles.length; i++) {
+            const extraId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "extra", blob: extraFiles[i].file });
+            extraPhotoRefs.push(`__pending_photo_${extraId}__`);
+          }
+          const allExtraRefs = [...extraPaths, ...extraPhotoRefs];
+          await addPendingMutation({
+            method: "POST",
+            url: `/api/visits/${completeDialogVisit.id}/complete-notify`,
+            body: {
+              gateClosedPhoto: gateClosedPath,
+              extraPhotos: allExtraRefs.length > 0 ? allExtraRefs : undefined,
+              technicianNotes: notes[completeDialogVisit.id] || undefined,
+            },
+          });
+          await queueGroupVisitsOffline(gateClosedPath);
+          finishCompletionOffline();
+          return;
+        }
+        throw extraUploadErr;
       }
 
-      await apiRequest("POST", `/api/visits/${completeDialogVisit.id}/complete-notify`, {
-        gateClosedPhoto: gateClosedPath,
-        extraPhotos: extraPaths.length > 0 ? extraPaths : undefined,
-        technicianNotes: notes[completeDialogVisit.id] || undefined,
-      });
+      try {
+        await apiRequest("POST", `/api/visits/${completeDialogVisit.id}/complete-notify`, {
+          gateClosedPhoto: gateClosedPath,
+          extraPhotos: extraPaths.length > 0 ? extraPaths : undefined,
+          technicianNotes: notes[completeDialogVisit.id] || undefined,
+        });
+      } catch (notifyErr) {
+        if (isNetworkError(notifyErr)) {
+          await addPendingMutation({
+            method: "POST",
+            url: `/api/visits/${completeDialogVisit.id}/complete-notify`,
+            body: {
+              gateClosedPhoto: gateClosedPath,
+              extraPhotos: extraPaths.length > 0 ? extraPaths : undefined,
+              technicianNotes: notes[completeDialogVisit.id] || undefined,
+            },
+          });
+          await queueGroupVisitsOffline(gateClosedPath);
+          finishCompletionOffline();
+          return;
+        }
+        throw notifyErr;
+      }
 
       let completedCount = 1;
       let failedCount = 0;
@@ -489,8 +543,28 @@ export default function TechMobile() {
             });
             completedCount++;
           } catch (groupErr: any) {
-            failedCount++;
-            console.error(`Failed to complete grouped visit ${groupVisit.id}:`, groupErr);
+            if (isNetworkError(groupErr)) {
+              if (groupVisit.status === "scheduled") {
+                await addPendingMutation({
+                  method: "PATCH",
+                  url: `/api/visits/${groupVisit.id}`,
+                  body: { startedAt: new Date().toISOString(), status: "in_progress" },
+                });
+              }
+              await addPendingMutation({
+                method: "POST",
+                url: `/api/visits/${groupVisit.id}/complete-notify`,
+                body: {
+                  gateClosedPhoto: gateClosedPath,
+                  technicianNotes: notes[completeDialogVisit.id] || undefined,
+                },
+              });
+              offline.refreshPendingCount();
+              completedCount++;
+            } else {
+              failedCount++;
+              console.error(`Failed to complete grouped visit ${groupVisit.id}:`, groupErr);
+            }
           }
         }
       }
