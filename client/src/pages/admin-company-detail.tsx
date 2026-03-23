@@ -8,12 +8,58 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X } from "lucide-react";
+import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X, MessageSquare, Phone, Activity, Download, Clock, Filter } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
+
+interface UsageData {
+  periodStart: string;
+  smsSegments: number;
+  voiceMinutes: number;
+  activeUsers: number;
+  maxUsers: number;
+  apiCalls: number;
+  messagesSent: number;
+}
+
+interface AuditLogEntry {
+  id: string;
+  userId: string | null;
+  userEmail: string | null;
+  entityType: string;
+  entityId: string;
+  action: string;
+  changes: any;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+const entityTypeLabels: Record<string, string> = {
+  invoice: "Invoice",
+  service_plan: "Service Plan",
+  api_key: "API Key",
+  webhook: "Webhook",
+  contact: "Contact",
+  company: "Company",
+  user: "User",
+};
+
+const actionLabels: Record<string, string> = {
+  create: "Created",
+  update: "Updated",
+  delete: "Deleted",
+  void: "Voided",
+};
+
+const actionColors: Record<string, string> = {
+  create: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  update: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  delete: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  void: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+};
 
 export default function AdminCompanyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -32,9 +78,27 @@ export default function AdminCompanyDetail() {
   const [editUserOpen, setEditUserOpen] = useState(false);
   const [editUserTarget, setEditUserTarget] = useState<{ userId: string; firstName: string; lastName: string; email: string; role: string } | null>(null);
 
+  const [auditPage, setAuditPage] = useState(0);
+  const [auditFilter, setAuditFilter] = useState<string>("");
+  const auditPageSize = 20;
+
+  const [activeTab, setActiveTab] = useState<"overview" | "audit">("overview");
+
   const { data: company, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/companies", id],
     queryFn: adminFetchFn(`/api/admin/companies/${id}`),
+  });
+
+  const { data: usage } = useQuery<UsageData>({
+    queryKey: ["/api/admin/companies", id, "usage"],
+    queryFn: adminFetchFn(`/api/admin/companies/${id}/usage`),
+    enabled: !!id,
+  });
+
+  const { data: auditData, isLoading: auditLoading } = useQuery<{ logs: AuditLogEntry[]; total: number }>({
+    queryKey: ["/api/admin/companies", id, "audit-logs", auditPage, auditFilter],
+    queryFn: adminFetchFn(`/api/admin/companies/${id}/audit-logs?limit=${auditPageSize}&offset=${auditPage * auditPageSize}${auditFilter ? `&entityType=${auditFilter}` : ""}`),
+    enabled: activeTab === "audit",
   });
 
   const tierMutation = useMutation({
@@ -235,6 +299,26 @@ export default function AdminCompanyDetail() {
     updateUserMutation.mutate({ userId: editUserTarget.userId, updates });
   };
 
+  const handleExport = async () => {
+    try {
+      const token = localStorage.getItem("admin_token");
+      const res = await fetch(`/api/admin/companies/${id}/export`, {
+        headers: { "x-admin-token": token || "" },
+      });
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tenant-export-${id}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Export downloaded" });
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err.message, variant: "destructive" });
+    }
+  };
+
   if (isLoading) {
     return <div className="p-6 text-center text-muted-foreground">Loading...</div>;
   }
@@ -243,298 +327,472 @@ export default function AdminCompanyDetail() {
     return <div className="p-6 text-center text-muted-foreground">Company not found</div>;
   }
 
+  const totalAuditPages = auditData ? Math.ceil(auditData.total / auditPageSize) : 0;
+
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto" data-testid="admin-company-detail">
-      <div className="flex items-center gap-3 flex-wrap">
-        <Link href="/admin">
-          <Button variant="ghost" size="icon" data-testid="button-back-admin">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-company-name">{company.name}</h1>
-          <p className="text-sm text-muted-foreground">{company.id}</p>
-        </div>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Building2 className="h-4 w-4" /> Account Info
-              </span>
-              {!editingCompany ? (
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={startEditingCompany} data-testid="button-edit-company">
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSaveCompany} disabled={updateCompanyMutation.isPending} data-testid="button-save-company">
-                    <Check className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingCompany(false)} data-testid="button-cancel-edit-company">
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {editingCompany ? (
-              <>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Company Name</Label>
-                  <Input value={companyForm.name} onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })} data-testid="input-company-name" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Email</Label>
-                  <Input value={companyForm.email} onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })} data-testid="input-company-email" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Phone</Label>
-                  <Input value={companyForm.phone} onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })} data-testid="input-company-phone" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Address</Label>
-                  <Input value={companyForm.address} onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })} data-testid="input-company-address" />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <span className="text-sm text-muted-foreground">Subscription</span>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={company.subscriptionTier}
-                      onValueChange={(v) => tierMutation.mutate(v)}
-                      disabled={tierMutation.isPending}
-                    >
-                      <SelectTrigger className="w-40" data-testid="select-tier">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(TIER_CONFIG).map(([key, config]) => (
-                          <SelectItem key={key} value={key}>
-                            {config.name} {config.price > 0 ? `($${config.price}/mo)` : "(Free)"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-muted-foreground">Status</span>
-                  <Badge variant="outline" data-testid="badge-subscription-status">{company.subscriptionStatus}</Badge>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-muted-foreground">Created</span>
-                  <span className="text-sm">{new Date(company.createdAt).toLocaleDateString()}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-muted-foreground">Phone</span>
-                  <span className="text-sm">{company.phone || "-"}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-muted-foreground">Email</span>
-                  <span className="text-sm">{company.email || "-"}</span>
-                </div>
-                {company.address && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-muted-foreground">Address</span>
-                    <span className="text-sm text-right max-w-[200px]">{company.address}</span>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-4 w-4" /> Team ({company.users?.length || 0})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {company.users?.length > 0 ? (
-              <div className="space-y-2">
-                {company.users.map((u: any) => (
-                  <div key={u.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-b-0" data-testid={`row-user-${u.userId}`}>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate" data-testid={`text-user-name-${u.userId}`}>
-                        {u.firstName || u.lastName ? `${u.firstName} ${u.lastName}`.trim() : "Unnamed"}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate" data-testid={`text-user-email-${u.userId}`}>{u.email}</p>
-                      <p className="text-xs text-muted-foreground" data-testid={`text-user-last-login-${u.userId}`}>
-                        {u.lastLoginAt
-                          ? `Last login: ${new Date(u.lastLoginAt).toLocaleDateString()} ${new Date(u.lastLoginAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                          : "Never logged in"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Badge variant="outline">{u.role}</Badge>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Edit user"
-                        onClick={() => openEditUser(u)}
-                        data-testid={`button-edit-user-${u.userId}`}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Set/Reset Password"
-                        onClick={() => {
-                          setResetTarget({ userId: u.userId, email: u.email, name: `${u.firstName} ${u.lastName}`.trim() || u.email });
-                          setResetOpen(true);
-                        }}
-                        data-testid={`button-reset-password-${u.userId}`}
-                      >
-                        <KeyRound className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Send password reset email"
-                        onClick={() => sendResetEmailMutation.mutate(u.userId)}
-                        disabled={sendResetEmailMutation.isPending}
-                        data-testid={`button-send-reset-${u.userId}`}
-                      >
-                        <Mail className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Send login credentials"
-                        onClick={() => sendCredentialsMutation.mutate(u.userId)}
-                        disabled={sendCredentialsMutation.isPending}
-                        data-testid={`button-send-credentials-${u.userId}`}
-                      >
-                        <Send className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No users</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Contact2 className="h-4 w-4" /> Contacts ({company.contacts?.length || 0})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {company.contacts?.length > 0 ? (
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {company.contacts.slice(0, 20).map((c: any) => (
-                  <div key={c.id} className="flex items-center justify-between gap-2 py-1">
-                    <span className="text-sm truncate">{c.firstName} {c.lastName}</span>
-                    <Badge variant="outline">{c.status}</Badge>
-                  </div>
-                ))}
-                {company.contacts.length > 20 && (
-                  <p className="text-xs text-muted-foreground">... and {company.contacts.length - 20} more</p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No contacts</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <FileText className="h-4 w-4" /> Invoices ({company.invoices?.length || 0})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {company.invoices?.length > 0 ? (
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {company.invoices.slice(0, 15).map((inv: any) => (
-                  <div key={inv.id} className="flex items-center justify-between gap-2 py-1">
-                    <span className="text-sm truncate">{inv.invoiceNumber || inv.id}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">${(inv.total / 100).toFixed(2)}</span>
-                      <Badge variant="outline">{inv.status}</Badge>
-                    </div>
-                  </div>
-                ))}
-                {company.invoices.length > 15 && (
-                  <p className="text-xs text-muted-foreground">... and {company.invoices.length - 15} more</p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No invoices</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <StickyNote className="h-4 w-4" /> Admin Notes
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Textarea
-              placeholder="Add a note about this account..."
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              className="min-h-[60px]"
-              data-testid="textarea-admin-note"
-            />
-            <Button
-              onClick={() => noteText.trim() && addNoteMutation.mutate(noteText.trim())}
-              disabled={!noteText.trim() || addNoteMutation.isPending}
-              data-testid="button-add-note"
-            >
-              Add
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <Link href="/admin">
+            <Button variant="ghost" size="icon" data-testid="button-back-admin">
+              <ArrowLeft className="h-4 w-4" />
             </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold" data-testid="text-company-name">{company.name}</h1>
+            <p className="text-sm text-muted-foreground">{company.id}</p>
           </div>
-          {company.notes?.length > 0 ? (
-            <div className="space-y-2">
-              {company.notes.map((n: any) => (
-                <div key={n.id} className="flex items-start justify-between gap-2 p-2 rounded border">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm whitespace-pre-wrap" data-testid={`text-note-${n.id}`}>{n.content}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(n.createdAt).toLocaleString()} by {n.createdBy}
-                    </p>
+        </div>
+        <Button variant="outline" onClick={handleExport} data-testid="button-export-data">
+          <Download className="h-4 w-4 mr-1.5" />
+          Export Data
+        </Button>
+      </div>
+
+      <div className="flex gap-2 border-b">
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setActiveTab("overview")}
+          data-testid="tab-overview"
+        >
+          Overview
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "audit" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => { setActiveTab("audit"); setAuditPage(0); }}
+          data-testid="tab-audit"
+        >
+          Audit Log
+        </button>
+      </div>
+
+      {activeTab === "overview" && (
+        <>
+          {usage && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="usage-dashboard">
+              <Card>
+                <CardContent className="pt-4 pb-3 px-4">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">SMS Segments</span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => deleteNoteMutation.mutate(n.id)}
-                    disabled={deleteNoteMutation.isPending}
-                    data-testid={`button-delete-note-${n.id}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
+                  <p className="text-2xl font-bold" data-testid="text-usage-sms">{usage.smsSegments}</p>
+                  <p className="text-xs text-muted-foreground">This month</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 pb-3 px-4">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <Phone className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">Voice Minutes</span>
+                  </div>
+                  <p className="text-2xl font-bold" data-testid="text-usage-voice">{usage.voiceMinutes}</p>
+                  <p className="text-xs text-muted-foreground">This month</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 pb-3 px-4">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <Users className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">Active Users</span>
+                  </div>
+                  <p className="text-2xl font-bold" data-testid="text-usage-users">
+                    {usage.activeUsers}
+                    <span className="text-sm font-normal text-muted-foreground"> / {usage.maxUsers}</span>
+                  </p>
+                  {usage.activeUsers >= Math.ceil(usage.maxUsers * 0.8) && (
+                    <Badge variant="destructive" className="text-xs mt-1" data-testid="badge-user-limit-warning">Near limit</Badge>
+                  )}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 pb-3 px-4">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <Activity className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">Messages</span>
+                  </div>
+                  <p className="text-2xl font-bold" data-testid="text-usage-messages">{usage.messagesSent}</p>
+                  <p className="text-xs text-muted-foreground">This month</p>
+                </CardContent>
+              </Card>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No notes yet</p>
           )}
-        </CardContent>
-      </Card>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" /> Account Info
+                  </span>
+                  {!editingCompany ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={startEditingCompany} data-testid="button-edit-company">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSaveCompany} disabled={updateCompanyMutation.isPending} data-testid="button-save-company">
+                        <Check className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingCompany(false)} data-testid="button-cancel-edit-company">
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {editingCompany ? (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Company Name</Label>
+                      <Input value={companyForm.name} onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })} data-testid="input-company-name" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Email</Label>
+                      <Input value={companyForm.email} onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })} data-testid="input-company-email" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Phone</Label>
+                      <Input value={companyForm.phone} onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })} data-testid="input-company-phone" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Address</Label>
+                      <Input value={companyForm.address} onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })} data-testid="input-company-address" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm text-muted-foreground">Subscription</span>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={company.subscriptionTier}
+                          onValueChange={(v) => tierMutation.mutate(v)}
+                          disabled={tierMutation.isPending}
+                        >
+                          <SelectTrigger className="w-40" data-testid="select-tier">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(TIER_CONFIG).map(([key, config]) => (
+                              <SelectItem key={key} value={key}>
+                                {config.name} {config.price > 0 ? `($${config.price}/mo)` : "(Free)"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-muted-foreground">Status</span>
+                      <Badge variant="outline" data-testid="badge-subscription-status">{company.subscriptionStatus}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-muted-foreground">Created</span>
+                      <span className="text-sm">{new Date(company.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-muted-foreground">Phone</span>
+                      <span className="text-sm">{company.phone || "-"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-muted-foreground">Email</span>
+                      <span className="text-sm">{company.email || "-"}</span>
+                    </div>
+                    {company.address && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-muted-foreground">Address</span>
+                        <span className="text-sm text-right max-w-[200px]">{company.address}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-4 w-4" /> Team ({company.users?.length || 0})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {company.users?.length > 0 ? (
+                  <div className="space-y-2">
+                    {company.users.map((u: any) => (
+                      <div key={u.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-b-0" data-testid={`row-user-${u.userId}`}>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate" data-testid={`text-user-name-${u.userId}`}>
+                            {u.firstName || u.lastName ? `${u.firstName} ${u.lastName}`.trim() : "Unnamed"}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate" data-testid={`text-user-email-${u.userId}`}>{u.email}</p>
+                          <p className="text-xs text-muted-foreground" data-testid={`text-user-last-login-${u.userId}`}>
+                            {u.lastLoginAt
+                              ? `Last login: ${new Date(u.lastLoginAt).toLocaleDateString()} ${new Date(u.lastLoginAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                              : "Never logged in"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Badge variant="outline">{u.role}</Badge>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            title="Edit user"
+                            onClick={() => openEditUser(u)}
+                            data-testid={`button-edit-user-${u.userId}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            title="Set/Reset Password"
+                            onClick={() => {
+                              setResetTarget({ userId: u.userId, email: u.email, name: `${u.firstName} ${u.lastName}`.trim() || u.email });
+                              setResetOpen(true);
+                            }}
+                            data-testid={`button-reset-password-${u.userId}`}
+                          >
+                            <KeyRound className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            title="Send password reset email"
+                            onClick={() => sendResetEmailMutation.mutate(u.userId)}
+                            disabled={sendResetEmailMutation.isPending}
+                            data-testid={`button-send-reset-${u.userId}`}
+                          >
+                            <Mail className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            title="Send login credentials"
+                            onClick={() => sendCredentialsMutation.mutate(u.userId)}
+                            disabled={sendCredentialsMutation.isPending}
+                            data-testid={`button-send-credentials-${u.userId}`}
+                          >
+                            <Send className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No users</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Contact2 className="h-4 w-4" /> Contacts ({company.contacts?.length || 0})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {company.contacts?.length > 0 ? (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {company.contacts.slice(0, 20).map((c: any) => (
+                      <div key={c.id} className="flex items-center justify-between gap-2 py-1">
+                        <span className="text-sm truncate">{c.firstName} {c.lastName}</span>
+                        <Badge variant="outline">{c.status}</Badge>
+                      </div>
+                    ))}
+                    {company.contacts.length > 20 && (
+                      <p className="text-xs text-muted-foreground">... and {company.contacts.length - 20} more</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No contacts</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4" /> Invoices ({company.invoices?.length || 0})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {company.invoices?.length > 0 ? (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {company.invoices.slice(0, 15).map((inv: any) => (
+                      <div key={inv.id} className="flex items-center justify-between gap-2 py-1">
+                        <span className="text-sm truncate">{inv.invoiceNumber || inv.id}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">${(inv.total / 100).toFixed(2)}</span>
+                          <Badge variant="outline">{inv.status}</Badge>
+                        </div>
+                      </div>
+                    ))}
+                    {company.invoices.length > 15 && (
+                      <p className="text-xs text-muted-foreground">... and {company.invoices.length - 15} more</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No invoices</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <StickyNote className="h-4 w-4" /> Admin Notes
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2">
+                <Textarea
+                  placeholder="Add a note about this account..."
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  className="min-h-[60px]"
+                  data-testid="textarea-admin-note"
+                />
+                <Button
+                  onClick={() => noteText.trim() && addNoteMutation.mutate(noteText.trim())}
+                  disabled={!noteText.trim() || addNoteMutation.isPending}
+                  data-testid="button-add-note"
+                >
+                  Add
+                </Button>
+              </div>
+              {company.notes?.length > 0 ? (
+                <div className="space-y-2">
+                  {company.notes.map((n: any) => (
+                    <div key={n.id} className="flex items-start justify-between gap-2 p-2 rounded border">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm whitespace-pre-wrap" data-testid={`text-note-${n.id}`}>{n.content}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(n.createdAt).toLocaleString()} by {n.createdBy}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteNoteMutation.mutate(n.id)}
+                        disabled={deleteNoteMutation.isPending}
+                        data-testid={`button-delete-note-${n.id}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No notes yet</p>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {activeTab === "audit" && (
+        <Card data-testid="card-tenant-audit-log">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4" /> Tenant Audit Log
+                {auditData && <span className="text-sm font-normal text-muted-foreground">({auditData.total} events)</span>}
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                <Select value={auditFilter} onValueChange={(v) => { setAuditFilter(v === "all" ? "" : v); setAuditPage(0); }}>
+                  <SelectTrigger className="w-36 h-8 text-xs" data-testid="select-audit-filter">
+                    <SelectValue placeholder="All types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    <SelectItem value="invoice">Invoice</SelectItem>
+                    <SelectItem value="service_plan">Service Plan</SelectItem>
+                    <SelectItem value="contact">Contact</SelectItem>
+                    <SelectItem value="api_key">API Key</SelectItem>
+                    <SelectItem value="webhook">Webhook</SelectItem>
+                    <SelectItem value="company">Company</SelectItem>
+                    <SelectItem value="user">User</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {auditLoading ? (
+              <p className="text-sm text-muted-foreground">Loading audit log...</p>
+            ) : !auditData?.logs?.length ? (
+              <p className="text-sm text-muted-foreground">No audit events for this tenant</p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {auditData.logs.map((log) => (
+                    <div key={log.id} className="flex items-start justify-between border rounded-lg px-3 py-2.5" data-testid={`audit-entry-${log.id}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge className={actionColors[log.action] || "bg-gray-100 text-gray-800"} variant="secondary">
+                            {actionLabels[log.action] || log.action}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {entityTypeLabels[log.entityType] || log.entityType}
+                          </Badge>
+                          {log.userEmail && (
+                            <span className="text-xs text-muted-foreground">{log.userEmail}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          <span>{new Date(log.createdAt).toLocaleString()}</span>
+                          {log.ipAddress && <span>IP: {log.ipAddress}</span>}
+                          <span className="font-mono">{log.entityId.slice(0, 12)}...</span>
+                        </div>
+                        {log.changes && Object.keys(log.changes).length > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1 font-mono truncate max-w-lg">
+                            {JSON.stringify(log.changes)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {totalAuditPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={auditPage === 0}
+                      onClick={() => setAuditPage(p => p - 1)}
+                      data-testid="button-audit-prev"
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {auditPage + 1} of {totalAuditPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={auditPage >= totalAuditPages - 1}
+                      onClick={() => setAuditPage(p => p + 1)}
+                      data-testid="button-audit-next"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={resetOpen} onOpenChange={(open) => { if (!open) handleCloseResetDialog(); else setResetOpen(open); }}>
         <DialogContent data-testid="dialog-reset-password">

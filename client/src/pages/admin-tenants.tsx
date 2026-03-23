@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Search, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { Building2, Search, ChevronRight, Plus, Trash2, AlertTriangle, MessageSquare, Phone } from "lucide-react";
 import { TIER_CONFIG, type Company } from "@shared/schema";
 import { useState, useMemo } from "react";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
@@ -156,8 +156,30 @@ export default function AdminTenants() {
                       <Badge variant="outline" data-testid={`badge-status-${c.id}`}>
                         {c.subscriptionStatus}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">{c.userCount} users</span>
+                      {(c as any).nearUserLimit && (
+                        <Badge variant="destructive" className="text-xs flex items-center gap-1" data-testid={`badge-user-warning-${c.id}`}>
+                          <AlertTriangle className="h-3 w-3" />
+                          Near user limit
+                        </Badge>
+                      )}
+                      <span className="text-xs text-muted-foreground" data-testid={`text-users-${c.id}`}>
+                        {(c as any).activeUserCount ?? c.userCount}/{(c as any).maxUsers ?? "?"} users
+                      </span>
                       <span className="text-xs text-muted-foreground">{c.contactCount} contacts</span>
+                      {((c as any).smsSegments > 0 || (c as any).voiceMinutes > 0) && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {(c as any).smsSegments > 0 && (
+                            <span className="flex items-center gap-0.5" data-testid={`text-sms-${c.id}`}>
+                              <MessageSquare className="h-3 w-3" />{(c as any).smsSegments}
+                            </span>
+                          )}
+                          {(c as any).voiceMinutes > 0 && (
+                            <span className="flex items-center gap-0.5" data-testid={`text-voice-${c.id}`}>
+                              <Phone className="h-3 w-3" />{(c as any).voiceMinutes}m
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
