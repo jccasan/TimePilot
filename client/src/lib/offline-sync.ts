@@ -5,6 +5,7 @@ import {
   updatePhotoStatus,
   removePendingMutation,
   removePendingPhoto,
+  saveMutationUpdate,
   type PendingMutation,
   type PendingPhoto,
 } from "./offline-store";
@@ -84,39 +85,37 @@ async function uploadAndPatchStandalonePhoto(photo: PendingPhoto): Promise<void>
   }
 }
 
+async function resolvePhotoRef(
+  placeholder: string,
+  pendingPhotosMap: Map<string, PendingPhoto>,
+  resolvedPaths: Record<string, string>
+): Promise<string | null> {
+  const photoId = placeholder.slice(16, -2);
+  if (resolvedPaths[photoId]) return resolvedPaths[photoId];
+  const photo = pendingPhotosMap.get(photoId);
+  if (photo) {
+    const path = await uploadPhotoBlob(photo.blob, photo.id);
+    resolvedPaths[photoId] = path;
+    return path;
+  }
+  return null;
+}
+
 async function resolvePendingPhotoRefs(
   body: Record<string, unknown>,
   pendingPhotosMap: Map<string, PendingPhoto>,
-  uploadedPaths: Map<string, string>
+  resolvedPaths: Record<string, string>
 ): Promise<void> {
   for (const [key, value] of Object.entries(body)) {
     if (typeof value === "string" && value.startsWith("__pending_photo_") && value.endsWith("__")) {
-      const photoId = value.slice(16, -2);
-      let path = uploadedPaths.get(photoId);
-      if (!path) {
-        const photo = pendingPhotosMap.get(photoId);
-        if (photo) {
-          path = await uploadPhotoBlob(photo.blob, photo.id);
-          uploadedPaths.set(photoId, path);
-          await removePendingPhoto(photoId);
-        }
-      }
+      const path = await resolvePhotoRef(value, pendingPhotosMap, resolvedPaths);
       if (path) body[key] = path;
     }
     if (Array.isArray(value)) {
       const resolvedArr: string[] = [];
       for (const item of value) {
         if (typeof item === "string" && item.startsWith("__pending_photo_") && item.endsWith("__")) {
-          const photoId = item.slice(16, -2);
-          let path = uploadedPaths.get(photoId);
-          if (!path) {
-            const photo = pendingPhotosMap.get(photoId);
-            if (photo) {
-              path = await uploadPhotoBlob(photo.blob, photo.id);
-              uploadedPaths.set(photoId, path);
-              await removePendingPhoto(photoId);
-            }
-          }
+          const path = await resolvePhotoRef(item, pendingPhotosMap, resolvedPaths);
           if (path) resolvedArr.push(path);
         } else if (typeof item === "string") {
           resolvedArr.push(item);
@@ -145,25 +144,42 @@ export async function syncAll(
       pendingPhotosMap.set(p.id, p);
     }
   }
-  const uploadedPaths = new Map<string, string>();
 
   const mutations = await getPendingMutations();
   const pendingMutations = mutations.filter(m => m.status === "pending" || m.status === "failed");
+  const photoIdsConsumedByMutations = new Set<string>();
 
   for (const mutation of pendingMutations) {
     try {
+      const resolvedPaths: Record<string, string> = { ...(mutation.resolvedPhotoPaths || {}) };
+
       if (mutation.body && typeof mutation.body === "object" && !Array.isArray(mutation.body)) {
         await resolvePendingPhotoRefs(
           mutation.body as Record<string, unknown>,
           pendingPhotosMap,
-          uploadedPaths
+          resolvedPaths
         );
       }
+
+      if (Object.keys(resolvedPaths).length > 0) {
+        await saveMutationUpdate(mutation.id, {
+          resolvedPhotoPaths: resolvedPaths,
+          body: mutation.body,
+        });
+      }
+
       await updateMutationStatus(mutation.id, "syncing");
       onProgress?.(`Syncing action ${result.mutationsSynced + 1} of ${pendingMutations.length}...`);
       await replayMutation(mutation);
+
+      for (const photoId of Object.keys(resolvedPaths)) {
+        photoIdsConsumedByMutations.add(photoId);
+        await removePendingPhoto(photoId);
+      }
+
       await removePendingMutation(mutation.id);
       result.mutationsSynced++;
+      result.photosSynced += Object.keys(resolvedPaths).length;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Unknown error";
       await updateMutationStatus(mutation.id, "failed", errorMsg);
@@ -175,7 +191,8 @@ export async function syncAll(
   const remainingPhotos = await getPendingPhotos();
   const standalonePhotos = remainingPhotos.filter(
     p => (p.status === "pending" || p.status === "failed") &&
-      (p.photoType === "before" || p.photoType === "after")
+      (p.photoType === "before" || p.photoType === "after") &&
+      !photoIdsConsumedByMutations.has(p.id)
   );
 
   for (const photo of standalonePhotos) {
@@ -191,11 +208,6 @@ export async function syncAll(
       result.photosFailed++;
       result.failedItems.push({ type: "photo", id: photo.id, error: errorMsg });
     }
-  }
-
-  for (const [photoId, path] of uploadedPaths) {
-    if (path) result.photosSynced++;
-    pendingPhotosMap.delete(photoId);
   }
 
   return result;

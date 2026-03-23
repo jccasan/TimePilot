@@ -11,6 +11,7 @@ export interface PendingMutation {
   createdAt: number;
   status: "pending" | "syncing" | "failed";
   errorMessage?: string;
+  resolvedPhotoPaths?: Record<string, string>;
 }
 
 export interface PendingPhoto {
@@ -99,6 +100,15 @@ export async function updateMutationStatus(id: string, status: PendingMutation["
   if (mutation) {
     mutation.status = status;
     if (errorMessage) mutation.errorMessage = errorMessage;
+    await db.put("pendingMutations", mutation);
+  }
+}
+
+export async function saveMutationUpdate(id: string, updates: Partial<PendingMutation>): Promise<void> {
+  const db = await getDB();
+  const mutation = await db.get("pendingMutations", id);
+  if (mutation) {
+    Object.assign(mutation, updates);
     await db.put("pendingMutations", mutation);
   }
 }
