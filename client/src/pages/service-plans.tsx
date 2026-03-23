@@ -115,6 +115,8 @@ export default function ServicePlans() {
     onSuccess: (data) => {
       toast({ title: "Bulk Update Complete", description: `${data.updated} service plan(s) updated.` });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && typeof query.queryKey[0] === "string" && (query.queryKey[0] as string).startsWith("/api/service-plans?") });
       setSelectedIds(new Set());
       setBulkDialogOpen(false);
       setBulkAction(null);
