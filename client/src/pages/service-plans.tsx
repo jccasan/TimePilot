@@ -51,6 +51,12 @@ type EnrichedPlan = ServicePlan & {
 type SortField = "contactName" | "propertyAddress" | "frequency" | "dayOfWeek" | "pricePerVisit" | "routeName" | "isActive" | "jobType";
 type SortDir = "asc" | "desc";
 
+type BulkUpdates =
+  | { priceAdjustment: { type: "flat" | "percentage"; amount: number } }
+  | { dayOfWeek: string }
+  | { isActive: boolean }
+  | { routeId: string | null };
+
 const DAY_LABELS: Record<string, string> = {
   monday: "Monday",
   tuesday: "Tuesday",
@@ -102,7 +108,7 @@ export default function ServicePlans() {
   }, [routes]);
 
   const bulkMutation = useMutation({
-    mutationFn: async (payload: { ids: string[]; updates: any }) => {
+    mutationFn: async (payload: { ids: string[]; updates: BulkUpdates }) => {
       const res = await apiRequest("PATCH", "/api/service-plans/bulk", payload);
       return res.json();
     },
@@ -155,20 +161,27 @@ export default function ServicePlans() {
     }
 
     result.sort((a, b) => {
-      let aVal: any, bVal: any;
+      const dir = sortDir === "asc" ? 1 : -1;
       switch (sortField) {
-        case "contactName": aVal = a.contactName; bVal = b.contactName; break;
-        case "propertyAddress": aVal = a.propertyAddress; bVal = b.propertyAddress; break;
-        case "frequency": aVal = a.frequency; bVal = b.frequency; break;
-        case "dayOfWeek": aVal = a.dayOfWeek || ""; bVal = b.dayOfWeek || ""; break;
-        case "pricePerVisit": aVal = parseFloat(a.pricePerVisit); bVal = parseFloat(b.pricePerVisit); break;
-        case "routeName": aVal = a.routeName || ""; bVal = b.routeName || ""; break;
-        case "isActive": aVal = a.isActive ? 1 : 0; bVal = b.isActive ? 1 : 0; break;
-        case "jobType": aVal = a.jobType || ""; bVal = b.jobType || ""; break;
-        default: aVal = ""; bVal = "";
+        case "pricePerVisit":
+          return dir * (parseFloat(a.pricePerVisit) - parseFloat(b.pricePerVisit));
+        case "isActive":
+          return dir * ((a.isActive ? 1 : 0) - (b.isActive ? 1 : 0));
+        case "contactName":
+          return dir * a.contactName.localeCompare(b.contactName);
+        case "propertyAddress":
+          return dir * a.propertyAddress.localeCompare(b.propertyAddress);
+        case "frequency":
+          return dir * (a.frequency || "").localeCompare(b.frequency || "");
+        case "dayOfWeek":
+          return dir * (a.dayOfWeek || "").localeCompare(b.dayOfWeek || "");
+        case "routeName":
+          return dir * (a.routeName || "").localeCompare(b.routeName || "");
+        case "jobType":
+          return dir * (a.jobType || "").localeCompare(b.jobType || "");
+        default:
+          return 0;
       }
-      if (typeof aVal === "number") return sortDir === "asc" ? aVal - bVal : bVal - aVal;
-      return sortDir === "asc" ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
     });
 
     return result;
@@ -226,7 +239,7 @@ export default function ServicePlans() {
 
   function handleBulkSubmit() {
     const ids = Array.from(selectedIds);
-    let updates: any = {};
+    let updates: BulkUpdates;
 
     switch (bulkAction) {
       case "price":
@@ -245,6 +258,8 @@ export default function ServicePlans() {
       case "route":
         updates = { routeId: bulkRouteId === "__unassigned__" ? null : bulkRouteId };
         break;
+      default:
+        return;
     }
 
     bulkMutation.mutate({ ids, updates });

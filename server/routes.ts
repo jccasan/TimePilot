@@ -3567,24 +3567,24 @@ export async function registerRoutes(
   app.patch("/api/service-plans/bulk", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { ids, updates } = req.body;
-      if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ error: "ids must be a non-empty array" });
-      }
-      if (!updates || typeof updates !== "object") {
-        return res.status(400).json({ error: "updates must be an object" });
-      }
+      const bulkSchema = z.object({
+        ids: z.array(z.string().uuid()).min(1, "ids must be a non-empty array of UUIDs"),
+        updates: z.object({
+          priceAdjustment: z.object({
+            type: z.enum(["flat", "percentage"]),
+            amount: z.number().finite(),
+          }).optional(),
+          dayOfWeek: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
+          isActive: z.boolean().optional(),
+          routeId: z.string().nullable().optional(),
+        }).strict(),
+      });
 
-      const allowedFields = ["priceAdjustment", "dayOfWeek", "isActive", "routeId"];
-      const unknownFields = Object.keys(updates).filter(k => !allowedFields.includes(k));
-      if (unknownFields.length > 0) {
-        return res.status(400).json({ error: `Invalid fields: ${unknownFields.join(", ")}. Allowed: ${allowedFields.join(", ")}` });
+      const parsed = bulkSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors.map(e => e.message).join("; ") });
       }
-
-      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-      if (updates.dayOfWeek && !validDays.includes(updates.dayOfWeek)) {
-        return res.status(400).json({ error: `Invalid dayOfWeek. Must be one of: ${validDays.join(", ")}` });
-      }
+      const { ids, updates } = parsed.data;
 
       if (updates.routeId && updates.routeId !== "") {
         const companyRoutes = await storage.getRoutes(companyId);
@@ -3603,29 +3603,31 @@ export async function registerRoutes(
         dayRoutes = await storage.getRoutes(companyId, updates.dayOfWeek);
       }
 
-      const results: any[] = [];
+      const results: typeof allPlans = [];
       for (const planId of ids) {
         const existing = planMap.get(planId);
         if (!existing) continue;
 
-        const safeUpdates: Record<string, any> = {};
+        const safeUpdates: Partial<{
+          pricePerVisit: string;
+          isActive: boolean;
+          pausedAt: Date | null;
+          routeId: string | null;
+          dayOfWeek: string;
+        }> = {};
 
         if (updates.priceAdjustment) {
           const currentPrice = parseFloat(existing.pricePerVisit);
           if (updates.priceAdjustment.type === "flat") {
             safeUpdates.pricePerVisit = Math.max(0, currentPrice + updates.priceAdjustment.amount).toFixed(2);
-          } else if (updates.priceAdjustment.type === "percentage") {
+          } else {
             safeUpdates.pricePerVisit = Math.max(0, currentPrice * (1 + updates.priceAdjustment.amount / 100)).toFixed(2);
           }
         }
 
         if (updates.isActive !== undefined) {
           safeUpdates.isActive = updates.isActive;
-          if (updates.isActive === false) {
-            safeUpdates.pausedAt = new Date();
-          } else if (updates.isActive === true) {
-            safeUpdates.pausedAt = null;
-          }
+          safeUpdates.pausedAt = updates.isActive ? null : new Date();
         }
 
         if (updates.routeId !== undefined) {
@@ -3654,7 +3656,7 @@ export async function registerRoutes(
 
         if (Object.keys(safeUpdates).length === 0) continue;
         const plan = await storage.updateServicePlan(planId, companyId, safeUpdates);
-        results.push(plan);
+        if (plan) results.push(plan);
       }
 
       res.json({ updated: results.length, results });
