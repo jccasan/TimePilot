@@ -112,7 +112,6 @@ export async function saveMutationUpdate(id: string, updates: Partial<PendingMut
     await db.put("pendingMutations", mutation);
   }
 }
-
 export async function removePendingMutation(id: string): Promise<void> {
   const db = await getDB();
   await db.delete("pendingMutations", id);

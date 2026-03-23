@@ -84,7 +84,7 @@ async function uploadAndPatchStandalonePhoto(photo: PendingPhoto): Promise<void>
     }
   }
 }
-
+ 
 async function resolvePhotoRef(
   placeholder: string,
   pendingPhotosMap: Map<string, PendingPhoto>,
@@ -100,7 +100,7 @@ async function resolvePhotoRef(
   }
   return null;
 }
-
+ 
 async function resolvePendingPhotoRefs(
   body: Record<string, unknown>,
   pendingPhotosMap: Map<string, PendingPhoto>,
@@ -212,7 +212,6 @@ export async function syncAll(
 
   return result;
 }
-
 export function isNetworkError(err: unknown): boolean {
   if (!navigator.onLine) return true;
   if (err instanceof TypeError) {

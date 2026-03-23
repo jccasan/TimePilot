@@ -228,6 +228,8 @@ function notify(companyId: string, type: string, title: string, message: string,
                   ${fullLink ? `<a href="${escapeHtml(fullLink)}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: bold;">View Details</a>` : ""}
                 </div>
               </div>`,
+            senderName: company?.name || undefined,
+            replyTo: company?.email || undefined,
           }));
         const results = await Promise.allSettled(sends);
         for (const r of results) {
@@ -6426,7 +6428,7 @@ export async function registerRoutes(
         sentBy: userId,
       });
 
-      const result = await sendEmail({ to, from: fromAddress, subject, text: body, html: htmlBody || body });
+      const result = await sendEmail({ to, from: fromAddress, subject, text: body, html: htmlBody || body, senderName: company?.name || undefined, replyTo: company?.email || undefined });
 
       if (result.success) {
         const updated = await storage.updateMessageStatus(msg.id, "sent");
@@ -6745,6 +6747,8 @@ export async function registerRoutes(
         subject,
         text: textBody,
         html: renderedHtml,
+        senderName: company?.name || undefined,
+        replyTo: company?.email || undefined,
       });
 
       if (result.success) {

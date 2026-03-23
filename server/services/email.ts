@@ -10,6 +10,7 @@ if (SENDGRID_API_KEY) {
 interface SendEmailOptions {
   to: string;
   from?: string;
+  senderName?: string;
   subject: string;
   text: string;
   html?: string;
@@ -33,9 +34,13 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     const replyTo = options.replyTo
       || (options.from && options.from !== VERIFIED_SENDER ? options.from : undefined);
 
+    const from = options.senderName
+      ? { name: options.senderName, email: VERIFIED_SENDER }
+      : VERIFIED_SENDER;
+
     const msg = {
       to: options.to,
-      from: VERIFIED_SENDER,
+      from,
       subject: options.subject,
       text: options.text,
       html: options.html || options.text,

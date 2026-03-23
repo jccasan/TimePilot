@@ -108,7 +108,7 @@ export async function runReminders() {
       const coveredTimings = new Set(activeRules.map(r => r.timing));
 
       for (const rule of activeRules) {
-        const count = await sendServiceRemindersForRule(company.id, company.name, tz, rule, false);
+        const count = await sendServiceRemindersForRule(company.id, company.name, company.email, tz, rule, false);
         totalServiceReminders += count;
       }
 
@@ -124,12 +124,12 @@ export async function runReminders() {
         if (timing === "custom") {
           fallbackRule.customHours = 4;
         }
-        const count = await sendServiceRemindersForRule(company.id, company.name, tz, fallbackRule, true);
+        const count = await sendServiceRemindersForRule(company.id, company.name, company.email, tz, fallbackRule, true);
         totalServiceReminders += count;
       }
 
       const invoiceSettings: InvoiceReminderSettings = company.invoiceReminderSettings || DEFAULT_INVOICE_SETTINGS;
-      const invoiceCount = await sendInvoiceReminders(company.id, company.name, tz, invoiceSettings);
+      const invoiceCount = await sendInvoiceReminders(company.id, company.name, company.email, tz, invoiceSettings);
       totalInvoiceReminders += invoiceCount;
     } catch (err) {
       errors++;
@@ -226,6 +226,7 @@ async function getContactTimingOverrides(companyId: string, coveredTimings: Set<
 async function sendServiceRemindersForRule(
   companyId: string,
   companyName: string,
+  companyEmail: string | null | undefined,
   timezone: string,
   rule: ReminderRule,
   contactOverrideOnly: boolean = false
@@ -372,6 +373,8 @@ async function sendServiceRemindersForRule(
             subject: `Service Reminder - ${companyName}`,
             text: message,
             html: generateServiceReminderHtml(companyName, `${contact.firstName} ${contact.lastName}`, addresses, cv.visit.scheduledDate, techInfo.techName, techInfo.arrivalWindow),
+            senderName: companyName,
+            replyTo: companyEmail || undefined,
           });
           emailOk = emailRes.success;
           if (!emailOk) console.error(`[reminders] Email delivery failed for ${contact.email}: ${emailRes.error}`);
@@ -461,6 +464,7 @@ function shouldSendInvoiceReminder(
 async function sendInvoiceReminders(
   companyId: string,
   companyName: string,
+  companyEmail: string | null | undefined,
   timezone: string,
   settings: InvoiceReminderSettings
 ): Promise<number> {
@@ -559,6 +563,8 @@ async function sendInvoiceReminders(
           subject,
           text: message,
           html: generateInvoiceReminderHtml(companyName, contactName, invoice.invoiceNumber, invoice.dueDate, String(total), isOverdue),
+          senderName: companyName,
+          replyTo: companyEmail || undefined,
         });
         if (emailRes.success) {
           emailOk = true;
