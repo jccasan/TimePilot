@@ -393,7 +393,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             variant="outline"
             className="flex-1 text-xs"
             onClick={() => onOptimize(route.id, stopCount)}
-            disabled={isOptimizing || stopCount < 2 || isOverMax || credits < creditsNeeded || route.isLocked}
+            disabled={isOptimizing || stopCount < 2 || isOverMax || credits < creditsNeeded}
             data-testid={`button-optimize-${route.id}`}
           >
             {isOptimizing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Navigation className="h-3 w-3 mr-1" />}
@@ -404,8 +404,8 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             variant="outline"
             className="text-xs"
             onClick={() => onReverse(route.id)}
-            disabled={isReversing || stopCount < 2 || route.isLocked}
-            title={route.isLocked ? "Route is locked" : "Reverse route order"}
+            disabled={isReversing || stopCount < 2}
+            title="Reverse route order"
             data-testid={`button-reverse-${route.id}`}
           >
             {isReversing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpDown className="h-3 w-3" />}
@@ -1324,6 +1324,11 @@ export default function RoutesPage() {
   }
 
   function handleOptimizeClick(routeId: string, stopCount: number) {
+    const route = allRoutes.find(r => r.id === routeId);
+    if (route?.isLocked) {
+      toast({ title: "Route is locked", description: "Unlock this route before optimizing.", variant: "destructive" });
+      return;
+    }
     if (credits < (stopCount <= 30 ? 1 : 2)) {
       setShowPurchase(true);
       return;
@@ -1452,7 +1457,14 @@ export default function RoutesPage() {
                           } else { deleteRouteMutation.mutate(r.id); }
                         }}
                         onOptimize={handleOptimizeClick}
-                        onReverse={(id) => reverseRouteMutation.mutate(id)}
+                        onReverse={(id) => {
+                          const r = allRoutes.find(rt => rt.id === id);
+                          if (r?.isLocked) {
+                            toast({ title: "Route is locked", description: "Unlock this route before reversing.", variant: "destructive" });
+                            return;
+                          }
+                          reverseRouteMutation.mutate(id);
+                        }}
                         onDispatch={(id) => dispatchMutation.mutate(id)}
                         onUnassignAll={(id) => setConfirmUnassignAll(id)}
                         onLock={(id) => lockRouteMutation.mutate(id)}
