@@ -159,11 +159,18 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
       return { success: false, error: "Telnyx credentials not configured" };
     }
     const { sendTelnyxSms } = await import("./telnyx-sms");
+    const { decrypt } = await import("../utils/encryption");
+    let apiKey: string;
+    try {
+      apiKey = decrypt(company.telnyxApiKey);
+    } catch {
+      apiKey = company.telnyxApiKey;
+    }
     return sendTelnyxSms({
       to: options.to,
       body: options.body,
       from: company.telnyxPhoneNumber,
-      apiKey: company.telnyxApiKey,
+      apiKey,
       messagingProfileId: company.telnyxMessagingProfileId,
       companyId: options.companyId,
       mediaUrl: options.mediaUrl,

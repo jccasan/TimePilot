@@ -1442,6 +1442,10 @@ export async function registerRoutes(
           }
         }
       }
+      if (updates.telnyxApiKey && typeof updates.telnyxApiKey === "string" && updates.telnyxApiKey.length > 0) {
+        const { encrypt } = await import("./utils/encryption");
+        updates.telnyxApiKey = encrypt(updates.telnyxApiKey);
+      }
       if (updates.reminderSettings) {
         const validTimings = ["24h_before", "2h_before", "morning_of", "custom"];
         const validChannels = ["email", "sms", "both"];
@@ -1471,7 +1475,7 @@ export async function registerRoutes(
         }
       }
       const company = await storage.updateCompany(companyId, updates);
-      auditLog(companyId, userId, "company", companyId, "update", { old: existing, new: company }, req.ip);
+      auditLog(companyId, userId, "company", companyId, "update", { old: sanitizeCompany(existing), new: sanitizeCompany(company) }, req.ip);
       res.json(sanitizeCompany(company));
     } catch (err) { handleError(res, err); }
   });
