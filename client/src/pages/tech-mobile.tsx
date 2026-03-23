@@ -14,6 +14,7 @@ import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
 import { useOffline } from "@/hooks/use-offline";
 import { OfflineStatusBar } from "@/components/offline-status-bar";
+import { PendingPhotosIndicator } from "@/components/pending-photos-indicator";
 import { cacheRouteData, getCachedRouteData, addPendingMutation, addPendingPhoto } from "@/lib/offline-store";
 
 type TodayVisit = {
@@ -406,18 +407,37 @@ export default function TechMobile() {
         gateClosedPath = await uploadFileDirect(gatePhoto);
       } catch (uploadErr) {
         if (!navigator.onLine) {
-          await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "gate", blob: gatePhoto });
+          const gatePhotoId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "gate", blob: gatePhoto });
           for (const extra of extraFiles) {
             await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "extra", blob: extra.file });
           }
-          const allVisitIds = [completeDialogVisit.id, ...completeDialogGroupVisits.filter(v => v.id !== completeDialogVisit.id && (v.status === "in_progress" || v.status === "scheduled")).map(v => v.id)];
-          for (const vid of allVisitIds) {
+          await addPendingMutation({
+            method: "POST",
+            url: `/api/visits/${completeDialogVisit.id}/complete-notify`,
+            body: {
+              gateClosedPhoto: `__pending_photo_${gatePhotoId}__`,
+              technicianNotes: notes[completeDialogVisit.id] || undefined,
+            },
+          });
+          const groupVisits = completeDialogGroupVisits.filter(v => v.id !== completeDialogVisit.id && (v.status === "in_progress" || v.status === "scheduled"));
+          for (const gv of groupVisits) {
+            if (gv.status === "scheduled") {
+              await addPendingMutation({
+                method: "PATCH",
+                url: `/api/visits/${gv.id}`,
+                body: { startedAt: new Date().toISOString(), status: "in_progress" },
+              });
+            }
             await addPendingMutation({
-              method: "PATCH",
-              url: `/api/visits/${vid}`,
-              body: { status: "completed", completedAt: new Date().toISOString(), technicianNotes: notes[completeDialogVisit.id] || undefined },
+              method: "POST",
+              url: `/api/visits/${gv.id}/complete-notify`,
+              body: {
+                gateClosedPhoto: `__pending_photo_${gatePhotoId}__`,
+                technicianNotes: notes[completeDialogVisit.id] || undefined,
+              },
             });
           }
+          const allVisitIds = [completeDialogVisit.id, ...groupVisits.map(v => v.id)];
           offline.refreshPendingCount();
           if (visits) {
             const completedIds = new Set(allVisitIds);
@@ -671,6 +691,8 @@ export default function TechMobile() {
                         </div>
                       </div>
                     )}
+
+                    <PendingPhotosIndicator visitId={primaryVisit.id} refreshTrigger={offline.pendingCount} />
 
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-1">Notes</p>

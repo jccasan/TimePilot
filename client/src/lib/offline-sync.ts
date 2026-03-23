@@ -15,7 +15,7 @@ export type SyncResult = {
   mutationsFailed: number;
   photosSynced: number;
   photosFailed: number;
-  failedItems: { type: "mutation" | "photo"; id: string; error: string }[];
+  failedItems: { type: "mutation" | "photo"; id: string; error: string; url?: string }[];
 };
 
 async function replayMutation(mutation: PendingMutation): Promise<void> {
@@ -61,6 +61,8 @@ async function uploadPendingPhoto(photo: PendingPhoto): Promise<string> {
     ? "proofOfServicePhoto"
     : photo.photoType === "gate"
     ? "gateClosedPhoto"
+    : photo.photoType === "extra"
+    ? "proofOfServicePhoto"
     : null;
 
   if (patchField) {
@@ -89,11 +91,43 @@ export async function syncAll(
     failedItems: [],
   };
 
+  const photos = await getPendingPhotos();
+  const pendingPhotosList = photos.filter(p => p.status === "pending" || p.status === "failed");
+  const uploadedPaths = new Map<string, string>();
+
+  for (const photo of pendingPhotosList) {
+    try {
+      await updatePhotoStatus(photo.id, "syncing");
+      onProgress?.(`Uploading photo ${result.photosSynced + 1} of ${pendingPhotosList.length}...`);
+      const objectPath = await uploadPendingPhoto(photo);
+      uploadedPaths.set(photo.id, objectPath);
+      await removePendingPhoto(photo.id);
+      result.photosSynced++;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      await updatePhotoStatus(photo.id, "failed", errorMsg);
+      result.photosFailed++;
+      result.failedItems.push({ type: "photo", id: photo.id, error: errorMsg });
+    }
+  }
+
   const mutations = await getPendingMutations();
   const pendingMutations = mutations.filter(m => m.status === "pending" || m.status === "failed");
 
   for (const mutation of pendingMutations) {
     try {
+      if (mutation.body && typeof mutation.body === "object") {
+        const body = mutation.body as Record<string, unknown>;
+        for (const [key, value] of Object.entries(body)) {
+          if (typeof value === "string" && value.startsWith("__pending_photo_") && value.endsWith("__")) {
+            const photoId = value.slice(16, -2);
+            const path = uploadedPaths.get(photoId);
+            if (path) {
+              body[key] = path;
+            }
+          }
+        }
+      }
       await updateMutationStatus(mutation.id, "syncing");
       onProgress?.(`Syncing action ${result.mutationsSynced + 1} of ${pendingMutations.length}...`);
       await replayMutation(mutation);
@@ -103,25 +137,7 @@ export async function syncAll(
       const errorMsg = err instanceof Error ? err.message : "Unknown error";
       await updateMutationStatus(mutation.id, "failed", errorMsg);
       result.mutationsFailed++;
-      result.failedItems.push({ type: "mutation", id: mutation.id, error: errorMsg });
-    }
-  }
-
-  const photos = await getPendingPhotos();
-  const pendingPhotosList = photos.filter(p => p.status === "pending" || p.status === "failed");
-
-  for (const photo of pendingPhotosList) {
-    try {
-      await updatePhotoStatus(photo.id, "syncing");
-      onProgress?.(`Uploading photo ${result.photosSynced + 1} of ${pendingPhotosList.length}...`);
-      await uploadPendingPhoto(photo);
-      await removePendingPhoto(photo.id);
-      result.photosSynced++;
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Unknown error";
-      await updatePhotoStatus(photo.id, "failed", errorMsg);
-      result.photosFailed++;
-      result.failedItems.push({ type: "photo", id: photo.id, error: errorMsg });
+      result.failedItems.push({ type: "mutation", id: mutation.id, error: errorMsg, url: mutation.url });
     }
   }
 
