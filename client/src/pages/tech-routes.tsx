@@ -11,6 +11,9 @@ import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
 import { Link } from "wouter";
+import { useOffline } from "@/hooks/use-offline";
+import { OfflineStatusBar } from "@/components/offline-status-bar";
+import { cacheRouteData, getCachedRouteData, addPendingMutation } from "@/lib/offline-store";
 
 const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const dayFullLabels: Record<string, string> = {
@@ -278,20 +281,44 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
 
 export default function TechRoutes() {
   const { toast } = useToast();
+  const offline = useOffline();
   const [selectedDay, setSelectedDay] = useState<string>(getTodayDayName());
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingAdvanceAfter, setPendingAdvanceAfter] = useState<string | null>(null);
+  const [cachedVisits, setCachedVisits] = useState<EnrichedVisit[] | null>(null);
 
   const selectedDate = useMemo(() => getDateForDay(selectedDay), [selectedDay]);
+  const cacheKey = `visits-routes-${selectedDate}`;
 
-  const { data: visits, isLoading } = useQuery<EnrichedVisit[]>({
+  const { data: fetchedVisits, isLoading: fetchLoading, isError: fetchError } = useQuery<EnrichedVisit[]>({
     queryKey: ["/api/visits/today", selectedDate],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/visits/today?date=${selectedDate}`);
       return res.json();
     },
   });
+
+  useEffect(() => {
+    if (fetchedVisits) {
+      cacheRouteData(cacheKey, fetchedVisits);
+      setCachedVisits(null);
+    }
+  }, [fetchedVisits, cacheKey]);
+
+  useEffect(() => {
+    if (fetchError && !fetchedVisits) {
+      getCachedRouteData<EnrichedVisit[]>(cacheKey).then(cached => {
+        if (cached) {
+          setCachedVisits(cached);
+          toast({ title: "Using cached data", description: "Showing your last loaded route data while offline." });
+        }
+      });
+    }
+  }, [fetchError, fetchedVisits, cacheKey, toast]);
+
+  const visits = fetchedVisits ?? cachedVisits;
+  const isLoading = fetchLoading && !cachedVisits;
 
   const routeGroups = useMemo<RouteGroup[]>(() => {
     if (!visits) return [];
@@ -344,11 +371,27 @@ export default function TechRoutes() {
         body.completedAt = null;
         body.startedAt = null;
       }
-      await apiRequest("PATCH", `/api/visits/${visitId}`, body);
+      try {
+        await apiRequest("PATCH", `/api/visits/${visitId}`, body);
+      } catch (err) {
+        if (!navigator.onLine) {
+          await addPendingMutation({ method: "PATCH", url: `/api/visits/${visitId}`, body });
+          offline.refreshPendingCount();
+          if (visits) {
+            const updated = visits.map(v => v.id === visitId ? { ...v, status, ...(body.startedAt ? { startedAt: body.startedAt as string } : {}), ...(body.completedAt ? { completedAt: body.completedAt as string } : {}) } : v);
+            cacheRouteData(cacheKey, updated);
+            setCachedVisits(updated);
+            queryClient.setQueryData<EnrichedVisit[]>(["/api/visits/today", selectedDate], updated);
+          }
+          toast({ title: "Visit updated (offline)", description: "Will sync when connection returns." });
+          return { visitId, status };
+        }
+        throw err;
+      }
       return { visitId, status };
     },
     onSuccess: (data) => {
-      if (data.status === "completed" || data.status === "skipped") {
+      if (data && (data.status === "completed" || data.status === "skipped")) {
         setPendingAdvanceAfter(data.visitId);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today", selectedDate] });
@@ -405,6 +448,13 @@ export default function TechRoutes() {
 
   return (
     <div className="p-4 space-y-4 overflow-auto h-full max-w-2xl mx-auto">
+      <OfflineStatusBar
+        isOnline={offline.isOnline}
+        pendingCount={offline.pendingCount}
+        isSyncing={offline.isSyncing}
+        lastSyncResult={offline.lastSyncResult}
+        onRetrySync={offline.performSync}
+      />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold" data-testid="text-tech-routes-heading">Route Overview</h1>

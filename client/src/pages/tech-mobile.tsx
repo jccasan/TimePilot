@@ -12,6 +12,9 @@ import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, 
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
+import { useOffline } from "@/hooks/use-offline";
+import { OfflineStatusBar } from "@/components/offline-status-bar";
+import { cacheRouteData, getCachedRouteData, addPendingMutation, addPendingPhoto } from "@/lib/offline-store";
 
 type TodayVisit = {
   id: string;
@@ -140,6 +143,7 @@ type RouteGroup = {
 
 export default function TechMobile() {
   const { toast } = useToast();
+  const offline = useOffline();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [uploadingVisitId, setUploadingVisitId] = useState<string | null>(null);
@@ -149,6 +153,7 @@ export default function TechMobile() {
   const pendingVisitIdRef = useRef<string | null>(null);
   const pendingUploadTypeRef = useRef<PhotoUploadType | null>(null);
   const [pendingAdvanceAfter, setPendingAdvanceAfter] = useState<string | null>(null);
+  const [cachedVisits, setCachedVisits] = useState<TodayVisit[] | null>(null);
 
   const [completeDialogVisit, setCompleteDialogVisit] = useState<TodayVisit | null>(null);
   const [completeDialogGroupVisits, setCompleteDialogGroupVisits] = useState<TodayVisit[]>([]);
@@ -197,9 +202,30 @@ export default function TechMobile() {
 
   const { data: company } = useQuery<{ name: string }>({ queryKey: ["/api/company"] });
 
-  const { data: visits, isLoading } = useQuery<TodayVisit[]>({
+  const { data: fetchedVisits, isLoading: fetchLoading, isError: fetchError } = useQuery<TodayVisit[]>({
     queryKey: ["/api/visits/today"],
   });
+
+  useEffect(() => {
+    if (fetchedVisits) {
+      cacheRouteData("visits-today", fetchedVisits);
+      setCachedVisits(null);
+    }
+  }, [fetchedVisits]);
+
+  useEffect(() => {
+    if (fetchError && !fetchedVisits) {
+      getCachedRouteData<TodayVisit[]>("visits-today").then(cached => {
+        if (cached) {
+          setCachedVisits(cached);
+          toast({ title: "Using cached data", description: "Showing your last loaded route data while offline." });
+        }
+      });
+    }
+  }, [fetchError, fetchedVisits, toast]);
+
+  const visits = fetchedVisits ?? cachedVisits;
+  const isLoading = fetchLoading && !cachedVisits;
 
   const routeGroupsWithProps = useMemo<RouteGroup[]>(() => {
     if (!visits) return [];
@@ -258,10 +284,27 @@ export default function TechMobile() {
 
   const startMutation = useMutation({
     mutationFn: async (visitId: string) => {
-      await apiRequest("PATCH", `/api/visits/${visitId}`, {
+      const body = {
         startedAt: new Date().toISOString(),
         status: "in_progress",
-      });
+      };
+      try {
+        await apiRequest("PATCH", `/api/visits/${visitId}`, body);
+      } catch (err) {
+        if (!navigator.onLine) {
+          await addPendingMutation({ method: "PATCH", url: `/api/visits/${visitId}`, body });
+          offline.refreshPendingCount();
+          if (visits) {
+            const updated = visits.map(v => v.id === visitId ? { ...v, status: "in_progress" as const, startedAt: body.startedAt } : v);
+            cacheRouteData("visits-today", updated);
+            setCachedVisits(updated);
+            queryClient.setQueryData<TodayVisit[]>(["/api/visits/today"], updated);
+          }
+          toast({ title: "Visit started (offline)", description: "Will sync when connection returns." });
+          return;
+        }
+        throw err;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
@@ -298,7 +341,14 @@ export default function TechMobile() {
       const label = photoType === "before" ? "Before" : "After";
       toast({ title: `${label} photo uploaded`, description: "Photo saved successfully." });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      if (!navigator.onLine) {
+        await addPendingPhoto({ visitId, photoType, blob: file });
+        offline.refreshPendingCount();
+        const label = photoType === "before" ? "Before" : "After";
+        toast({ title: `${label} photo saved offline`, description: "Will upload when connection returns." });
+      } else {
+        toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      }
     } finally {
       setUploadingVisitId(null);
       setUploadingType(null);
@@ -351,7 +401,40 @@ export default function TechMobile() {
     setIsCompleting(true);
 
     try {
-      const gateClosedPath = await uploadFileDirect(gatePhoto);
+      let gateClosedPath: string;
+      try {
+        gateClosedPath = await uploadFileDirect(gatePhoto);
+      } catch (uploadErr) {
+        if (!navigator.onLine) {
+          await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "gate", blob: gatePhoto });
+          for (const extra of extraFiles) {
+            await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "extra", blob: extra.file });
+          }
+          const allVisitIds = [completeDialogVisit.id, ...completeDialogGroupVisits.filter(v => v.id !== completeDialogVisit.id && (v.status === "in_progress" || v.status === "scheduled")).map(v => v.id)];
+          for (const vid of allVisitIds) {
+            await addPendingMutation({
+              method: "PATCH",
+              url: `/api/visits/${vid}`,
+              body: { status: "completed", completedAt: new Date().toISOString(), technicianNotes: notes[completeDialogVisit.id] || undefined },
+            });
+          }
+          offline.refreshPendingCount();
+          if (visits) {
+            const completedIds = new Set(allVisitIds);
+            const updated = visits.map(v => completedIds.has(v.id) ? { ...v, status: "completed", completedAt: new Date().toISOString() } : v);
+            cacheRouteData("visits-today", updated);
+            setCachedVisits(updated);
+            queryClient.setQueryData<TodayVisit[]>(["/api/visits/today"], updated);
+          }
+          setPendingAdvanceAfter(completeDialogVisit.id);
+          setCompleteDialogVisit(null);
+          setCompleteDialogGroupVisits([]);
+          toast({ title: "Visit completed (offline)", description: "Photos and notification will sync when connection returns." });
+          setIsCompleting(false);
+          return;
+        }
+        throw uploadErr;
+      }
 
       const extraPaths: string[] = [];
       for (const extra of extraFiles) {
@@ -417,6 +500,13 @@ export default function TechMobile() {
 
   return (
     <div className="p-4 space-y-4 overflow-auto h-full max-w-lg mx-auto">
+      <OfflineStatusBar
+        isOnline={offline.isOnline}
+        pendingCount={offline.pendingCount}
+        isSyncing={offline.isSyncing}
+        lastSyncResult={offline.lastSyncResult}
+        onRetrySync={offline.performSync}
+      />
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-tech-heading">Active Service</h1>
         <p className="text-sm text-muted-foreground">Complete visits and capture proof of service</p>
