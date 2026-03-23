@@ -3621,6 +3621,11 @@ export async function registerRoutes(
 
         if (updates.isActive !== undefined) {
           safeUpdates.isActive = updates.isActive;
+          if (updates.isActive === false) {
+            safeUpdates.pausedAt = new Date();
+          } else if (updates.isActive === true) {
+            safeUpdates.pausedAt = null;
+          }
         }
 
         if (updates.routeId !== undefined) {
