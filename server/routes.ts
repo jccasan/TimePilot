@@ -3210,11 +3210,27 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.patch("/api/routes/:id/lock", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const route = await storage.getRoute(req.params.id, companyId);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+
+      const newLocked = !route.isLocked;
+      const updated = await storage.updateRoute(req.params.id, companyId, { isLocked: newLocked });
+      res.json(updated);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/routes/:id/optimize", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const route = await storage.getRoute(req.params.id, companyId);
       if (!route) return res.status(404).json({ error: "Route not found" });
+
+      if (route.isLocked) {
+        return res.status(409).json({ error: "Route is locked. Unlock it before optimizing." });
+      }
 
       const plans = await storage.getServicePlans(companyId, { isActive: true });
       const routePlans = plans.filter(sp => sp.routeId === route.id);
@@ -3334,6 +3350,10 @@ export async function registerRoutes(
       const { companyId } = await getCompanyContext(req);
       const route = await storage.getRoute(req.params.id, companyId);
       if (!route) return res.status(404).json({ error: "Route not found" });
+
+      if (route.isLocked) {
+        return res.status(409).json({ error: "Route is locked. Unlock it before reversing." });
+      }
 
       const plans = await storage.getServicePlans(companyId, { isActive: true });
       const routePlans = plans.filter(sp => sp.routeId === route.id).sort((a, b) => a.stopOrder - b.stopOrder);

@@ -32,7 +32,7 @@ import {
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
   Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
-  CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert
+  CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert, Lock, Unlock
 } from "lucide-react";
 import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
@@ -285,7 +285,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 }
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
-  onEdit, onDelete, onOptimize, onReverse, onDispatch, onUnassignAll, isOptimizing, isReversing, isDispatching, isUnassigning,
+  onEdit, onDelete, onOptimize, onReverse, onDispatch, onUnassignAll, onLock, isOptimizing, isReversing, isDispatching, isUnassigning, isLocking,
   visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick, onOnMyWay, onMyWaySendingId }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
@@ -294,7 +294,8 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   onReverse: (routeId: string) => void;
   onDispatch: (routeId: string) => void;
   onUnassignAll: (routeId: string) => void;
-  isOptimizing: boolean; isReversing: boolean; isDispatching: boolean; isUnassigning: boolean;
+  onLock: (routeId: string) => void;
+  isOptimizing: boolean; isReversing: boolean; isDispatching: boolean; isUnassigning: boolean; isLocking: boolean;
   visitsByPlan?: Record<string, Visit>;
   onVisitStatusChange?: (visitId: string, status: string) => void;
   updatingVisitId?: string | null;
@@ -328,8 +329,19 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             <CardTitle className="text-sm font-semibold truncate" data-testid={`text-route-name-${route.id}`}>
               {route.name}
             </CardTitle>
+            {route.isLocked && <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" data-testid={`icon-locked-${route.id}`} />}
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onLock(route.id)}
+              disabled={isLocking}
+              title={route.isLocked ? "Unlock route" : "Lock route"}
+              data-testid={`button-lock-${route.id}`}
+            >
+              {isLocking ? <Loader2 className="h-4 w-4 animate-spin" /> : route.isLocked ? <Lock className="h-4 w-4 text-amber-500" /> : <Unlock className="h-4 w-4" />}
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => onEdit(route)} data-testid={`button-edit-route-${route.id}`}>
               <Pencil className="h-4 w-4" />
             </Button>
@@ -381,7 +393,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             variant="outline"
             className="flex-1 text-xs"
             onClick={() => onOptimize(route.id, stopCount)}
-            disabled={isOptimizing || stopCount < 2 || isOverMax || credits < creditsNeeded}
+            disabled={isOptimizing || stopCount < 2 || isOverMax || credits < creditsNeeded || route.isLocked}
             data-testid={`button-optimize-${route.id}`}
           >
             {isOptimizing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Navigation className="h-3 w-3 mr-1" />}
@@ -392,8 +404,8 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             variant="outline"
             className="text-xs"
             onClick={() => onReverse(route.id)}
-            disabled={isReversing || stopCount < 2}
-            title="Reverse route order"
+            disabled={isReversing || stopCount < 2 || route.isLocked}
+            title={route.isLocked ? "Route is locked" : "Reverse route order"}
             data-testid={`button-reverse-${route.id}`}
           >
             {isReversing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpDown className="h-3 w-3" />}
@@ -881,6 +893,7 @@ export default function RoutesPage() {
   const [optimizingRouteId, setOptimizingRouteId] = useState<string | null>(null);
   const [reversingRouteId, setReversingRouteId] = useState<string | null>(null);
   const [dispatchingRouteId, setDispatchingRouteId] = useState<string | null>(null);
+  const [lockingRouteId, setLockingRouteId] = useState<string | null>(null);
   const [unassignedSearch, setUnassignedSearch] = useState("");
   const [confirmOptimize, setConfirmOptimize] = useState<{ routeId: string; stopCount: number } | null>(null);
   const [savingsResult, setSavingsResult] = useState<OptimizeResult | null>(null);
@@ -1212,6 +1225,23 @@ export default function RoutesPage() {
     },
   });
 
+  const lockRouteMutation = useMutation({
+    mutationFn: async (routeId: string) => {
+      setLockingRouteId(routeId);
+      const res = await apiRequest("PATCH", `/api/routes/${routeId}/lock`);
+      return res.json() as Promise<Route>;
+    },
+    onSuccess: (data) => {
+      setLockingRouteId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      toast({ title: data.isLocked ? "Route locked" : "Route unlocked", description: data.isLocked ? "Optimize and reverse are now blocked for this route." : "Route can now be optimized and reversed." });
+    },
+    onError: (err: Error) => {
+      setLockingRouteId(null);
+      toast({ title: "Lock toggle failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const dispatchMutation = useMutation({
     mutationFn: async (routeId: string) => {
       setDispatchingRouteId(routeId);
@@ -1425,9 +1455,11 @@ export default function RoutesPage() {
                         onReverse={(id) => reverseRouteMutation.mutate(id)}
                         onDispatch={(id) => dispatchMutation.mutate(id)}
                         onUnassignAll={(id) => setConfirmUnassignAll(id)}
+                        onLock={(id) => lockRouteMutation.mutate(id)}
                         isOptimizing={optimizingRouteId === route.id}
                         isReversing={reversingRouteId === route.id}
                         isDispatching={dispatchingRouteId === route.id}
+                        isLocking={lockingRouteId === route.id}
                         visitsByPlan={visitsByPlan}
                         onVisitStatusChange={handleVisitStatusChange}
                         updatingVisitId={updatingVisitId}

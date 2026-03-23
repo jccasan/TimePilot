@@ -303,6 +303,7 @@ export const routes = pgTable("routes", {
   dayOfWeek: dayOfWeekEnum("day_of_week").notNull(),
   technicianId: varchar("technician_id").references(() => users.id),
   color: varchar("color", { length: 7 }).default("#3b82f6"),
+  isLocked: boolean("is_locked").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
