@@ -75,6 +75,8 @@ export default function ServicePlans() {
   const [filterDay, setFilterDay] = useState("all");
   const [filterRoute, setFilterRoute] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterPriceMin, setFilterPriceMin] = useState("");
+  const [filterPriceMax, setFilterPriceMax] = useState("");
   const [sortField, setSortField] = useState<SortField>("contactName");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -144,6 +146,14 @@ export default function ServicePlans() {
       if (filterStatus === "active") result = result.filter((p) => p.isActive);
       else if (filterStatus === "paused") result = result.filter((p) => !p.isActive);
     }
+    if (filterPriceMin) {
+      const min = parseFloat(filterPriceMin);
+      if (!isNaN(min)) result = result.filter((p) => parseFloat(p.pricePerVisit) >= min);
+    }
+    if (filterPriceMax) {
+      const max = parseFloat(filterPriceMax);
+      if (!isNaN(max)) result = result.filter((p) => parseFloat(p.pricePerVisit) <= max);
+    }
 
     result.sort((a, b) => {
       let aVal: any, bVal: any;
@@ -163,7 +173,7 @@ export default function ServicePlans() {
     });
 
     return result;
-  }, [plans, search, filterFrequency, filterDay, filterRoute, filterStatus, sortField, sortDir]);
+  }, [plans, search, filterFrequency, filterDay, filterRoute, filterStatus, filterPriceMin, filterPriceMax, sortField, sortDir]);
 
   const allSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
 
@@ -234,7 +244,7 @@ export default function ServicePlans() {
         updates = { isActive: bulkStatus === "true" };
         break;
       case "route":
-        updates = { routeId: bulkRouteId || null };
+        updates = { routeId: bulkRouteId === "__unassigned__" ? null : bulkRouteId };
         break;
     }
 
@@ -253,7 +263,7 @@ export default function ServicePlans() {
       case "status":
         return `${bulkStatus === "true" ? "Activate" : "Pause"} ${count} plan(s)`;
       case "route":
-        const routeName = bulkRouteId ? routeMap.get(bulkRouteId) || "Unknown" : "Unassigned";
+        const routeName = bulkRouteId === "__unassigned__" ? "Unassigned" : (bulkRouteId ? routeMap.get(bulkRouteId) || "Unknown" : "—");
         return `Reassign ${count} plan(s) to route: ${routeName}`;
       default:
         return "";
@@ -338,6 +348,25 @@ export default function ServicePlans() {
                 <SelectItem value="paused">Paused</SelectItem>
               </SelectContent>
             </Select>
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                placeholder="Min $"
+                value={filterPriceMin}
+                onChange={(e) => setFilterPriceMin(e.target.value)}
+                className="w-[80px]"
+                data-testid="input-filter-price-min"
+              />
+              <span className="text-muted-foreground text-xs">-</span>
+              <Input
+                type="number"
+                placeholder="Max $"
+                value={filterPriceMax}
+                onChange={(e) => setFilterPriceMax(e.target.value)}
+                className="w-[80px]"
+                data-testid="input-filter-price-max"
+              />
+            </div>
           </div>
 
           {selectedIds.size > 0 && (
@@ -549,6 +578,7 @@ export default function ServicePlans() {
                     <SelectValue placeholder="Select a route" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__unassigned__">Unassigned</SelectItem>
                     {routes?.map((r) => (
                       <SelectItem key={r.id} value={r.id}>{r.name} ({DAY_LABELS[r.dayOfWeek] || r.dayOfWeek})</SelectItem>
                     ))}
@@ -566,7 +596,7 @@ export default function ServicePlans() {
             <Button variant="outline" onClick={() => setBulkDialogOpen(false)} data-testid="button-bulk-cancel">
               Cancel
             </Button>
-            <Button onClick={handleBulkSubmit} disabled={bulkMutation.isPending} data-testid="button-bulk-confirm">
+            <Button onClick={handleBulkSubmit} disabled={bulkMutation.isPending || (bulkAction === "route" && !bulkRouteId)} data-testid="button-bulk-confirm">
               {bulkMutation.isPending ? "Updating..." : "Apply Changes"}
             </Button>
           </DialogFooter>
