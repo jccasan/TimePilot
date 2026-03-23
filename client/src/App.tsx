@@ -59,6 +59,8 @@ import MigrationPage from "@/pages/migration-page";
 import ResetPassword from "@/pages/reset-password";
 import SignupWidget from "@/pages/signup-widget";
 import VoiceSignup from "@/pages/voice-signup";
+import PrivacyPolicy from "@/pages/privacy-policy";
+import SmsTerms from "@/pages/sms-terms";
 import Jobs from "@/pages/jobs";
 import ServicePlansPage from "@/pages/service-plans";
 import { NotificationBell } from "@/components/notification-bell";
@@ -461,6 +463,20 @@ function AppContent() {
 
   const isVoiceSignupPath = typeof window !== "undefined" &&
     window.location.pathname.startsWith("/voice-signup/");
+
+  const isPrivacyPolicyPath = typeof window !== "undefined" &&
+    window.location.pathname === "/privacy-policy";
+
+  const isSmsTermsPath = typeof window !== "undefined" &&
+    window.location.pathname === "/sms-terms";
+
+  if (isPrivacyPolicyPath) {
+    return <PrivacyPolicy />;
+  }
+
+  if (isSmsTermsPath) {
+    return <SmsTerms />;
+  }
 
   if (isResetPasswordPath) {
     return <ResetPassword />;
