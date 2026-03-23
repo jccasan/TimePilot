@@ -39,12 +39,12 @@ async function replayMutation(mutation: PendingMutation): Promise<void> {
   }
 }
 
-async function uploadPendingPhoto(photo: PendingPhoto): Promise<string> {
+async function uploadPhotoBlob(blob: Blob, photoId: string): Promise<string> {
   const headers: Record<string, string> = {
     ...getAuthHeaders(),
   };
   const formData = new FormData();
-  formData.append("file", photo.blob, `offline-photo-${photo.id}.jpg`);
+  formData.append("file", blob, `offline-photo-${photoId}.jpg`);
 
   const uploadRes = await fetch("/api/uploads/direct", {
     method: "POST",
@@ -54,21 +54,26 @@ async function uploadPendingPhoto(photo: PendingPhoto): Promise<string> {
   });
   if (!uploadRes.ok) throw new Error("Upload failed");
   const { objectPath } = await uploadRes.json();
+  return objectPath;
+}
+
+async function uploadAndPatchStandalonePhoto(photo: PendingPhoto): Promise<void> {
+  const objectPath = await uploadPhotoBlob(photo.blob, photo.id);
 
   const patchField = photo.photoType === "before"
     ? "proofOfServicePhotoBefore"
     : photo.photoType === "after"
     ? "proofOfServicePhoto"
-    : photo.photoType === "gate"
-    ? "gateClosedPhoto"
-    : photo.photoType === "extra"
-    ? "proofOfServicePhoto"
     : null;
 
   if (patchField) {
+    const headers: Record<string, string> = {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    };
     const patchRes = await fetch(`/api/visits/${photo.visitId}`, {
       method: "PATCH",
-      headers: { ...headers, "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ [patchField]: objectPath }),
       credentials: "include",
     });
@@ -77,7 +82,49 @@ async function uploadPendingPhoto(photo: PendingPhoto): Promise<string> {
       throw new Error(`Patch failed: ${text}`);
     }
   }
-  return objectPath;
+}
+
+async function resolvePendingPhotoRefs(
+  body: Record<string, unknown>,
+  pendingPhotosMap: Map<string, PendingPhoto>,
+  uploadedPaths: Map<string, string>
+): Promise<void> {
+  for (const [key, value] of Object.entries(body)) {
+    if (typeof value === "string" && value.startsWith("__pending_photo_") && value.endsWith("__")) {
+      const photoId = value.slice(16, -2);
+      let path = uploadedPaths.get(photoId);
+      if (!path) {
+        const photo = pendingPhotosMap.get(photoId);
+        if (photo) {
+          path = await uploadPhotoBlob(photo.blob, photo.id);
+          uploadedPaths.set(photoId, path);
+          await removePendingPhoto(photoId);
+        }
+      }
+      if (path) body[key] = path;
+    }
+    if (Array.isArray(value)) {
+      const resolvedArr: string[] = [];
+      for (const item of value) {
+        if (typeof item === "string" && item.startsWith("__pending_photo_") && item.endsWith("__")) {
+          const photoId = item.slice(16, -2);
+          let path = uploadedPaths.get(photoId);
+          if (!path) {
+            const photo = pendingPhotosMap.get(photoId);
+            if (photo) {
+              path = await uploadPhotoBlob(photo.blob, photo.id);
+              uploadedPaths.set(photoId, path);
+              await removePendingPhoto(photoId);
+            }
+          }
+          if (path) resolvedArr.push(path);
+        } else if (typeof item === "string") {
+          resolvedArr.push(item);
+        }
+      }
+      body[key] = resolvedArr;
+    }
+  }
 }
 
 export async function syncAll(
@@ -91,42 +138,26 @@ export async function syncAll(
     failedItems: [],
   };
 
-  const photos = await getPendingPhotos();
-  const pendingPhotosList = photos.filter(p => p.status === "pending" || p.status === "failed");
-  const uploadedPaths = new Map<string, string>();
-
-  for (const photo of pendingPhotosList) {
-    try {
-      await updatePhotoStatus(photo.id, "syncing");
-      onProgress?.(`Uploading photo ${result.photosSynced + 1} of ${pendingPhotosList.length}...`);
-      const objectPath = await uploadPendingPhoto(photo);
-      uploadedPaths.set(photo.id, objectPath);
-      await removePendingPhoto(photo.id);
-      result.photosSynced++;
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Unknown error";
-      await updatePhotoStatus(photo.id, "failed", errorMsg);
-      result.photosFailed++;
-      result.failedItems.push({ type: "photo", id: photo.id, error: errorMsg });
+  const allPhotos = await getPendingPhotos();
+  const pendingPhotosMap = new Map<string, PendingPhoto>();
+  for (const p of allPhotos) {
+    if (p.status === "pending" || p.status === "failed") {
+      pendingPhotosMap.set(p.id, p);
     }
   }
+  const uploadedPaths = new Map<string, string>();
 
   const mutations = await getPendingMutations();
   const pendingMutations = mutations.filter(m => m.status === "pending" || m.status === "failed");
 
   for (const mutation of pendingMutations) {
     try {
-      if (mutation.body && typeof mutation.body === "object") {
-        const body = mutation.body as Record<string, unknown>;
-        for (const [key, value] of Object.entries(body)) {
-          if (typeof value === "string" && value.startsWith("__pending_photo_") && value.endsWith("__")) {
-            const photoId = value.slice(16, -2);
-            const path = uploadedPaths.get(photoId);
-            if (path) {
-              body[key] = path;
-            }
-          }
-        }
+      if (mutation.body && typeof mutation.body === "object" && !Array.isArray(mutation.body)) {
+        await resolvePendingPhotoRefs(
+          mutation.body as Record<string, unknown>,
+          pendingPhotosMap,
+          uploadedPaths
+        );
       }
       await updateMutationStatus(mutation.id, "syncing");
       onProgress?.(`Syncing action ${result.mutationsSynced + 1} of ${pendingMutations.length}...`);
@@ -141,5 +172,43 @@ export async function syncAll(
     }
   }
 
+  const remainingPhotos = await getPendingPhotos();
+  const standalonePhotos = remainingPhotos.filter(
+    p => (p.status === "pending" || p.status === "failed") &&
+      (p.photoType === "before" || p.photoType === "after")
+  );
+
+  for (const photo of standalonePhotos) {
+    try {
+      await updatePhotoStatus(photo.id, "syncing");
+      onProgress?.(`Uploading photo ${result.photosSynced + 1}...`);
+      await uploadAndPatchStandalonePhoto(photo);
+      await removePendingPhoto(photo.id);
+      result.photosSynced++;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      await updatePhotoStatus(photo.id, "failed", errorMsg);
+      result.photosFailed++;
+      result.failedItems.push({ type: "photo", id: photo.id, error: errorMsg });
+    }
+  }
+
+  for (const [photoId, path] of uploadedPaths) {
+    if (path) result.photosSynced++;
+    pendingPhotosMap.delete(photoId);
+  }
+
   return result;
+}
+
+export function isNetworkError(err: unknown): boolean {
+  if (!navigator.onLine) return true;
+  if (err instanceof TypeError) {
+    const msg = err.message.toLowerCase();
+    if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
+      return true;
+    }
+  }
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  return false;
 }

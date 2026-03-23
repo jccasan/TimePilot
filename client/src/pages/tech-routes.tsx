@@ -14,6 +14,7 @@ import { Link } from "wouter";
 import { useOffline } from "@/hooks/use-offline";
 import { OfflineStatusBar } from "@/components/offline-status-bar";
 import { cacheRouteData, getCachedRouteData, addPendingMutation } from "@/lib/offline-store";
+import { isNetworkError } from "@/lib/offline-sync";
 
 const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const dayFullLabels: Record<string, string> = {
@@ -374,7 +375,7 @@ export default function TechRoutes() {
       try {
         await apiRequest("PATCH", `/api/visits/${visitId}`, body);
       } catch (err) {
-        if (!navigator.onLine) {
+        if (isNetworkError(err)) {
           await addPendingMutation({ method: "PATCH", url: `/api/visits/${visitId}`, body });
           offline.refreshPendingCount();
           if (visits) {

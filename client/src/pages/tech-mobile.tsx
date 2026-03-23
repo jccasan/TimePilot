@@ -16,6 +16,7 @@ import { useOffline } from "@/hooks/use-offline";
 import { OfflineStatusBar } from "@/components/offline-status-bar";
 import { PendingPhotosIndicator } from "@/components/pending-photos-indicator";
 import { cacheRouteData, getCachedRouteData, addPendingMutation, addPendingPhoto } from "@/lib/offline-store";
+import { isNetworkError } from "@/lib/offline-sync";
 
 type TodayVisit = {
   id: string;
@@ -292,7 +293,7 @@ export default function TechMobile() {
       try {
         await apiRequest("PATCH", `/api/visits/${visitId}`, body);
       } catch (err) {
-        if (!navigator.onLine) {
+        if (isNetworkError(err)) {
           await addPendingMutation({ method: "PATCH", url: `/api/visits/${visitId}`, body });
           offline.refreshPendingCount();
           if (visits) {
@@ -342,7 +343,7 @@ export default function TechMobile() {
       const label = photoType === "before" ? "Before" : "After";
       toast({ title: `${label} photo uploaded`, description: "Photo saved successfully." });
     } catch (err: any) {
-      if (!navigator.onLine) {
+      if (isNetworkError(err)) {
         await addPendingPhoto({ visitId, photoType, blob: file });
         offline.refreshPendingCount();
         const label = photoType === "before" ? "Before" : "After";
@@ -406,16 +407,19 @@ export default function TechMobile() {
       try {
         gateClosedPath = await uploadFileDirect(gatePhoto);
       } catch (uploadErr) {
-        if (!navigator.onLine) {
+        if (isNetworkError(uploadErr)) {
           const gatePhotoId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "gate", blob: gatePhoto });
+          const extraPhotoRefs: string[] = [];
           for (const extra of extraFiles) {
-            await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "extra", blob: extra.file });
+            const extraId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "extra", blob: extra.file });
+            extraPhotoRefs.push(`__pending_photo_${extraId}__`);
           }
           await addPendingMutation({
             method: "POST",
             url: `/api/visits/${completeDialogVisit.id}/complete-notify`,
             body: {
               gateClosedPhoto: `__pending_photo_${gatePhotoId}__`,
+              extraPhotos: extraPhotoRefs.length > 0 ? extraPhotoRefs : undefined,
               technicianNotes: notes[completeDialogVisit.id] || undefined,
             },
           });
