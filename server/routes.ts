@@ -6601,6 +6601,47 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/webhooks/quickbooks", async (req: Request, res: Response) => {
+    try {
+      const verifierToken = process.env.QBO_WEBHOOK_VERIFIER_TOKEN;
+      const signature = req.headers["intuit-signature"] as string | undefined;
+
+      if (verifierToken) {
+        if (!signature) {
+          console.warn("[QBO Webhook] Missing intuit-signature header");
+          return res.status(401).json({ error: "Missing signature" });
+        }
+        const crypto = await import("crypto");
+        const rawBody = (req as any).rawBody;
+        const hash = crypto.createHmac("sha256", verifierToken)
+          .update(rawBody)
+          .digest("base64");
+        if (hash !== signature) {
+          console.warn("[QBO Webhook] Signature mismatch");
+          return res.status(401).json({ error: "Invalid signature" });
+        }
+      } else {
+        console.warn("[QBO Webhook] QBO_WEBHOOK_VERIFIER_TOKEN not set — skipping signature verification");
+      }
+
+      const payload = req.body;
+      if (payload?.eventNotifications) {
+        for (const notification of payload.eventNotifications) {
+          const realmId = notification.realmId;
+          const entities = notification.dataChangeEvent?.entities || [];
+          for (const entity of entities) {
+            console.log(`[QBO Webhook] realmId=${realmId} operation=${entity.operation} entity=${entity.name} id=${entity.id} lastUpdated=${entity.lastUpdated}`);
+          }
+        }
+      }
+
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error("[QBO Webhook] Error:", err);
+      res.status(200).json({ ok: true });
+    }
+  });
+
   // Send invoice via email
   app.post("/api/invoices/:id/send-email", isAuthenticated, async (req: Request, res: Response) => {
     try {

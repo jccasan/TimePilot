@@ -1,0 +1,65 @@
+Objective
+Create a POST /api/webhooks/quickbooks endpoint on the API server that receives and validates Intuit QuickBooks Online webhook notifications. The endpoint must be publicly accessible (no auth middleware), verify HMAC-SHA256 signatures, and respond with 200 OK so Intuit sees it as active and functional.
+
+Business Context
+Intuit's app review requires an active, functional webhook endpoint
+The verifier token will be stored as an environment secret (QBO_WEBHOOK_VERIFIER_TOKEN) — the user will add the actual value once Intuit provides it
+URL for Intuit portal: https://api.servicd.pro/api/webhooks/quickbooks
+For now, the endpoint should log received events; actual data sync logic will be added later
+Scope
+1. Create artifacts/api-server/src/routes/qbo-webhooks.ts
+Export a router with POST /webhooks/quickbooks
+Signature verification:
+Intuit sends an intuit-signature header containing a Base64-encoded HMAC-SHA256 hash
+Compute HMAC-SHA256 of the raw request body using QBO_WEBHOOK_VERIFIER_TOKEN as the key
+Compare the computed hash (Base64) against the header value
+If the token env var is not set, log a warning and skip verification (so the endpoint works during setup before the token is available)
+If verification fails, respond with 401
+Response:
+Always respond with 200 OK quickly (Intuit expects a response within 10 seconds)
+Parse the payload and log the event entities (operation, entity name, entity ID)
+Payload structure (from Intuit docs):
+{
+  "eventNotifications": [
+    {
+      "realmId": "1234567890",
+      "dataChangeEvent": {
+        "entities": [
+          {
+            "name": "Customer",
+            "id": "123",
+            "operation": "Create",
+            "lastUpdated": "2026-03-24T00:00:00.000Z"
+          }
+        ]
+      }
+    }
+  ]
+}
+2. Ensure raw body is available
+The webhook route needs the raw request body for HMAC verification
+Check how Express body parsing is configured in the API server (likely express.json())
+Add express.raw() or configure express.json({ verify: ... }) specifically for the webhook route to capture the raw body buffer
+Reference: look at how artifacts/api-server/src/index.ts sets up body parsing
+3. Register the route in artifacts/api-server/src/routes/index.ts
+Import the webhook router
+Mount it before the requireAuth middleware (webhooks are unauthenticated)
+Place it alongside other public routes (near waitlistRouter, publicIntakeRouter, etc.)
+4. Add placeholder environment secret
+Use the environment-secrets skill to set QBO_WEBHOOK_VERIFIER_TOKEN as a placeholder (e.g., empty string or "pending")
+The user will update this value once they get their verifier token from Intuit
+5. Verify the endpoint
+Restart the API server workflow
+Test with curl that POST /api/webhooks/quickbooks returns 200 OK
+Test that it handles both valid and missing signatures gracefully
+Key Files
+artifacts/api-server/src/routes/qbo-webhooks.ts (new)
+artifacts/api-server/src/routes/index.ts (register route)
+artifacts/api-server/src/index.ts (check body parsing config)
+Acceptance Criteria
+POST /api/webhooks/quickbooks returns 200 OK
+HMAC-SHA256 signature verification is implemented (using QBO_WEBHOOK_VERIFIER_TOKEN)
+Endpoint works without the token set (logs warning, skips verification)
+Endpoint is registered before auth middleware (publicly accessible)
+Raw body is preserved for signature verification
+Incoming events are logged with entity name, ID, and operation
