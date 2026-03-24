@@ -72,6 +72,14 @@ export default function SmsTerms() {
           </p>
         </CardContent>
       </Card>
+      <div className="mt-6 text-center space-y-1">
+        <p className="text-xs text-muted-foreground font-medium" data-testid="text-powered-by">
+          Powered by <a href="https://servicd.app" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-green-700">Servicd</a>
+        </p>
+        <p className="text-xs text-muted-foreground" data-testid="text-copyright">
+          &copy; {new Date().getFullYear()} PetPilot LLC dba Servicd and ScooPilot
+        </p>
+      </div>
     </div>
   );
 }
