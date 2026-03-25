@@ -27,6 +27,7 @@ import {
   Clock, FileText, MapPin, Camera, X, Ruler,
 } from "lucide-react";
 import { YardMeasureTool } from "@/components/yard-measure-tool";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   draft: { label: "Draft", variant: "secondary" },
@@ -478,7 +479,6 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   );
   const [generatingImage, setGeneratingImage] = useState(false);
   const [addressCoords, setAddressCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [geocoding, setGeocoding] = useState(false);
   const [measurePolygon, setMeasurePolygon] = useState<number[][] | null>(null);
   const [measureSqft, setMeasureSqft] = useState<number | null>(null);
   const [showMeasureTool, setShowMeasureTool] = useState(false);
@@ -582,29 +582,16 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
 
   const selectedProperty = contactProperties?.find(p => p.id === propertyId);
 
-  useEffect(() => {
-    if (!propertyAddress || propertyAddress.trim().length < 5) {
+  const handleAddressSelect = useCallback((parsed: { streetAddress: string; city: string; state: string; zipCode: string; latitude: string; longitude: string }) => {
+    if (parsed.latitude && parsed.longitude) {
+      setAddressCoords({ lat: parseFloat(parsed.latitude), lng: parseFloat(parsed.longitude) });
+    } else {
       setAddressCoords(null);
-      return;
     }
-    const timer = setTimeout(async () => {
-      setGeocoding(true);
-      try {
-        const res = await fetch(`/api/geocode/forward?q=${encodeURIComponent(propertyAddress)}`);
-        const data = await res.json();
-        if (data?.coordinates) {
-          setAddressCoords({ lat: data.coordinates.latitude, lng: data.coordinates.longitude });
-        } else {
-          setAddressCoords(null);
-        }
-      } catch {
-        setAddressCoords(null);
-      } finally {
-        setGeocoding(false);
-      }
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [propertyAddress]);
+    setMeasurePolygon(null);
+    setMeasureSqft(null);
+    setShowMeasureTool(false);
+  }, []);
 
   const handleGenerateYardImage = useCallback(async (polygon: number[][], sqft: number, lat: number, lng: number) => {
     if (generatingImage) return;
@@ -810,7 +797,13 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
             )}
             <div className={contactId && contactProperties && contactProperties.length > 0 ? "" : "md:col-span-2"}>
               <Label>Property Address</Label>
-              <Input data-testid="input-address" value={propertyAddress} onChange={e => setPropertyAddress(e.target.value)} placeholder="123 Main St, City, ST" />
+              <AddressAutocomplete
+                data-testid="input-address"
+                value={propertyAddress}
+                onChange={setPropertyAddress}
+                onSelect={handleAddressSelect}
+                placeholder="Start typing an address..."
+              />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -961,11 +954,8 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
             {!propertyAddress && (
               <p className="text-xs text-muted-foreground">Enter a property address above to enable yard measurement.</p>
             )}
-            {propertyAddress && !addressCoords && !geocoding && (
-              <p className="text-xs text-muted-foreground">Could not locate this address on the map. Try a more complete address.</p>
-            )}
-            {geocoding && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Locating address...</p>
+            {propertyAddress && !addressCoords && (
+              <p className="text-xs text-muted-foreground">Select an address from the suggestions to enable yard measurement.</p>
             )}
             {showMeasureTool && addressCoords && (
               <div className="mt-2 border rounded-lg p-3 bg-muted/30">
