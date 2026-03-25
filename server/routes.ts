@@ -43,6 +43,7 @@ import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversine
 import { geocodeAddress } from "./services/geocode";
 import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
+import { calculateQuotePricing, renderResidentialProposalHtml, renderCommercialProposalHtml, renderQuoteSmsText, type ResidentialQuoteInput, type CommercialQuoteInput } from "./services/quote-pricing";
 import {
   TIER_CONFIG,
   VOICE_PLAN_CONFIG,
@@ -7849,6 +7850,292 @@ export async function registerRoutes(
     }
   });
 
+  // ================ Quotes ================
+
+  app.get("/api/quotes/calculate-pricing", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const type = req.query.type as string;
+      if (type === "residential") {
+        const input: ResidentialQuoteInput = {
+          type: "residential",
+          dogCount: parseInt(req.query.dogCount as string) || 1,
+          yardSize: (req.query.yardSize as any) || "small",
+          frequency: (req.query.frequency as any) || "weekly",
+          isFirstTime: req.query.isFirstTime === "true",
+        };
+        const pricing = calculateQuotePricing(input);
+        res.json(pricing);
+      } else if (type === "commercial") {
+        const input: CommercialQuoteInput = {
+          type: "commercial",
+          stationCount: parseInt(req.query.stationCount as string) || 1,
+          commonAreaMinutes: parseInt(req.query.commonAreaMinutes as string) || 30,
+          frequency: (req.query.frequency as any) || "1x_weekly",
+        };
+        const pricing = calculateQuotePricing(input);
+        res.json(pricing);
+      } else {
+        res.status(400).json({ error: "Invalid quote type. Must be 'residential' or 'commercial'." });
+      }
+    } catch (err: any) {
+      console.error("Error calculating pricing:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/quotes", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const filters: any = {};
+      if (req.query.status) filters.status = req.query.status;
+      if (req.query.type) filters.type = req.query.type;
+      if (req.query.contactId) filters.contactId = req.query.contactId;
+      const quotesList = await storage.getQuotes(companyId, filters);
+      res.json(quotesList);
+    } catch (err: any) {
+      console.error("Error listing quotes:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/quotes/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const quote = await storage.getQuote(req.params.id, companyId);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      res.json(quote);
+    } catch (err: any) {
+      console.error("Error getting quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const createQuoteBodySchema = z.object({
+    type: z.enum(["residential", "commercial"]),
+    contactId: z.string().nullable().optional(),
+    contactName: z.string().min(1, "Contact name is required").max(255),
+    contactEmail: z.string().email().max(255).nullable().optional(),
+    contactPhone: z.string().max(50).nullable().optional(),
+    propertyAddress: z.string().nullable().optional(),
+    dogCount: z.number().int().min(0).max(50).nullable().optional(),
+    yardSize: z.string().max(50).nullable().optional(),
+    stationCount: z.number().int().min(0).max(200).nullable().optional(),
+    commonAreaMinutes: z.number().int().min(0).max(600).nullable().optional(),
+    frequency: z.string().max(50).nullable().optional(),
+    isFirstTime: z.boolean().optional(),
+    essentialPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+    premiumPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+    deluxePrice: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+    initialCleanFee: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+    essentialFeatures: z.array(z.string()).nullable().optional(),
+    premiumFeatures: z.array(z.string()).nullable().optional(),
+    deluxeFeatures: z.array(z.string()).nullable().optional(),
+    pricingBreakdown: z.record(z.any()).nullable().optional(),
+    notes: z.string().max(5000).nullable().optional(),
+    internalNotes: z.string().max(5000).nullable().optional(),
+  });
+
+  app.post("/api/quotes", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+
+      const parsed = createQuoteBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid quote data", details: parsed.error.flatten() });
+      }
+
+      const quoteNumber = await storage.getNextQuoteNumber(companyId);
+
+      const quoteData = {
+        ...parsed.data,
+        companyId,
+        quoteNumber,
+      };
+
+      const quote = await storage.createQuote(quoteData);
+      res.status(201).json(quote);
+    } catch (err: any) {
+      console.error("Error creating quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/quotes/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const existing = await storage.getQuote(req.params.id, companyId);
+      if (!existing) return res.status(404).json({ error: "Quote not found" });
+
+      const parsed = createQuoteBodySchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid quote data", details: parsed.error.flatten() });
+      }
+
+      const quote = await storage.updateQuote(req.params.id, companyId, parsed.data as any);
+      res.json(quote);
+    } catch (err: any) {
+      console.error("Error updating quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/quotes/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const existing = await storage.getQuote(req.params.id, companyId);
+      if (!existing) return res.status(404).json({ error: "Quote not found" });
+      await storage.deleteQuote(req.params.id, companyId);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Error deleting quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/quotes/:id/send", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const quote = await storage.getQuote(req.params.id, companyId);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (quote.status !== "draft" && quote.status !== "sent") {
+        return res.status(400).json({ error: "Only draft or sent quotes can be sent" });
+      }
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const pricing = {
+        essential: parseFloat(quote.essentialPrice || "0"),
+        premium: parseFloat(quote.premiumPrice || "0"),
+        deluxe: parseFloat(quote.deluxePrice || "0"),
+        initialCleanFee: parseFloat(quote.initialCleanFee || "0"),
+        essentialFeatures: (quote.essentialFeatures as string[]) || [],
+        premiumFeatures: (quote.premiumFeatures as string[]) || [],
+        deluxeFeatures: (quote.deluxeFeatures as string[]) || [],
+        breakdown: (quote.pricingBreakdown as Record<string, any>) || {},
+      };
+
+      const slug = (company as any).slug || companyId;
+      const acceptUrl = `${req.protocol}://${req.get("host")}/portal/${slug}/quotes/${quote.id}`;
+
+      const renderData = {
+        companyName: company.name,
+        companyEmail: (company as any).email || undefined,
+        companyPhone: company.phone || undefined,
+        contactName: quote.contactName || "Customer",
+        quoteNumber: quote.quoteNumber,
+        propertyAddress: quote.propertyAddress || undefined,
+        pricing,
+        frequency: quote.frequency || "weekly",
+        expiresAt: quote.expiresAt?.toISOString() || undefined,
+        notes: quote.notes || undefined,
+        acceptUrl,
+      };
+
+      const html = quote.type === "commercial"
+        ? renderCommercialProposalHtml(renderData)
+        : renderResidentialProposalHtml(renderData);
+
+      const sendVia = req.body.sendVia || "email";
+      const results: any = { sent: [] };
+
+      if ((sendVia === "email" || sendVia === "both") && quote.contactEmail) {
+        try {
+          await sendEmail({
+            to: quote.contactEmail,
+            subject: `${company.name} — Service ${quote.type === "commercial" ? "Proposal" : "Quote"} #${quote.quoteNumber}`,
+            html,
+          });
+          results.sent.push("email");
+        } catch (emailErr: any) {
+          console.error("Failed to send quote email:", emailErr);
+          results.emailError = emailErr.message;
+        }
+      }
+
+      if ((sendVia === "sms" || sendVia === "both") && quote.contactPhone) {
+        try {
+          const smsText = renderQuoteSmsText({
+            companyName: company.name,
+            contactName: quote.contactName || "Customer",
+            quoteNumber: quote.quoteNumber,
+            pricing,
+            type: quote.type,
+            frequency: quote.frequency || "weekly",
+            acceptUrl,
+          });
+          const smsConfigured = await isSmsConfiguredForCompany(companyId);
+          if (smsConfigured) {
+            await sendSmsForCompany(companyId, quote.contactPhone, smsText);
+          } else if (isTwilioConfigured()) {
+            const from = getTwilioPhoneNumber();
+            await sendSms(from!, quote.contactPhone, smsText);
+          }
+          results.sent.push("sms");
+        } catch (smsErr: any) {
+          console.error("Failed to send quote SMS:", smsErr);
+          results.smsError = smsErr.message;
+        }
+      }
+
+      const expiresAt = quote.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const updatedQuote = await storage.updateQuote(req.params.id, companyId, {
+        status: "sent",
+        sentAt: new Date(),
+        expiresAt,
+      } as any);
+
+      res.json({ ...results, quote: updatedQuote });
+    } catch (err: any) {
+      console.error("Error sending quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/quotes/:id/preview", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const quote = await storage.getQuote(req.params.id, companyId);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const pricing = {
+        essential: parseFloat(quote.essentialPrice || "0"),
+        premium: parseFloat(quote.premiumPrice || "0"),
+        deluxe: parseFloat(quote.deluxePrice || "0"),
+        initialCleanFee: parseFloat(quote.initialCleanFee || "0"),
+        essentialFeatures: (quote.essentialFeatures as string[]) || [],
+        premiumFeatures: (quote.premiumFeatures as string[]) || [],
+        deluxeFeatures: (quote.deluxeFeatures as string[]) || [],
+        breakdown: (quote.pricingBreakdown as Record<string, any>) || {},
+      };
+
+      const renderData = {
+        companyName: company.name,
+        companyEmail: (company as any).email || undefined,
+        companyPhone: company.phone || undefined,
+        contactName: quote.contactName || "Customer",
+        quoteNumber: quote.quoteNumber,
+        propertyAddress: quote.propertyAddress || undefined,
+        pricing,
+        frequency: quote.frequency || "weekly",
+        expiresAt: quote.expiresAt?.toISOString() || undefined,
+        notes: quote.notes || undefined,
+      };
+
+      const html = quote.type === "commercial"
+        ? renderCommercialProposalHtml(renderData)
+        : renderResidentialProposalHtml(renderData);
+
+      res.setHeader("Content-Type", "text/html");
+      res.send(html);
+    } catch (err: any) {
+      console.error("Error previewing quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ================ Client Portal Routes ================
 
   app.post("/api/portal/login", async (req: Request, res: Response) => {
@@ -8665,6 +8952,121 @@ export async function registerRoutes(
       notify(companyId, "general", "Estimate Declined", `${contact?.firstName} ${contact?.lastName} declined estimate: ${estimate.description}${req.body.reason ? ` - Reason: ${req.body.reason}` : ""}`, `/contacts/${contactId}`);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Portal: Quotes ================
+
+  app.get("/api/portal/quotes/:id", async (req: Request, res: Response) => {
+    try {
+      const quoteId = req.params.id;
+      const allQuotes = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
+      const quoteRow = allQuotes.rows?.[0];
+      if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
+
+      if (quoteRow.status === "expired" || (quoteRow.expires_at && new Date(quoteRow.expires_at as string) < new Date())) {
+        return res.json({ ...quoteRow, status: "expired" });
+      }
+
+      const safeQuote = {
+        id: quoteRow.id,
+        quoteNumber: quoteRow.quote_number,
+        type: quoteRow.type,
+        status: quoteRow.status,
+        contactName: quoteRow.contact_name,
+        propertyAddress: quoteRow.property_address,
+        dogCount: quoteRow.dog_count,
+        yardSize: quoteRow.yard_size,
+        stationCount: quoteRow.station_count,
+        commonAreaMinutes: quoteRow.common_area_minutes,
+        frequency: quoteRow.frequency,
+        essentialPrice: quoteRow.essential_price,
+        premiumPrice: quoteRow.premium_price,
+        deluxePrice: quoteRow.deluxe_price,
+        initialCleanFee: quoteRow.initial_clean_fee,
+        selectedTier: quoteRow.selected_tier,
+        selectedPrice: quoteRow.selected_price,
+        essentialFeatures: quoteRow.essential_features,
+        premiumFeatures: quoteRow.premium_features,
+        deluxeFeatures: quoteRow.deluxe_features,
+        notes: quoteRow.notes,
+        expiresAt: quoteRow.expires_at,
+        sentAt: quoteRow.sent_at,
+        acceptedAt: quoteRow.accepted_at,
+        companyId: quoteRow.company_id,
+      };
+
+      const company = await storage.getCompany(quoteRow.company_id as string);
+      res.json({ quote: safeQuote, companyName: company?.name || "Service Provider" });
+    } catch (err: any) {
+      console.error("Error fetching portal quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/portal/quotes/:id/accept", async (req: Request, res: Response) => {
+    try {
+      const quoteId = req.params.id;
+      const { tier } = req.body;
+      if (!tier || !["essential", "premium", "deluxe"].includes(tier)) {
+        return res.status(400).json({ error: "Must select a tier: essential, premium, or deluxe" });
+      }
+
+      const result = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
+      const quoteRow = result.rows?.[0];
+      if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
+
+      if (quoteRow.status !== "sent" && quoteRow.status !== "draft") {
+        return res.status(400).json({ error: "This quote has already been " + quoteRow.status });
+      }
+
+      if (quoteRow.expires_at && new Date(quoteRow.expires_at as string) < new Date()) {
+        return res.status(400).json({ error: "This quote has expired" });
+      }
+
+      const priceKey = `${tier}_price` as string;
+      const selectedPrice = quoteRow[priceKey] || "0";
+
+      await db.execute(sql`
+        UPDATE quotes SET
+          status = 'accepted',
+          selected_tier = ${tier},
+          selected_price = ${selectedPrice},
+          accepted_at = NOW(),
+          updated_at = NOW()
+        WHERE id = ${quoteId}
+      `);
+
+      res.json({ success: true, tier, price: selectedPrice });
+    } catch (err: any) {
+      console.error("Error accepting quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/portal/quotes/:id/decline", async (req: Request, res: Response) => {
+    try {
+      const quoteId = req.params.id;
+      const result = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
+      const quoteRow = result.rows?.[0];
+      if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
+
+      if (quoteRow.status !== "sent" && quoteRow.status !== "draft") {
+        return res.status(400).json({ error: "This quote has already been " + quoteRow.status });
+      }
+
+      await db.execute(sql`
+        UPDATE quotes SET
+          status = 'declined',
+          declined_at = NOW(),
+          updated_at = NOW()
+        WHERE id = ${quoteId}
+      `);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Error declining quote:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // ================ Portal: Notification Preferences (T005) ================

@@ -62,6 +62,8 @@ import {
   overheadCosts,
   competitorPricing,
   serviceZones,
+  type Quote, type InsertQuote,
+  quotes,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -374,6 +376,14 @@ export interface IStorage {
   // Referral helpers
   getContactByReferralCode(code: string): Promise<Contact | undefined>;
   getReferralCount(contactId: string): Promise<number>;
+
+  // Quotes
+  getQuote(id: string, companyId: string): Promise<Quote | undefined>;
+  getQuotes(companyId: string, filters?: { status?: string; type?: string; contactId?: string }): Promise<Quote[]>;
+  createQuote(data: InsertQuote): Promise<Quote>;
+  updateQuote(id: string, companyId: string, data: Partial<InsertQuote>): Promise<Quote>;
+  deleteQuote(id: string, companyId: string): Promise<void>;
+  getNextQuoteNumber(companyId: string): Promise<string>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2159,6 +2169,49 @@ export class DatabaseStorage implements IStorage {
       stopOrder: 0,
     }).returning();
     return job;
+  }
+  // ================ Quotes ================
+  async getQuote(id: string, companyId: string): Promise<Quote | undefined> {
+    const [quote] = await db.select().from(quotes)
+      .where(and(eq(quotes.id, id), eq(quotes.companyId, companyId)));
+    return quote;
+  }
+
+  async getQuotes(companyId: string, filters?: { status?: string; type?: string; contactId?: string }): Promise<Quote[]> {
+    const conditions = [eq(quotes.companyId, companyId)];
+    if (filters?.status) conditions.push(eq(quotes.status, filters.status as any));
+    if (filters?.type) conditions.push(eq(quotes.type, filters.type as any));
+    if (filters?.contactId) conditions.push(eq(quotes.contactId, filters.contactId));
+    return db.select().from(quotes).where(and(...conditions)).orderBy(desc(quotes.createdAt));
+  }
+
+  async createQuote(data: InsertQuote): Promise<Quote> {
+    const [quote] = await db.insert(quotes).values(data).returning();
+    return quote;
+  }
+
+  async updateQuote(id: string, companyId: string, data: Partial<InsertQuote>): Promise<Quote> {
+    const [quote] = await db.update(quotes)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(quotes.id, id), eq(quotes.companyId, companyId)))
+      .returning();
+    return quote;
+  }
+
+  async deleteQuote(id: string, companyId: string): Promise<void> {
+    await db.delete(quotes).where(and(eq(quotes.id, id), eq(quotes.companyId, companyId)));
+  }
+
+  async getNextQuoteNumber(companyId: string): Promise<string> {
+    const [result] = await db.select({
+      maxNum: sql<string>`max(quote_number)`,
+    }).from(quotes).where(eq(quotes.companyId, companyId));
+    const current = result?.maxNum;
+    if (!current) return "Q-0001";
+    const match = current.match(/Q-(\d+)/);
+    if (!match) return "Q-0001";
+    const next = parseInt(match[1], 10) + 1;
+    return `Q-${String(next).padStart(4, "0")}`;
   }
 }
 

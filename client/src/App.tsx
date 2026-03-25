@@ -27,6 +27,7 @@ import TechMobile from "@/pages/tech-mobile";
 import TechRoutes from "@/pages/tech-routes";
 import TechClients from "@/pages/tech-clients";
 import Invoices from "@/pages/invoices";
+import Quotes from "@/pages/quotes";
 import Billing from "@/pages/billing";
 import Automation from "@/pages/automation";
 import ApiKeysPage from "@/pages/api-keys";
@@ -36,6 +37,7 @@ import PortalLogin from "@/pages/portal-login";
 import PortalResetPassword from "@/pages/portal-reset-password";
 import PortalVerifyEmail from "@/pages/portal-verify-email";
 import PortalClient from "@/pages/portal-client";
+import PortalQuoteView from "@/pages/portal-quote-view";
 import Pricing from "@/pages/pricing";
 import Communications from "@/pages/communications";
 import Reports from "@/pages/reports";
@@ -87,6 +89,7 @@ function Router() {
       <Route path="/jobs" component={Jobs} />
       <Route path="/service-plans" component={ServicePlansPage} />
       <Route path="/m/today" component={TechMobile} />
+      <Route path="/quotes" component={Quotes} />
       <Route path="/invoices" component={Invoices} />
       <Route path="/billing" component={Billing} />
       <Route path="/automation" component={Automation} />
@@ -444,6 +447,9 @@ function PortalRouter() {
       <Route path="/portal/reset-password" component={PortalResetPassword} />
       <Route path="/portal/verify-email" component={PortalVerifyEmail} />
       <Route path="/portal/client" component={PortalClient} />
+      <Route path="/portal/:slug/quotes/:quoteId">
+        {(params: any) => <PortalQuoteView quoteId={params.quoteId} />}
+      </Route>
       <Route>{() => { window.location.href = "/portal/login"; return null; }}</Route>
     </Switch>
   );

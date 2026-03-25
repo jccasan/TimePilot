@@ -1418,3 +1418,102 @@ export const qboSyncLogs = pgTable("qbo_sync_logs", {
 export const insertQboSyncLogSchema = createInsertSchema(qboSyncLogs).omit({ id: true, createdAt: true });
 export type QboSyncLog = typeof qboSyncLogs.$inferSelect;
 export type InsertQboSyncLog = z.infer<typeof insertQboSyncLogSchema>;
+
+export const quoteTypeEnum = pgEnum("quote_type", ["residential", "commercial"]);
+export const quoteStatusEnum = pgEnum("quote_status", ["draft", "sent", "accepted", "declined", "expired"]);
+export const quoteTierEnum = pgEnum("quote_tier", ["essential", "premium", "deluxe"]);
+
+export interface QuoteDefaults {
+  residentialBaseRate: number;
+  perDogSurcharge: number;
+  acreageMediumSurcharge: number;
+  acreageLargeSurcharge: number;
+  acreageEstateSurcharge: number;
+  heavyAccumulationMultiplier: number;
+  initialCleanMultiplier: number;
+  initialCleanCap: number;
+  premiumDeodorizerPrice: number;
+  premiumGateCheckPrice: number;
+  deluxeSanitizationPrice: number;
+  deluxePriorityPrice: number;
+  commercialStationRate: number;
+  commercialFieldRate: number;
+  commercialDensityDiscount2x: number;
+  commercialDensityDiscount3x: number;
+  commercialPremiumStationUpcharge: number;
+  commercialDeluxeStationUpcharge: number;
+}
+
+export const DEFAULT_QUOTE_DEFAULTS: QuoteDefaults = {
+  residentialBaseRate: 25,
+  perDogSurcharge: 5,
+  acreageMediumSurcharge: 10,
+  acreageLargeSurcharge: 20,
+  acreageEstateSurcharge: 40,
+  heavyAccumulationMultiplier: 1.2,
+  initialCleanMultiplier: 2.5,
+  initialCleanCap: 150,
+  premiumDeodorizerPrice: 8,
+  premiumGateCheckPrice: 5,
+  deluxeSanitizationPrice: 15,
+  deluxePriorityPrice: 10,
+  commercialStationRate: 12,
+  commercialFieldRate: 45,
+  commercialDensityDiscount2x: 0.10,
+  commercialDensityDiscount3x: 0.15,
+  commercialPremiumStationUpcharge: 3,
+  commercialDeluxeStationUpcharge: 5,
+};
+
+export const quotes = pgTable("quotes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+  propertyId: varchar("property_id").references(() => properties.id, { onDelete: "set null" }),
+  quoteNumber: varchar("quote_number", { length: 50 }).notNull(),
+  type: quoteTypeEnum("type").notNull(),
+  status: quoteStatusEnum("status").notNull().default("draft"),
+  contactName: varchar("contact_name", { length: 255 }),
+  contactEmail: varchar("contact_email", { length: 255 }),
+  contactPhone: varchar("contact_phone", { length: 50 }),
+  propertyAddress: text("property_address"),
+  dogCount: integer("dog_count"),
+  yardSize: varchar("yard_size", { length: 50 }),
+  stationCount: integer("station_count"),
+  commonAreaMinutes: integer("common_area_minutes"),
+  frequency: varchar("frequency", { length: 50 }),
+  isFirstTime: boolean("is_first_time").default(true),
+  essentialPrice: decimal("essential_price", { precision: 10, scale: 2 }),
+  premiumPrice: decimal("premium_price", { precision: 10, scale: 2 }),
+  deluxePrice: decimal("deluxe_price", { precision: 10, scale: 2 }),
+  initialCleanFee: decimal("initial_clean_fee", { precision: 10, scale: 2 }),
+  selectedTier: quoteTierEnum("selected_tier"),
+  selectedPrice: decimal("selected_price", { precision: 10, scale: 2 }),
+  essentialFeatures: jsonb("essential_features").$type<string[]>(),
+  premiumFeatures: jsonb("premium_features").$type<string[]>(),
+  deluxeFeatures: jsonb("deluxe_features").$type<string[]>(),
+  pricingBreakdown: jsonb("pricing_breakdown").$type<Record<string, any>>(),
+  notes: text("notes"),
+  internalNotes: text("internal_notes"),
+  expiresAt: timestamp("expires_at"),
+  sentAt: timestamp("sent_at"),
+  acceptedAt: timestamp("accepted_at"),
+  declinedAt: timestamp("declined_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_quotes_company").on(table.companyId),
+  index("idx_quotes_contact").on(table.contactId),
+  index("idx_quotes_status").on(table.status),
+  unique().on(table.companyId, table.quoteNumber),
+]);
+
+export const insertQuoteSchema = createInsertSchema(quotes).omit({ id: true, createdAt: true, updatedAt: true });
+export type Quote = typeof quotes.$inferSelect;
+export type InsertQuote = z.infer<typeof insertQuoteSchema>;
+
+export const quoteRelations = relations(quotes, ({ one }) => ({
+  company: one(companies, { fields: [quotes.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [quotes.contactId], references: [contacts.id] }),
+  property: one(properties, { fields: [quotes.propertyId], references: [properties.id] }),
+}));

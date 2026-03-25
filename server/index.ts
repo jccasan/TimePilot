@@ -284,6 +284,62 @@ async function ensureCompanyColumns() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_calls_retell_id ON voice_calls(retell_call_id) WHERE retell_call_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_voice_calls_created ON voice_calls(created_at);
     `);
+    await pool.query(`
+      DO $$ BEGIN
+        CREATE TYPE quote_type AS ENUM ('residential', 'commercial');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$;
+      DO $$ BEGIN
+        CREATE TYPE quote_status AS ENUM ('draft', 'sent', 'accepted', 'declined', 'expired');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$;
+      DO $$ BEGIN
+        CREATE TYPE quote_tier AS ENUM ('essential', 'premium', 'deluxe');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$;
+      CREATE TABLE IF NOT EXISTS quotes (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        contact_id VARCHAR REFERENCES contacts(id) ON DELETE SET NULL,
+        property_id VARCHAR REFERENCES properties(id) ON DELETE SET NULL,
+        quote_number VARCHAR(50) NOT NULL,
+        type quote_type NOT NULL,
+        status quote_status NOT NULL DEFAULT 'draft',
+        contact_name VARCHAR(255),
+        contact_email VARCHAR(255),
+        contact_phone VARCHAR(50),
+        property_address TEXT,
+        dog_count INTEGER,
+        yard_size VARCHAR(50),
+        station_count INTEGER,
+        common_area_minutes INTEGER,
+        frequency VARCHAR(50),
+        is_first_time BOOLEAN DEFAULT true,
+        essential_price DECIMAL(10,2),
+        premium_price DECIMAL(10,2),
+        deluxe_price DECIMAL(10,2),
+        initial_clean_fee DECIMAL(10,2),
+        selected_tier quote_tier,
+        selected_price DECIMAL(10,2),
+        essential_features JSONB,
+        premium_features JSONB,
+        deluxe_features JSONB,
+        pricing_breakdown JSONB,
+        notes TEXT,
+        internal_notes TEXT,
+        expires_at TIMESTAMP,
+        sent_at TIMESTAMP,
+        accepted_at TIMESTAMP,
+        declined_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_quotes_company ON quotes(company_id);
+      CREATE INDEX IF NOT EXISTS idx_quotes_contact ON quotes(contact_id);
+      CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(status);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_company_number ON quotes(company_id, quote_number);
+    `);
+    console.log("[Migration] Quotes table verified");
     console.log("[Migration] Company voice columns verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure company columns:", err);

@@ -28,6 +28,7 @@ import {
   HelpCircle,
   Compass,
   Sparkles,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -67,6 +68,7 @@ const menuSections = [
       { title: "Routes", url: "/routes", icon: MapPin },
       { title: "Jobs", url: "/jobs", icon: Briefcase },
       { title: "Service Plans", url: "/service-plans", icon: ClipboardList },
+      { title: "Quotes", url: "/quotes", icon: ClipboardCheck },
       { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Field View", url: "/m/today", icon: Smartphone },
       { title: "Messages", url: "/communications", icon: MessageSquare },
