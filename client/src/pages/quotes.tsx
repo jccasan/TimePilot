@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Quote, Contact } from "@shared/schema";
+import type { Quote, Contact, Property } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -437,10 +437,12 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     quote?.type || "residential"
   );
   const [contactId, setContactId] = useState(quote?.contactId || "");
+  const [propertyId, setPropertyId] = useState(quote?.propertyId || "");
   const [contactName, setContactName] = useState(quote?.contactName || "");
   const [contactEmail, setContactEmail] = useState(quote?.contactEmail || "");
   const [contactPhone, setContactPhone] = useState(quote?.contactPhone || "");
   const [propertyAddress, setPropertyAddress] = useState(quote?.propertyAddress || "");
+  const [expiresAt, setExpiresAt] = useState(quote?.expiresAt ? new Date(quote.expiresAt).toISOString().split("T")[0] : "");
   const [dogCount, setDogCount] = useState(quote?.dogCount || 2);
   const [yardSize, setYardSize] = useState(quote?.yardSize || "small");
   const [stationCount, setStationCount] = useState(quote?.stationCount || 4);
@@ -459,10 +461,12 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     if (quote) {
       setQuoteType(quote.type || "residential");
       setContactId(quote.contactId || "");
+      setPropertyId(quote.propertyId || "");
       setContactName(quote.contactName || "");
       setContactEmail(quote.contactEmail || "");
       setContactPhone(quote.contactPhone || "");
       setPropertyAddress(quote.propertyAddress || "");
+      setExpiresAt(quote.expiresAt ? new Date(quote.expiresAt).toISOString().split("T")[0] : "");
       setDogCount(quote.dogCount || 2);
       setYardSize(quote.yardSize || "small");
       setStationCount(quote.stationCount || 4);
@@ -474,10 +478,12 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     } else {
       setQuoteType("residential");
       setContactId("");
+      setPropertyId("");
       setContactName("");
       setContactEmail("");
       setContactPhone("");
       setPropertyAddress("");
+      setExpiresAt("");
       setDogCount(2);
       setYardSize("small");
       setStationCount(4);
@@ -512,8 +518,20 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     if (calculatedPricing) setLivePricing(calculatedPricing);
   }, [calculatedPricing]);
 
+  const { data: contactProperties } = useQuery<Property[]>({
+    queryKey: ["/api/properties", { contactId }],
+    queryFn: async () => {
+      if (!contactId) return [];
+      const res = await fetch(`/api/properties?contactId=${contactId}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!contactId && open,
+  });
+
   const handleContactSelect = (id: string) => {
     setContactId(id);
+    setPropertyId("");
     const contact = contacts.find(c => c.id === id);
     if (contact) {
       setContactName(`${contact.firstName} ${contact.lastName}`.trim());
@@ -522,8 +540,16 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     }
   };
 
+  const handlePropertySelect = (id: string) => {
+    setPropertyId(id);
+    const prop = contactProperties?.find(p => p.id === id);
+    if (prop) {
+      setPropertyAddress(prop.address || "");
+    }
+  };
+
   const createMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: Record<string, unknown>) => {
       if (isEdit) {
         const res = await apiRequest("PATCH", `/api/quotes/${quote!.id}`, data);
         return res.json();
@@ -545,9 +571,10 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     const p = livePricing;
     if (!p) return;
 
-    const data: any = {
+    const data: Record<string, unknown> = {
       type: quoteType,
       contactId: contactId || null,
+      propertyId: propertyId || null,
       contactName,
       contactEmail,
       contactPhone,
@@ -564,6 +591,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       premiumFeatures: p.premiumFeatures,
       deluxeFeatures: p.deluxeFeatures,
       pricingBreakdown: p.breakdown,
+      expiresAt: expiresAt || null,
     };
 
     if (quoteType === "residential") {
@@ -668,9 +696,35 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
             </div>
           </div>
 
-          <div>
-            <Label>Property Address</Label>
-            <Input data-testid="input-address" value={propertyAddress} onChange={e => setPropertyAddress(e.target.value)} placeholder="123 Main St, City, ST" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {contactId && contactProperties && contactProperties.length > 0 && (
+              <div>
+                <Label>Property</Label>
+                <Select value={propertyId} onValueChange={handlePropertySelect}>
+                  <SelectTrigger data-testid="select-property">
+                    <SelectValue placeholder="Select property..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contactProperties.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.address}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className={contactId && contactProperties && contactProperties.length > 0 ? "" : "md:col-span-2"}>
+              <Label>Property Address</Label>
+              <Input data-testid="input-address" value={propertyAddress} onChange={e => setPropertyAddress(e.target.value)} placeholder="123 Main St, City, ST" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Expiration Date</Label>
+              <Input data-testid="input-expires-at" type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} />
+              <p className="text-xs text-muted-foreground mt-1">Leave blank for 30-day default when sent</p>
+            </div>
           </div>
 
           {quoteType === "residential" ? (

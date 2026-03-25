@@ -7921,6 +7921,7 @@ export async function registerRoutes(
   const createQuoteBodySchema = z.object({
     type: z.enum(["residential", "commercial"]),
     contactId: z.string().nullable().optional(),
+    propertyId: z.string().nullable().optional(),
     contactName: z.string().min(1, "Contact name is required").max(255),
     contactEmail: z.string().email().max(255).nullable().optional(),
     contactPhone: z.string().max(50).nullable().optional(),
@@ -7941,6 +7942,7 @@ export async function registerRoutes(
     pricingBreakdown: z.record(z.any()).nullable().optional(),
     notes: z.string().max(5000).nullable().optional(),
     internalNotes: z.string().max(5000).nullable().optional(),
+    expiresAt: z.string().nullable().optional(),
   });
 
   app.post("/api/quotes", isAuthenticated, async (req: Request, res: Response) => {
@@ -7971,11 +7973,30 @@ export async function registerRoutes(
         }
       }
 
+      let propertyId = parsed.data.propertyId || null;
+      if (!propertyId && parsed.data.propertyAddress && contactId) {
+        try {
+          const newProperty = await storage.createProperty({
+            companyId,
+            contactId,
+            address: parsed.data.propertyAddress,
+            city: "",
+            state: "",
+            zip: "",
+          });
+          propertyId = String(newProperty.id);
+        } catch (propErr) {
+          console.error("Failed to create property from quote:", propErr);
+        }
+      }
+
       const quoteData = {
         ...parsed.data,
         companyId,
         quoteNumber,
         contactId,
+        propertyId,
+        expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
       };
 
       const quote = await storage.createQuote(quoteData);
