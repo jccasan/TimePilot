@@ -2,8 +2,14 @@ import PDFDocument from "pdfkit";
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, AlignmentType, BorderStyle, HeadingLevel, ShadingType,
-  convertInchesToTwip,
+  ImageRun, convertInchesToTwip,
 } from "docx";
+
+interface QuoteImage {
+  url: string;
+  caption: string;
+  sqft?: number;
+}
 
 interface QuoteDocData {
   companyName: string;
@@ -24,6 +30,8 @@ interface QuoteDocData {
   premiumFeatures: string[];
   deluxeFeatures: string[];
   breakdown: Record<string, any>;
+  images?: QuoteImage[];
+  baseUrl?: string;
 }
 
 const GREEN = "#1a7a4c";
@@ -44,7 +52,80 @@ function filterFeatures(features: string[]): string[] {
   return features.filter(f => f && f.trim().length > 0);
 }
 
-export function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
+function resolveImageUrl(url: string, baseUrl?: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  const path = url.startsWith('/') ? url : `/objects/${url}`;
+  return baseUrl ? `${baseUrl}${path}` : path;
+}
+
+interface FetchedImage {
+  buffer: Buffer;
+  caption: string;
+  sqft?: number;
+  width: number;
+  height: number;
+}
+
+async function fetchImageBuffers(images: QuoteImage[], baseUrl?: string): Promise<FetchedImage[]> {
+  const results: FetchedImage[] = [];
+  for (const img of images) {
+    try {
+      const fullUrl = resolveImageUrl(img.url, baseUrl);
+      const res = await fetch(fullUrl);
+      if (!res.ok) continue;
+      const arrayBuf = await res.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
+
+      let width = 400;
+      let height = 300;
+      if (buffer.length > 24) {
+        const dims = getImageDimensions(buffer);
+        if (dims) {
+          width = dims.width;
+          height = dims.height;
+        }
+      }
+
+      results.push({ buffer, caption: img.caption, sqft: img.sqft, width, height });
+    } catch (err) {
+      console.error(`Failed to fetch image ${img.url}:`, err);
+    }
+  }
+  return results;
+}
+
+function getImageDimensions(buf: Buffer): { width: number; height: number } | null {
+  if (buf[0] === 0x89 && buf[1] === 0x50) {
+    if (buf.length >= 24) {
+      return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+    }
+  }
+  if (buf[0] === 0xFF && buf[1] === 0xD8) {
+    let offset = 2;
+    while (offset < buf.length - 1) {
+      if (buf[offset] !== 0xFF) break;
+      const marker = buf[offset + 1];
+      if (marker === 0xC0 || marker === 0xC2) {
+        if (offset + 9 < buf.length) {
+          return { height: buf.readUInt16BE(offset + 5), width: buf.readUInt16BE(offset + 7) };
+        }
+      }
+      if (offset + 3 < buf.length) {
+        const segLen = buf.readUInt16BE(offset + 2);
+        offset += 2 + segLen;
+      } else {
+        break;
+      }
+    }
+  }
+  return null;
+}
+
+export async function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
+  const fetchedImages = data.images && data.images.length > 0
+    ? await fetchImageBuffers(data.images, data.baseUrl)
+    : [];
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "LETTER", margin: 50 });
     const chunks: Buffer[] = [];
@@ -53,6 +134,7 @@ export function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
     doc.on("error", reject);
 
     const pageBottom = doc.page.height - 60;
+    const contentWidth = doc.page.width - 100;
     let y = 0;
 
     function checkPage(needed: number) {
@@ -176,6 +258,36 @@ export function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
       y += 40;
     }
 
+    if (fetchedImages.length > 0) {
+      checkPage(30);
+      y += 10;
+      const sectionTitle = data.type === "commercial" ? "Site Overview" : "Property Measurement";
+      doc.fillColor(DARK).fontSize(13).font("Helvetica-Bold").text(sectionTitle, 50, y);
+      y += 20;
+      doc.font("Helvetica");
+
+      for (const img of fetchedImages) {
+        const maxImgWidth = contentWidth;
+        const maxImgHeight = 280;
+        const scale = Math.min(maxImgWidth / img.width, maxImgHeight / img.height, 1);
+        const renderW = img.width * scale;
+        const renderH = img.height * scale;
+
+        checkPage(renderH + 30);
+
+        try {
+          doc.image(img.buffer, 50, y, { width: renderW, height: renderH });
+          y += renderH + 6;
+        } catch (imgErr) {
+          console.error("Failed to embed image in PDF:", imgErr);
+          continue;
+        }
+
+        doc.fillColor(MUTED).fontSize(9).text(img.caption, 50, y, { width: contentWidth, align: "center" });
+        y += 16;
+      }
+    }
+
     if (data.notes) {
       const notesHeight = doc.heightOfString(data.notes, { width: doc.page.width - 100 });
       checkPage(notesHeight + 30);
@@ -204,6 +316,10 @@ export function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
 }
 
 export async function generateQuoteDocx(data: QuoteDocData): Promise<Buffer> {
+  const fetchedImages = data.images && data.images.length > 0
+    ? await fetchImageBuffers(data.images, data.baseUrl)
+    : [];
+
   const freqLabel = frequencyLabel(data.frequency);
 
   const headerRows: Paragraph[] = [];
@@ -288,6 +404,43 @@ export async function generateQuoteDocx(data: QuoteDocData): Promise<Buffer> {
     }
   }
 
+  const imageParagraphs: Paragraph[] = [];
+  if (fetchedImages.length > 0) {
+    const sectionTitle = data.type === "commercial" ? "Site Overview" : "Property Measurement";
+    imageParagraphs.push(new Paragraph({
+      text: sectionTitle,
+      heading: HeadingLevel.HEADING_2,
+      spacing: { before: 300, after: 150 },
+    }));
+
+    for (const img of fetchedImages) {
+      const maxW = 500;
+      const maxH = 350;
+      const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+      const renderW = Math.round(img.width * scale);
+      const renderH = Math.round(img.height * scale);
+
+      const imgType = (img.buffer[0] === 0xFF && img.buffer[1] === 0xD8) ? "jpg" : "png";
+      imageParagraphs.push(new Paragraph({
+        children: [
+          new ImageRun({
+            data: img.buffer,
+            transformation: { width: renderW, height: renderH },
+            type: imgType as any,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 60 },
+      }));
+
+      imageParagraphs.push(new Paragraph({
+        children: [new TextRun({ text: img.caption, color: "64748b", size: 18, italics: true })],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 150 },
+      }));
+    }
+  }
+
   const notesParagraphs: Paragraph[] = [];
   if (data.notes) {
     notesParagraphs.push(new Paragraph({
@@ -364,6 +517,7 @@ export async function generateQuoteDocx(data: QuoteDocData): Promise<Buffer> {
         }),
         tierTable,
         ...initialCleanParagraphs,
+        ...imageParagraphs,
         ...notesParagraphs,
         ...expiryParagraphs,
         new Paragraph({

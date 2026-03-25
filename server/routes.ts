@@ -8435,6 +8435,8 @@ export async function registerRoutes(
         premiumFeatures: pricing.premiumFeatures,
         deluxeFeatures: pricing.deluxeFeatures,
         breakdown: pricing.breakdown,
+        images: (quote.images as { url: string; caption: string; sqft?: number }[]) || undefined,
+        baseUrl: getBaseUrl(req),
       };
 
       const safeName = `Quote-${quote.quoteNumber}`.replace(/[^a-zA-Z0-9-_]/g, "_");
