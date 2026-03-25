@@ -485,6 +485,11 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const [overrideEssential, setOverrideEssential] = useState("");
   const [overridePremium, setOverridePremium] = useState("");
   const [overrideDeluxe, setOverrideDeluxe] = useState("");
+  const [customEssentialFeatures, setCustomEssentialFeatures] = useState<string[]>([]);
+  const [customPremiumFeatures, setCustomPremiumFeatures] = useState<string[]>([]);
+  const [customDeluxeFeatures, setCustomDeluxeFeatures] = useState<string[]>([]);
+  const [featuresCustomized, setFeaturesCustomized] = useState(false);
+  const [editingFeatures, setEditingFeatures] = useState(false);
   const [quoteImages, setQuoteImages] = useState<{ url: string; caption: string; sqft?: number | null }[]>(
     (quote?.images as { url: string; caption: string; sqft?: number | null }[]) || []
   );
@@ -523,6 +528,12 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setNotes(quote.notes || "");
       setInternalNotes(quote.internalNotes || "");
       setQuoteImages((quote.images as { url: string; caption: string; sqft?: number | null }[]) || []);
+      if (quote.essentialFeatures) {
+        setCustomEssentialFeatures(quote.essentialFeatures as string[]);
+        setCustomPremiumFeatures(quote.premiumFeatures as string[]);
+        setCustomDeluxeFeatures(quote.deluxeFeatures as string[]);
+        setFeaturesCustomized(true);
+      }
     } else {
       setQuoteType("residential");
       setContactId("");
@@ -550,6 +561,11 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setMeasureSqft(null);
       setShowMeasureTool(false);
       setAddressCoords(null);
+      setCustomEssentialFeatures([]);
+      setCustomPremiumFeatures([]);
+      setCustomDeluxeFeatures([]);
+      setFeaturesCustomized(false);
+      setEditingFeatures(false);
     }
   }, [quote, open]);
 
@@ -571,8 +587,15 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   });
 
   useEffect(() => {
-    if (calculatedPricing) setLivePricing(calculatedPricing);
-  }, [calculatedPricing]);
+    if (calculatedPricing) {
+      setLivePricing(calculatedPricing);
+      if (!featuresCustomized) {
+        setCustomEssentialFeatures(calculatedPricing.essentialFeatures);
+        setCustomPremiumFeatures(calculatedPricing.premiumFeatures);
+        setCustomDeluxeFeatures(calculatedPricing.deluxeFeatures);
+      }
+    }
+  }, [calculatedPricing, featuresCustomized]);
 
   const { data: contactProperties } = useQuery<Property[]>({
     queryKey: ["/api/properties", { contactId }],
@@ -707,9 +730,9 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       premiumPrice: manualOverride && overridePremium ? overridePremium : p.premium.toFixed(2),
       deluxePrice: manualOverride && overrideDeluxe ? overrideDeluxe : p.deluxe.toFixed(2),
       initialCleanFee: p.initialCleanFee.toFixed(2),
-      essentialFeatures: p.essentialFeatures,
-      premiumFeatures: p.premiumFeatures,
-      deluxeFeatures: p.deluxeFeatures,
+      essentialFeatures: customEssentialFeatures.length > 0 ? customEssentialFeatures : p.essentialFeatures,
+      premiumFeatures: customPremiumFeatures.length > 0 ? customPremiumFeatures : p.premiumFeatures,
+      deluxeFeatures: customDeluxeFeatures.length > 0 ? customDeluxeFeatures : p.deluxeFeatures,
       pricingBreakdown: p.breakdown,
       images: quoteImages.length > 0 ? quoteImages : null,
       expiresAt: expiresAt || null,
@@ -1079,7 +1102,94 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
                   </div>
                 </div>
               ) : (
-                <TierPreviewCards pricing={livePricing} />
+                <TierPreviewCards pricing={{
+                  ...livePricing,
+                  essentialFeatures: customEssentialFeatures.length > 0 ? customEssentialFeatures : livePricing.essentialFeatures,
+                  premiumFeatures: customPremiumFeatures.length > 0 ? customPremiumFeatures : livePricing.premiumFeatures,
+                  deluxeFeatures: customDeluxeFeatures.length > 0 ? customDeluxeFeatures : livePricing.deluxeFeatures,
+                }} />
+              )}
+
+              <div className="flex justify-end">
+                <Button
+                  data-testid="button-edit-features"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingFeatures(!editingFeatures)}
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  {editingFeatures ? "Done Editing Packages" : "Edit Packages"}
+                </Button>
+              </div>
+
+              {editingFeatures && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border rounded-lg p-4 bg-muted/30">
+                  {([
+                    { label: "Essential", features: customEssentialFeatures, setFeatures: setCustomEssentialFeatures },
+                    { label: "Property Care", features: customPremiumFeatures, setFeatures: setCustomPremiumFeatures },
+                    { label: "Deluxe", features: customDeluxeFeatures, setFeatures: setCustomDeluxeFeatures },
+                  ] as const).map(({ label, features, setFeatures }) => (
+                    <div key={label} className="space-y-2">
+                      <Label className="text-xs font-semibold">{label} Features</Label>
+                      {features.map((f, i) => (
+                        <div key={i} className="flex items-center gap-1">
+                          <Input
+                            data-testid={`input-feature-${label.toLowerCase().replace(/\s/g, "-")}-${i}`}
+                            value={f}
+                            onChange={e => {
+                              const updated = [...features];
+                              updated[i] = e.target.value;
+                              setFeatures(updated);
+                              setFeaturesCustomized(true);
+                            }}
+                            className="text-xs h-7"
+                          />
+                          <button
+                            data-testid={`button-remove-feature-${label.toLowerCase().replace(/\s/g, "-")}-${i}`}
+                            type="button"
+                            onClick={() => {
+                              setFeatures(features.filter((_, j) => j !== i));
+                              setFeaturesCustomized(true);
+                            }}
+                            className="text-red-500 hover:text-red-700 shrink-0"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                      <Button
+                        data-testid={`button-add-feature-${label.toLowerCase().replace(/\s/g, "-")}`}
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-6 w-full"
+                        onClick={() => {
+                          setFeatures([...features, ""]);
+                          setFeaturesCustomized(true);
+                        }}
+                      >
+                        <Plus className="h-3 w-3 mr-1" /> Add Feature
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="col-span-full flex justify-end">
+                    <Button
+                      data-testid="button-reset-features"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        if (livePricing) {
+                          setCustomEssentialFeatures(livePricing.essentialFeatures);
+                          setCustomPremiumFeatures(livePricing.premiumFeatures);
+                          setCustomDeluxeFeatures(livePricing.deluxeFeatures);
+                          setFeaturesCustomized(false);
+                        }
+                      }}
+                    >
+                      Reset to Defaults
+                    </Button>
+                  </div>
+                </div>
               )}
 
               {livePricing.initialCleanFee > 0 && (

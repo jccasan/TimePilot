@@ -8151,7 +8151,12 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid quote data", details: parsed.error.flatten() });
       }
 
-      const quote = await storage.updateQuote(req.params.id, companyId, parsed.data as Partial<InsertQuote>);
+      const updateData = { ...parsed.data } as Record<string, any>;
+      if (updateData.quoteNumber === null || updateData.quoteNumber === undefined) {
+        delete updateData.quoteNumber;
+      }
+
+      const quote = await storage.updateQuote(req.params.id, companyId, updateData as Partial<InsertQuote>);
       res.json(quote);
     } catch (err: any) {
       console.error("Error updating quote:", err);
