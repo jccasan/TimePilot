@@ -97,6 +97,12 @@ export default function AdminCompanyDetail() {
     enabled: !!id,
   });
 
+  const { data: voiceCalls } = useQuery<any[]>({
+    queryKey: ["/api/admin/companies", id, "voice-calls"],
+    queryFn: adminFetchFn(`/api/admin/companies/${id}/voice-calls?limit=20`),
+    enabled: !!id,
+  });
+
   const { data: auditData, isLoading: auditLoading } = useQuery<{ logs: AuditLogEntry[]; total: number }>({
     queryKey: ["/api/admin/companies", id, "audit-logs", auditPage, auditFilter],
     queryFn: adminFetchFn(`/api/admin/companies/${id}/audit-logs?limit=${auditPageSize}&offset=${auditPage * auditPageSize}${auditFilter ? `&entityType=${auditFilter}` : ""}`),
@@ -430,6 +436,50 @@ export default function AdminCompanyDetail() {
                 </CardContent>
               </Card>
             </div>
+          )}
+
+          {voiceCalls && voiceCalls.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Phone className="h-4 w-4" /> Voice Call Log
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm" data-testid="table-voice-calls">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="py-2 pr-3">Date</th>
+                        <th className="py-2 pr-3">Caller</th>
+                        <th className="py-2 pr-3">Duration</th>
+                        <th className="py-2 pr-3">Outcome</th>
+                        <th className="py-2">Summary</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {voiceCalls.map((call: any) => (
+                        <tr key={call.id} className="border-b last:border-0" data-testid={`row-voice-call-${call.id}`}>
+                          <td className="py-2 pr-3 whitespace-nowrap">{new Date(call.createdAt).toLocaleDateString()}</td>
+                          <td className="py-2 pr-3 whitespace-nowrap">{call.callerPhone || "Unknown"}</td>
+                          <td className="py-2 pr-3 whitespace-nowrap">
+                            {call.durationMinutes} min ({call.durationSeconds}s)
+                          </td>
+                          <td className="py-2 pr-3">
+                            <Badge variant={call.outcome === "successful" ? "default" : "secondary"} data-testid={`badge-outcome-${call.id}`}>
+                              {call.outcome || "unknown"}
+                            </Badge>
+                          </td>
+                          <td className="py-2 text-xs text-muted-foreground max-w-[200px] truncate" title={call.summary || ""}>
+                            {call.summary || "--"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           <div className="grid md:grid-cols-2 gap-4">

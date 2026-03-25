@@ -6676,7 +6676,7 @@ export async function registerRoutes(
         ? callData.end_timestamp - callData.start_timestamp
         : 0;
       const durationSeconds = Math.round(durationMs / 1000);
-      const durationMinutes = Math.max(1, Math.ceil(durationSeconds / 60));
+      const durationMinutes = durationSeconds > 0 ? Math.ceil(durationSeconds / 60) : 0;
       const outcome = callData.call_analysis?.call_successful ? "successful" : (callData.disconnection_reason || "unknown");
       const summary = callData.call_analysis?.call_summary || null;
 
@@ -6727,18 +6727,20 @@ export async function registerRoutes(
         },
       });
 
-      await storage.createUsageEvent({
-        companyId,
-        eventType: "voice_minute",
-        quantity: durationMinutes,
-        metadata: { retellCallId, durationSeconds, callerPhone: callData.from_number },
-      });
+      if (durationMinutes > 0) {
+        await storage.createUsageEvent({
+          companyId,
+          eventType: "voice_minute",
+          quantity: durationMinutes,
+          metadata: { retellCallId, durationSeconds, callerPhone: callData.from_number },
+        });
 
-      const voiceSubId = matchedCompany.stripeVoiceSubscriptionId || matchedCompany.stripeSubscriptionId;
-      if (voiceSubId) {
-        reportMeteredUsage(voiceSubId, "voice_minute", durationMinutes).catch(err =>
-          console.error(`[Retell Webhook] Failed to report metered usage:`, err.message)
-        );
+        const voiceSubId = matchedCompany.stripeVoiceSubscriptionId || matchedCompany.stripeSubscriptionId;
+        if (voiceSubId) {
+          reportMeteredUsage(voiceSubId, "voice_minute", durationMinutes).catch(err =>
+            console.error(`[Retell Webhook] Failed to report metered usage:`, err.message)
+          );
+        }
       }
 
       console.log(`[Retell Webhook] Recorded call ${retellCallId} for company ${matchedCompany.name} (${companyId}): ${durationMinutes} min(s)`);
