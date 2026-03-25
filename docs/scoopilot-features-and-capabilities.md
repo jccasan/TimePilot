@@ -1,14 +1,20 @@
 # ScooPilot — Complete Features & Capabilities Guide
 
+---
+
+## 1. Platform Overview
+
 **The all-in-one field service management platform built specifically for pet waste removal businesses.**
 
 ScooPilot is a cloud-based SaaS platform that gives pet waste removal companies everything they need to run, grow, and scale their business from a single dashboard. From the first lead to the last invoice, ScooPilot handles CRM, quoting, scheduling, route optimization, field operations, invoicing, payments, AI-powered tools, and client communications — all purpose-built for the scooping industry.
 
 Whether you're a solo operator running 30 yards a day or a growing company with multiple crews and hundreds of clients, ScooPilot adapts to your business with flexible pricing tiers, team management, and powerful automation.
 
+ScooPilot is a multi-tenant SaaS platform, meaning each company gets its own fully isolated workspace with its own data, branding, users, and settings — all managed from a single, secure cloud application at [app.scoopilot.com](https://app.scoopilot.com).
+
 ---
 
-## 1. CRM & Contact Management
+## 2. CRM & Contact Management
 
 ScooPilot includes a full customer relationship management system designed for service businesses that manage recurring residential and commercial accounts.
 
@@ -24,7 +30,7 @@ ScooPilot includes a full customer relationship management system designed for s
 
 ---
 
-## 2. Quoting & Proposals
+## 3. Quoting & Proposals
 
 ScooPilot's universal quoting engine lets you create professional, branded proposals for both residential homeowners and commercial properties — complete with interactive yard measurements and a client-facing acceptance portal.
 
@@ -55,7 +61,7 @@ ScooPilot's universal quoting engine lets you create professional, branded propo
 
 ---
 
-## 3. Scheduling & Visit Management
+## 4. Scheduling & Visit Management
 
 ScooPilot's scheduling system handles recurring service plans, one-time cleanups, and everything in between — with visual calendar tools and automated visit generation.
 
@@ -70,7 +76,7 @@ ScooPilot's scheduling system handles recurring service plans, one-time cleanups
 
 ---
 
-## 4. Route Optimization
+## 5. Route Optimization
 
 ScooPilot's route builder helps you plan the most efficient paths for your crews, reducing drive time and fuel costs while maximizing the number of yards you can service each day.
 
@@ -84,7 +90,7 @@ ScooPilot's route builder helps you plan the most efficient paths for your crews
 
 ---
 
-## 5. Field Technician Mobile App
+## 6. Field Technician Mobile App
 
 ScooPilot includes a dedicated mobile-optimized interface for field technicians — no separate app download required. Techs access everything through their phone's browser.
 
@@ -99,7 +105,7 @@ ScooPilot includes a dedicated mobile-optimized interface for field technicians 
 
 ---
 
-## 6. Invoicing & Payments
+## 7. Invoicing & Payments
 
 ScooPilot automates the entire billing cycle — from generating invoices when service is completed to processing credit card payments and recording them in your books.
 
@@ -116,7 +122,7 @@ ScooPilot automates the entire billing cycle — from generating invoices when s
 
 ---
 
-## 7. Client Portal
+## 8. Client Portal
 
 Give your clients a professional, self-service experience with ScooPilot's branded client portal — accessible from any device without downloading an app.
 
@@ -130,7 +136,7 @@ Give your clients a professional, self-service experience with ScooPilot's brand
 
 ---
 
-## 8. AI-Powered Features
+## 9. AI-Powered Features
 
 ScooPilot integrates artificial intelligence throughout the platform to help you work smarter, price better, and serve clients faster.
 
@@ -151,7 +157,7 @@ ScooPilot integrates artificial intelligence throughout the platform to help you
 
 ---
 
-## 9. AI Voice Agent
+## 10. AI Voice Agent
 
 ScooPilot integrates with Retell AI to provide an intelligent, always-available phone agent that handles inbound calls for your business — answering questions, looking up customers, and booking services.
 
@@ -167,7 +173,7 @@ ScooPilot integrates with Retell AI to provide an intelligent, always-available 
 
 ---
 
-## 10. SMS & Communications
+## 11. SMS & Communications
 
 ScooPilot's built-in communication tools keep your clients informed at every stage — from service reminders to payment confirmations — with two-way SMS and automated messaging.
 
@@ -175,14 +181,14 @@ ScooPilot's built-in communication tools keep your clients informed at every sta
 - **Multi-Provider Support** — Choose between Twilio (system default) or Telnyx as your SMS provider. Companies can configure their own Telnyx API keys and messaging profiles for custom sender IDs.
 - **Automated Service Reminders** — Send "service scheduled for tomorrow" reminders automatically. Configure timing and message content to match your brand voice.
 - **Invoice & Payment Reminders** — Automated text reminders for outstanding invoices. Set the timing and frequency of follow-ups.
-- **Customizable Templates** — Create reusable message templates with dynamic placeholders like {firstName}, {servicDate}, {total}, and {companyName}. Templates ensure consistent, professional communication.
+- **Customizable Templates** — Create reusable message templates with dynamic placeholders like {firstName}, {serviceDate}, {total}, and {companyName}. Templates ensure consistent, professional communication.
 - **Threaded Conversation Inbox** — View all SMS conversations in a unified inbox. See the full history with each contact, reply inline, and never lose track of a conversation.
 - **Quiet Hours** — Configure business hours for automated messages. Reminders and notifications are held until your designated sending window so you never text a client at 3 AM.
 - **SMS Usage Tracking** — Monitor your monthly SMS segment usage against your plan allowance. Usage is metered and billed through Stripe for transparent cost management.
 
 ---
 
-## 11. Email Communications
+## 12. Email Communications
 
 ScooPilot handles transactional email delivery through SendGrid, ensuring your business communications reach your clients' inboxes reliably.
 
@@ -192,7 +198,7 @@ ScooPilot handles transactional email delivery through SendGrid, ensuring your b
 
 ---
 
-## 12. QuickBooks Online Integration
+## 13. QuickBooks Online Integration
 
 Keep your books in sync automatically. ScooPilot's QuickBooks Online integration eliminates double data entry by syncing your customers, invoices, and payments bidirectionally.
 
@@ -205,7 +211,7 @@ Keep your books in sync automatically. ScooPilot's QuickBooks Online integration
 
 ---
 
-## 13. Subscription Plans & Billing
+## 14. Subscription Plans & Billing
 
 ScooPilot offers flexible pricing tiers that grow with your business, from solo operators to multi-crew enterprises. All plans include a 14-day free trial.
 
@@ -234,7 +240,7 @@ ScooPilot offers flexible pricing tiers that grow with your business, from solo 
 
 ---
 
-## 14. Automation Engine
+## 15. Automation Engine
 
 ScooPilot's automation engine lets you create "if this, then that" rules that eliminate repetitive tasks and ensure nothing falls through the cracks.
 
@@ -251,7 +257,7 @@ ScooPilot's automation engine lets you create "if this, then that" rules that el
 
 ---
 
-## 15. Webhooks & API Integration
+## 16. Webhooks & API Integration
 
 ScooPilot is built to integrate with your existing tools and external services through a robust webhook and API system.
 
@@ -273,7 +279,7 @@ ScooPilot is built to integrate with your existing tools and external services t
 
 ---
 
-## 16. Analytics & Business Intelligence
+## 17. Analytics & Business Intelligence
 
 ScooPilot gives you a clear picture of your business health with real-time dashboards, KPI tracking, and visual analytics.
 
@@ -293,7 +299,7 @@ ScooPilot gives you a clear picture of your business health with real-time dashb
 
 ---
 
-## 17. Profitability Tools
+## 18. Profitability Tools
 
 ScooPilot goes beyond revenue tracking to show you true profitability — accounting for labor, travel, equipment, and overhead costs at the per-customer and per-route level.
 
@@ -306,7 +312,7 @@ ScooPilot goes beyond revenue tracking to show you true profitability — accoun
 
 ---
 
-## 18. Data Migration & Import
+## 19. Data Migration & Import
 
 Switching to ScooPilot from another platform? The migration tools make it painless to bring your existing data — clients, properties, service plans, and invoice history — into your new system.
 
@@ -324,7 +330,7 @@ Switching to ScooPilot from another platform? The migration tools make it painle
 
 ---
 
-## 19. Platform Administration
+## 20. Platform Administration
 
 For ScooPilot platform operators, a dedicated admin dashboard provides oversight across all tenant companies.
 
@@ -335,7 +341,7 @@ For ScooPilot platform operators, a dedicated admin dashboard provides oversight
 
 ---
 
-## 20. Client Signup Widget
+## 21. Client Signup Widget
 
 A public-facing signup and quote page that you can link from your website to capture leads and provide instant pricing.
 
@@ -345,7 +351,7 @@ A public-facing signup and quote page that you can link from your website to cap
 
 ---
 
-## 21. Settings & Configuration
+## 22. Settings & Configuration
 
 ScooPilot is deeply configurable to match how your specific business operates.
 
@@ -359,17 +365,17 @@ ScooPilot is deeply configurable to match how your specific business operates.
 
 ---
 
-## 22. Dark Mode
+## 23. Dark Mode
 
 ScooPilot supports full dark mode across the entire application. Toggle between light and dark themes based on your preference. The dark theme is carefully designed to maintain readability and visual hierarchy across all screens, maps, charts, and data tables.
 
 ---
 
-## 23. Security & Reliability
+## 24. Security & Reliability
 
 ScooPilot is built with enterprise-grade security practices to protect your business data and your clients' information.
 
-- **Multi-Tenant Data Isolation** — Every company's data is strictly isolated. There is no possibility of data leakage between tenants. Every database query is scoped to the authenticated company.
+- **Multi-Tenant Data Isolation** — Every company's data is strictly isolated at the database query level. Every API call is scoped to the authenticated company, ensuring tenant data remains separate and secure.
 - **Role-Based Access Control** — Assign roles (platform admin, company admin, office staff, technician) with appropriate permission levels. Technicians see only their routes; admins see everything.
 - **API Key Scoping** — API keys can be restricted to specific operations, limiting the blast radius if a key is compromised.
 - **Encrypted Communications** — All data in transit is encrypted via TLS/SSL. Sensitive credentials (QuickBooks tokens, API keys) are encrypted at rest.
@@ -379,7 +385,7 @@ ScooPilot is built with enterprise-grade security practices to protect your busi
 
 ---
 
-## 24. Technical Foundation
+## 25. Technical Foundation
 
 ScooPilot is built on a modern, scalable technology stack designed for reliability and performance.
 
