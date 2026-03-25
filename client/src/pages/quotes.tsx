@@ -467,7 +467,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const [expiresAt, setExpiresAt] = useState(quote?.expiresAt ? new Date(quote.expiresAt).toISOString().split("T")[0] : "");
   const [dogCount, setDogCount] = useState(quote?.dogCount || 2);
   const [yardSize, setYardSize] = useState(quote?.yardSize || "small");
-  const [stationCount, setStationCount] = useState(quote?.stationCount || 4);
+  const [stationCount, setStationCount] = useState(quote?.stationCount ?? 4);
   const [commonAreaMinutes, setCommonAreaMinutes] = useState(quote?.commonAreaMinutes || 30);
   const [timePerStation, setTimePerStation] = useState(quote?.timePerStation || 10);
   const [mileageDistance, setMileageDistance] = useState(parseFloat(String(quote?.mileageDistance || 0)));
@@ -511,7 +511,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setExpiresAt(quote.expiresAt ? new Date(quote.expiresAt).toISOString().split("T")[0] : "");
       setDogCount(quote.dogCount || 2);
       setYardSize(quote.yardSize || "small");
-      setStationCount(quote.stationCount || 4);
+      setStationCount(quote.stationCount ?? 4);
       setCommonAreaMinutes(quote.commonAreaMinutes || 30);
       setTimePerStation(quote.timePerStation || 10);
       setMileageDistance(parseFloat(String(quote.mileageDistance || 0)));
@@ -926,7 +926,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <Label>Waste Stations</Label>
-                  <Input data-testid="input-station-count" type="number" min={1} max={100} value={stationCount} onChange={e => setStationCount(parseInt(e.target.value) || 1)} />
+                  <Input data-testid="input-station-count" type="number" min={0} max={100} value={stationCount} onChange={e => { const v = parseInt(e.target.value); setStationCount(isNaN(v) ? 0 : v); }} />
                 </div>
                 <div>
                   <Label>Time/Station (min)</Label>

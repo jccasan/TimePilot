@@ -7977,7 +7977,7 @@ export async function registerRoutes(
         const frequency = (req.query.frequency as string) || "1x_weekly";
         const input: CommercialQuoteInput = {
           type: "commercial",
-          stationCount: parseInt(req.query.stationCount as string) || 1,
+          stationCount: (() => { const v = parseInt(req.query.stationCount as string); return isNaN(v) ? 0 : v; })(),
           commonAreaMinutes: parseInt(req.query.commonAreaMinutes as string) || 30,
           frequency: frequency as CommercialQuoteInput["frequency"],
           timePerStation: parseInt(req.query.timePerStation as string) || 10,

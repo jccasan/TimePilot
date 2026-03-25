@@ -260,7 +260,7 @@ export function calculateCommercialPricing(
     initialCleanFee,
     essentialFeatures: [
       `${frequencyLabel} station maintenance`,
-      `${input.stationCount} waste station${input.stationCount !== 1 ? "s" : ""} (${timePerStation} min each)`,
+      input.stationCount > 0 ? `${input.stationCount} waste station${input.stationCount !== 1 ? "s" : ""} (${timePerStation} min each)` : "",
       "Station emptying & bag refill",
       `Common area scooping (${input.commonAreaMinutes} min)`,
       `${crewSize}-person crew · ${Math.round(totalLaborHours * 10) / 10} hr total labor`,
@@ -477,7 +477,7 @@ export function renderCommercialProposalHtml(data: {
         ${e.propertyAddress ? `<p style="margin: 0 0 8px; font-size: 14px; color: #475569;">Property: <strong>${e.propertyAddress}</strong></p>` : ''}
         <p style="margin: 0 0 20px; font-size: 14px; color: #475569;">
           This proposal outlines a comprehensive pet waste management solution for your property,
-          including maintenance of ${breakdown.stationCount || 0} waste station${(breakdown.stationCount || 0) !== 1 ? 's' : ''},
+          ${(breakdown.stationCount || 0) > 0 ? `including maintenance of ${breakdown.stationCount} waste station${breakdown.stationCount !== 1 ? 's' : ''},` : 'including'}
           ${breakdown.commonAreaMinutes || 0} minutes of common area servicing,
           and an estimated ${breakdown.totalLaborHours || 0} hours of on-site labor per visit
           with a ${breakdown.crewSize || 1}-person crew.
@@ -491,12 +491,12 @@ export function renderCommercialProposalHtml(data: {
           </tr>
           <tr>
             <td style="padding: 8px 12px; font-weight: 600;">Waste Stations</td>
-            <td style="padding: 8px 12px;">${breakdown.stationCount || 0} stations @ $${(breakdown.stationRate || 0).toFixed(2)}/station = $${(breakdown.stationCost || 0).toFixed(2)}</td>
+            <td style="padding: 8px 12px;">${(breakdown.stationCount || 0) > 0 ? `${breakdown.stationCount} stations @ $${(breakdown.stationRate || 0).toFixed(2)}/station = $${(breakdown.stationCost || 0).toFixed(2)}` : 'No waste stations'}</td>
           </tr>
-          <tr style="background-color: #f8fafc;">
+          ${(breakdown.stationCount || 0) > 0 ? `<tr style="background-color: #f8fafc;">
             <td style="padding: 8px 12px; font-weight: 600;">Time Per Station</td>
             <td style="padding: 8px 12px;">${breakdown.timePerStation || 0} min × ${breakdown.stationCount || 0} stations = ${breakdown.totalStationMinutes || 0} min</td>
-          </tr>
+          </tr>` : ''}
           <tr>
             <td style="padding: 8px 12px; font-weight: 600;">Common Area Service</td>
             <td style="padding: 8px 12px;">${breakdown.commonAreaMinutes || 0} minutes</td>
