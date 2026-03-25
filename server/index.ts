@@ -292,10 +292,196 @@ async function ensureCompanyColumns() {
   }
 }
 
+async function seedDemoCompany() {
+  try {
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+    const existing = await pool.query("SELECT id FROM users WHERE email = 'demo@scoopilot.com'");
+    if (existing.rows.length > 0) {
+      console.log("[Migration] Demo company already exists");
+      await pool.end();
+      return;
+    }
+
+    const pwHash = 'c432304d6d32bf305f0c66b607e05581:bad70236ce9513ae6733fca4b215d4baabf4609144cb108386d2603ddf1d6307db2ea6b81414d068a0fbe3a0d6e42dfa8bc2dfbaf1842ec15f6c4b15f427b7e8';
+
+    const userRes = await pool.query(
+      `INSERT INTO users (email, password_hash, first_name, last_name, must_change_password) VALUES ($1, $2, 'Alex', 'Demo', false) RETURNING id`,
+      ['demo@scoopilot.com', pwHash]
+    );
+    const userId = userRes.rows[0].id;
+
+    const compRes = await pool.query(
+      `INSERT INTO companies (name, slug, timezone, subscription_tier, subscription_status, charge_timing, mrr_cents, route_credits, reminders_enabled, auto_visits_enabled, ai_import_mapping_enabled, rover_ai_enabled, sms_provider)
+       VALUES ('Clean Paws Fredericksburg', 'clean-paws-fredericksburg', 'America/New_York', 'tier_1', 'active', 'day_before', 0, 10, true, true, true, true, 'twilio')
+       RETURNING id`
+    );
+    const companyId = compRes.rows[0].id;
+
+    await pool.query(`INSERT INTO company_users (company_id, user_id, role) VALUES ($1, $2, 'owner')`, [companyId, userId]);
+
+    const contactData = [
+      ['Marcus', 'Johnson', 'marcus.j@example.com', '(540) 555-0142', 'active'],
+      ['Sarah', 'Mitchell', 'sarah.m@example.com', '(540) 555-0198', 'active'],
+      ['David', 'Ramirez', 'david.r@example.com', '(540) 555-0267', 'active'],
+      ['Jennifer', "O'Brien", 'jennifer.ob@example.com', '(540) 555-0331', 'active'],
+      ['Chris', 'Nguyen', 'chris.n@example.com', '(540) 555-0415', 'active'],
+      ['Amanda', 'Foster', 'amanda.f@example.com', '(540) 555-0489', 'active'],
+      ['Brian', 'Carlisle', 'brian.c@example.com', '(540) 555-0523', 'active'],
+      ['Heather', 'Torres', 'heather.t@example.com', '(540) 555-0607', 'active'],
+      ['Kevin', 'Whitfield', 'kevin.w@example.com', '(540) 555-0671', 'active'],
+      ['Rachel', 'Simmons', 'rachel.s@example.com', '(540) 555-0745', 'active'],
+      ['Tyler', 'Brooks', 'tyler.b@example.com', '(540) 555-0819', 'active'],
+      ['Laura', 'Pennington', 'laura.p@example.com', '(540) 555-0883', 'lead'],
+      ['Greg', 'Hoffman', 'greg.h@example.com', '(540) 555-0957', 'lead'],
+      ['Nicole', 'Crawford', 'nicole.c@example.com', '(540) 555-1021', 'lead'],
+      ['Mike', 'Patterson', 'mike.p@example.com', '(540) 555-1095', 'active'],
+    ];
+
+    const contactIds: string[] = [];
+    for (const [fn, ln, em, ph, st] of contactData) {
+      const r = await pool.query(
+        `INSERT INTO contacts (company_id, first_name, last_name, email, phone, status, has_portal_access, auto_pay_enabled, auto_invoice_enabled) VALUES ($1,$2,$3,$4,$5,$6,false,false,true) RETURNING id`,
+        [companyId, fn, ln, em, ph, st]
+      );
+      contactIds.push(r.rows[0].id);
+    }
+
+    const addresses = [
+      ['1204 Charles St', 38.3032, -77.4605, 2, 'medium'],
+      ['810 William St', 38.3018, -77.4589, 1, 'small'],
+      ['305 Hanover St', 38.3045, -77.4573, 3, 'large'],
+      ['1501 Princess Anne St', 38.3055, -77.4612, 2, 'medium'],
+      ['2108 Fall Hill Ave', 38.3102, -77.4701, 1, 'small'],
+      ['904 Kenmore Ave', 38.2985, -77.4632, 2, 'large'],
+      ['412 Lafayette Blvd', 38.2967, -77.4598, 1, 'medium'],
+      ['1700 Plank Rd', 38.2921, -77.4915, 3, 'large'],
+      ['206 Caroline St', 38.3012, -77.4567, 2, 'medium'],
+      ['3200 Westwood Dr', 38.2878, -77.4832, 1, 'small'],
+      ['508 Sophia St', 38.3001, -77.4555, 2, 'medium'],
+      ['1105 Stafford Ave', 38.2945, -77.4678, 1, 'small'],
+      ['2401 Cowan Blvd', 38.289, -77.5012, 2, 'large'],
+      ['609 George St', 38.3028, -77.4582, 1, 'medium'],
+      ['1303 Sunken Rd', 38.2935, -77.4745, 2, 'large'],
+    ];
+
+    const propIds: string[] = [];
+    for (let i = 0; i < addresses.length; i++) {
+      const [addr, lat, lng, dogs, yard] = addresses[i];
+      const r = await pool.query(
+        `INSERT INTO properties (company_id, contact_id, street_address, city, state, zip_code, latitude, longitude, number_of_dogs, yard_size) VALUES ($1,$2,$3,'Fredericksburg','VA','22401',$4,$5,$6,$7) RETURNING id`,
+        [companyId, contactIds[i], addr, lat, lng, dogs, yard]
+      );
+      propIds.push(r.rows[0].id);
+    }
+
+    const routeRes = await pool.query(
+      `INSERT INTO routes (company_id, name, day_of_week, color) VALUES
+        ($1, 'Downtown Mon', 'monday', '#4F46E5'),
+        ($1, 'Downtown Wed', 'wednesday', '#059669'),
+        ($1, 'Downtown Fri', 'friday', '#DC2626'),
+        ($1, 'West Side Tue', 'tuesday', '#D97706'),
+        ($1, 'West Side Thu', 'thursday', '#7C3AED')
+       RETURNING id`,
+      [companyId]
+    );
+    const routeIds = routeRes.rows.map((r: any) => r.id);
+
+    const planConfigs = [
+      { ci: 0, pi: 0, freq: 'weekly', price: '25.00', ri: 0 },
+      { ci: 1, pi: 1, freq: 'weekly', price: '20.00', ri: 1 },
+      { ci: 2, pi: 2, freq: 'weekly', price: '35.00', ri: 0 },
+      { ci: 3, pi: 3, freq: 'biweekly', price: '30.00', ri: 3 },
+      { ci: 4, pi: 4, freq: 'weekly', price: '18.00', ri: 2 },
+      { ci: 5, pi: 5, freq: 'weekly', price: '28.00', ri: 1 },
+      { ci: 6, pi: 6, freq: 'biweekly', price: '22.00', ri: 4 },
+      { ci: 7, pi: 7, freq: 'weekly', price: '40.00', ri: 3 },
+      { ci: 8, pi: 8, freq: 'weekly', price: '25.00', ri: 0 },
+      { ci: 9, pi: 9, freq: 'monthly', price: '45.00', ri: 2 },
+      { ci: 10, pi: 10, freq: 'weekly', price: '26.00', ri: 1 },
+      { ci: 14, pi: 14, freq: 'weekly', price: '32.00', ri: 4 },
+    ];
+
+    const planIds: string[] = [];
+    for (const pc of planConfigs) {
+      const r = await pool.query(
+        `INSERT INTO service_plans (company_id, contact_id, property_id, frequency, price_per_visit, is_active, start_date, stop_order, is_stop_only, route_id) VALUES ($1,$2,$3,$4,$5,true,'2026-02-01',0,false,$6) RETURNING id`,
+        [companyId, contactIds[pc.ci], propIds[pc.pi], pc.freq, pc.price, routeIds[pc.ri]]
+      );
+      planIds.push(r.rows[0].id);
+    }
+
+    const dayMap = [1, 3, 1, 2, 5, 3, 4, 2, 1, 5, 3, 4];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let pIdx = 0; pIdx < planConfigs.length; pIdx++) {
+      const pc = planConfigs[pIdx];
+      const day = dayMap[pIdx];
+      for (let wk = 6; wk >= -1; wk--) {
+        if (pc.freq === 'biweekly' && wk % 2 !== 0) continue;
+        if (pc.freq === 'monthly' && wk !== 0 && wk !== 4) continue;
+
+        const d = new Date(today);
+        d.setDate(d.getDate() - (wk * 7) + (day - d.getDay()));
+        const dateStr = d.toISOString().split('T')[0];
+
+        let status: string;
+        if (d > today) status = 'scheduled';
+        else if (dateStr === today.toISOString().split('T')[0]) status = 'scheduled';
+        else status = Math.random() > 0.1 ? 'completed' : 'skipped';
+
+        const completedAt = status === 'completed' ? d.toISOString() : null;
+        await pool.query(
+          `INSERT INTO visits (company_id, service_plan_id, property_id, scheduled_date, status, completed_at) VALUES ($1,$2,$3,$4,$5,$6)`,
+          [companyId, planIds[pIdx], propIds[pc.pi], dateStr, status, completedAt]
+        );
+      }
+    }
+
+    const activeContacts = [0, 1, 2, 4, 5, 7, 10, 14];
+    const prices = [25, 20, 35, 18, 28, 40, 26, 32];
+    const addrs2 = ['1204 Charles St', '810 William St', '305 Hanover St', '2108 Fall Hill Ave', '904 Kenmore Ave', '1700 Plank Rd', '508 Sophia St', '1303 Sunken Rd'];
+    let invNum = 1;
+
+    for (let i = 0; i < activeContacts.length; i++) {
+      const cid = contactIds[activeContacts[i]];
+      const price = prices[i];
+      const addr = addrs2[i];
+
+      const paidTotal = (price * 4).toFixed(2);
+      const paidInvNum = `INV-${String(invNum++).padStart(5, '0')}`;
+      await pool.query(
+        `INSERT INTO invoices (company_id, contact_id, invoice_number, due_date, subtotal, tax, total, status, auto_generated, payment_attempts, issued_date) VALUES ($1,$2,$3,'2026-03-15',$4,'0',$4,'paid',true,0,'2026-02-15')`,
+        [companyId, cid, paidInvNum, paidTotal]
+      );
+
+      const draftTotal = (price * 2).toFixed(2);
+      const draftInvNum = `INV-${String(invNum++).padStart(5, '0')}`;
+      const draftRes = await pool.query(
+        `INSERT INTO invoices (company_id, contact_id, invoice_number, due_date, subtotal, tax, total, status, auto_generated, payment_attempts) VALUES ($1,$2,$3,'2026-04-01',$4,'0',$4,'draft',true,0) RETURNING id`,
+        [companyId, cid, draftInvNum, draftTotal]
+      );
+    }
+
+    const leadSources = ['Referral', 'Nextdoor', 'Facebook', 'Google', 'Yard Sign', 'Website'];
+    for (const ls of leadSources) {
+      await pool.query(`INSERT INTO lead_sources (company_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [companyId, ls]);
+    }
+
+    await pool.end();
+    console.log("[Migration] Demo company 'Clean Paws Fredericksburg' seeded successfully");
+  } catch (err) {
+    console.error("[Migration] Failed to seed demo company:", err);
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
   await syncSubscriptionTiers();
+  await seedDemoCompany();
   setupSession(app);
   await registerRoutes(httpServer, app);
 
