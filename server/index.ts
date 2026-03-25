@@ -337,6 +337,16 @@ async function seedDemoCompany() {
       ['Greg', 'Hoffman', 'greg.h@example.com', '(540) 555-0957', 'lead'],
       ['Nicole', 'Crawford', 'nicole.c@example.com', '(540) 555-1021', 'lead'],
       ['Mike', 'Patterson', 'mike.p@example.com', '(540) 555-1095', 'active'],
+      ['Danielle', 'Marsh', 'danielle.m@example.com', '(540) 555-1102', 'active'],
+      ['Patrick', 'Yates', 'patrick.y@example.com', '(540) 555-1176', 'active'],
+      ['Carla', 'Benson', 'carla.b@example.com', '(540) 555-1243', 'active'],
+      ['Derek', 'Sullivan', 'derek.s@example.com', '(540) 555-1317', 'active'],
+      ['Megan', 'Hargrove', 'megan.h@example.com', '(540) 555-1391', 'active'],
+      ['Jason', 'Draper', 'jason.d@example.com', '(540) 555-1465', 'active'],
+      ['Tina', 'Blackwell', 'tina.b@example.com', '(540) 555-1539', 'active'],
+      ['Ryan', 'Kessler', 'ryan.k@example.com', '(540) 555-1613', 'active'],
+      ['Olivia', 'Chambers', 'olivia.c@example.com', '(540) 555-1687', 'active'],
+      ['Brandon', 'Faulkner', 'brandon.f@example.com', '(540) 555-1761', 'active'],
     ];
 
     const contactIds: string[] = [];
@@ -364,6 +374,16 @@ async function seedDemoCompany() {
       ['2401 Cowan Blvd', 38.289, -77.5012, 2, 'large'],
       ['609 George St', 38.3028, -77.4582, 1, 'medium'],
       ['1303 Sunken Rd', 38.2935, -77.4745, 2, 'large'],
+      ['700 Littlepage St', 38.2998, -77.4621, 1, 'medium'],
+      ['1800 Augustine Ave', 38.2862, -77.4558, 3, 'large'],
+      ['405 Dixon St', 38.3065, -77.4641, 2, 'small'],
+      ['2205 Bragg Rd', 38.2847, -77.4889, 1, 'medium'],
+      ['1010 Willis St', 38.2973, -77.4543, 2, 'large'],
+      ['3400 Plank Rd', 38.2789, -77.5068, 1, 'small'],
+      ['505 Weedon St', 38.3038, -77.4527, 3, 'large'],
+      ['1600 Old Salem Rd', 38.2915, -77.5134, 2, 'medium'],
+      ['920 Wolfe St', 38.2957, -77.4612, 1, 'small'],
+      ['2600 Salem Church Rd', 38.2821, -77.5201, 2, 'large'],
     ];
 
     const propIds: string[] = [];
@@ -401,6 +421,16 @@ async function seedDemoCompany() {
       { ci: 9, pi: 9, freq: 'monthly', price: '45.00', ri: 2 },
       { ci: 10, pi: 10, freq: 'weekly', price: '26.00', ri: 1 },
       { ci: 14, pi: 14, freq: 'weekly', price: '32.00', ri: 4 },
+      { ci: 15, pi: 15, freq: 'weekly', price: '24.00', ri: 0 },
+      { ci: 16, pi: 16, freq: 'weekly', price: '38.00', ri: 3 },
+      { ci: 17, pi: 17, freq: 'weekly', price: '22.00', ri: 1 },
+      { ci: 18, pi: 18, freq: 'biweekly', price: '35.00', ri: 2 },
+      { ci: 19, pi: 19, freq: 'weekly', price: '27.00', ri: 4 },
+      { ci: 20, pi: 20, freq: 'weekly', price: '30.00', ri: 0 },
+      { ci: 21, pi: 21, freq: 'weekly', price: '42.00', ri: 3 },
+      { ci: 22, pi: 22, freq: 'weekly', price: '23.00', ri: 1 },
+      { ci: 23, pi: 23, freq: 'weekly', price: '19.00', ri: 2 },
+      { ci: 24, pi: 24, freq: 'biweekly', price: '33.00', ri: 4 },
     ];
 
     const planIds: string[] = [];
@@ -412,7 +442,7 @@ async function seedDemoCompany() {
       planIds.push(r.rows[0].id);
     }
 
-    const dayMap = [1, 3, 1, 2, 5, 3, 4, 2, 1, 5, 3, 4];
+    const dayMap = [1, 3, 1, 2, 5, 3, 4, 2, 1, 5, 3, 4, 1, 2, 3, 5, 4, 1, 2, 3, 5, 4];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
