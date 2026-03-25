@@ -93,6 +93,7 @@ export async function createPaymentIntent(params: {
   };
 
   if (params.stripeConnectAccountId) {
+    piParams.on_behalf_of = params.stripeConnectAccountId;
     piParams.transfer_data = { destination: params.stripeConnectAccountId };
     piParams.application_fee_amount = computeApplicationFee(amountCents);
   }
@@ -152,6 +153,7 @@ export async function chargeInvoiceAutomatically(params: {
     };
 
     if (params.stripeConnectAccountId) {
+      piParams.on_behalf_of = params.stripeConnectAccountId;
       piParams.transfer_data = { destination: params.stripeConnectAccountId };
       piParams.application_fee_amount = computeApplicationFee(amountCents);
     }
@@ -219,6 +221,7 @@ export async function createCheckoutSession(params: {
 
   if (params.stripeConnectAccountId) {
     sessionParams.payment_intent_data = {
+      on_behalf_of: params.stripeConnectAccountId,
       transfer_data: { destination: params.stripeConnectAccountId },
       application_fee_amount: computeApplicationFee(amountCents),
     };
