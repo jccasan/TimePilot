@@ -6644,13 +6644,26 @@ export async function registerRoutes(
 
   app.post("/api/webhooks/retell", async (req: Request, res: Response) => {
     try {
-      const retellSecret = process.env.RETELL_WEBHOOK_SECRET;
-      if (retellSecret) {
-        const providedSecret = req.headers["x-retell-secret"] as string | undefined;
-        if (providedSecret !== retellSecret) {
-          console.warn("[Retell Webhook] Invalid or missing x-retell-secret header");
-          return res.status(401).json({ error: "Unauthorized" });
+      const retellApiKey = process.env.RETELL_API_KEY;
+      if (retellApiKey) {
+        const signature = req.headers["x-retell-signature"] as string | undefined;
+        if (!signature) {
+          console.warn("[Retell Webhook] Missing x-retell-signature header");
+          return res.status(401).json({ error: "Missing signature" });
         }
+        const crypto = await import("crypto");
+        const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+        const expectedSignature = crypto.createHmac("sha256", retellApiKey)
+          .update(rawBody)
+          .digest("hex");
+        const sigBuf = Buffer.from(signature);
+        const expectedBuf = Buffer.from(expectedSignature);
+        if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+          console.warn("[Retell Webhook] Signature mismatch");
+          return res.status(401).json({ error: "Invalid signature" });
+        }
+      } else {
+        console.warn("[Retell Webhook] RETELL_API_KEY not set — skipping signature verification");
       }
 
       const payload = req.body;
