@@ -24,7 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Plus, Send, Eye, Trash2, Pencil, ClipboardCheck, Search,
   DollarSign, Home, Building2, Dog, Loader2, CheckCircle2, XCircle,
-  Clock, FileText,
+  Clock, FileText, MapPin, Camera, X,
 } from "lucide-react";
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -472,6 +472,10 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const [overrideEssential, setOverrideEssential] = useState("");
   const [overridePremium, setOverridePremium] = useState("");
   const [overrideDeluxe, setOverrideDeluxe] = useState("");
+  const [quoteImages, setQuoteImages] = useState<{ url: string; caption: string; sqft?: number | null }[]>(
+    (quote?.images as { url: string; caption: string; sqft?: number | null }[]) || []
+  );
+  const [generatingImage, setGeneratingImage] = useState(false);
 
   useEffect(() => {
     if (quote) {
@@ -491,6 +495,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setIsFirstTime(quote.isFirstTime !== false);
       setNotes(quote.notes || "");
       setInternalNotes(quote.internalNotes || "");
+      setQuoteImages((quote.images as { url: string; caption: string; sqft?: number | null }[]) || []);
     } else {
       setQuoteType("residential");
       setContactId("");
@@ -510,6 +515,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setInternalNotes("");
       setManualOverride(false);
       setLivePricing(null);
+      setQuoteImages([]);
     }
   }, [quote, open]);
 
@@ -564,6 +570,32 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     }
   };
 
+  const selectedProperty = contactProperties?.find(p => p.id === propertyId);
+  const hasYardMeasurement = selectedProperty?.yardPolygon && Array.isArray(selectedProperty.yardPolygon) && (selectedProperty.yardPolygon as number[][]).length >= 3;
+
+  const handleGenerateYardImage = async (zoom?: number) => {
+    if (!propertyId || generatingImage) return;
+    setGeneratingImage(true);
+    try {
+      const res = await apiRequest("POST", "/api/quotes/generate-yard-image", {
+        propertyId,
+        zoom: zoom || 18,
+      });
+      const data = await res.json();
+      setQuoteImages(prev => [...prev, { url: data.url, caption: data.caption, sqft: data.sqft }]);
+      toast({ title: "Yard image generated" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to generate image";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setGeneratingImage(false);
+    }
+  };
+
+  const removeImage = (idx: number) => {
+    setQuoteImages(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
       if (isEdit) {
@@ -607,6 +639,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       premiumFeatures: p.premiumFeatures,
       deluxeFeatures: p.deluxeFeatures,
       pricingBreakdown: p.breakdown,
+      images: quoteImages.length > 0 ? quoteImages : null,
       expiresAt: expiresAt || null,
     };
 
@@ -863,6 +896,69 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
               )}
             </div>
           )}
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-sm font-medium">Yard Measurement Images</Label>
+              {hasYardMeasurement && (
+                <div className="flex gap-2">
+                  <Button
+                    data-testid="button-generate-yard-close"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={generatingImage}
+                    onClick={() => handleGenerateYardImage(19)}
+                  >
+                    {generatingImage ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Camera className="h-3 w-3 mr-1" />}
+                    Close-up
+                  </Button>
+                  <Button
+                    data-testid="button-generate-yard-overview"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={generatingImage}
+                    onClick={() => handleGenerateYardImage(17)}
+                  >
+                    {generatingImage ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <MapPin className="h-3 w-3 mr-1" />}
+                    Overview
+                  </Button>
+                </div>
+              )}
+            </div>
+            {!propertyId && (
+              <p className="text-xs text-muted-foreground">Select a property above to generate yard images.</p>
+            )}
+            {propertyId && !hasYardMeasurement && (
+              <p className="text-xs text-muted-foreground">This property doesn't have a yard measurement yet. Use the yard measuring tool on the contact detail page first.</p>
+            )}
+            {quoteImages.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
+                {quoteImages.map((img, idx) => (
+                  <div key={idx} className="relative group border rounded-lg overflow-hidden">
+                    <img
+                      src={img.url.startsWith("/objects") ? img.url : `/objects/${img.url}`}
+                      alt={img.caption}
+                      className="w-full h-32 object-cover"
+                      data-testid={`img-yard-${idx}`}
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1.5 truncate">
+                      {img.caption}
+                    </div>
+                    <button
+                      data-testid={`button-remove-image-${idx}`}
+                      type="button"
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => removeImage(idx)}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

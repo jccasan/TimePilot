@@ -342,6 +342,7 @@ async function ensureCompanyColumns() {
       CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(status);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_company_number ON quotes(company_id, quote_number);
     `);
+    await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS images JSONB`);
     console.log("[Migration] Quotes table verified");
     console.log("[Migration] Company voice columns verified");
   } catch (err) {

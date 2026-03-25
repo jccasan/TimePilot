@@ -1494,6 +1494,7 @@ export const quotes = pgTable("quotes", {
   premiumFeatures: jsonb("premium_features").$type<string[]>(),
   deluxeFeatures: jsonb("deluxe_features").$type<string[]>(),
   pricingBreakdown: jsonb("pricing_breakdown").$type<Record<string, any>>(),
+  images: jsonb("images").$type<{ url: string; caption: string; sqft?: number }[]>(),
   notes: text("notes"),
   internalNotes: text("internal_notes"),
   expiresAt: timestamp("expires_at"),

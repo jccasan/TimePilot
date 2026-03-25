@@ -1,5 +1,11 @@
 import { type QuoteDefaults, DEFAULT_QUOTE_DEFAULTS } from "@shared/schema";
 
+function resolveImageUrl(url: string, baseUrl?: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  const path = url.startsWith('/') ? url : `/objects/${url}`;
+  return baseUrl ? `${baseUrl}${path}` : path;
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -253,6 +259,8 @@ export function renderResidentialProposalHtml(data: {
   expiresAt?: string;
   notes?: string;
   acceptUrl?: string;
+  images?: { url: string; caption: string; sqft?: number }[];
+  baseUrl?: string;
 }): string {
   const { pricing } = data;
   const e = {
@@ -326,6 +334,20 @@ export function renderResidentialProposalHtml(data: {
 
         ${initialCleanSection}
 
+        ${data.images && data.images.length > 0 ? `
+          <div style="margin-top: 24px;">
+            <h3 style="margin: 0 0 12px; font-size: 15px; color: #1e293b;">Property Measurement</h3>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+              ${data.images.map(img => {
+                const imgSrc = resolveImageUrl(img.url, data.baseUrl);
+                return `<div style="flex: 1; min-width: 240px; max-width: 380px;">
+                  <img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(img.caption)}" style="width: 100%; border-radius: 8px; border: 1px solid #e2e8f0;" />
+                  <p style="margin: 6px 0 0; font-size: 12px; color: #64748b; text-align: center;">${escapeHtml(img.caption)}</p>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>` : ''}
+
         ${e.notes ? `<div style="margin-top: 20px; padding: 12px 16px; background-color: #f8fafc; border-radius: 8px;"><p style="margin: 0; font-size: 13px; color: #475569;">${e.notes}</p></div>` : ''}
 
         ${e.acceptUrl ? `
@@ -355,6 +377,8 @@ export function renderCommercialProposalHtml(data: {
   expiresAt?: string;
   notes?: string;
   acceptUrl?: string;
+  images?: { url: string; caption: string; sqft?: number }[];
+  baseUrl?: string;
 }): string {
   const { pricing } = data;
   const breakdown = pricing.breakdown || {};
@@ -456,6 +480,20 @@ export function renderCommercialProposalHtml(data: {
             <li style="padding: 3px 0;">Online portal for service history and communication</li>
           </ul>
         </div>
+
+        ${data.images && data.images.length > 0 ? `
+          <div style="margin-top: 24px;">
+            <h3 style="margin: 0 0 12px; font-size: 15px; color: #1e293b;">Site Overview</h3>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+              ${data.images.map(img => {
+                const imgSrc = resolveImageUrl(img.url, data.baseUrl);
+                return `<div style="flex: 1; min-width: 240px; max-width: 380px;">
+                  <img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(img.caption)}" style="width: 100%; border-radius: 8px; border: 1px solid #e2e8f0;" />
+                  <p style="margin: 6px 0 0; font-size: 12px; color: #64748b; text-align: center;">${escapeHtml(img.caption)}</p>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>` : ''}
 
         ${e.notes ? `<div style="margin-top: 20px; padding: 12px 16px; background-color: #f8fafc; border-radius: 8px;"><p style="margin: 0; font-size: 13px; color: #475569;">${e.notes}</p></div>` : ''}
 

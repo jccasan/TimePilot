@@ -7853,6 +7853,101 @@ export async function registerRoutes(
 
   // ================ Quotes ================
 
+  app.post("/api/quotes/generate-yard-image", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { propertyId, zoom: requestedZoom, caption } = req.body;
+
+      if (!propertyId) {
+        return res.status(400).json({ error: "propertyId is required" });
+      }
+
+      const property = await storage.getProperty(propertyId, companyId);
+      if (!property) {
+        return res.status(404).json({ error: "Property not found" });
+      }
+
+      const polygon = property.yardPolygon as number[][] | null;
+      const lat = property.latitude ? parseFloat(String(property.latitude)) : null;
+      const lng = property.longitude ? parseFloat(String(property.longitude)) : null;
+
+      if (!polygon || polygon.length < 3 || !lat || !lng) {
+        return res.status(400).json({ error: "Property must have a yard measurement with at least 3 points" });
+      }
+
+      const mapboxToken = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
+      if (!mapboxToken) {
+        return res.status(500).json({ error: "Mapbox token not configured" });
+      }
+
+      const zoom = requestedZoom || 18;
+      const width = 800;
+      const height = 600;
+
+      const closedPoly = [...polygon];
+      if (closedPoly[0][0] !== closedPoly[closedPoly.length - 1][0] ||
+          closedPoly[0][1] !== closedPoly[closedPoly.length - 1][1]) {
+        closedPoly.push(closedPoly[0]);
+      }
+
+      const geoJson = {
+        type: "Feature",
+        properties: {
+          "stroke": "#22c55e",
+          "stroke-width": 3,
+          "stroke-opacity": 0.9,
+          "fill": "#22c55e",
+          "fill-opacity": 0.25
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: [closedPoly]
+        }
+      };
+
+      const geoJsonEncoded = encodeURIComponent(JSON.stringify(geoJson));
+      const staticUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/geojson(${geoJsonEncoded})/${lng},${lat},${zoom},0/${width}x${height}@2x?access_token=${mapboxToken}&attribution=false&logo=false`;
+
+      const imgResponse = await fetch(staticUrl);
+      if (!imgResponse.ok) {
+        const errText = await imgResponse.text();
+        console.error("Mapbox Static API error:", errText);
+        return res.status(502).json({ error: "Failed to generate satellite image" });
+      }
+
+      const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+
+      const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+      const objStorage = new ObjectStorageService();
+      const uploadURL = await objStorage.getObjectEntityUploadURL();
+      const objectPath = objStorage.normalizeObjectEntityPath(uploadURL);
+
+      const putResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: imgBuffer,
+        headers: { "Content-Type": "image/png" },
+      });
+
+      if (!putResponse.ok) {
+        throw new Error(`Storage upload failed: ${putResponse.status}`);
+      }
+
+      const sqft = property.measuredYardSqft || undefined;
+      const autoCaption = caption || `Yard measurement${sqft ? ` — ${Number(sqft).toLocaleString()} sqft` : ""}`;
+
+      res.json({
+        url: objectPath,
+        caption: autoCaption,
+        sqft: sqft || null,
+        width,
+        height,
+      });
+    } catch (err: any) {
+      console.error("Error generating yard image:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/quotes/calculate-pricing", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -7940,6 +8035,7 @@ export async function registerRoutes(
     premiumFeatures: z.array(z.string()).nullable().optional(),
     deluxeFeatures: z.array(z.string()).nullable().optional(),
     pricingBreakdown: z.record(z.any()).nullable().optional(),
+    images: z.array(z.object({ url: z.string(), caption: z.string(), sqft: z.number().nullable().optional() })).nullable().optional(),
     notes: z.string().max(5000).nullable().optional(),
     internalNotes: z.string().max(5000).nullable().optional(),
     expiresAt: z.string().nullable().optional(),
@@ -8142,6 +8238,8 @@ export async function registerRoutes(
         expiresAt: quote.expiresAt?.toISOString() || undefined,
         notes: quote.notes || undefined,
         acceptUrl,
+        images: (quote.images as { url: string; caption: string; sqft?: number }[]) || undefined,
+        baseUrl: getBaseUrl(req),
       };
 
       const html = quote.type === "commercial"
@@ -8234,6 +8332,8 @@ export async function registerRoutes(
         frequency: quote.frequency || "weekly",
         expiresAt: quote.expiresAt?.toISOString() || undefined,
         notes: quote.notes || undefined,
+        images: (quote.images as { url: string; caption: string; sqft?: number }[]) || undefined,
+        baseUrl: getBaseUrl(req),
       };
 
       const html = quote.type === "commercial"
