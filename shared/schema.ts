@@ -884,6 +884,26 @@ export const insertSaasCostsMonthlySchema = createInsertSchema(saasCostsMonthly)
 export const insertCostConfigSchema = createInsertSchema(costConfig).omit({ id: true, updatedAt: true });
 export const insertUsageEventSchema = createInsertSchema(usageEvents).omit({ id: true, recordedAt: true });
 
+export const voiceCalls = pgTable("voice_calls", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  retellCallId: varchar("retell_call_id", { length: 255 }),
+  callerPhone: varchar("caller_phone", { length: 30 }),
+  agentPhone: varchar("agent_phone", { length: 30 }),
+  durationSeconds: integer("duration_seconds").notNull().default(0),
+  durationMinutes: integer("duration_minutes").notNull().default(0),
+  outcome: varchar("outcome", { length: 50 }),
+  summary: text("summary"),
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_voice_calls_company").on(table.companyId),
+  index("idx_voice_calls_retell_id").on(table.retellCallId),
+  index("idx_voice_calls_created").on(table.createdAt),
+]);
+
+export const insertVoiceCallSchema = createInsertSchema(voiceCalls).omit({ id: true, createdAt: true });
+
 export type SmsMessage = typeof smsMessages.$inferSelect;
 export type InsertSmsMessage = z.infer<typeof insertSmsMessageSchema>;
 export type EmailSent = typeof emailsSent.$inferSelect;
@@ -896,6 +916,8 @@ export type CostConfigItem = typeof costConfig.$inferSelect;
 export type InsertCostConfig = z.infer<typeof insertCostConfigSchema>;
 export type UsageEvent = typeof usageEvents.$inferSelect;
 export type InsertUsageEvent = z.infer<typeof insertUsageEventSchema>;
+export type VoiceCall = typeof voiceCalls.$inferSelect;
+export type InsertVoiceCall = z.infer<typeof insertVoiceCallSchema>;
 
 export const adminNotes = pgTable("admin_notes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

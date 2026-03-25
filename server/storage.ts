@@ -55,6 +55,8 @@ import {
   type ServiceChangeRequest, type InsertServiceChangeRequest,
   type ServiceZone, type InsertServiceZone,
   type UsageEvent, type InsertUsageEvent,
+  type VoiceCall, type InsertVoiceCall,
+  voiceCalls,
   priceRecommendations,
   profitabilitySnapshots,
   overheadCosts,
@@ -361,6 +363,13 @@ export interface IStorage {
   createUsageEvent(data: InsertUsageEvent): Promise<UsageEvent>;
   getUsageEvents(companyId: string, startDate: string, endDate: string): Promise<UsageEvent[]>;
   getUsageSummary(companyId: string, startDate: string, endDate: string): Promise<{ smsSegments: number; voiceMinutes: number; userSeats: number }>;
+
+  // Voice Calls
+  createVoiceCall(data: InsertVoiceCall): Promise<VoiceCall>;
+  updateVoiceCall(id: string, data: Partial<Pick<InsertVoiceCall, "outcome" | "summary" | "metadata">>): Promise<VoiceCall>;
+  getVoiceCalls(companyId: string, limit?: number): Promise<VoiceCall[]>;
+  getVoiceCallByRetellId(retellCallId: string): Promise<VoiceCall | undefined>;
+  getVoiceCallSummary(companyId: string, startDate: string, endDate: string): Promise<{ totalCalls: number; totalMinutes: number }>;
 
   // Referral helpers
   getContactByReferralCode(code: string): Promise<Contact | undefined>;
@@ -2093,6 +2102,42 @@ export class DatabaseStorage implements IStorage {
       voiceMinutes: map["voice_minute"] || 0,
       userSeats: map["user_seat"] || 0,
     };
+  }
+
+  async createVoiceCall(data: InsertVoiceCall): Promise<VoiceCall> {
+    const [call] = await db.insert(voiceCalls).values(data).returning();
+    return call;
+  }
+
+  async updateVoiceCall(id: string, data: Partial<Pick<InsertVoiceCall, "outcome" | "summary" | "metadata">>): Promise<VoiceCall> {
+    const [call] = await db.update(voiceCalls).set(data).where(eq(voiceCalls.id, id)).returning();
+    return call;
+  }
+
+  async getVoiceCalls(companyId: string, limit = 50): Promise<VoiceCall[]> {
+    return db.select().from(voiceCalls)
+      .where(eq(voiceCalls.companyId, companyId))
+      .orderBy(desc(voiceCalls.createdAt))
+      .limit(limit);
+  }
+
+  async getVoiceCallByRetellId(retellCallId: string): Promise<VoiceCall | undefined> {
+    const [call] = await db.select().from(voiceCalls)
+      .where(eq(voiceCalls.retellCallId, retellCallId));
+    return call;
+  }
+
+  async getVoiceCallSummary(companyId: string, startDate: string, endDate: string): Promise<{ totalCalls: number; totalMinutes: number }> {
+    const [result] = await db.select({
+      totalCalls: sql<number>`count(*)`,
+      totalMinutes: sql<number>`coalesce(sum(${voiceCalls.durationMinutes}), 0)`,
+    }).from(voiceCalls)
+      .where(and(
+        eq(voiceCalls.companyId, companyId),
+        gte(voiceCalls.createdAt, new Date(startDate)),
+        lte(voiceCalls.createdAt, new Date(endDate)),
+      ));
+    return { totalCalls: Number(result?.totalCalls || 0), totalMinutes: Number(result?.totalMinutes || 0) };
   }
 
   async createJobFromEstimate(estimate: Estimate, contactId: string): Promise<ServicePlan> {

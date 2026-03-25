@@ -6642,6 +6642,113 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/webhooks/retell", async (req: Request, res: Response) => {
+    try {
+      const retellSecret = process.env.RETELL_WEBHOOK_SECRET;
+      if (retellSecret) {
+        const providedSecret = req.headers["x-retell-secret"] as string | undefined;
+        if (providedSecret !== retellSecret) {
+          console.warn("[Retell Webhook] Invalid or missing x-retell-secret header");
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+      }
+
+      const payload = req.body;
+      const eventType = payload?.event;
+      const callData = payload?.call;
+
+      if (!callData || !eventType) {
+        return res.status(200).json({ ok: true });
+      }
+
+      if (eventType !== "call_ended" && eventType !== "call_analyzed") {
+        console.log(`[Retell Webhook] Ignoring event: ${eventType}`);
+        return res.status(200).json({ ok: true });
+      }
+
+      const retellCallId = callData.call_id;
+      if (!retellCallId) {
+        return res.status(200).json({ ok: true });
+      }
+
+      const agentPhone = (callData.to_number || callData.agent_id || "").replace(/\D/g, "");
+      const durationMs = callData.end_timestamp && callData.start_timestamp
+        ? callData.end_timestamp - callData.start_timestamp
+        : 0;
+      const durationSeconds = Math.round(durationMs / 1000);
+      const durationMinutes = Math.max(1, Math.ceil(durationSeconds / 60));
+      const outcome = callData.call_analysis?.call_successful ? "successful" : (callData.disconnection_reason || "unknown");
+      const summary = callData.call_analysis?.call_summary || null;
+
+      const existing = await storage.getVoiceCallByRetellId(retellCallId);
+
+      if (existing) {
+        if (eventType === "call_analyzed" && callData.call_analysis) {
+          await storage.updateVoiceCall(existing.id, {
+            outcome,
+            summary,
+            metadata: {
+              ...(existing.metadata as Record<string, any> || {}),
+              callAnalysis: callData.call_analysis,
+            },
+          });
+          console.log(`[Retell Webhook] Updated analysis for call ${retellCallId}`);
+        } else {
+          console.log(`[Retell Webhook] Call ${retellCallId} already recorded, skipping`);
+        }
+        return res.status(200).json({ ok: true });
+      }
+
+      const allCompanies = await storage.listCompanies();
+      const matchedCompany = allCompanies.find(c => {
+        const cDigits = (c.dedicatedPhoneNumber || "").replace(/\D/g, "");
+        return cDigits.length >= 10 && agentPhone.length >= 10 && agentPhone.endsWith(cDigits.slice(-10));
+      });
+
+      if (!matchedCompany) {
+        console.warn(`[Retell Webhook] No company matched for agent phone ${agentPhone}, call ${retellCallId}`);
+        return res.status(200).json({ ok: true });
+      }
+
+      const companyId = matchedCompany.id;
+
+      await storage.createVoiceCall({
+        companyId,
+        retellCallId,
+        callerPhone: callData.from_number || null,
+        agentPhone: callData.to_number || null,
+        durationSeconds,
+        durationMinutes,
+        outcome,
+        summary,
+        metadata: {
+          disconnectionReason: callData.disconnection_reason,
+          callAnalysis: callData.call_analysis,
+        },
+      });
+
+      await storage.createUsageEvent({
+        companyId,
+        eventType: "voice_minute",
+        quantity: durationMinutes,
+        metadata: { retellCallId, durationSeconds, callerPhone: callData.from_number },
+      });
+
+      const voiceSubId = matchedCompany.stripeVoiceSubscriptionId || matchedCompany.stripeSubscriptionId;
+      if (voiceSubId) {
+        reportMeteredUsage(voiceSubId, "voice_minute", durationMinutes).catch(err =>
+          console.error(`[Retell Webhook] Failed to report metered usage:`, err.message)
+        );
+      }
+
+      console.log(`[Retell Webhook] Recorded call ${retellCallId} for company ${matchedCompany.name} (${companyId}): ${durationMinutes} min(s)`);
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error("[Retell Webhook] Error:", err);
+      res.status(200).json({ ok: true });
+    }
+  });
+
   // Send invoice via email
   app.post("/api/invoices/:id/send-email", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -9941,6 +10048,17 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/admin/companies/:id/voice-calls", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const companyId = req.params.id;
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const calls = await storage.getVoiceCalls(companyId, limit);
+      res.json(calls);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/admin/companies/:id/audit-logs", isAdmin, async (req: Request, res: Response) => {
     try {
       const companyId = req.params.id;
@@ -11618,6 +11736,16 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/voice/calls", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const calls = await storage.getVoiceCalls(companyId, limit);
+      res.json(calls);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/voice/availability", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
@@ -11740,18 +11868,6 @@ export async function registerRoutes(
         return { contact, property, servicePlan };
       });
 
-      storage.createUsageEvent({
-        companyId,
-        eventType: "voice_minute",
-        quantity: 1,
-        metadata: { action: "book", contactId: result.contact.id },
-      }).then(async () => {
-        const company = await storage.getCompany(companyId);
-        if (company?.stripeSubscriptionId) {
-          reportMeteredUsage(company.stripeSubscriptionId, "voice_minute", 1).catch(() => {});
-        }
-      }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
-
       res.status(201).json({
         success: true,
         contactId: result.contact.id,
@@ -11795,14 +11911,6 @@ export async function registerRoutes(
       const holds = await Promise.all(planIds.map(pid =>
         storage.createVacationHold({ servicePlanId: pid, startDate, endDate, reason: reason || null })
       ));
-      storage.createUsageEvent({
-        companyId, eventType: "voice_minute", quantity: 1,
-        metadata: { action: "pause", startDate, endDate },
-      }).then(async () => {
-        const company = await storage.getCompany(companyId);
-        if (company?.stripeSubscriptionId) reportMeteredUsage(company.stripeSubscriptionId, "voice_minute", 1).catch(() => {});
-      }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
-
       res.status(201).json({
         success: true,
         holdsCreated: holds.length,
@@ -11839,14 +11947,6 @@ export async function registerRoutes(
           removedCount++;
         }
       }
-      storage.createUsageEvent({
-        companyId, eventType: "voice_minute", quantity: 1,
-        metadata: { action: "resume", holdsRemoved: removedCount },
-      }).then(async () => {
-        const company = await storage.getCompany(companyId);
-        if (company?.stripeSubscriptionId) reportMeteredUsage(company.stripeSubscriptionId, "voice_minute", 1).catch(() => {});
-      }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
-
       res.json({
         success: true,
         holdsRemoved: removedCount,
@@ -11896,14 +11996,6 @@ export async function registerRoutes(
       for (const plan of plans) {
         await storage.updateServicePlan(plan.id, companyId, { dayOfWeek: newDayOfWeek as any, routeId: newRouteId });
       }
-      storage.createUsageEvent({
-        companyId, eventType: "voice_minute", quantity: 1,
-        metadata: { action: "reschedule", newDayOfWeek, plansUpdated: plans.length },
-      }).then(async () => {
-        const company = await storage.getCompany(companyId);
-        if (company?.stripeSubscriptionId) reportMeteredUsage(company.stripeSubscriptionId, "voice_minute", 1).catch(() => {});
-      }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
-
       res.json({
         success: true,
         plansUpdated: plans.length,
@@ -11934,14 +12026,6 @@ export async function registerRoutes(
           ? `${contact.notes}\n[Voice agent] Cancelled: ${reason || "No reason provided"}`
           : `[Voice agent] Cancelled: ${reason || "No reason provided"}`,
       });
-      storage.createUsageEvent({
-        companyId, eventType: "voice_minute", quantity: 1,
-        metadata: { action: "cancel", contactId },
-      }).then(async () => {
-        const company = await storage.getCompany(companyId);
-        if (company?.stripeSubscriptionId) reportMeteredUsage(company.stripeSubscriptionId, "voice_minute", 1).catch(() => {});
-      }).catch(err => console.error("[Usage] Failed to log voice usage:", err.message));
-
       res.json({
         success: true,
         plansDeactivated: plans.length,

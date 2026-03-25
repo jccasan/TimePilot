@@ -276,6 +276,24 @@ async function ensureCompanyColumns() {
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS retell_knowledge_base_id VARCHAR(255);
       ALTER TABLE routes ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false;
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS voice_calls (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        retell_call_id VARCHAR(255),
+        caller_phone VARCHAR(30),
+        agent_phone VARCHAR(30),
+        duration_seconds INTEGER NOT NULL DEFAULT 0,
+        duration_minutes INTEGER NOT NULL DEFAULT 0,
+        outcome VARCHAR(50),
+        summary TEXT,
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_voice_calls_company ON voice_calls(company_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_calls_retell_id ON voice_calls(retell_call_id) WHERE retell_call_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_voice_calls_created ON voice_calls(created_at);
+    `);
     console.log("[Migration] Company voice columns verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure company columns:", err);
