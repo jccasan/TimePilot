@@ -24,7 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Plus, Send, Eye, Trash2, Pencil, ClipboardCheck, Search,
   DollarSign, Home, Building2, Dog, Loader2, CheckCircle2, XCircle,
-  Clock, FileText, MapPin, Camera, X, Ruler,
+  Clock, FileText, MapPin, Camera, X, Ruler, Download,
 } from "lucide-react";
 import { YardMeasureTool } from "@/components/yard-measure-tool";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
@@ -119,6 +119,7 @@ export default function Quotes() {
   const [sendVia, setSendVia] = useState("email");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewQuoteId, setPreviewQuoteId] = useState<string | null>(null);
+  const [downloadMenuId, setDownloadMenuId] = useState<string | null>(null);
 
   const { data: allQuotes = [], isLoading } = useQuery<Quote[]>({
     queryKey: ["/api/quotes"],
@@ -183,6 +184,29 @@ export default function Quotes() {
       toast({ title: "Send failed", description: err.message, variant: "destructive" });
     },
   });
+
+  const handleDownload = useCallback(async (quoteId: string, format: "pdf" | "docx") => {
+    try {
+      setDownloadMenuId(null);
+      const res = await fetch(`/api/quotes/${quoteId}/download/${format}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const filenameMatch = disposition.match(/filename="?([^";\n]+)"?/);
+      const filename = filenameMatch ? filenameMatch[1] : `quote.${format === "pdf" ? "pdf" : "docx"}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: `Downloaded as ${format.toUpperCase()}` });
+    } catch (err: any) {
+      toast({ title: "Download failed", description: err.message, variant: "destructive" });
+    }
+  }, [toast]);
 
   return (
     <div className="p-6 space-y-6">
@@ -357,6 +381,26 @@ export default function Quotes() {
                             onClick={() => { setPreviewQuoteId(quote.id); setPreviewOpen(true); }}>
                             <Eye className="h-4 w-4" />
                           </Button>
+                          <div className="relative">
+                            <Button variant="ghost" size="icon" data-testid={`button-download-${quote.id}`}
+                              onClick={() => setDownloadMenuId(downloadMenuId === quote.id ? null : quote.id)}>
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            {downloadMenuId === quote.id && (
+                              <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-md border bg-white dark:bg-gray-900 shadow-lg py-1">
+                                <button className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted flex items-center gap-2"
+                                  data-testid={`button-download-pdf-${quote.id}`}
+                                  onClick={() => handleDownload(quote.id, "pdf")}>
+                                  <FileText className="h-3.5 w-3.5" /> Download PDF
+                                </button>
+                                <button className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted flex items-center gap-2"
+                                  data-testid={`button-download-docx-${quote.id}`}
+                                  onClick={() => handleDownload(quote.id, "docx")}>
+                                  <FileText className="h-3.5 w-3.5" /> Download Word
+                                </button>
+                              </div>
+                            )}
+                          </div>
                           {(quote.status === "draft" || quote.status === "sent") && (
                             <>
                               <Button variant="ghost" size="icon" data-testid={`button-edit-${quote.id}`}
@@ -426,7 +470,21 @@ export default function Quotes() {
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-auto">
           <DialogHeader>
-            <DialogTitle>Quote Preview</DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle>Quote Preview</DialogTitle>
+              {previewQuoteId && (
+                <div className="flex gap-2 mr-6">
+                  <Button variant="outline" size="sm" data-testid="button-preview-download-pdf"
+                    onClick={() => handleDownload(previewQuoteId, "pdf")}>
+                    <Download className="h-3.5 w-3.5 mr-1.5" /> PDF
+                  </Button>
+                  <Button variant="outline" size="sm" data-testid="button-preview-download-docx"
+                    onClick={() => handleDownload(previewQuoteId, "docx")}>
+                    <Download className="h-3.5 w-3.5 mr-1.5" /> Word
+                  </Button>
+                </div>
+              )}
+            </div>
           </DialogHeader>
           {previewQuoteId && (
             <iframe

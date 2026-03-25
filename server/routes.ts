@@ -44,6 +44,7 @@ import { geocodeAddress } from "./services/geocode";
 import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import { calculateQuotePricing, renderResidentialProposalHtml, renderCommercialProposalHtml, renderQuoteSmsText, type ResidentialQuoteInput, type CommercialQuoteInput } from "./services/quote-pricing";
+import { generateQuotePdf, generateQuoteDocx } from "./services/quote-document";
 import {
   TIER_CONFIG,
   VOICE_PLAN_CONFIG,
@@ -8392,6 +8393,67 @@ export async function registerRoutes(
       res.send(html);
     } catch (err: any) {
       console.error("Error previewing quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/quotes/:id/download/:format", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const quote = await storage.getQuote(req.params.id, companyId);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const pricing = {
+        essential: parseFloat(quote.essentialPrice || "0"),
+        premium: parseFloat(quote.premiumPrice || "0"),
+        deluxe: parseFloat(quote.deluxePrice || "0"),
+        initialCleanFee: parseFloat(quote.initialCleanFee || "0"),
+        essentialFeatures: (quote.essentialFeatures as string[]) || [],
+        premiumFeatures: (quote.premiumFeatures as string[]) || [],
+        deluxeFeatures: (quote.deluxeFeatures as string[]) || [],
+        breakdown: (quote.pricingBreakdown as Record<string, any>) || {},
+      };
+
+      const docData = {
+        companyName: company.name,
+        companyEmail: (company as any).email || undefined,
+        companyPhone: company.phone || undefined,
+        contactName: quote.contactName || "Customer",
+        quoteNumber: quote.quoteNumber,
+        propertyAddress: quote.propertyAddress || undefined,
+        type: quote.type || "residential",
+        frequency: quote.frequency || "weekly",
+        expiresAt: quote.expiresAt?.toISOString() || undefined,
+        notes: quote.notes || undefined,
+        essentialPrice: pricing.essential,
+        premiumPrice: pricing.premium,
+        deluxePrice: pricing.deluxe,
+        initialCleanFee: pricing.initialCleanFee,
+        essentialFeatures: pricing.essentialFeatures,
+        premiumFeatures: pricing.premiumFeatures,
+        deluxeFeatures: pricing.deluxeFeatures,
+        breakdown: pricing.breakdown,
+      };
+
+      const safeName = `Quote-${quote.quoteNumber}`.replace(/[^a-zA-Z0-9-_]/g, "_");
+
+      if (req.params.format === "pdf") {
+        const pdfBuffer = await generateQuotePdf(docData);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="${safeName}.pdf"`);
+        res.send(pdfBuffer);
+      } else if (req.params.format === "docx") {
+        const docxBuffer = await generateQuoteDocx(docData);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        res.setHeader("Content-Disposition", `attachment; filename="${safeName}.docx"`);
+        res.send(docxBuffer);
+      } else {
+        res.status(400).json({ error: "Invalid format. Use 'pdf' or 'docx'." });
+      }
+    } catch (err: any) {
+      console.error("Error generating quote download:", err);
       res.status(500).json({ error: err.message });
     }
   });
