@@ -199,6 +199,7 @@ export default function Invoices() {
   const [discountValue, setDiscountValue] = useState("0");
   const [invoiceStatus, setInvoiceStatus] = useState("pending");
   const [loadingUninvoiced, setLoadingUninvoiced] = useState(false);
+  const [draftInvoiceIds, setDraftInvoiceIds] = useState<string[]>([]);
 
 
   const [editMode, setEditMode] = useState(false);
@@ -360,21 +361,38 @@ export default function Invoices() {
       if (!contactId) throw new Error("Please select a contact");
       if (!dueDate) throw new Error("Please set a due date");
       if (lineItems.length === 0) throw new Error("Please add at least one line item");
-      await apiRequest("POST", "/api/invoices", {
-        contactId,
-        dueDate,
-        status: invoiceStatus,
-        lineItems: lineItems.map(li => ({
-          description: li.description,
-          quantity: parseInt(li.quantity) || 1,
-          unitPrice: li.unitPrice,
-          servicePricingId: li.servicePricingId || null,
-          visitId: li.visitId || null,
-        })),
-        taxRate,
-        discountType: discountType || null,
-        discountValue,
-      });
+
+      if (draftInvoiceIds.length > 0) {
+        await apiRequest("POST", "/api/invoices/consolidate", {
+          contactId,
+          draftInvoiceIds,
+          lineItems: lineItems.map(li => ({
+            description: li.description,
+            quantity: parseInt(li.quantity) || 1,
+            unitPrice: li.unitPrice,
+            visitId: li.visitId || null,
+          })),
+          dueDate,
+          discountType: discountType || null,
+          discountValue,
+        });
+      } else {
+        await apiRequest("POST", "/api/invoices", {
+          contactId,
+          dueDate,
+          status: invoiceStatus,
+          lineItems: lineItems.map(li => ({
+            description: li.description,
+            quantity: parseInt(li.quantity) || 1,
+            unitPrice: li.unitPrice,
+            servicePricingId: li.servicePricingId || null,
+            visitId: li.visitId || null,
+          })),
+          taxRate,
+          discountType: discountType || null,
+          discountValue,
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
@@ -382,7 +400,10 @@ export default function Invoices() {
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
-      toast({ title: "Invoice created", description: "New invoice has been created." });
+      const msg = draftInvoiceIds.length > 0
+        ? `Consolidated ${draftInvoiceIds.length} draft invoice${draftInvoiceIds.length !== 1 ? "s" : ""} into one.`
+        : "New invoice has been created.";
+      toast({ title: "Invoice created", description: msg });
       resetCreateForm();
       setCreateDialogOpen(false);
     },
@@ -488,6 +509,7 @@ export default function Invoices() {
     setContactId("");
     setDueDate("");
     setLineItems([]);
+    setDraftInvoiceIds([]);
     setTaxRate("0");
     setDiscountType("");
     setDiscountValue("0");
@@ -497,6 +519,7 @@ export default function Invoices() {
   async function handleContactSelect(newContactId: string) {
     setContactId(newContactId);
     setLineItems([]);
+    setDraftInvoiceIds([]);
     if (!newContactId) {
       return;
     }
@@ -505,27 +528,55 @@ export default function Invoices() {
       const token = localStorage.getItem("sessionToken");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`/api/contacts/${newContactId}/uninvoiced-visits`, {
-        credentials: "include",
-        headers,
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.visits && data.visits.length > 0) {
-          const visitItems: LineItem[] = data.visits.map((v: any) => ({
-            description: `${v.servicePlanName} - ${v.propertyAddress} (${v.scheduledDate})`,
-            quantity: "1",
-            unitPrice: v.pricePerVisit || "0",
-            visitId: v.id,
-          }));
-          setLineItems(visitItems);
+
+      const [unsentRes, uninvoicedRes] = await Promise.all([
+        fetch(`/api/contacts/${newContactId}/unsent-invoices`, { credentials: "include", headers }),
+        fetch(`/api/contacts/${newContactId}/uninvoiced-visits`, { credentials: "include", headers }),
+      ]);
+
+      const consolidatedItems: LineItem[] = [];
+      const draftIds: string[] = [];
+
+      if (unsentRes.ok) {
+        const unsentData = await unsentRes.json();
+        if (unsentData.invoices && unsentData.invoices.length > 0) {
+          for (const inv of unsentData.invoices) {
+            draftIds.push(inv.id);
+            for (const item of inv.lineItems || []) {
+              consolidatedItems.push({
+                description: item.description || "",
+                quantity: String(item.quantity ?? "1"),
+                unitPrice: item.unitPrice || "0",
+                visitId: item.visitId ?? undefined,
+              });
+            }
+          }
         }
-      } else {
-        toast({ title: "Could not load uninvoiced work", description: "You can still add items manually.", variant: "destructive" });
+      }
+
+      if (uninvoicedRes.ok) {
+        const uninvoicedData = await uninvoicedRes.json();
+        if (uninvoicedData.visits && uninvoicedData.visits.length > 0) {
+          for (const v of uninvoicedData.visits) {
+            consolidatedItems.push({
+              description: `${v.servicePlanName} - ${v.propertyAddress} (${v.scheduledDate})`,
+              quantity: "1",
+              unitPrice: v.pricePerVisit || "0",
+              visitId: v.id,
+            });
+          }
+        }
+      }
+
+      setDraftInvoiceIds(draftIds);
+      setLineItems(consolidatedItems);
+
+      if (!unsentRes.ok && !uninvoicedRes.ok) {
+        toast({ title: "Could not load billing data", description: "You can still add items manually.", variant: "destructive" });
       }
     } catch (err) {
-      console.error("Failed to fetch uninvoiced visits:", err);
-      toast({ title: "Could not load uninvoiced work", description: "You can still add items manually.", variant: "destructive" });
+      console.error("Failed to fetch billing data:", err);
+      toast({ title: "Could not load billing data", description: "You can still add items manually.", variant: "destructive" });
     } finally {
       setLoadingUninvoiced(false);
     }
@@ -616,7 +667,7 @@ export default function Invoices() {
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Invoice</DialogTitle>
-                <DialogDescription>Select a customer to auto-load their uninvoiced completed work, then adjust as needed.</DialogDescription>
+                <DialogDescription>Select a customer to auto-load their unsent draft invoices and uninvoiced work into one combined invoice.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
@@ -675,16 +726,22 @@ export default function Invoices() {
                     </div>
                   )}
 
+                  {draftInvoiceIds.length > 0 && (
+                    <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md p-3 text-sm text-blue-800 dark:text-blue-200" data-testid="consolidation-banner">
+                      Consolidating {draftInvoiceIds.length} unsent draft invoice{draftInvoiceIds.length !== 1 ? "s" : ""} into one. The old drafts will be voided when you create this invoice.
+                    </div>
+                  )}
+
                   {loadingUninvoiced ? (
                     <div className="flex items-center justify-center py-4 gap-2" data-testid="loading-uninvoiced">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <p className="text-sm text-muted-foreground">Loading completed work...</p>
+                      <p className="text-sm text-muted-foreground">Loading billing data...</p>
                     </div>
                   ) : lineItems.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-line-items">
                       {contactId
-                        ? "No uninvoiced completed work found. Use \"Add Custom Charge\" for any item, or pick from your service catalog."
-                        : "Select a contact to auto-load uninvoiced work, or add items manually."}
+                        ? "No unsent drafts or uninvoiced work found. Use \"Add Custom Charge\" for any item, or pick from your service catalog."
+                        : "Select a contact to auto-load unsent invoices, or add items manually."}
                     </p>
                   ) : (
                     <div className="space-y-2">
@@ -806,7 +863,7 @@ export default function Invoices() {
                   className="w-full"
                   data-testid="button-submit-invoice"
                 >
-                  {createMutation.isPending ? "Creating..." : "Create Invoice"}
+                  {createMutation.isPending ? "Creating..." : draftInvoiceIds.length > 0 ? "Consolidate & Create Invoice" : "Create Invoice"}
                 </Button>
               </div>
             </DialogContent>
