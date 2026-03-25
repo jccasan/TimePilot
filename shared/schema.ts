@@ -1443,6 +1443,11 @@ export interface QuoteDefaults {
   commercialDensityDiscount3x: number;
   commercialPremiumStationUpcharge: number;
   commercialDeluxeStationUpcharge: number;
+  commercialTimePerStation: number;
+  commercialMileageRate: number;
+  commercialDumpFee: number;
+  commercialCrewRate: number;
+  commercialInitialCleanRate: number;
 }
 
 export const DEFAULT_QUOTE_DEFAULTS: QuoteDefaults = {
@@ -1464,6 +1469,11 @@ export const DEFAULT_QUOTE_DEFAULTS: QuoteDefaults = {
   commercialDensityDiscount3x: 0.15,
   commercialPremiumStationUpcharge: 3,
   commercialDeluxeStationUpcharge: 5,
+  commercialTimePerStation: 10,
+  commercialMileageRate: 0.655,
+  commercialDumpFee: 25,
+  commercialCrewRate: 35,
+  commercialInitialCleanRate: 150,
 };
 
 export const quotes = pgTable("quotes", {
@@ -1482,6 +1492,11 @@ export const quotes = pgTable("quotes", {
   yardSize: varchar("yard_size", { length: 50 }),
   stationCount: integer("station_count"),
   commonAreaMinutes: integer("common_area_minutes"),
+  timePerStation: integer("time_per_station"),
+  mileageDistance: decimal("mileage_distance", { precision: 10, scale: 2 }),
+  dumpFee: decimal("dump_fee", { precision: 10, scale: 2 }),
+  crewSize: integer("crew_size"),
+  siteSqft: integer("site_sqft"),
   frequency: varchar("frequency", { length: 50 }),
   isFirstTime: boolean("is_first_time").default(true),
   essentialPrice: decimal("essential_price", { precision: 10, scale: 2 }),

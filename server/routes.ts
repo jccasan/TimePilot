@@ -7981,6 +7981,12 @@ export async function registerRoutes(
           stationCount: parseInt(req.query.stationCount as string) || 1,
           commonAreaMinutes: parseInt(req.query.commonAreaMinutes as string) || 30,
           frequency: frequency as CommercialQuoteInput["frequency"],
+          timePerStation: parseInt(req.query.timePerStation as string) || 10,
+          mileageDistance: parseFloat(req.query.mileageDistance as string) || 0,
+          dumpFee: Number.isFinite(parseFloat(req.query.dumpFee as string)) ? parseFloat(req.query.dumpFee as string) : 25,
+          crewSize: parseInt(req.query.crewSize as string) || 1,
+          siteSqft: parseInt(req.query.siteSqft as string) || 0,
+          isInitialClean: req.query.isInitialClean === "true",
         };
         const pricing = calculateQuotePricing(input, companyQuoteDefaults);
         res.json(pricing);
@@ -8020,6 +8026,24 @@ export async function registerRoutes(
     }
   });
 
+  function normalizeQuoteFrequency(freq: string | null | undefined): "weekly" | "biweekly" | "monthly" | "onetime" {
+    switch (freq) {
+      case "weekly":
+      case "1x_weekly":
+      case "2x_weekly":
+      case "3x_weekly":
+        return "weekly";
+      case "biweekly":
+        return "biweekly";
+      case "monthly":
+        return "monthly";
+      case "onetime":
+        return "onetime";
+      default:
+        return "weekly";
+    }
+  }
+
   const createQuoteBodySchema = z.object({
     type: z.enum(["residential", "commercial"]),
     contactId: z.string().nullable().optional(),
@@ -8032,6 +8056,11 @@ export async function registerRoutes(
     yardSize: z.string().max(50).nullable().optional(),
     stationCount: z.number().int().min(0).max(200).nullable().optional(),
     commonAreaMinutes: z.number().int().min(0).max(600).nullable().optional(),
+    timePerStation: z.number().int().min(0).max(120).nullable().optional(),
+    mileageDistance: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+    dumpFee: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+    crewSize: z.number().int().min(1).max(20).nullable().optional(),
+    siteSqft: z.number().int().min(0).nullable().optional(),
     frequency: z.string().max(50).nullable().optional(),
     isFirstTime: z.boolean().optional(),
     essentialPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
@@ -8186,7 +8215,7 @@ export async function registerRoutes(
             companyId,
             contactId: quote.contactId,
             propertyId: quote.propertyId,
-            frequency: (quote.frequency as "weekly" | "biweekly" | "monthly" | "onetime") || "weekly",
+            frequency: normalizeQuoteFrequency(quote.frequency),
             pricePerVisit: selectedPrice,
             startDate: today,
             isActive: true,
@@ -9273,7 +9302,7 @@ export async function registerRoutes(
             companyId,
             contactId,
             propertyId,
-            frequency: frequency as "weekly" | "biweekly" | "monthly" | "onetime",
+            frequency: normalizeQuoteFrequency(frequency),
             pricePerVisit: String(selectedPrice),
             startDate: today,
             isActive: true,

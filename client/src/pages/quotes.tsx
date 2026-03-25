@@ -468,6 +468,12 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const [yardSize, setYardSize] = useState(quote?.yardSize || "small");
   const [stationCount, setStationCount] = useState(quote?.stationCount || 4);
   const [commonAreaMinutes, setCommonAreaMinutes] = useState(quote?.commonAreaMinutes || 30);
+  const [timePerStation, setTimePerStation] = useState(quote?.timePerStation || 10);
+  const [mileageDistance, setMileageDistance] = useState(parseFloat(String(quote?.mileageDistance || 0)));
+  const [dumpFee, setDumpFee] = useState(parseFloat(String(quote?.dumpFee || 25)));
+  const [crewSize, setCrewSize] = useState(quote?.crewSize || 1);
+  const [siteSqft, setSiteSqft] = useState(quote?.siteSqft || 0);
+  const [isInitialClean, setIsInitialClean] = useState(false);
   const [frequency, setFrequency] = useState(quote?.frequency || (quoteType === "residential" ? "weekly" : "1x_weekly"));
   const [isFirstTime, setIsFirstTime] = useState(quote?.isFirstTime !== false);
   const [notes, setNotes] = useState(quote?.notes || "");
@@ -505,6 +511,11 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setYardSize(quote.yardSize || "small");
       setStationCount(quote.stationCount || 4);
       setCommonAreaMinutes(quote.commonAreaMinutes || 30);
+      setTimePerStation(quote.timePerStation || 10);
+      setMileageDistance(parseFloat(String(quote.mileageDistance || 0)));
+      setDumpFee(parseFloat(String(quote.dumpFee || 25)));
+      setCrewSize(quote.crewSize || 1);
+      setSiteSqft(quote.siteSqft || 0);
       setFrequency(quote.frequency || "weekly");
       setIsFirstTime(quote.isFirstTime !== false);
       setNotes(quote.notes || "");
@@ -544,8 +555,8 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     if (quoteType === "residential") {
       return `type=residential&dogCount=${dogCount}&yardSize=${yardSize}&frequency=${frequency}&isFirstTime=${isFirstTime}`;
     }
-    return `type=commercial&stationCount=${stationCount}&commonAreaMinutes=${commonAreaMinutes}&frequency=${frequency}`;
-  }, [quoteType, dogCount, yardSize, stationCount, commonAreaMinutes, frequency, isFirstTime]);
+    return `type=commercial&stationCount=${stationCount}&commonAreaMinutes=${commonAreaMinutes}&frequency=${frequency}&timePerStation=${timePerStation}&mileageDistance=${mileageDistance}&dumpFee=${dumpFee}&crewSize=${crewSize}&siteSqft=${siteSqft}&isInitialClean=${isInitialClean}`;
+  }, [quoteType, dogCount, yardSize, stationCount, commonAreaMinutes, frequency, isFirstTime, timePerStation, mileageDistance, dumpFee, crewSize, siteSqft, isInitialClean]);
 
   const { data: calculatedPricing } = useQuery<TierPricing>({
     queryKey: ["/api/quotes/calculate-pricing", pricingParams],
@@ -641,11 +652,14 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const handleMeasurementSave = useCallback((polygon: number[][], areaSqft: number) => {
     setMeasurePolygon(polygon);
     setMeasureSqft(areaSqft);
+    if (quoteType === "commercial") {
+      setSiteSqft(Math.round(areaSqft));
+    }
     setShowMeasureTool(false);
     if (addressCoords) {
       handleGenerateYardImage(polygon, areaSqft, addressCoords.lat, addressCoords.lng);
     }
-  }, [addressCoords, handleGenerateYardImage]);
+  }, [addressCoords, handleGenerateYardImage, quoteType]);
 
   const removeImage = (idx: number) => {
     setQuoteImages(prev => prev.filter((_, i) => i !== idx));
@@ -704,6 +718,11 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     } else {
       data.stationCount = stationCount;
       data.commonAreaMinutes = commonAreaMinutes;
+      data.timePerStation = timePerStation;
+      data.mileageDistance = mileageDistance.toFixed(2);
+      data.dumpFee = dumpFee.toFixed(2);
+      data.crewSize = crewSize;
+      data.siteSqft = siteSqft;
     }
 
     createMutation.mutate(data);
@@ -890,28 +909,102 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <Label>Waste Stations</Label>
-                <Input data-testid="input-station-count" type="number" min={1} max={100} value={stationCount} onChange={e => setStationCount(parseInt(e.target.value) || 1)} />
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <Label>Waste Stations</Label>
+                  <Input data-testid="input-station-count" type="number" min={1} max={100} value={stationCount} onChange={e => setStationCount(parseInt(e.target.value) || 1)} />
+                </div>
+                <div>
+                  <Label>Time/Station (min)</Label>
+                  <Input data-testid="input-time-per-station" type="number" min={1} max={60} value={timePerStation} onChange={e => setTimePerStation(parseInt(e.target.value) || 10)} />
+                </div>
+                <div>
+                  <Label>Common Area (min)</Label>
+                  <Input data-testid="input-common-area" type="number" min={0} max={480} value={commonAreaMinutes} onChange={e => setCommonAreaMinutes(parseInt(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <Label>Crew Size</Label>
+                  <Input data-testid="input-crew-size" type="number" min={1} max={10} value={crewSize} onChange={e => setCrewSize(parseInt(e.target.value) || 1)} />
+                </div>
               </div>
-              <div>
-                <Label>Common Area (minutes)</Label>
-                <Input data-testid="input-common-area" type="number" min={0} max={480} value={commonAreaMinutes} onChange={e => setCommonAreaMinutes(parseInt(e.target.value) || 0)} />
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <Label>Round Trip Miles</Label>
+                  <Input data-testid="input-mileage" type="number" min={0} step="0.1" value={mileageDistance} onChange={e => setMileageDistance(parseFloat(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <Label>Dump Fee ($/visit)</Label>
+                  <Input data-testid="input-dump-fee" type="number" min={0} step="0.01" value={dumpFee} onChange={e => setDumpFee(parseFloat(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <Label>Site Area (sq ft)</Label>
+                  <Input data-testid="input-site-sqft" type="number" min={0} value={siteSqft} onChange={e => setSiteSqft(parseInt(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <Label>Frequency</Label>
+                  <Select value={frequency} onValueChange={setFrequency}>
+                    <SelectTrigger data-testid="select-frequency-commercial">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {comFrequencies.map(f => (
+                        <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div>
-                <Label>Frequency</Label>
-                <Select value={frequency} onValueChange={setFrequency}>
-                  <SelectTrigger data-testid="select-frequency-commercial">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {comFrequencies.map(f => (
-                      <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+              <div className="flex items-end gap-4 pb-1">
+                <div className="flex items-center gap-2">
+                  <Switch data-testid="switch-initial-clean" checked={isInitialClean} onCheckedChange={setIsInitialClean} />
+                  <Label className="text-sm">Initial deep clean</Label>
+                </div>
               </div>
+
+              {livePricing?.breakdown && (
+                <div className="rounded-lg border bg-slate-50 p-4 space-y-2">
+                  <h4 className="font-semibold text-sm text-slate-700">Cost Breakdown (per visit)</h4>
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">{stationCount} stations × ${livePricing.breakdown.stationRate?.toFixed(2)}</span>
+                      <span className="font-medium">${livePricing.breakdown.stationCost?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Labor ({livePricing.breakdown.totalLaborHours} hrs × {crewSize} crew)</span>
+                      <span className="font-medium">${livePricing.breakdown.laborCost?.toFixed(2)}</span>
+                    </div>
+                    {mileageDistance > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Mileage ({mileageDistance} mi)</span>
+                        <span className="font-medium">${livePricing.breakdown.mileageCost?.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {dumpFee > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Dump fee</span>
+                        <span className="font-medium">${dumpFee.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="border-t pt-2 flex justify-between font-semibold text-sm">
+                    <span>Per Visit Total</span>
+                    <span className="text-green-700">${livePricing.essential.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Est. Monthly ({livePricing.breakdown.visitsPerMonth} visits)</span>
+                    <span>${livePricing.breakdown.monthlyEstimate?.toFixed(2)}</span>
+                  </div>
+                  {isInitialClean && livePricing.initialCleanFee > 0 && (
+                    <div className="flex justify-between text-xs text-amber-700 font-medium">
+                      <span>Initial Deep Clean (one-time)</span>
+                      <span>${livePricing.initialCleanFee.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

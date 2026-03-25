@@ -343,6 +343,11 @@ async function ensureCompanyColumns() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_company_number ON quotes(company_id, quote_number);
     `);
     await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS images JSONB`);
+    await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS time_per_station INTEGER`);
+    await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS mileage_distance DECIMAL(10,2)`);
+    await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS dump_fee DECIMAL(10,2)`);
+    await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS crew_size INTEGER`);
+    await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS site_sqft INTEGER`);
     console.log("[Migration] Quotes table verified");
     console.log("[Migration] Company voice columns verified");
   } catch (err) {

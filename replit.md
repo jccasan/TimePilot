@@ -42,7 +42,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Client Signup Widget**: Public-facing signup and quote page with instant pricing and lead creation.
 - **Lead Webhook Integration**: Accepts leads from external sources with API key authentication, auto-creating contacts and triggering notifications.
 - **Field Operations**: Technician mobile interface with proof-of-service photo uploads, time tracking, yard measurement tools, and automated customer notifications (e.g., ETA SMS). Features offline resilience via IndexedDB caching and background sync.
-- **Quoting & Proposals**: Universal quoting engine supporting residential and commercial quotes with multi-tier pricing, manual overrides, and public portal for viewing/accepting proposals.
+- **Quoting & Proposals**: Universal quoting engine supporting residential and commercial quotes with multi-tier pricing, manual overrides, and public portal for viewing/accepting proposals. Commercial pricing tool includes station count, time per station, common area minutes, crew size, round-trip mileage, dump fees, site sq ft (auto-populated from measurement tool), initial deep clean, and multi-visit frequency discounts.
 - **Business Intelligence**: Overhead cost tracking, customer profitability, route profit maps, and pricing simulation.
 - **Subscription Management**: DB-backed subscription tiers, Stripe Checkout integration, 14-day free trial, automated account freezing for failed payments, and usage metering. Includes a Voice Plan Add-on for AI voice agents.
 - **Voice Agent Scheduling API**: Platform-agnostic REST API for AI voice agents to perform caller lookup, check availability, book/pause/resume/reschedule/cancel services, and retrieve call logs.

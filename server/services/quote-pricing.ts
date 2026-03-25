@@ -28,6 +28,12 @@ export interface CommercialQuoteInput {
   stationCount: number;
   commonAreaMinutes: number;
   frequency: "1x_weekly" | "2x_weekly" | "3x_weekly" | "monthly";
+  timePerStation: number;
+  mileageDistance: number;
+  dumpFee: number;
+  crewSize: number;
+  siteSqft: number;
+  isInitialClean: boolean;
 }
 
 export type QuoteInput = ResidentialQuoteInput | CommercialQuoteInput;
@@ -153,9 +159,21 @@ export function calculateCommercialPricing(
   const d = { ...DEFAULT_QUOTE_DEFAULTS, ...(config || {}) };
 
   const stationCost = input.stationCount * d.commercialStationRate;
-  const commonAreaHours = input.commonAreaMinutes / 60;
-  const commonAreaCost = Math.round(commonAreaHours * d.commercialFieldRate * 100) / 100;
-  let basePerVisit = stationCost + commonAreaCost;
+
+  const timePerStation = input.timePerStation || d.commercialTimePerStation;
+  const totalStationMinutes = input.stationCount * timePerStation;
+  const totalLaborMinutes = totalStationMinutes + input.commonAreaMinutes;
+  const totalLaborHours = totalLaborMinutes / 60;
+
+  const crewSize = Math.max(input.crewSize || 1, 1);
+  const laborCost = Math.round(totalLaborHours * d.commercialCrewRate * crewSize * 100) / 100;
+
+  const mileageDistance = input.mileageDistance || 0;
+  const mileageCost = Math.round(mileageDistance * d.commercialMileageRate * 100) / 100;
+
+  const dumpFee = input.dumpFee ?? d.commercialDumpFee;
+
+  let basePerVisit = stationCost + laborCost + mileageCost + dumpFee;
 
   let visitsPerWeek = 1;
   let discountPct = 0;
@@ -179,6 +197,13 @@ export function calculateCommercialPricing(
     basePerVisit = Math.round(((firstVisitCost + additionalVisitCost * (visitsPerWeek - 1)) / visitsPerWeek) * 100) / 100;
   }
 
+  let initialCleanFee = 0;
+  if (input.isInitialClean) {
+    initialCleanFee = d.commercialInitialCleanRate;
+    const sqftMultiplier = input.siteSqft > 0 ? Math.max(1, Math.ceil(input.siteSqft / 10000)) : 1;
+    initialCleanFee = initialCleanFee * sqftMultiplier;
+  }
+
   const essential = Math.round(basePerVisit * 100) / 100;
   const premiumUpcharge = input.stationCount * d.commercialPremiumStationUpcharge;
   const premium = Math.round((basePerVisit + premiumUpcharge) * 100) / 100;
@@ -189,33 +214,52 @@ export function calculateCommercialPricing(
     input.frequency === "2x_weekly" ? "2x Weekly" :
     input.frequency === "3x_weekly" ? "3x Weekly" : "Monthly";
 
+  const visitsPerMonth = Math.round(visitsPerWeek * 4.33 * 100) / 100;
+
   const breakdown: Record<string, any> = {
     stationCount: input.stationCount,
     stationRate: d.commercialStationRate,
     stationCost,
+    timePerStation,
+    totalStationMinutes,
     commonAreaMinutes: input.commonAreaMinutes,
-    fieldRate: d.commercialFieldRate,
-    commonAreaCost,
+    totalLaborMinutes,
+    totalLaborHours: Math.round(totalLaborHours * 100) / 100,
+    crewSize,
+    crewRate: d.commercialCrewRate,
+    laborCost,
+    mileageDistance,
+    mileageRate: d.commercialMileageRate,
+    mileageCost,
+    dumpFee,
+    siteSqft: input.siteSqft || 0,
     frequency: input.frequency,
     frequencyLabel,
     visitsPerWeek,
+    visitsPerMonth,
     densityDiscount: discountPct > 0 ? `${(discountPct * 100).toFixed(0)}%` : null,
-    weeklyTotal: Math.round(essential * visitsPerWeek * (visitsPerWeek >= 1 ? 1 : 4) * 100) / 100,
-    monthlyEstimate: Math.round(essential * visitsPerWeek * 4.33 * 100) / 100,
+    isInitialClean: input.isInitialClean,
+    initialCleanFee,
+    weeklyTotal: Math.round(essential * Math.max(visitsPerWeek, 1) * 100) / 100,
+    monthlyEstimate: Math.round(essential * visitsPerMonth * 100) / 100,
+    fieldRate: d.commercialFieldRate,
   };
 
   return {
     essential,
     premium,
     deluxe,
-    initialCleanFee: 0,
+    initialCleanFee,
     essentialFeatures: [
       `${frequencyLabel} station maintenance`,
-      `${input.stationCount} waste station${input.stationCount !== 1 ? "s" : ""}`,
+      `${input.stationCount} waste station${input.stationCount !== 1 ? "s" : ""} (${timePerStation} min each)`,
       "Station emptying & bag refill",
       `Common area scooping (${input.commonAreaMinutes} min)`,
+      `${crewSize}-person crew · ${Math.round(totalLaborHours * 10) / 10} hr total labor`,
+      mileageDistance > 0 ? `Travel: ${mileageDistance} mi round trip` : "",
+      dumpFee > 0 ? `Waste disposal included ($${dumpFee.toFixed(2)}/visit)` : "",
       "GPS-verified service logs",
-      discountPct > 0 ? `${(discountPct * 100).toFixed(0)}% density discount applied` : "",
+      discountPct > 0 ? `${(discountPct * 100).toFixed(0)}% multi-visit discount applied` : "",
     ].filter(Boolean),
     premiumFeatures: [
       "Everything in Essential, plus:",
@@ -425,27 +469,53 @@ export function renderCommercialProposalHtml(data: {
         ${e.propertyAddress ? `<p style="margin: 0 0 8px; font-size: 14px; color: #475569;">Property: <strong>${e.propertyAddress}</strong></p>` : ''}
         <p style="margin: 0 0 20px; font-size: 14px; color: #475569;">
           This proposal outlines a comprehensive pet waste management solution for your property,
-          including maintenance of ${breakdown.stationCount || 0} waste station${(breakdown.stationCount || 0) !== 1 ? 's' : ''}
-          and ${breakdown.commonAreaMinutes || 0} minutes of common area servicing per visit.
+          including maintenance of ${breakdown.stationCount || 0} waste station${(breakdown.stationCount || 0) !== 1 ? 's' : ''},
+          ${breakdown.commonAreaMinutes || 0} minutes of common area servicing,
+          and an estimated ${breakdown.totalLaborHours || 0} hours of on-site labor per visit
+          with a ${breakdown.crewSize || 1}-person crew.
         </p>
 
         <h2 style="margin: 24px 0 12px; font-size: 18px; color: #0f172a; border-bottom: 2px solid #1a7a4c; padding-bottom: 8px;">Scope of Work</h2>
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 14px;">
           <tr style="background-color: #f8fafc;">
             <td style="padding: 8px 12px; font-weight: 600;">Service Frequency</td>
-            <td style="padding: 8px 12px;">${breakdown.frequencyLabel || data.frequency}</td>
+            <td style="padding: 8px 12px;">${breakdown.frequencyLabel || data.frequency} (${breakdown.visitsPerMonth || 0} visits/month)</td>
           </tr>
           <tr>
             <td style="padding: 8px 12px; font-weight: 600;">Waste Stations</td>
-            <td style="padding: 8px 12px;">${breakdown.stationCount || 0} stations @ $${(breakdown.stationRate || 0).toFixed(2)}/station/visit</td>
+            <td style="padding: 8px 12px;">${breakdown.stationCount || 0} stations @ $${(breakdown.stationRate || 0).toFixed(2)}/station = $${(breakdown.stationCost || 0).toFixed(2)}</td>
           </tr>
           <tr style="background-color: #f8fafc;">
-            <td style="padding: 8px 12px; font-weight: 600;">Common Area Service</td>
-            <td style="padding: 8px 12px;">${breakdown.commonAreaMinutes || 0} minutes @ $${(breakdown.fieldRate || 0).toFixed(2)}/hr</td>
+            <td style="padding: 8px 12px; font-weight: 600;">Time Per Station</td>
+            <td style="padding: 8px 12px;">${breakdown.timePerStation || 0} min × ${breakdown.stationCount || 0} stations = ${breakdown.totalStationMinutes || 0} min</td>
           </tr>
+          <tr>
+            <td style="padding: 8px 12px; font-weight: 600;">Common Area Service</td>
+            <td style="padding: 8px 12px;">${breakdown.commonAreaMinutes || 0} minutes</td>
+          </tr>
+          <tr style="background-color: #f8fafc;">
+            <td style="padding: 8px 12px; font-weight: 600;">Total Labor</td>
+            <td style="padding: 8px 12px;">${breakdown.totalLaborHours || 0} hrs × ${breakdown.crewSize || 1} crew @ $${(breakdown.crewRate || 0).toFixed(2)}/hr = $${(breakdown.laborCost || 0).toFixed(2)}</td>
+          </tr>
+          ${(breakdown.mileageDistance || 0) > 0 ? `<tr>
+            <td style="padding: 8px 12px; font-weight: 600;">Mileage</td>
+            <td style="padding: 8px 12px;">${breakdown.mileageDistance} mi @ $${(breakdown.mileageRate || 0).toFixed(3)}/mi = $${(breakdown.mileageCost || 0).toFixed(2)}</td>
+          </tr>` : ''}
+          ${(breakdown.dumpFee || 0) > 0 ? `<tr style="background-color: #f8fafc;">
+            <td style="padding: 8px 12px; font-weight: 600;">Waste Disposal</td>
+            <td style="padding: 8px 12px;">$${(breakdown.dumpFee || 0).toFixed(2)}/visit</td>
+          </tr>` : ''}
+          ${(breakdown.siteSqft || 0) > 0 ? `<tr>
+            <td style="padding: 8px 12px; font-weight: 600;">Site Area</td>
+            <td style="padding: 8px 12px;">${(breakdown.siteSqft || 0).toLocaleString()} sq ft</td>
+          </tr>` : ''}
           ${breakdown.densityDiscount ? `<tr>
             <td style="padding: 8px 12px; font-weight: 600;">Multi-Visit Discount</td>
             <td style="padding: 8px 12px; color: #1a7a4c; font-weight: 600;">${breakdown.densityDiscount} off additional visits</td>
+          </tr>` : ''}
+          ${(breakdown.initialCleanFee || 0) > 0 ? `<tr style="background-color: #fef3c7;">
+            <td style="padding: 8px 12px; font-weight: 600;">Initial Deep Clean (one-time)</td>
+            <td style="padding: 8px 12px; font-weight: 600;">$${(breakdown.initialCleanFee || 0).toFixed(2)}</td>
           </tr>` : ''}
           <tr style="background-color: #f1f5f9;">
             <td style="padding: 8px 12px; font-weight: 600;">Est. Monthly Investment</td>
