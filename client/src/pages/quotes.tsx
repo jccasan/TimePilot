@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -24,8 +24,9 @@ import { Switch } from "@/components/ui/switch";
 import {
   Plus, Send, Eye, Trash2, Pencil, ClipboardCheck, Search,
   DollarSign, Home, Building2, Dog, Loader2, CheckCircle2, XCircle,
-  Clock, FileText, MapPin, Camera, X,
+  Clock, FileText, MapPin, Camera, X, Ruler,
 } from "lucide-react";
+import { YardMeasureTool } from "@/components/yard-measure-tool";
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   draft: { label: "Draft", variant: "secondary" },
@@ -476,6 +477,11 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     (quote?.images as { url: string; caption: string; sqft?: number | null }[]) || []
   );
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [addressCoords, setAddressCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [geocoding, setGeocoding] = useState(false);
+  const [measurePolygon, setMeasurePolygon] = useState<number[][] | null>(null);
+  const [measureSqft, setMeasureSqft] = useState<number | null>(null);
+  const [showMeasureTool, setShowMeasureTool] = useState(false);
 
   useEffect(() => {
     if (quote) {
@@ -516,6 +522,10 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setManualOverride(false);
       setLivePricing(null);
       setQuoteImages([]);
+      setMeasurePolygon(null);
+      setMeasureSqft(null);
+      setShowMeasureTool(false);
+      setAddressCoords(null);
     }
   }, [quote, open]);
 
@@ -571,26 +581,61 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   };
 
   const selectedProperty = contactProperties?.find(p => p.id === propertyId);
-  const hasYardMeasurement = selectedProperty?.yardPolygon && Array.isArray(selectedProperty.yardPolygon) && (selectedProperty.yardPolygon as number[][]).length >= 3;
 
-  const handleGenerateYardImage = async (zoom?: number) => {
-    if (!propertyId || generatingImage) return;
+  useEffect(() => {
+    if (!propertyAddress || propertyAddress.trim().length < 5) {
+      setAddressCoords(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setGeocoding(true);
+      try {
+        const res = await fetch(`/api/geocode/forward?q=${encodeURIComponent(propertyAddress)}`);
+        const data = await res.json();
+        if (data?.coordinates) {
+          setAddressCoords({ lat: data.coordinates.latitude, lng: data.coordinates.longitude });
+        } else {
+          setAddressCoords(null);
+        }
+      } catch {
+        setAddressCoords(null);
+      } finally {
+        setGeocoding(false);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [propertyAddress]);
+
+  const handleGenerateYardImage = useCallback(async (polygon: number[][], sqft: number, lat: number, lng: number) => {
+    if (generatingImage) return;
     setGeneratingImage(true);
     try {
       const res = await apiRequest("POST", "/api/quotes/generate-yard-image", {
-        propertyId,
-        zoom: zoom || 18,
+        polygon,
+        lat,
+        lng,
+        sqft,
+        zoom: 19,
       });
       const data = await res.json();
       setQuoteImages(prev => [...prev, { url: data.url, caption: data.caption, sqft: data.sqft }]);
-      toast({ title: "Yard image generated" });
+      toast({ title: "Measurement saved & image captured" });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to generate image";
       toast({ title: "Error", description: msg, variant: "destructive" });
     } finally {
       setGeneratingImage(false);
     }
-  };
+  }, [generatingImage, toast]);
+
+  const handleMeasurementSave = useCallback((polygon: number[][], areaSqft: number) => {
+    setMeasurePolygon(polygon);
+    setMeasureSqft(areaSqft);
+    setShowMeasureTool(false);
+    if (addressCoords) {
+      handleGenerateYardImage(polygon, areaSqft, addressCoords.lat, addressCoords.lng);
+    }
+  }, [addressCoords, handleGenerateYardImage]);
 
   const removeImage = (idx: number) => {
     setQuoteImages(prev => prev.filter((_, i) => i !== idx));
@@ -899,39 +944,46 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <Label className="text-sm font-medium">Yard Measurement Images</Label>
-              {hasYardMeasurement && (
-                <div className="flex gap-2">
-                  <Button
-                    data-testid="button-generate-yard-close"
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={generatingImage}
-                    onClick={() => handleGenerateYardImage(19)}
-                  >
-                    {generatingImage ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Camera className="h-3 w-3 mr-1" />}
-                    Close-up
-                  </Button>
-                  <Button
-                    data-testid="button-generate-yard-overview"
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={generatingImage}
-                    onClick={() => handleGenerateYardImage(17)}
-                  >
-                    {generatingImage ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <MapPin className="h-3 w-3 mr-1" />}
-                    Overview
-                  </Button>
-                </div>
+              <Label className="text-sm font-medium">Yard Measurement</Label>
+              {addressCoords && !showMeasureTool && (
+                <Button
+                  data-testid="button-open-measure-tool"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowMeasureTool(true)}
+                >
+                  <Ruler className="h-3 w-3 mr-1" />
+                  {measurePolygon ? "Re-measure" : "Measure Yard"}
+                </Button>
               )}
             </div>
-            {!propertyId && (
-              <p className="text-xs text-muted-foreground">Select a property above to generate yard images.</p>
+            {!propertyAddress && (
+              <p className="text-xs text-muted-foreground">Enter a property address above to enable yard measurement.</p>
             )}
-            {propertyId && !hasYardMeasurement && (
-              <p className="text-xs text-muted-foreground">This property doesn't have a yard measurement yet. Use the yard measuring tool on the contact detail page first.</p>
+            {propertyAddress && !addressCoords && !geocoding && (
+              <p className="text-xs text-muted-foreground">Could not locate this address on the map. Try a more complete address.</p>
+            )}
+            {geocoding && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Locating address...</p>
+            )}
+            {showMeasureTool && addressCoords && (
+              <div className="mt-2 border rounded-lg p-3 bg-muted/30">
+                <YardMeasureTool
+                  lat={addressCoords.lat}
+                  lng={addressCoords.lng}
+                  existingPolygon={measurePolygon}
+                  existingArea={measureSqft}
+                  onSave={handleMeasurementSave}
+                  onCancel={() => setShowMeasureTool(false)}
+                />
+              </div>
+            )}
+            {generatingImage && (
+              <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generating measurement image...
+              </div>
             )}
             {quoteImages.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">

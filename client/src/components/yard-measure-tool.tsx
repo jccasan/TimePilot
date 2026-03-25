@@ -6,7 +6,7 @@ import { Undo2, Trash2, Save, MousePointerClick, ZoomIn, ZoomOut } from "lucide-
 interface YardMeasureToolProps {
   lat: number;
   lng: number;
-  propertyId: string;
+  propertyId?: string;
   existingPolygon?: number[][] | null;
   existingArea?: number | null;
   onSave: (polygon: number[][], areaSqft: number) => void;

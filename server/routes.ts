@@ -7856,23 +7856,31 @@ export async function registerRoutes(
   app.post("/api/quotes/generate-yard-image", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { propertyId, zoom: requestedZoom, caption } = req.body;
+      const { propertyId, zoom: requestedZoom, caption, polygon: directPolygon, lat: directLat, lng: directLng, sqft: directSqft } = req.body;
 
-      if (!propertyId) {
-        return res.status(400).json({ error: "propertyId is required" });
+      let polygon: number[][] | null = null;
+      let lat: number | null = null;
+      let lng: number | null = null;
+      let sqft: number | undefined;
+
+      if (directPolygon && Array.isArray(directPolygon) && directPolygon.length >= 3 && directLat && directLng) {
+        polygon = directPolygon;
+        lat = parseFloat(String(directLat));
+        lng = parseFloat(String(directLng));
+        sqft = directSqft ? Number(directSqft) : undefined;
+      } else if (propertyId) {
+        const property = await storage.getProperty(propertyId, companyId);
+        if (!property) {
+          return res.status(404).json({ error: "Property not found" });
+        }
+        polygon = property.yardPolygon as number[][] | null;
+        lat = property.latitude ? parseFloat(String(property.latitude)) : null;
+        lng = property.longitude ? parseFloat(String(property.longitude)) : null;
+        sqft = property.measuredYardSqft ? Number(property.measuredYardSqft) : undefined;
       }
-
-      const property = await storage.getProperty(propertyId, companyId);
-      if (!property) {
-        return res.status(404).json({ error: "Property not found" });
-      }
-
-      const polygon = property.yardPolygon as number[][] | null;
-      const lat = property.latitude ? parseFloat(String(property.latitude)) : null;
-      const lng = property.longitude ? parseFloat(String(property.longitude)) : null;
 
       if (!polygon || polygon.length < 3 || !lat || !lng) {
-        return res.status(400).json({ error: "Property must have a yard measurement with at least 3 points" });
+        return res.status(400).json({ error: "Must provide a polygon with at least 3 points and coordinates" });
       }
 
       const mapboxToken = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
@@ -7932,7 +7940,6 @@ export async function registerRoutes(
         throw new Error(`Storage upload failed: ${putResponse.status}`);
       }
 
-      const sqft = property.measuredYardSqft || undefined;
       const autoCaption = caption || `Yard measurement${sqft ? ` — ${Number(sqft).toLocaleString()} sqft` : ""}`;
 
       res.json({
