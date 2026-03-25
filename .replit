@@ -63,4 +63,4 @@ STRIPE_COUPON_VOICE_PRO_SUBSCRIBER = "VOICE_PRO_MEMBER"
 
 [postMerge]
 path = "scripts/post-merge.sh"
-timeoutMs = 20000
+timeoutMs = 60000
