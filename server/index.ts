@@ -174,45 +174,35 @@ async function applyAdminCredentialMigration() {
   try {
     const { Pool } = await import("pg");
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    
-    const targetHash = "1c550fe77d50ef59ee1cd7adc292073c:2bb8a997c7f785b5fa7996667c9c0dba44c6f558c037345df6c1eabff748f2ccb521c61b9c64fd8eb109e94ce63bd18a0cdd49b6365ca2a27b61f316364288a9";
+
     const targetEmail = "jeremy@doocrewva.com";
-    
-    const check = await pool.query("SELECT id, password_hash FROM users WHERE email = 'jeremy@scoopilot.com' OR email = 'jeremy@doocrewva.com'");
+
+    const check = await pool.query("SELECT id, email FROM users WHERE email = 'jeremy@scoopilot.com' OR email = 'jeremy@doocrewva.com'");
     if (check.rows.length > 0) {
       const row = check.rows[0];
-      if (row.password_hash !== targetHash) {
+      if (row.email === "jeremy@scoopilot.com") {
         await pool.query(
-          "UPDATE users SET email = $1, password_hash = $2, updated_at = NOW() WHERE id = $3",
-          [targetEmail, targetHash, row.id]
+          "UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2",
+          [targetEmail, row.id]
         );
-        console.log("[Migration] Tenant credentials updated successfully");
+        console.log("[Migration] Tenant email migrated to doocrewva.com");
       } else {
         console.log("[Migration] Tenant credentials already up to date");
       }
     }
 
-    const adminTarget = await pool.query("SELECT id, password_hash FROM admin_users WHERE email = $1", [targetEmail]);
+    const adminTarget = await pool.query("SELECT id FROM admin_users WHERE email = $1", [targetEmail]);
     if (adminTarget.rows.length > 0) {
-      const adminRow = adminTarget.rows[0];
-      if (adminRow.password_hash !== targetHash) {
-        await pool.query(
-          "UPDATE admin_users SET password_hash = $1 WHERE id = $2",
-          [targetHash, adminRow.id]
-        );
-        console.log("[Migration] Platform admin credentials updated successfully");
-      } else {
-        console.log("[Migration] Platform admin credentials already up to date");
-      }
-      await pool.query("DELETE FROM admin_users WHERE email = 'jeremy@scoopilot.com' AND id != $1", [adminRow.id]);
+      await pool.query("DELETE FROM admin_users WHERE email = 'jeremy@scoopilot.com' AND id != $1", [adminTarget.rows[0].id]);
+      console.log("[Migration] Platform admin credentials already up to date");
     } else {
       const adminOld = await pool.query("SELECT id FROM admin_users WHERE email = 'jeremy@scoopilot.com'");
       if (adminOld.rows.length > 0) {
         await pool.query(
-          "UPDATE admin_users SET email = $1, password_hash = $2 WHERE id = $3",
-          [targetEmail, targetHash, adminOld.rows[0].id]
+          "UPDATE admin_users SET email = $1 WHERE id = $2",
+          [targetEmail, adminOld.rows[0].id]
         );
-        console.log("[Migration] Platform admin credentials migrated successfully");
+        console.log("[Migration] Platform admin email migrated");
       }
     }
 
