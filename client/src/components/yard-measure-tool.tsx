@@ -286,7 +286,10 @@ export function YardMeasureTool({ lat, lng, propertyId, existingPolygon, existin
   const [tokenLoaded, setTokenLoaded] = useState(false);
 
   useEffect(() => {
-    fetch("/api/mapbox-token")
+    const headers: Record<string, string> = {};
+    const token = localStorage.getItem("sessionToken");
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    fetch("/api/mapbox-token", { credentials: "include", headers })
       .then((r) => r.json())
       .then((d) => {
         if (d.token) {
