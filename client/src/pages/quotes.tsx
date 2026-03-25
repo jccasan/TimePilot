@@ -259,6 +259,7 @@ export default function Quotes() {
             <TabsTrigger value="sent" data-testid="tab-sent">Sent</TabsTrigger>
             <TabsTrigger value="accepted" data-testid="tab-accepted">Accepted</TabsTrigger>
             <TabsTrigger value="declined" data-testid="tab-declined">Declined</TabsTrigger>
+            <TabsTrigger value="expired" data-testid="tab-expired">Expired</TabsTrigger>
           </TabsList>
         </Tabs>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
