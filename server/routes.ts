@@ -9075,15 +9075,13 @@ export async function registerRoutes(
       const quoteRow = allQuotes.rows?.[0];
       if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
 
-      if (quoteRow.status === "expired" || (quoteRow.expires_at && new Date(quoteRow.expires_at as string) < new Date())) {
-        return res.json({ ...quoteRow, status: "expired" });
-      }
+      const isExpired = quoteRow.status === "expired" || (quoteRow.expires_at && new Date(quoteRow.expires_at as string) < new Date());
 
       const safeQuote = {
         id: quoteRow.id,
         quoteNumber: quoteRow.quote_number,
         type: quoteRow.type,
-        status: quoteRow.status,
+        status: isExpired ? "expired" : quoteRow.status,
         contactName: quoteRow.contact_name,
         propertyAddress: quoteRow.property_address,
         dogCount: quoteRow.dog_count,
