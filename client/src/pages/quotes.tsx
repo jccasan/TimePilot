@@ -108,6 +108,7 @@ export default function Quotes() {
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [contactFilter, setContactFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
@@ -129,6 +130,7 @@ export default function Quotes() {
     let result = allQuotes;
     if (statusFilter !== "all") result = result.filter(q => q.status === statusFilter);
     if (typeFilter !== "all") result = result.filter(q => q.type === typeFilter);
+    if (contactFilter !== "all") result = result.filter(q => q.contactId === contactFilter);
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
       result = result.filter(q =>
@@ -139,7 +141,7 @@ export default function Quotes() {
       );
     }
     return result;
-  }, [allQuotes, statusFilter, typeFilter, searchTerm]);
+  }, [allQuotes, statusFilter, typeFilter, contactFilter, searchTerm]);
 
   const stats = useMemo(() => ({
     total: allQuotes.length,
@@ -267,6 +269,19 @@ export default function Quotes() {
             <SelectItem value="all">All Types</SelectItem>
             <SelectItem value="residential">Residential</SelectItem>
             <SelectItem value="commercial">Commercial</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={contactFilter} onValueChange={setContactFilter}>
+          <SelectTrigger className="w-[180px]" data-testid="select-contact-filter">
+            <SelectValue placeholder="All Contacts" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Contacts</SelectItem>
+            {contacts.map(c => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.firstName} {c.lastName}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

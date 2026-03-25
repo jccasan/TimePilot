@@ -306,6 +306,16 @@ export function renderResidentialProposalHtml(data: {
         ${e.propertyAddress ? `<p style="margin: 0 0 16px; font-size: 14px; color: #475569;">📍 ${e.propertyAddress}</p>` : ''}
         <p style="margin: 0 0 24px; font-size: 14px; color: #475569;">Service Frequency: <strong>${frequencyLabel}</strong></p>
 
+        <div style="background-color: #f8fafc; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
+          <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #334155;">Pricing Breakdown</p>
+          <table style="width: 100%; font-size: 13px; color: #475569;">
+            ${pricing.breakdown.baseRate ? `<tr><td style="padding: 2px 0;">Base rate</td><td style="text-align: right;">$${Number(pricing.breakdown.baseRate).toFixed(2)}</td></tr>` : ''}
+            ${pricing.breakdown.dogSurcharge && pricing.breakdown.dogSurcharge > 0 ? `<tr><td style="padding: 2px 0;">Dog surcharge (${pricing.breakdown.dogCount || ''})</td><td style="text-align: right;">+$${Number(pricing.breakdown.dogSurcharge).toFixed(2)}</td></tr>` : ''}
+            ${pricing.breakdown.acreageSurcharge && pricing.breakdown.acreageSurcharge > 0 ? `<tr><td style="padding: 2px 0;">Yard size (${escapeHtml(String(pricing.breakdown.yardSize || ''))})</td><td style="text-align: right;">+$${Number(pricing.breakdown.acreageSurcharge).toFixed(2)}</td></tr>` : ''}
+            ${pricing.breakdown.heavyAccumulation ? `<tr><td style="padding: 2px 0;">Heavy accumulation (${pricing.breakdown.heavyAccumulationMultiplier}x)</td><td style="text-align: right;">applied</td></tr>` : ''}
+          </table>
+        </div>
+
         <h2 style="margin: 0 0 16px; font-size: 18px; color: #1e293b; text-align: center;">Choose Your Service Level</h2>
 
         <div style="display: flex; gap: 16px; flex-wrap: wrap;">
