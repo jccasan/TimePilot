@@ -454,6 +454,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const [quoteType, setQuoteType] = useState<"residential" | "commercial">(
     quote?.type || "residential"
   );
+  const [quoteNumber, setQuoteNumber] = useState(quote?.quoteNumber || "");
   const [contactId, setContactId] = useState(quote?.contactId || "");
   const [propertyId, setPropertyId] = useState(quote?.propertyId || "");
   const [contactName, setContactName] = useState(quote?.contactName || "");
@@ -691,6 +692,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
 
     const data: Record<string, unknown> = {
       type: quoteType,
+      quoteNumber: quoteNumber || null,
       contactId: contactId || null,
       propertyId: propertyId || null,
       contactName,
@@ -789,6 +791,16 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
               </div>
             </div>
           )}
+
+          <div>
+            <Label>Quote Number</Label>
+            <Input
+              data-testid="input-quote-number"
+              value={quoteNumber}
+              onChange={e => setQuoteNumber(e.target.value)}
+              placeholder={isEdit ? "" : "Auto-generated if left blank"}
+            />
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

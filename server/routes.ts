@@ -7888,7 +7888,6 @@ export async function registerRoutes(
         return res.status(500).json({ error: "Mapbox token not configured" });
       }
 
-      const zoom = requestedZoom || 18;
       const width = 800;
       const height = 600;
 
@@ -7914,7 +7913,7 @@ export async function registerRoutes(
       };
 
       const geoJsonEncoded = encodeURIComponent(JSON.stringify(geoJson));
-      const staticUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/geojson(${geoJsonEncoded})/${lng},${lat},${zoom},0/${width}x${height}@2x?access_token=${mapboxToken}&attribution=false&logo=false`;
+      const staticUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/geojson(${geoJsonEncoded})/auto/${width}x${height}@2x?padding=40&access_token=${mapboxToken}&attribution=false&logo=false`;
 
       const imgResponse = await fetch(staticUrl);
       if (!imgResponse.ok) {
@@ -8047,6 +8046,7 @@ export async function registerRoutes(
 
   const createQuoteBodySchema = z.object({
     type: z.enum(["residential", "commercial"]),
+    quoteNumber: z.string().max(50).nullable().optional(),
     contactId: z.string().nullable().optional(),
     propertyId: z.string().nullable().optional(),
     contactName: z.string().min(1, "Contact name is required").max(255),
@@ -8087,7 +8087,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid quote data", details: parsed.error.flatten() });
       }
 
-      const quoteNumber = await storage.getNextQuoteNumber(companyId);
+      const quoteNumber = parsed.data.quoteNumber || await storage.getNextQuoteNumber(companyId);
 
       let contactId = parsed.data.contactId || null;
       if (!contactId && parsed.data.contactName) {
@@ -8361,10 +8361,13 @@ export async function registerRoutes(
         breakdown: (quote.pricingBreakdown as Record<string, any>) || {},
       };
 
+      const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : undefined;
+
       const renderData = {
         companyName: company.name,
         companyEmail: (company as any).email || undefined,
         companyPhone: company.phone || undefined,
+        companyLogo: logoUrl,
         contactName: quote.contactName || "Customer",
         quoteNumber: quote.quoteNumber,
         propertyAddress: quote.propertyAddress || undefined,
