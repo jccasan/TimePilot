@@ -441,8 +441,13 @@ export default function AdminCompanyDetail() {
           {voiceCalls && voiceCalls.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Phone className="h-4 w-4" /> Voice Call Log
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Phone className="h-4 w-4" /> Voice Call Log
+                  </span>
+                  <span className="text-xs font-normal text-muted-foreground" data-testid="text-voice-summary">
+                    {voiceCalls.length} call{voiceCalls.length !== 1 ? "s" : ""} / {voiceCalls.reduce((sum: number, c: any) => sum + (c.durationMinutes || 0), 0)} min total
+                  </span>
                 </CardTitle>
               </CardHeader>
               <CardContent>

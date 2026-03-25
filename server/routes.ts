@@ -6649,7 +6649,7 @@ export async function registerRoutes(
         const signature = req.headers["x-retell-signature"] as string | undefined;
         if (!signature) {
           console.warn("[Retell Webhook] Missing x-retell-signature header");
-          return res.status(401).json({ error: "Missing signature" });
+          return res.status(200).json({ ok: true });
         }
         const crypto = await import("crypto");
         const rawBody = (req as any).rawBody || JSON.stringify(req.body);
@@ -6660,7 +6660,7 @@ export async function registerRoutes(
         const expectedBuf = Buffer.from(expectedSignature);
         if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
           console.warn("[Retell Webhook] Signature mismatch");
-          return res.status(401).json({ error: "Invalid signature" });
+          return res.status(200).json({ ok: true });
         }
       } else {
         console.warn("[Retell Webhook] RETELL_API_KEY not set — skipping signature verification");
