@@ -60,6 +60,7 @@ import {
   insertWebhookSchema,
   insertServicePricingSchema,
   insertServicePackageSchema,
+  type InsertQuote,
 } from "@shared/schema";
 
 const CHANGE_PASSWORD_EXEMPT_PATHS = ["/api/auth/change-password", "/api/auth/user", "/api/auth/logout"];
@@ -7854,25 +7855,32 @@ export async function registerRoutes(
 
   app.get("/api/quotes/calculate-pricing", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const companyQuoteDefaults = company?.quoteDefaults ?? null;
+
       const type = req.query.type as string;
       if (type === "residential") {
+        const yardSize = (req.query.yardSize as string) || "small";
+        const frequency = (req.query.frequency as string) || "weekly";
         const input: ResidentialQuoteInput = {
           type: "residential",
           dogCount: parseInt(req.query.dogCount as string) || 1,
-          yardSize: (req.query.yardSize as any) || "small",
-          frequency: (req.query.frequency as any) || "weekly",
+          yardSize: yardSize as ResidentialQuoteInput["yardSize"],
+          frequency: frequency as ResidentialQuoteInput["frequency"],
           isFirstTime: req.query.isFirstTime === "true",
         };
-        const pricing = calculateQuotePricing(input);
+        const pricing = calculateQuotePricing(input, companyQuoteDefaults);
         res.json(pricing);
       } else if (type === "commercial") {
+        const frequency = (req.query.frequency as string) || "1x_weekly";
         const input: CommercialQuoteInput = {
           type: "commercial",
           stationCount: parseInt(req.query.stationCount as string) || 1,
           commonAreaMinutes: parseInt(req.query.commonAreaMinutes as string) || 30,
-          frequency: (req.query.frequency as any) || "1x_weekly",
+          frequency: frequency as CommercialQuoteInput["frequency"],
         };
-        const pricing = calculateQuotePricing(input);
+        const pricing = calculateQuotePricing(input, companyQuoteDefaults);
         res.json(pricing);
       } else {
         res.status(400).json({ error: "Invalid quote type. Must be 'residential' or 'commercial'." });
@@ -7946,10 +7954,28 @@ export async function registerRoutes(
 
       const quoteNumber = await storage.getNextQuoteNumber(companyId);
 
+      let contactId = parsed.data.contactId || null;
+      if (!contactId && parsed.data.contactName) {
+        try {
+          const newContact = await storage.createContact({
+            companyId,
+            firstName: parsed.data.contactName.split(" ")[0],
+            lastName: parsed.data.contactName.split(" ").slice(1).join(" ") || "",
+            email: parsed.data.contactEmail || null,
+            phone: parsed.data.contactPhone || null,
+            status: "lead",
+          });
+          contactId = String(newContact.id);
+        } catch (contactErr) {
+          console.error("Failed to create lead from quote:", contactErr);
+        }
+      }
+
       const quoteData = {
         ...parsed.data,
         companyId,
         quoteNumber,
+        contactId,
       };
 
       const quote = await storage.createQuote(quoteData);
@@ -7971,7 +7997,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid quote data", details: parsed.error.flatten() });
       }
 
-      const quote = await storage.updateQuote(req.params.id, companyId, parsed.data as any);
+      const quote = await storage.updateQuote(req.params.id, companyId, parsed.data as Partial<InsertQuote>);
       res.json(quote);
     } catch (err: any) {
       console.error("Error updating quote:", err);
@@ -7988,6 +8014,71 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (err: any) {
       console.error("Error deleting quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/quotes/:id/accept", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const quote = await storage.getQuote(req.params.id, companyId);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+      const tier = req.body.tier as string;
+      if (!tier || !["essential", "premium", "deluxe"].includes(tier)) {
+        return res.status(400).json({ error: "Must select a tier: essential, premium, or deluxe" });
+      }
+
+      if (quote.status === "accepted") {
+        return res.status(400).json({ error: "Quote already accepted" });
+      }
+
+      const priceMap: Record<string, string | null> = {
+        essential: quote.essentialPrice,
+        premium: quote.premiumPrice,
+        deluxe: quote.deluxePrice,
+      };
+      const selectedPrice = priceMap[tier] || "0";
+
+      const updatedQuote = await storage.updateQuote(req.params.id, companyId, {
+        status: "accepted",
+        selectedTier: tier as "essential" | "premium" | "deluxe",
+        selectedPrice,
+        acceptedAt: new Date(),
+      });
+
+      if (quote.contactId) {
+        const contact = await storage.getContactById(quote.contactId);
+        if (contact && contact.status === "lead") {
+          await storage.updateContact(quote.contactId, companyId, { status: "active" });
+        }
+      }
+
+      let servicePlan = null;
+      if (quote.contactId && quote.propertyId) {
+        try {
+          const today = new Date().toISOString().split("T")[0];
+          servicePlan = await storage.createServicePlan({
+            companyId,
+            contactId: quote.contactId,
+            propertyId: quote.propertyId,
+            frequency: (quote.frequency as "weekly" | "biweekly" | "monthly" | "onetime") || "weekly",
+            pricePerVisit: selectedPrice,
+            startDate: today,
+            isActive: true,
+            serviceName: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Service (Quote #${quote.quoteNumber})`,
+            jobType: "recurring",
+            jobStatus: "active",
+            stopOrder: 0,
+          });
+        } catch (spErr) {
+          console.error("Failed to create service plan from accepted quote:", spErr);
+        }
+      }
+
+      res.json({ quote: updatedQuote, servicePlan });
+    } catch (err: any) {
+      console.error("Error accepting quote:", err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -9035,6 +9126,40 @@ export async function registerRoutes(
           updated_at = NOW()
         WHERE id = ${quoteId}
       `);
+
+      const contactId = quoteRow.contact_id as number | null;
+      const propertyId = quoteRow.property_id as number | null;
+      const companyId = quoteRow.company_id as number;
+      const quoteNumber = quoteRow.quote_number as string | null;
+      const frequency = (quoteRow.frequency as string) || "weekly";
+
+      if (contactId) {
+        const contact = await storage.getContactById(contactId);
+        if (contact && contact.status === "lead") {
+          await storage.updateContact(contactId, companyId, { status: "active" });
+        }
+      }
+
+      if (contactId && propertyId) {
+        try {
+          const today = new Date().toISOString().split("T")[0];
+          await storage.createServicePlan({
+            companyId,
+            contactId,
+            propertyId,
+            frequency: frequency as "weekly" | "biweekly" | "monthly" | "onetime",
+            pricePerVisit: String(selectedPrice),
+            startDate: today,
+            isActive: true,
+            serviceName: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Service (Quote #${quoteNumber || quoteId})`,
+            jobType: "recurring",
+            jobStatus: "active",
+            stopOrder: 0,
+          });
+        } catch (spErr) {
+          console.error("Failed to create service plan from portal quote acceptance:", spErr);
+        }
+      }
 
       res.json({ success: true, tier, price: selectedPrice });
     } catch (err: any) {

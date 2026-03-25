@@ -434,7 +434,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const isEdit = !!quote;
 
   const [quoteType, setQuoteType] = useState<"residential" | "commercial">(
-    (quote?.type as any) || "residential"
+    quote?.type || "residential"
   );
   const [contactId, setContactId] = useState(quote?.contactId || "");
   const [contactName, setContactName] = useState(quote?.contactName || "");
@@ -457,7 +457,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
 
   useEffect(() => {
     if (quote) {
-      setQuoteType((quote.type as any) || "residential");
+      setQuoteType(quote.type || "residential");
       setContactId(quote.contactId || "");
       setContactName(quote.contactName || "");
       setContactEmail(quote.contactEmail || "");

@@ -142,6 +142,7 @@ export const companies = pgTable("companies", {
   aiImportMappingEnabled: boolean("ai_import_mapping_enabled").notNull().default(true),
   roverAiEnabled: boolean("rover_ai_enabled").notNull().default(true),
   pricingConfig: jsonb("pricing_config").$type<PricingConfig>(),
+  quoteDefaults: jsonb("quote_defaults").$type<Partial<QuoteDefaults>>(),
   voiceAgentServiceArea: text("voice_agent_service_area"),
   voiceAgentPricingSummary: text("voice_agent_pricing_summary"),
   voiceAgentPolicies: text("voice_agent_policies"),

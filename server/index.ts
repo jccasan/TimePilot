@@ -285,6 +285,9 @@ async function ensureCompanyColumns() {
       CREATE INDEX IF NOT EXISTS idx_voice_calls_created ON voice_calls(created_at);
     `);
     await pool.query(`
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS quote_defaults JSONB;
+    `);
+    await pool.query(`
       DO $$ BEGIN
         CREATE TYPE quote_type AS ENUM ('residential', 'commercial');
       EXCEPTION WHEN duplicate_object THEN null;
