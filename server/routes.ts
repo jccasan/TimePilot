@@ -8263,10 +8263,13 @@ export async function registerRoutes(
       const slug = (company as any).slug || companyId;
       const acceptUrl = `${req.protocol}://${req.get("host")}/portal/${slug}/quotes/${quote.id}`;
 
+      const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : undefined;
+
       const renderData = {
         companyName: company.name,
         companyEmail: (company as any).email || undefined,
         companyPhone: company.phone || undefined,
+        companyLogo: logoUrl,
         contactName: quote.contactName || "Customer",
         quoteNumber: quote.quoteNumber,
         propertyAddress: quote.propertyAddress || undefined,
