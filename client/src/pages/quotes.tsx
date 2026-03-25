@@ -460,6 +460,9 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const [contactEmail, setContactEmail] = useState(quote?.contactEmail || "");
   const [contactPhone, setContactPhone] = useState(quote?.contactPhone || "");
   const [propertyAddress, setPropertyAddress] = useState(quote?.propertyAddress || "");
+  const [propertyCity, setPropertyCity] = useState("");
+  const [propertyState, setPropertyState] = useState("");
+  const [propertyZip, setPropertyZip] = useState("");
   const [expiresAt, setExpiresAt] = useState(quote?.expiresAt ? new Date(quote.expiresAt).toISOString().split("T")[0] : "");
   const [dogCount, setDogCount] = useState(quote?.dogCount || 2);
   const [yardSize, setYardSize] = useState(quote?.yardSize || "small");
@@ -491,7 +494,12 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setContactName(quote.contactName || "");
       setContactEmail(quote.contactEmail || "");
       setContactPhone(quote.contactPhone || "");
-      setPropertyAddress(quote.propertyAddress || "");
+      const addrParts = (quote.propertyAddress || "").split(",").map((s: string) => s.trim());
+      setPropertyAddress(addrParts[0] || "");
+      setPropertyCity(addrParts[1] || "");
+      const stateZip = (addrParts[2] || "").split(/\s+/);
+      setPropertyState(stateZip[0] || "");
+      setPropertyZip(stateZip.slice(1).join(" ") || (addrParts[3] || ""));
       setExpiresAt(quote.expiresAt ? new Date(quote.expiresAt).toISOString().split("T")[0] : "");
       setDogCount(quote.dogCount || 2);
       setYardSize(quote.yardSize || "small");
@@ -510,6 +518,9 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setContactEmail("");
       setContactPhone("");
       setPropertyAddress("");
+      setPropertyCity("");
+      setPropertyState("");
+      setPropertyZip("");
       setExpiresAt("");
       setDogCount(2);
       setYardSize("small");
@@ -577,12 +588,24 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     const prop = contactProperties?.find(p => p.id === id);
     if (prop) {
       setPropertyAddress(prop.address || "");
+      setPropertyCity((prop as any).city || "");
+      setPropertyState((prop as any).state || "");
+      setPropertyZip((prop as any).zipCode || "");
+      const lat = prop.latitude ? parseFloat(String(prop.latitude)) : null;
+      const lng = prop.longitude ? parseFloat(String(prop.longitude)) : null;
+      if (lat && lng) {
+        setAddressCoords({ lat, lng });
+      }
     }
   };
 
   const selectedProperty = contactProperties?.find(p => p.id === propertyId);
 
   const handleAddressSelect = useCallback((parsed: { streetAddress: string; city: string; state: string; zipCode: string; latitude: string; longitude: string }) => {
+    if (parsed.streetAddress) setPropertyAddress(parsed.streetAddress);
+    setPropertyCity(parsed.city || "");
+    setPropertyState(parsed.state || "");
+    setPropertyZip(parsed.zipCode || "");
     if (parsed.latitude && parsed.longitude) {
       setAddressCoords({ lat: parseFloat(parsed.latitude), lng: parseFloat(parsed.longitude) });
     } else {
@@ -658,7 +681,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       contactName,
       contactEmail,
       contactPhone,
-      propertyAddress,
+      propertyAddress: [propertyAddress, propertyCity, propertyState, propertyZip].filter(Boolean).join(", "),
       frequency,
       notes: notes || null,
       internalNotes: internalNotes || null,
@@ -796,7 +819,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
               </div>
             )}
             <div className={contactId && contactProperties && contactProperties.length > 0 ? "" : "md:col-span-2"}>
-              <Label>Property Address</Label>
+              <Label>Street Address</Label>
               <AddressAutocomplete
                 data-testid="input-address"
                 value={propertyAddress}
@@ -804,6 +827,20 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
                 onSelect={handleAddressSelect}
                 placeholder="Start typing an address..."
               />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <Label>City</Label>
+              <Input data-testid="input-city" value={propertyCity} onChange={e => setPropertyCity(e.target.value)} placeholder="City" />
+            </div>
+            <div>
+              <Label>State</Label>
+              <Input data-testid="input-state" value={propertyState} onChange={e => setPropertyState(e.target.value)} placeholder="ST" />
+            </div>
+            <div>
+              <Label>ZIP Code</Label>
+              <Input data-testid="input-zip" value={propertyZip} onChange={e => setPropertyZip(e.target.value)} placeholder="12345" />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
