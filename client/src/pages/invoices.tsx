@@ -198,6 +198,7 @@ export default function Invoices() {
   const [discountType, setDiscountType] = useState<string>("");
   const [discountValue, setDiscountValue] = useState("0");
   const [invoiceStatus, setInvoiceStatus] = useState("pending");
+  const [loadingUninvoiced, setLoadingUninvoiced] = useState(false);
 
 
   const [editMode, setEditMode] = useState(false);
@@ -493,6 +494,43 @@ export default function Invoices() {
     setInvoiceStatus("pending");
   }
 
+  async function handleContactSelect(newContactId: string) {
+    setContactId(newContactId);
+    setLineItems([]);
+    if (!newContactId) {
+      return;
+    }
+    setLoadingUninvoiced(true);
+    try {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`/api/contacts/${newContactId}/uninvoiced-visits`, {
+        credentials: "include",
+        headers,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.visits && data.visits.length > 0) {
+          const visitItems: LineItem[] = data.visits.map((v: any) => ({
+            description: `${v.servicePlanName} - ${v.propertyAddress} (${v.scheduledDate})`,
+            quantity: "1",
+            unitPrice: v.pricePerVisit || "0",
+            visitId: v.id,
+          }));
+          setLineItems(visitItems);
+        }
+      } else {
+        toast({ title: "Could not load uninvoiced work", description: "You can still add items manually.", variant: "destructive" });
+      }
+    } catch (err) {
+      console.error("Failed to fetch uninvoiced visits:", err);
+      toast({ title: "Could not load uninvoiced work", description: "You can still add items manually.", variant: "destructive" });
+    } finally {
+      setLoadingUninvoiced(false);
+    }
+  }
+
   function addServiceItem(pricingItem: ServicePricingItem) {
     setLineItems([...lineItems, {
       description: pricingItem.name,
@@ -578,13 +616,13 @@ export default function Invoices() {
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Invoice</DialogTitle>
-                <DialogDescription>Select services and set pricing for the invoice.</DialogDescription>
+                <DialogDescription>Select a customer to auto-load their uninvoiced completed work, then adjust as needed.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Contact</Label>
-                    <Select value={contactId} onValueChange={setContactId}>
+                    <Select value={contactId} onValueChange={handleContactSelect}>
                       <SelectTrigger data-testid="select-invoice-contact"><SelectValue placeholder="Select contact" /></SelectTrigger>
                       <SelectContent>
                         {contacts?.map((c) => (
@@ -637,9 +675,16 @@ export default function Invoices() {
                     </div>
                   )}
 
-                  {lineItems.length === 0 ? (
+                  {loadingUninvoiced ? (
+                    <div className="flex items-center justify-center py-4 gap-2" data-testid="loading-uninvoiced">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <p className="text-sm text-muted-foreground">Loading completed work...</p>
+                    </div>
+                  ) : lineItems.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-line-items">
-                      No line items added yet. Use "Add Custom Charge" for any item, or pick from your service catalog.
+                      {contactId
+                        ? "No uninvoiced completed work found. Use \"Add Custom Charge\" for any item, or pick from your service catalog."
+                        : "Select a contact to auto-load uninvoiced work, or add items manually."}
                     </p>
                   ) : (
                     <div className="space-y-2">

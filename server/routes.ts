@@ -4716,6 +4716,17 @@ export async function registerRoutes(
         createdLineItems.push(lineItem);
       }
 
+      const visitIdsToMark = createdLineItems
+        .map((li: any) => li.visitId)
+        .filter((vid: string | null | undefined) => !!vid);
+      if (visitIdsToMark.length > 0) {
+        for (const vid of visitIdsToMark) {
+          try {
+            await storage.updateVisit(vid, companyId, { invoiceId: invoice.id } as any);
+          } catch (_e) {}
+        }
+      }
+
       qboAutoSync(companyId, invoice.id, "invoice");
       const { userId: auditUserId } = await getCompanyContext(req);
       auditLog(companyId, auditUserId, "invoice", invoice.id, "create", { new: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, contactId: invoice.contactId } }, req.ip || undefined);
