@@ -474,6 +474,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const [crewSize, setCrewSize] = useState(quote?.crewSize || 1);
   const [siteSqft, setSiteSqft] = useState(quote?.siteSqft || 0);
   const [isInitialClean, setIsInitialClean] = useState(false);
+  const [markupPct, setMarkupPct] = useState(20);
   const [frequency, setFrequency] = useState(quote?.frequency || (quoteType === "residential" ? "weekly" : "1x_weekly"));
   const [isFirstTime, setIsFirstTime] = useState(quote?.isFirstTime !== false);
   const [notes, setNotes] = useState(quote?.notes || "");
@@ -555,8 +556,8 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     if (quoteType === "residential") {
       return `type=residential&dogCount=${dogCount}&yardSize=${yardSize}&frequency=${frequency}&isFirstTime=${isFirstTime}`;
     }
-    return `type=commercial&stationCount=${stationCount}&commonAreaMinutes=${commonAreaMinutes}&frequency=${frequency}&timePerStation=${timePerStation}&mileageDistance=${mileageDistance}&dumpFee=${dumpFee}&crewSize=${crewSize}&siteSqft=${siteSqft}&isInitialClean=${isInitialClean}`;
-  }, [quoteType, dogCount, yardSize, stationCount, commonAreaMinutes, frequency, isFirstTime, timePerStation, mileageDistance, dumpFee, crewSize, siteSqft, isInitialClean]);
+    return `type=commercial&stationCount=${stationCount}&commonAreaMinutes=${commonAreaMinutes}&frequency=${frequency}&timePerStation=${timePerStation}&mileageDistance=${mileageDistance}&dumpFee=${dumpFee}&crewSize=${crewSize}&siteSqft=${siteSqft}&isInitialClean=${isInitialClean}&markupPct=${markupPct}`;
+  }, [quoteType, dogCount, yardSize, stationCount, commonAreaMinutes, frequency, isFirstTime, timePerStation, mileageDistance, dumpFee, crewSize, siteSqft, isInitialClean, markupPct]);
 
   const { data: calculatedPricing } = useQuery<TierPricing>({
     queryKey: ["/api/quotes/calculate-pricing", pricingParams],
@@ -957,48 +958,62 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
                 </div>
               </div>
 
-              <div className="flex items-end gap-4 pb-1">
-                <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="flex items-center gap-2 pt-5">
                   <Switch data-testid="switch-initial-clean" checked={isInitialClean} onCheckedChange={setIsInitialClean} />
                   <Label className="text-sm">Initial deep clean</Label>
+                </div>
+                <div>
+                  <Label>Markup %</Label>
+                  <Input data-testid="input-markup-pct" type="number" min={0} max={200} step="1" value={markupPct} onChange={e => setMarkupPct(parseFloat(e.target.value) || 0)} />
                 </div>
               </div>
 
               {livePricing?.breakdown && (
-                <div className="rounded-lg border bg-slate-50 p-4 space-y-2">
-                  <h4 className="font-semibold text-sm text-slate-700">Cost Breakdown (per visit)</h4>
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">{stationCount} stations × ${livePricing.breakdown.stationRate?.toFixed(2)}</span>
-                      <span className="font-medium">${livePricing.breakdown.stationCost?.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Labor ({livePricing.breakdown.totalLaborHours} hrs × {crewSize} crew)</span>
-                      <span className="font-medium">${livePricing.breakdown.laborCost?.toFixed(2)}</span>
-                    </div>
-                    {mileageDistance > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Mileage ({mileageDistance} mi)</span>
-                        <span className="font-medium">${livePricing.breakdown.mileageCost?.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {dumpFee > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Dump fee</span>
-                        <span className="font-medium">${dumpFee.toFixed(2)}</span>
-                      </div>
-                    )}
+                <div className="rounded-lg border bg-slate-50 dark:bg-slate-900 p-4 space-y-1 text-sm">
+                  <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Cost Breakdown (per visit)</h4>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{stationCount} stations x ${livePricing.breakdown.stationRate?.toFixed(2)}</span>
+                    <span className="font-medium">${livePricing.breakdown.stationCost?.toFixed(2)}</span>
                   </div>
-                  <div className="border-t pt-2 flex justify-between font-semibold text-sm">
-                    <span>Per Visit Total</span>
-                    <span className="text-green-700">${livePricing.essential.toFixed(2)}</span>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Labor ({livePricing.breakdown.totalLaborHours} hrs x {crewSize} crew @ ${livePricing.breakdown.crewRate?.toFixed(2)}/hr)</span>
+                    <span className="font-medium">${livePricing.breakdown.laborCost?.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
+                  {mileageDistance > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Mileage ({mileageDistance} mi x ${livePricing.breakdown.mileageRate?.toFixed(3)})</span>
+                      <span className="font-medium">${livePricing.breakdown.mileageCost?.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {dumpFee > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Dump fee</span>
+                      <span className="font-medium">${dumpFee.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  <div className="border-t border-slate-300 dark:border-slate-600 pt-2 mt-2 flex justify-between font-semibold">
+                    <span>Subtotal (Your Costs)</span>
+                    <span>${livePricing.breakdown.costSubtotal?.toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Markup ({markupPct}%)</span>
+                    <span>+ ${livePricing.breakdown.markupFee?.toFixed(2)}</span>
+                  </div>
+
+                  <div className="border-t border-slate-400 dark:border-slate-500 pt-2 mt-1 flex justify-between font-bold text-base">
+                    <span>Grand Total (per visit)</span>
+                    <span className="text-green-700 dark:text-green-400">${livePricing.essential.toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-xs text-muted-foreground pt-1">
                     <span>Est. Monthly ({livePricing.breakdown.visitsPerMonth} visits)</span>
                     <span>${livePricing.breakdown.monthlyEstimate?.toFixed(2)}</span>
                   </div>
                   {isInitialClean && livePricing.initialCleanFee > 0 && (
-                    <div className="flex justify-between text-xs text-amber-700 font-medium">
+                    <div className="flex justify-between text-xs text-amber-700 dark:text-amber-400 font-medium">
                       <span>Initial Deep Clean (one-time)</span>
                       <span>${livePricing.initialCleanFee.toFixed(2)}</span>
                     </div>

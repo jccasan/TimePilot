@@ -7987,6 +7987,7 @@ export async function registerRoutes(
           crewSize: parseInt(req.query.crewSize as string) || 1,
           siteSqft: parseInt(req.query.siteSqft as string) || 0,
           isInitialClean: req.query.isInitialClean === "true",
+          markupPct: Number.isFinite(parseFloat(req.query.markupPct as string)) ? parseFloat(req.query.markupPct as string) : 20,
         };
         const pricing = calculateQuotePricing(input, companyQuoteDefaults);
         res.json(pricing);

@@ -34,6 +34,7 @@ export interface CommercialQuoteInput {
   crewSize: number;
   siteSqft: number;
   isInitialClean: boolean;
+  markupPct: number;
 }
 
 export type QuoteInput = ResidentialQuoteInput | CommercialQuoteInput;
@@ -173,7 +174,7 @@ export function calculateCommercialPricing(
 
   const dumpFee = input.dumpFee ?? d.commercialDumpFee;
 
-  let basePerVisit = stationCost + laborCost + mileageCost + dumpFee;
+  let costSubtotal = stationCost + laborCost + mileageCost + dumpFee;
 
   let visitsPerWeek = 1;
   let discountPct = 0;
@@ -192,9 +193,9 @@ export function calculateCommercialPricing(
   }
 
   if (discountPct > 0 && visitsPerWeek > 1) {
-    const firstVisitCost = basePerVisit;
-    const additionalVisitCost = basePerVisit * (1 - discountPct);
-    basePerVisit = Math.round(((firstVisitCost + additionalVisitCost * (visitsPerWeek - 1)) / visitsPerWeek) * 100) / 100;
+    const firstVisitCost = costSubtotal;
+    const additionalVisitCost = costSubtotal * (1 - discountPct);
+    costSubtotal = Math.round(((firstVisitCost + additionalVisitCost * (visitsPerWeek - 1)) / visitsPerWeek) * 100) / 100;
   }
 
   let initialCleanFee = 0;
@@ -204,7 +205,11 @@ export function calculateCommercialPricing(
     initialCleanFee = initialCleanFee * sqftMultiplier;
   }
 
-  const essential = Math.round(basePerVisit * 100) / 100;
+  const markupPct = Math.max(input.markupPct ?? 20, 0);
+  const markupFee = Math.round(costSubtotal * (markupPct / 100) * 100) / 100;
+  const basePerVisit = Math.round((costSubtotal + markupFee) * 100) / 100;
+
+  const essential = basePerVisit;
   const premiumUpcharge = input.stationCount * d.commercialPremiumStationUpcharge;
   const premium = Math.round((basePerVisit + premiumUpcharge) * 100) / 100;
   const deluxeUpcharge = input.stationCount * d.commercialDeluxeStationUpcharge;
@@ -232,6 +237,9 @@ export function calculateCommercialPricing(
     mileageRate: d.commercialMileageRate,
     mileageCost,
     dumpFee,
+    costSubtotal: Math.round(costSubtotal * 100) / 100,
+    markupPct,
+    markupFee,
     siteSqft: input.siteSqft || 0,
     frequency: input.frequency,
     frequencyLabel,
