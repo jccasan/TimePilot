@@ -491,7 +491,7 @@ export function renderCommercialProposalHtml(data: {
           </tr>
           <tr>
             <td style="padding: 8px 12px; font-weight: 600;">Waste Stations</td>
-            <td style="padding: 8px 12px;">${(breakdown.stationCount || 0) > 0 ? `${breakdown.stationCount} stations @ $${(breakdown.stationRate || 0).toFixed(2)}/station = $${(breakdown.stationCost || 0).toFixed(2)}` : 'No waste stations'}</td>
+            <td style="padding: 8px 12px;">${(breakdown.stationCount || 0) > 0 ? `${breakdown.stationCount} station${breakdown.stationCount !== 1 ? 's' : ''} maintained per visit` : 'No waste stations'}</td>
           </tr>
           ${(breakdown.stationCount || 0) > 0 ? `<tr style="background-color: #f8fafc;">
             <td style="padding: 8px 12px; font-weight: 600;">Time Per Station</td>
@@ -502,16 +502,16 @@ export function renderCommercialProposalHtml(data: {
             <td style="padding: 8px 12px;">${breakdown.commonAreaMinutes || 0} minutes</td>
           </tr>
           <tr style="background-color: #f8fafc;">
-            <td style="padding: 8px 12px; font-weight: 600;">Total Labor</td>
-            <td style="padding: 8px 12px;">${breakdown.totalLaborHours || 0} hrs × ${breakdown.crewSize || 1} crew @ $${(breakdown.crewRate || 0).toFixed(2)}/hr = $${(breakdown.laborCost || 0).toFixed(2)}</td>
+            <td style="padding: 8px 12px; font-weight: 600;">On-Site Labor</td>
+            <td style="padding: 8px 12px;">${breakdown.totalLaborHours || 0} hrs with ${breakdown.crewSize || 1}-person crew</td>
           </tr>
           ${(breakdown.mileageDistance || 0) > 0 ? `<tr>
-            <td style="padding: 8px 12px; font-weight: 600;">Mileage</td>
-            <td style="padding: 8px 12px;">${breakdown.mileageDistance} mi @ $${(breakdown.mileageRate || 0).toFixed(3)}/mi = $${(breakdown.mileageCost || 0).toFixed(2)}</td>
+            <td style="padding: 8px 12px; font-weight: 600;">Travel</td>
+            <td style="padding: 8px 12px;">Included (${breakdown.mileageDistance} mi round-trip)</td>
           </tr>` : ''}
           ${(breakdown.dumpFee || 0) > 0 ? `<tr style="background-color: #f8fafc;">
             <td style="padding: 8px 12px; font-weight: 600;">Waste Disposal</td>
-            <td style="padding: 8px 12px;">$${(breakdown.dumpFee || 0).toFixed(2)}/visit</td>
+            <td style="padding: 8px 12px;">Included</td>
           </tr>` : ''}
           ${(breakdown.siteSqft || 0) > 0 ? `<tr>
             <td style="padding: 8px 12px; font-weight: 600;">Site Area</td>
@@ -521,9 +521,13 @@ export function renderCommercialProposalHtml(data: {
             <td style="padding: 8px 12px; font-weight: 600;">Multi-Visit Discount</td>
             <td style="padding: 8px 12px; color: #1a7a4c; font-weight: 600;">${breakdown.densityDiscount} off additional visits</td>
           </tr>` : ''}
-          ${(breakdown.initialCleanFee || 0) > 0 ? `<tr style="background-color: #fef3c7;">
+          <tr style="background-color: #f1f5f9;">
+            <td style="padding: 8px 12px; font-weight: 600;">Per-Visit Total</td>
+            <td style="padding: 8px 12px; font-weight: 700; color: #1a7a4c;">$${pricing.essential.toFixed(2)}</td>
+          </tr>
+          ${(pricing.initialCleanFee || 0) > 0 ? `<tr style="background-color: #fef3c7;">
             <td style="padding: 8px 12px; font-weight: 600;">Initial Deep Clean (one-time)</td>
-            <td style="padding: 8px 12px; font-weight: 600;">$${(breakdown.initialCleanFee || 0).toFixed(2)}</td>
+            <td style="padding: 8px 12px; font-weight: 600;">$${pricing.initialCleanFee.toFixed(2)}</td>
           </tr>` : ''}
           <tr style="background-color: #f1f5f9;">
             <td style="padding: 8px 12px; font-weight: 600;">Est. Monthly Investment</td>

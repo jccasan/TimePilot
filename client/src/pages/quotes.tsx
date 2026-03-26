@@ -534,6 +534,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const [siteSqft, setSiteSqft] = useState(quote?.siteSqft || 0);
   const [isInitialClean, setIsInitialClean] = useState(false);
   const [markupPct, setMarkupPct] = useState(20);
+  const [overrideInitialClean, setOverrideInitialClean] = useState("");
   const [frequency, setFrequency] = useState(quote?.frequency || (quoteType === "residential" ? "weekly" : "1x_weekly"));
   const [isFirstTime, setIsFirstTime] = useState(quote?.isFirstTime !== false);
   const [notes, setNotes] = useState(quote?.notes || "");
@@ -586,6 +587,8 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setNotes(quote.notes || "");
       setInternalNotes(quote.internalNotes || "");
       setQuoteImages((quote.images as { url: string; caption: string; sqft?: number | null }[]) || []);
+      const savedInitialClean = parseFloat(String(quote.initialCleanFee || 0));
+      setOverrideInitialClean(savedInitialClean > 0 ? savedInitialClean.toFixed(2) : "");
       if (quote.essentialFeatures) {
         setCustomEssentialFeatures(quote.essentialFeatures as string[]);
         setCustomPremiumFeatures(quote.premiumFeatures as string[]);
@@ -624,6 +627,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setCustomDeluxeFeatures([]);
       setFeaturesCustomized(false);
       setEditingFeatures(false);
+      setOverrideInitialClean("");
     }
   }, [quote, open]);
 
@@ -787,7 +791,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       essentialPrice: manualOverride && overrideEssential ? overrideEssential : p.essential.toFixed(2),
       premiumPrice: manualOverride && overridePremium ? overridePremium : p.premium.toFixed(2),
       deluxePrice: manualOverride && overrideDeluxe ? overrideDeluxe : p.deluxe.toFixed(2),
-      initialCleanFee: p.initialCleanFee.toFixed(2),
+      initialCleanFee: overrideInitialClean || p.initialCleanFee.toFixed(2),
       essentialFeatures: customEssentialFeatures.length > 0 ? customEssentialFeatures : p.essentialFeatures,
       premiumFeatures: customPremiumFeatures.length > 0 ? customPremiumFeatures : p.premiumFeatures,
       deluxeFeatures: customDeluxeFeatures.length > 0 ? customDeluxeFeatures : p.deluxeFeatures,
@@ -1105,10 +1109,18 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
                     <span>Est. Monthly ({livePricing.breakdown.visitsPerMonth} visits)</span>
                     <span>${livePricing.breakdown.monthlyEstimate?.toFixed(2)}</span>
                   </div>
-                  {isInitialClean && livePricing.initialCleanFee > 0 && (
-                    <div className="flex justify-between text-xs text-amber-700 dark:text-amber-400 font-medium">
+                  {isInitialClean && (
+                    <div className="flex justify-between items-center text-xs text-amber-700 dark:text-amber-400 font-medium">
                       <span>Initial Deep Clean (one-time)</span>
-                      <span>${livePricing.initialCleanFee.toFixed(2)}</span>
+                      <Input
+                        data-testid="input-override-initial-clean"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="w-24 h-6 text-xs text-right"
+                        value={overrideInitialClean || livePricing.initialCleanFee.toFixed(2)}
+                        onChange={e => setOverrideInitialClean(e.target.value)}
+                      />
                     </div>
                   )}
                 </div>
@@ -1250,11 +1262,18 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
                 </div>
               )}
 
-              {livePricing.initialCleanFee > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p className="text-sm text-amber-800">
-                    <strong>Initial Clean Fee:</strong> ${livePricing.initialCleanFee.toFixed(2)} (one-time)
-                  </p>
+              {(livePricing.initialCleanFee > 0 || isFirstTime || isInitialClean) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+                  <span className="text-sm text-amber-800 font-semibold">Initial Clean Fee (one-time)</span>
+                  <Input
+                    data-testid="input-override-initial-clean-preview"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="w-28 h-7 text-sm text-right"
+                    value={overrideInitialClean || livePricing.initialCleanFee.toFixed(2)}
+                    onChange={e => setOverrideInitialClean(e.target.value)}
+                  />
                 </div>
               )}
             </div>

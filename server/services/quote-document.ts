@@ -176,7 +176,7 @@ export async function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
 
       const scopeItems: [string, string][] = [];
       if (bd.stationCount > 0) {
-        scopeItems.push(["Waste Stations", `${bd.stationCount} stations @ $${(bd.stationRate || 0).toFixed(2)}/station`]);
+        scopeItems.push(["Waste Stations", `${bd.stationCount} station${bd.stationCount !== 1 ? 's' : ''} maintained per visit`]);
       }
       if (bd.commonAreaMinutes) {
         scopeItems.push(["Common Area", `${bd.commonAreaMinutes} min`]);
@@ -185,13 +185,13 @@ export async function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
         scopeItems.push(["Crew Size", `${bd.crewSize} person(s)`]);
       }
       if (bd.totalLaborHours) {
-        scopeItems.push(["Labor Per Visit", `${bd.totalLaborHours} hrs`]);
+        scopeItems.push(["On-Site Labor", `${bd.totalLaborHours} hrs with ${bd.crewSize || 1}-person crew`]);
       }
       if (bd.mileageCost && bd.mileageCost > 0) {
-        scopeItems.push(["Mileage", `${bd.mileageDistance || 0} mi @ $${(bd.mileageRate || 0).toFixed(3)}/mi`]);
+        scopeItems.push(["Travel", `Included (${bd.mileageDistance || 0} mi round-trip)`]);
       }
       if (bd.dumpFee && bd.dumpFee > 0) {
-        scopeItems.push(["Dump Fee", `$${Number(bd.dumpFee).toFixed(2)}`]);
+        scopeItems.push(["Waste Disposal", `Included`]);
       }
 
       for (const [label, val] of scopeItems) {
@@ -390,12 +390,20 @@ export async function generateQuoteDocx(data: QuoteDocData): Promise<Buffer> {
       spacing: { before: 300, after: 150 },
     }));
     const items: string[] = [];
-    if (bd.stationCount > 0) items.push(`Waste Stations: ${bd.stationCount} @ $${(bd.stationRate || 0).toFixed(2)}/station`);
+    if (bd.stationCount > 0) {
+      items.push(`Waste Stations: ${bd.stationCount} station${bd.stationCount !== 1 ? 's' : ''} maintained per visit`);
+    }
     if (bd.commonAreaMinutes) items.push(`Common Area: ${bd.commonAreaMinutes} min`);
     if (bd.crewSize) items.push(`Crew Size: ${bd.crewSize} person(s)`);
-    if (bd.totalLaborHours) items.push(`Labor Per Visit: ${bd.totalLaborHours} hrs`);
-    if (bd.mileageCost > 0) items.push(`Mileage: ${bd.mileageDistance || 0} mi`);
-    if (bd.dumpFee > 0) items.push(`Dump Fee: $${Number(bd.dumpFee).toFixed(2)}`);
+    if (bd.totalLaborHours) {
+      items.push(`On-Site Labor: ${bd.totalLaborHours} hrs with ${bd.crewSize || 1}-person crew`);
+    }
+    if (bd.mileageCost > 0) {
+      items.push(`Travel: Included (${bd.mileageDistance || 0} mi round-trip)`);
+    }
+    if (bd.dumpFee > 0) {
+      items.push(`Waste Disposal: Included`);
+    }
     for (const item of items) {
       scopeParagraphs.push(new Paragraph({
         children: [new TextRun({ text: `• ${item}`, size: 20, color: "475569" })],
