@@ -6909,19 +6909,39 @@ export async function registerRoutes(
           }
 
           const baseUrl = getBaseUrl(req);
-          const checkoutResult = await createCheckoutSession({
-            customerId: stripeCustomerId,
-            invoiceId: invoice.id,
-            invoiceNumber: invoice.invoiceNumber,
-            amount: parseFloat(invoice.total),
-            successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
-            cancelUrl: `${baseUrl}/portal`,
-            stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
-            tenantId: companyId,
-          });
-          paymentUrl = checkoutResult.url;
-        } catch (stripeErr) {
-          console.log("[send-email] Could not generate Stripe checkout URL, sending without payment link:", stripeErr);
+          const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+          try {
+            const checkoutResult = await createCheckoutSession({
+              customerId: stripeCustomerId,
+              invoiceId: invoice.id,
+              invoiceNumber: invoice.invoiceNumber,
+              amount: parseFloat(invoice.total),
+              successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
+              cancelUrl: `${baseUrl}/portal`,
+              stripeConnectAccountId: connectAccountId,
+              tenantId: companyId,
+            });
+            paymentUrl = checkoutResult.url;
+          } catch (connectErr: any) {
+            if (connectAccountId) {
+              console.log(`[send-email] Stripe Connect checkout failed (${connectErr?.message}), retrying without Connect...`);
+              const fallbackResult = await createCheckoutSession({
+                customerId: stripeCustomerId,
+                invoiceId: invoice.id,
+                invoiceNumber: invoice.invoiceNumber,
+                amount: parseFloat(invoice.total),
+                successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
+                cancelUrl: `${baseUrl}/portal`,
+                stripeConnectAccountId: null,
+                tenantId: companyId,
+              });
+              paymentUrl = fallbackResult.url;
+            } else {
+              throw connectErr;
+            }
+          }
+        } catch (stripeErr: any) {
+          console.error("[send-email] Could not generate Stripe checkout URL, sending without payment link:", stripeErr?.message || stripeErr);
         }
       }
 
@@ -6932,12 +6952,14 @@ export async function registerRoutes(
       const paidNum = invoice.paidAt ? parseFloat(invoice.total) : 0;
       const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : "";
 
+      const fromAddress = company?.email || "jeremy@scoopilot.com";
+
       const invoiceData = {
         business: {
           name: company?.name || "",
           address: company?.address || "",
           phone: company?.phone || "",
-          email: company?.email || "",
+          email: "",
           website: "",
           logo: logoUrl,
         },
@@ -6981,7 +7003,7 @@ export async function registerRoutes(
           tax_rate: taxRateNum,
           paid: paidNum,
         },
-        visits: [] as { date: string; time: string; status: string }[],
+        visits: undefined as { date: string; time: string; status: string }[] | undefined,
         notes: "",
         payment_instructions: "",
         thank_you: "Thank you for your business!",
@@ -7002,8 +7024,6 @@ export async function registerRoutes(
 
       const subject = `Invoice ${invoice.invoiceNumber} from ${company?.name || "ScooPilot"}`;
       const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}\n\nThank you for your business!`;
-
-      const fromAddress = company?.email || "jeremy@scoopilot.com";
 
       const msg = await storage.createMessage({
         companyId,
