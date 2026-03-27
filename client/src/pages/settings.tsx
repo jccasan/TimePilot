@@ -69,6 +69,7 @@ type Company = {
   telnyxPhoneNumber: string | null;
   telnyxMessagingProfileId: string | null;
   telnyxApiKeySet?: boolean;
+  venmoHandle: string | null;
 };
 
 type TeamMember = {
@@ -519,6 +520,77 @@ function StripeConnectSection() {
             )}
           </>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function VenmoSection({ company }: { company: Company | null | undefined }) {
+  const { toast } = useToast();
+  const [venmoHandle, setVenmoHandle] = useState(company?.venmoHandle || "");
+
+  useEffect(() => {
+    setVenmoHandle(company?.venmoHandle || "");
+  }, [company?.venmoHandle]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const cleanHandle = venmoHandle.trim().replace(/^@+/, "");
+      const res = await apiRequest("PATCH", "/api/company", { venmoHandle: cleanHandle });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save Venmo handle");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Venmo handle saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Card data-testid="card-venmo">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CreditCard className="h-5 w-5" />
+          Payment Options
+        </CardTitle>
+        <CardDescription>Add your Venmo handle so customers can pay invoices via Venmo</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="venmo-handle">Venmo Handle</Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">@</span>
+                <Input
+                  id="venmo-handle"
+                  value={venmoHandle.replace(/^@+/, "")}
+                  onChange={(e) => setVenmoHandle(e.target.value.replace(/^@+/, ""))}
+                  placeholder="your-venmo-handle"
+                  className="pl-7"
+                  data-testid="input-venmo-handle"
+                />
+              </div>
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+                data-testid="button-save-venmo"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {saveMutation.isPending ? "Saving..." : "Save"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              When set, customers will see a Venmo payment option on invoices and in emails.
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -1101,6 +1173,7 @@ function AuditLogSection() {
             No audit log entries found.
           </p>
         ) : (
+          <div className="max-h-96 overflow-y-auto rounded-md border">
           <Table data-testid="table-audit-log">
             <TableHeader>
               <TableRow>
@@ -1169,6 +1242,7 @@ function AuditLogSection() {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -2583,9 +2657,6 @@ export default function Settings() {
 
           <ReminderSettingsSection company={company} toast={toast} />
 
-        </div>
-
-        <div className="space-y-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -2615,7 +2686,7 @@ export default function Settings() {
                   <Skeleton className="h-14 w-full" />
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
                   {team?.map((member) => {
                     const RoleIcon = roleIcons[member.role] || Wrench;
                     const isCurrentUser = member.id === currentUser?.id;
@@ -2679,44 +2750,6 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Subscription</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loadingCompany ? (
-                <Skeleton className="h-10 w-full" />
-              ) : (
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div>
-                    <p className="font-semibold" data-testid="text-settings-tier">{tierInfo?.name || "Unknown"}</p>
-                    <p className="text-sm text-muted-foreground">${tierInfo?.price?.toFixed(2) || "0.00"}/month</p>
-                  </div>
-                  <Badge
-                    variant={company?.subscriptionStatus === "active" ? "default" : "secondary"}
-                    data-testid="badge-subscription-status"
-                  >
-                    {company?.subscriptionStatus || "unknown"}
-                  </Badge>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <SmsProviderSection company={company} />
-
-          <StripeConnectSection />
-
-          <QuickBooksSection />
-
-          <VoiceApiDocsSection />
-
-          <SignupWidgetSection company={company ? { slug: company.slug, name: company.name } : null} />
-
-          <WebhookLeadSection />
-
-          <SmsQuoteTemplateSection company={company ?? null} />
 
           <Card>
             <CardHeader>
@@ -2850,6 +2883,49 @@ export default function Settings() {
             </CardContent>
           </Card>
 
+        </div>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Subscription</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingCompany ? (
+                <Skeleton className="h-10 w-full" />
+              ) : (
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <p className="font-semibold" data-testid="text-settings-tier">{tierInfo?.name || "Unknown"}</p>
+                    <p className="text-sm text-muted-foreground">${tierInfo?.price?.toFixed(2) || "0.00"}/month</p>
+                  </div>
+                  <Badge
+                    variant={company?.subscriptionStatus === "active" ? "default" : "secondary"}
+                    data-testid="badge-subscription-status"
+                  >
+                    {company?.subscriptionStatus || "unknown"}
+                  </Badge>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <SmsProviderSection company={company} />
+
+          <StripeConnectSection />
+
+          <VenmoSection company={company} />
+
+          <QuickBooksSection />
+
+          <VoiceApiDocsSection />
+
+          <SignupWidgetSection company={company ? { slug: company.slug, name: company.name } : null} />
+
+          <WebhookLeadSection />
+
+          <SmsQuoteTemplateSection company={company ?? null} />
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -2892,7 +2968,7 @@ export default function Settings() {
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-1">
                     {leadSources.map((source) => (
                       <Badge key={source.id} variant="secondary" className="flex items-center gap-1 pr-1" data-testid={`badge-lead-source-${source.id}`}>
                         {source.name}
