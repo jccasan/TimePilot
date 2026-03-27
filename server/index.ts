@@ -264,6 +264,7 @@ async function ensureCompanyColumns() {
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS telnyx_messaging_profile_id VARCHAR(255);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS retell_agent_id VARCHAR(255);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS retell_knowledge_base_id VARCHAR(255);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS venmo_handle VARCHAR(100);
       ALTER TABLE routes ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false;
     `);
     await pool.query(`
