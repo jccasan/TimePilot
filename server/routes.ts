@@ -7029,12 +7029,33 @@ export async function registerRoutes(
 
       const fromAddress = company?.email || "jeremy@scoopilot.com";
 
+      const emailFormattedDueDate = invoice.dueDate
+        ? new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+        : "";
+
+      const emailBillingAddr = contact.streetAddress ? {
+        line1: contact.streetAddress,
+        line2: contact.address2 || "",
+        city: contact.city || "",
+        state: contact.state || "",
+        zip: contact.zipCode || "",
+      } : null;
+      const emailServiceAddr = serviceAddr ? {
+        line1: serviceAddr.streetAddress || "",
+        line2: "",
+        city: serviceAddr.city || "",
+        state: serviceAddr.state || "",
+        zip: serviceAddr.zipCode || "",
+      } : null;
+      const emailBillingLine = emailBillingAddr ? `${emailBillingAddr.line1} ${emailBillingAddr.city} ${emailBillingAddr.state} ${emailBillingAddr.zip}`.trim() : "";
+      const emailServiceLine = emailServiceAddr ? `${emailServiceAddr.line1} ${emailServiceAddr.city} ${emailServiceAddr.state} ${emailServiceAddr.zip}`.trim() : "";
+      const emailShowServiceAddr = emailServiceAddr && emailServiceLine && emailServiceLine !== emailBillingLine;
+
       const invoiceData = {
         business: {
           name: company?.name || "",
           address: company?.address || "",
           phone: company?.phone || "",
-          email: "",
           website: "",
           logo: logoUrl,
         },
@@ -7042,29 +7063,16 @@ export async function registerRoutes(
           number: invoice.invoiceNumber,
           status: invoice.status || "pending",
           issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
-          due_date: invoice.dueDate,
+          due_date: emailFormattedDueDate,
           terms: "Net 30",
           service_period: "",
         },
         customer: {
           name: `${contact.firstName} ${contact.lastName || ""}`.trim(),
-          email: contact.email || "",
-          phone: contact.phone || "",
         },
-        billing_address: contact.streetAddress ? {
-          line1: contact.streetAddress,
-          line2: contact.address2 || "",
-          city: contact.city || "",
-          state: contact.state || "",
-          zip: contact.zipCode || "",
-        } : null,
-        service_address: serviceAddr ? {
-          line1: serviceAddr.streetAddress || "",
-          line2: "",
-          city: serviceAddr.city || "",
-          state: serviceAddr.state || "",
-          zip: serviceAddr.zipCode || "",
-        } : null,
+        billing_address: emailBillingAddr,
+        service_address: emailServiceAddr,
+        show_service_address: emailShowServiceAddr ? emailServiceAddr : null,
         line_items: lineItems.map(li => ({
           description: li.description,
           details: "",
@@ -7082,6 +7090,7 @@ export async function registerRoutes(
         notes: "",
         payment_instructions: "",
         thank_you: "Thank you for your business!",
+        hasFooter: true,
         paymentUrl: paymentUrl || "",
         venmoHandle: company?.venmoHandle || "",
         venmoHandleOnly: !paymentUrl && !!company?.venmoHandle ? company.venmoHandle : "",
@@ -10245,12 +10254,33 @@ export async function registerRoutes(
       const paidNum = invoice.paidAt ? parseFloat(invoice.total) : 0;
 
       const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : "";
+      const formattedDueDate = invoice.dueDate
+        ? new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+        : "";
+
+      const billingAddr = contact.address ? {
+        line1: contact.address,
+        line2: "",
+        city: "",
+        state: "",
+        zip: "",
+      } : null;
+      const serviceAddrObj = serviceAddr ? {
+        line1: serviceAddr.street || "",
+        line2: "",
+        city: serviceAddr.city || "",
+        state: serviceAddr.state || "",
+        zip: serviceAddr.zip || "",
+      } : null;
+      const billingLine = billingAddr ? `${billingAddr.line1} ${billingAddr.city} ${billingAddr.state} ${billingAddr.zip}`.trim() : "";
+      const serviceLine = serviceAddrObj ? `${serviceAddrObj.line1} ${serviceAddrObj.city} ${serviceAddrObj.state} ${serviceAddrObj.zip}`.trim() : "";
+      const showServiceAddress = serviceAddrObj && serviceLine && serviceLine !== billingLine;
+
       const invoiceData: any = {
         business: {
           name: company?.name || "",
           address: company?.address || "",
           phone: company?.phone || "",
-          email: company?.email || "",
           website: "",
           logo: logoUrl,
         },
@@ -10258,29 +10288,16 @@ export async function registerRoutes(
           number: invoice.invoiceNumber,
           status: statusRaw,
           issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
-          due_date: invoice.dueDate,
+          due_date: formattedDueDate,
           terms: "Net 30",
           service_period: "",
         },
         customer: {
           name: `${contact.firstName} ${contact.lastName || ""}`.trim(),
-          email: contact.email || "",
-          phone: contact.phone || "",
         },
-        billing_address: contact.address ? {
-          line1: contact.address,
-          line2: "",
-          city: "",
-          state: "",
-          zip: "",
-        } : null,
-        service_address: serviceAddr ? {
-          line1: serviceAddr.street || "",
-          line2: "",
-          city: serviceAddr.city || "",
-          state: serviceAddr.state || "",
-          zip: serviceAddr.zip || "",
-        } : null,
+        billing_address: billingAddr,
+        service_address: serviceAddrObj,
+        show_service_address: showServiceAddress ? serviceAddrObj : null,
         line_items: lineItems.map((li: any) => ({
           description: li.description,
           details: "",
@@ -10298,6 +10315,7 @@ export async function registerRoutes(
         notes: "",
         payment_instructions: "",
         thank_you: "Thank you for your business!",
+        hasFooter: true,
         venmoHandle: company?.venmoHandle || "",
         venmoHandleOnly: !!company?.venmoHandle ? company.venmoHandle : "",
       };
