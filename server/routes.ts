@@ -8377,6 +8377,8 @@ export async function registerRoutes(
             to: quote.contactEmail,
             subject: `${company.name} — Service ${quote.type === "commercial" ? "Proposal" : "Quote"} #${quote.quoteNumber}`,
             html,
+            senderName: company.name,
+            replyTo: company.email || undefined,
           });
           results.sent.push("email");
         } catch (emailErr: any) {
@@ -8644,6 +8646,8 @@ export async function registerRoutes(
       sendEmail({
         to: foundContact.email!,
         subject: `Reset your ${companyName} portal password`,
+        senderName: company?.name || undefined,
+        replyTo: company?.email || undefined,
         text: `Hi ${foundContact.firstName},\n\nWe received a request to reset your portal password.\n\nClick this link to set a new password (expires in 1 hour):\n${resetLink}\n\nIf you didn't request this, you can safely ignore this email.\n\n${companyName}`,
         html: `
           <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -9123,6 +9127,8 @@ export async function registerRoutes(
         sendEmail({
           to: pendingEmailChange,
           subject: `Verify your new email address - ${companyName}`,
+          senderName: company?.name || undefined,
+          replyTo: company?.email || undefined,
           text: `Hi ${contact.firstName},\n\nYou requested to change your email address to ${pendingEmailChange}.\n\nClick this link to verify your new email (expires in 24 hours):\n${verifyLink}\n\nIf you didn't request this change, you can safely ignore this email.\n\n${companyName}`,
           html: `
             <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -9799,6 +9805,8 @@ export async function registerRoutes(
         sendEmail({
           to: contact.email,
           subject: `New Estimate from ${company?.name || "Your Service Provider"}`,
+          senderName: company?.name || undefined,
+          replyTo: company?.email || undefined,
           text: `Hi ${contact.firstName},\n\nYou have a new estimate: ${description}\nTotal: $${(totalCents / 100).toFixed(2)}\n\nLog in to your portal to approve or decline: ${portalUrl}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -9927,6 +9935,8 @@ export async function registerRoutes(
     sendEmail({
       to: contact.email,
       subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
+      senderName: company?.name || undefined,
+      replyTo: company?.email || undefined,
       text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password.\n\nThank you!`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -10026,6 +10036,8 @@ export async function registerRoutes(
       sendEmail({
         to: contact.email,
         subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
+        senderName: company?.name || undefined,
+        replyTo: company?.email || undefined,
         text: `Hi ${contact.firstName},\n\nHere is your client portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nNew Password: ${tempPassword}\n\nThank you!`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -10099,6 +10111,8 @@ export async function registerRoutes(
           sendEmail({
             to: contact.email,
             subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
+            senderName: company?.name || undefined,
+            replyTo: company?.email || undefined,
             text: `Hi ${contact.firstName},\n\nHere is your client portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nPassword: ${tempPassword}\n\nThank you!`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
