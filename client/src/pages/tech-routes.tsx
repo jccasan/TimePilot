@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { toLocalDateString } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -83,7 +84,7 @@ function getDateForDay(dayName: string): string {
   const diff = targetDayIndex - todayDayIndex;
   const target = new Date(today);
   target.setDate(today.getDate() + diff);
-  return target.toISOString().split("T")[0];
+  return toLocalDateString(target);
 }
 
 function getTodayDayName(): string {

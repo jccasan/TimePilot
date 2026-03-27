@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { toLocalDateString } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import type { Contact, Visit, Invoice, InvoiceLineItem } from "@shared/schema";
 import {
@@ -53,8 +54,8 @@ function getMonthRange(monthsAgo: number): { start: string; end: string; label: 
   d.setMonth(d.getMonth() - monthsAgo);
   const year = d.getFullYear();
   const month = d.getMonth();
-  const start = new Date(year, month, 1).toISOString().split("T")[0];
-  const end = new Date(year, month + 1, 0).toISOString().split("T")[0];
+  const start = toLocalDateString(new Date(year, month, 1));
+  const end = toLocalDateString(new Date(year, month + 1, 0));
   const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   return { start, end, label };
 }
@@ -74,7 +75,7 @@ export function GenerateInvoiceDialog({
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
-    return d.toISOString().split("T")[0];
+    return toLocalDateString(d);
   });
 
   const activeContactId = initialContactId || selectedContactId;

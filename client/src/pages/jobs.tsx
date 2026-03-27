@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { toLocalDateString } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import type { ServicePlan, Contact, Property } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,7 +114,7 @@ function JobForm({
   const [frequency, setFrequency] = useState(initial?.frequency || "weekly");
   const [dayOfWeek, setDayOfWeek] = useState(initial?.dayOfWeek || "");
   const [pricePerVisit, setPricePerVisit] = useState(initial?.pricePerVisit || "");
-  const [startDate, setStartDate] = useState(initial?.startDate || new Date().toISOString().split("T")[0]);
+  const [startDate, setStartDate] = useState(initial?.startDate || toLocalDateString(new Date()));
   const [startTime, setStartTime] = useState(initial?.startTime || "");
   const [endTime, setEndTime] = useState(initial?.endTime || "");
   const [anytime, setAnytime] = useState(initial?.anytime !== false);

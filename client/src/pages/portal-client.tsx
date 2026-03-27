@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { toLocalDateString } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1387,7 +1388,7 @@ export default function PortalClient() {
                           type="date"
                           value={cleanupDate}
                           onChange={(e) => setCleanupDate(e.target.value)}
-                          min={new Date().toISOString().split("T")[0]}
+                          min={toLocalDateString(new Date())}
                           data-testid="input-cleanup-date"
                         />
                       </div>

@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { toLocalDateString } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import type { Route, ServicePlan, Contact, Property, Visit } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -924,7 +925,7 @@ export default function RoutesPage() {
     const diff = targetIdx - todayIdx;
     const target = new Date(now);
     target.setDate(now.getDate() + diff);
-    return target.toISOString().split("T")[0];
+    return toLocalDateString(target);
   }, [selectedDay]);
 
   const { data: dayVisits = [] } = useQuery<Visit[]>({
@@ -1245,7 +1246,7 @@ export default function RoutesPage() {
   const dispatchMutation = useMutation({
     mutationFn: async (routeId: string) => {
       setDispatchingRouteId(routeId);
-      const res = await apiRequest("POST", `/api/routes/${routeId}/dispatch`, { date: new Date().toISOString().split("T")[0] });
+      const res = await apiRequest("POST", `/api/routes/${routeId}/dispatch`, { date: toLocalDateString(new Date()) });
       return res.json();
     },
     onSuccess: (data: any) => {

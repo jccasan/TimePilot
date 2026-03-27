@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { toLocalDateString } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -370,7 +371,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       if (daysUntil <= 0) daysUntil += 7;
       const startDate = new Date(today);
       startDate.setDate(today.getDate() + daysUntil);
-      const startDateStr = startDate.toISOString().split("T")[0];
+      const startDateStr = toLocalDateString(startDate);
 
       const res = await apiRequest("POST", "/api/service-plans", {
         contactId: createdContactId,
@@ -435,8 +436,8 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       const endDate = new Date(today);
       endDate.setDate(today.getDate() + 28);
       const visitsRes = await apiRequest("POST", "/api/visits/generate", {
-        startDate: today.toISOString().split("T")[0],
-        endDate: endDate.toISOString().split("T")[0],
+        startDate: toLocalDateString(today),
+        endDate: toLocalDateString(endDate),
       });
       const visitsData = await visitsRes.json();
 

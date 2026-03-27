@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { toLocalDateString } from "@/lib/utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
@@ -855,7 +856,7 @@ function deriveGroup(visit: PipelineVisit): OperationalGroup {
   if (visit.status === "skipped" || visit.status === "cancelled") return "skipped";
   if (visit.status === "in_progress") return "active";
   const now = new Date();
-  const today = now.toISOString().split("T")[0];
+  const today = toLocalDateString(now);
   if (visit.scheduledDate < today) return "overdue";
   if (visit.scheduledDate === today && now.getHours() >= 17) return "overdue";
   return "remaining";

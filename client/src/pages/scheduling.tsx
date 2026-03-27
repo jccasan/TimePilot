@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { toLocalDateString } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import type { Visit, Contact, Property, Route, ServicePricingItem, ServicePlan } from "@shared/schema";
 import { Label } from "@/components/ui/label";
@@ -101,7 +102,7 @@ function getWeekStart(date: Date): Date {
 }
 
 function formatDate(date: Date): string {
-  return date.toISOString().split("T")[0];
+  return toLocalDateString(date);
 }
 
 function getMonthStart(date: Date): Date {
