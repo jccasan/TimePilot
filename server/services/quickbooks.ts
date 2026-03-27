@@ -672,8 +672,8 @@ async function updateLocalInvoiceFromQboInvoice(companyId: string, qboInvoiceId:
     const totalAmt = parseFloat(qboInvoice.TotalAmt ?? "0");
 
     if (qboInvoice.PrivateNote?.includes("Voided")) {
-      if (inv.status !== "void") {
-        await db.update(invoices).set({ status: "void" }).where(eq(invoices.id, inv.id));
+      if (inv.status !== "voided") {
+        await db.update(invoices).set({ status: "voided" }).where(eq(invoices.id, inv.id));
         await logSync(companyId, "invoice", inv.id, "inbound-void", "synced", qboInvoiceId);
       }
     } else if (balance === 0 && totalAmt > 0 && inv.status !== "paid") {
@@ -690,8 +690,8 @@ async function handleQboInvoiceVoid(companyId: string, qboInvoiceId: string): Pr
     .where(and(eq(invoices.companyId, companyId), eq(invoices.qboInvoiceId, qboInvoiceId)));
 
   for (const inv of matchingInvoices) {
-    if (inv.status !== "void") {
-      await db.update(invoices).set({ status: "void" }).where(eq(invoices.id, inv.id));
+    if (inv.status !== "voided") {
+      await db.update(invoices).set({ status: "voided" }).where(eq(invoices.id, inv.id));
       await logSync(companyId, "invoice", inv.id, "inbound-void", "synced", qboInvoiceId);
     }
   }
@@ -761,6 +761,7 @@ export async function runCdcPoll(): Promise<void> {
                   }
                 } catch (err: any) {
                   console.error(`[QBO CDC] Customer processing error:`, err.message);
+                  await logSync(company.id, "customer", String(customer.Id), "cdc-update", "error", String(customer.Id), err.message).catch(() => {});
                 }
               }
             }
@@ -784,6 +785,7 @@ export async function runCdcPoll(): Promise<void> {
                   }
                 } catch (err: any) {
                   console.error(`[QBO CDC] Invoice processing error:`, err.message);
+                  await logSync(company.id, "invoice", String(qboInv.Id), "cdc-update", "error", String(qboInv.Id), err.message).catch(() => {});
                 }
               }
             }
