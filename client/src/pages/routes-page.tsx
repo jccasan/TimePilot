@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
+import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { Route, ServicePlan, Contact, Property, Visit } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -881,6 +882,7 @@ function PurchaseCreditsDialog({ open, onOpenChange, onPurchase, isPurchasing }:
 }
 
 export default function RoutesPage() {
+  const tz = useCompanyTimezone();
   const { toast } = useToast();
   const { startTutorial, isTutorialCompleted } = useTutorialContext();
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(() => {
@@ -925,8 +927,8 @@ export default function RoutesPage() {
     const diff = targetIdx - todayIdx;
     const target = new Date(now);
     target.setDate(now.getDate() + diff);
-    return toLocalDateString(target);
-  }, [selectedDay]);
+    return toLocalDateString(target, tz);
+  }, [selectedDay, tz]);
 
   const { data: dayVisits = [] } = useQuery<Visit[]>({
     queryKey: ["/api/visits/range", selectedDayDate],
@@ -1246,7 +1248,7 @@ export default function RoutesPage() {
   const dispatchMutation = useMutation({
     mutationFn: async (routeId: string) => {
       setDispatchingRouteId(routeId);
-      const res = await apiRequest("POST", `/api/routes/${routeId}/dispatch`, { date: toLocalDateString(new Date()) });
+      const res = await apiRequest("POST", `/api/routes/${routeId}/dispatch`, { date: toLocalDateString(new Date(), tz) });
       return res.json();
     },
     onSuccess: (data: any) => {

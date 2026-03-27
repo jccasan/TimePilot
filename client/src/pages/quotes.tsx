@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
+import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { Quote, Contact, Property } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -507,6 +508,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   quote: Quote | null;
   contacts: Contact[];
 }) {
+  const tz = useCompanyTimezone();
   const { toast } = useToast();
   const isEdit = !!quote;
 
@@ -523,7 +525,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const [propertyCity, setPropertyCity] = useState("");
   const [propertyState, setPropertyState] = useState("");
   const [propertyZip, setPropertyZip] = useState("");
-  const [expiresAt, setExpiresAt] = useState(quote?.expiresAt ? toLocalDateString(new Date(quote.expiresAt)) : "");
+  const [expiresAt, setExpiresAt] = useState(quote?.expiresAt ? toLocalDateString(new Date(quote.expiresAt), tz) : "");
   const [dogCount, setDogCount] = useState(quote?.dogCount || 2);
   const [yardSize, setYardSize] = useState(quote?.yardSize || "small");
   const [stationCount, setStationCount] = useState(quote?.stationCount ?? 4);
@@ -573,7 +575,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       const stateZip = (addrParts[2] || "").split(/\s+/);
       setPropertyState(stateZip[0] || "");
       setPropertyZip(stateZip.slice(1).join(" ") || (addrParts[3] || ""));
-      setExpiresAt(quote.expiresAt ? toLocalDateString(new Date(quote.expiresAt)) : "");
+      setExpiresAt(quote.expiresAt ? toLocalDateString(new Date(quote.expiresAt), tz) : "");
       setDogCount(quote.dogCount || 2);
       setYardSize(quote.yardSize || "small");
       setStationCount(quote.stationCount ?? 4);

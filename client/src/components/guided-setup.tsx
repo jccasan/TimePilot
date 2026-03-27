@@ -7,6 +7,7 @@ import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
+import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -147,6 +148,7 @@ interface GuidedSetupProps {
 }
 
 export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
+  const tz = useCompanyTimezone();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [activeStep, setActiveStep] = useState(0);
@@ -371,7 +373,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       if (daysUntil <= 0) daysUntil += 7;
       const startDate = new Date(today);
       startDate.setDate(today.getDate() + daysUntil);
-      const startDateStr = toLocalDateString(startDate);
+      const startDateStr = toLocalDateString(startDate, tz);
 
       const res = await apiRequest("POST", "/api/service-plans", {
         contactId: createdContactId,
@@ -436,8 +438,8 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       const endDate = new Date(today);
       endDate.setDate(today.getDate() + 28);
       const visitsRes = await apiRequest("POST", "/api/visits/generate", {
-        startDate: toLocalDateString(today),
-        endDate: toLocalDateString(endDate),
+        startDate: toLocalDateString(today, tz),
+        endDate: toLocalDateString(endDate, tz),
       });
       const visitsData = await visitsRes.json();
 

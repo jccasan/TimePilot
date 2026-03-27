@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
+import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { Contact, Visit, Invoice, InvoiceLineItem } from "@shared/schema";
 import {
@@ -49,13 +50,13 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function getMonthRange(monthsAgo: number): { start: string; end: string; label: string } {
+function getMonthRange(monthsAgo: number, timezone?: string): { start: string; end: string; label: string } {
   const d = new Date();
   d.setMonth(d.getMonth() - monthsAgo);
   const year = d.getFullYear();
   const month = d.getMonth();
-  const start = toLocalDateString(new Date(year, month, 1));
-  const end = toLocalDateString(new Date(year, month + 1, 0));
+  const start = toLocalDateString(new Date(year, month, 1), timezone);
+  const end = toLocalDateString(new Date(year, month + 1, 0), timezone);
   const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   return { start, end, label };
 }
@@ -66,6 +67,7 @@ export function GenerateInvoiceDialog({
   contactId: initialContactId,
   showContactPicker = false,
 }: GenerateInvoiceDialogProps) {
+  const tz = useCompanyTimezone();
   const { toast } = useToast();
   const [selectedContactId, setSelectedContactId] = useState(initialContactId || "");
   const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
@@ -75,7 +77,7 @@ export function GenerateInvoiceDialog({
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
-    return toLocalDateString(d);
+    return toLocalDateString(d, tz);
   });
 
   const activeContactId = initialContactId || selectedContactId;
@@ -107,7 +109,7 @@ export function GenerateInvoiceDialog({
     } else if (dateFilter !== "all") {
       const monthsAgo = parseInt(dateFilter);
       if (!isNaN(monthsAgo)) {
-        const range = getMonthRange(monthsAgo);
+        const range = getMonthRange(monthsAgo, tz);
         rangeStart = range.start;
         rangeEnd = range.end;
       }
@@ -250,13 +252,13 @@ export function GenerateInvoiceDialog({
                 All
               </Button>
               <Button variant={dateFilter === "0" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("0"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-this-month">
-                {getMonthRange(0).label}
+                {getMonthRange(0, tz).label}
               </Button>
               <Button variant={dateFilter === "1" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("1"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-last-month">
-                {getMonthRange(1).label}
+                {getMonthRange(1, tz).label}
               </Button>
               <Button variant={dateFilter === "2" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("2"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-2-months">
-                {getMonthRange(2).label}
+                {getMonthRange(2, tz).label}
               </Button>
               <Button variant={dateFilter === "custom" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("custom"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-custom">
                 Custom

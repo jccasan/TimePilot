@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toLocalDateString } from "@/lib/utils";
+import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -328,6 +329,7 @@ function SectionHeader({ title, description, action }: { title: string; descript
 }
 
 export default function PortalClient() {
+  const tz = useCompanyTimezone();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { portalFetch, portalDownload, token } = usePortalApi();
@@ -1388,7 +1390,7 @@ export default function PortalClient() {
                           type="date"
                           value={cleanupDate}
                           onChange={(e) => setCleanupDate(e.target.value)}
-                          min={toLocalDateString(new Date())}
+                          min={toLocalDateString(new Date(), tz)}
                           data-testid="input-cleanup-date"
                         />
                       </div>

@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
+import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, Route, ActivityLog, Invoice } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1651,6 +1652,7 @@ function InlinePriceSuggestion({
 }
 
 function ServicePlansCard({ contactId, contact, properties }: { contactId: string; contact: Contact; properties: Property[] }) {
+  const tz = useCompanyTimezone();
   const { toast } = useToast();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<ServicePlan | null>(null);
@@ -1703,7 +1705,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       jobType: "recurring",
       anytime: true,
       pricePerVisit: "",
-      startDate: toLocalDateString(new Date()),
+      startDate: toLocalDateString(new Date(), tz),
       routeId: "",
     },
   });
@@ -1717,7 +1719,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       jobType: "recurring",
       anytime: true,
       pricePerVisit: "",
-      startDate: toLocalDateString(new Date()),
+      startDate: toLocalDateString(new Date(), tz),
       routeId: "",
       isActive: true,
     },
@@ -2167,7 +2169,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                   <Button type="button" size="sm" variant={endMode === "count" ? "default" : "outline"} onClick={() => { form.setValue("endsAfterCount", form.getValues("endsAfterCount") || 12); form.setValue("endsAfterUnit", form.getValues("endsAfterUnit") || "months"); form.setValue("endDate", ""); }} data-testid="button-plan-end-count">
                     After Count
                   </Button>
-                  <Button type="button" size="sm" variant={endMode === "date" ? "default" : "outline"} onClick={() => { form.setValue("endsAfterCount", undefined); form.setValue("endsAfterUnit", undefined); form.setValue("endDate", form.getValues("endDate") || toLocalDateString(new Date())); }} data-testid="button-plan-end-date">
+                  <Button type="button" size="sm" variant={endMode === "date" ? "default" : "outline"} onClick={() => { form.setValue("endsAfterCount", undefined); form.setValue("endsAfterUnit", undefined); form.setValue("endDate", form.getValues("endDate") || toLocalDateString(new Date(), tz)); }} data-testid="button-plan-end-date">
                     On Date
                   </Button>
                 </div>

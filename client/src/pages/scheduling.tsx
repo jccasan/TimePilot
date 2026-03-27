@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
+import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { Visit, Contact, Property, Route, ServicePricingItem, ServicePlan } from "@shared/schema";
 import { Label } from "@/components/ui/label";
@@ -101,8 +102,8 @@ function getWeekStart(date: Date): Date {
   return d;
 }
 
-function formatDate(date: Date): string {
-  return toLocalDateString(date);
+function formatDate(date: Date, timezone?: string): string {
+  return toLocalDateString(date, timezone);
 }
 
 function getMonthStart(date: Date): Date {
@@ -139,6 +140,7 @@ const servicePlanSchema = z.object({
 type ServicePlanFormValues = z.infer<typeof servicePlanSchema>;
 
 export default function Scheduling() {
+  const tz = useCompanyTimezone();
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -160,8 +162,8 @@ export default function Scheduling() {
     }
   }, [viewMode, currentDate]);
 
-  const startStr = formatDate(dateRange.start);
-  const endStr = formatDate(dateRange.end);
+  const startStr = formatDate(dateRange.start, tz);
+  const endStr = formatDate(dateRange.end, tz);
 
   const { data: visits, isLoading } = useQuery<Visit[]>({
     queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`],
@@ -192,7 +194,7 @@ export default function Scheduling() {
     resolver: zodResolver(servicePlanSchema),
     defaultValues: {
       contactId: "", propertyId: "", frequency: "weekly", dayOfWeek: "monday",
-      pricePerVisit: "", startDate: formatDate(new Date()), routeId: "",
+      pricePerVisit: "", startDate: formatDate(new Date(), tz), routeId: "",
     },
   });
 
@@ -392,7 +394,7 @@ export default function Scheduling() {
     });
   }, [viewMode, dateRange.start]);
 
-  const todayStr = formatDate(new Date());
+  const todayStr = formatDate(new Date(), tz);
   const currentMonth = currentDate.getMonth();
 
   return (
@@ -561,7 +563,7 @@ export default function Scheduling() {
           {viewMode === "day" && (
             <DayView
               date={currentDate}
-              visits={visitsByDate[formatDate(currentDate)] || []}
+              visits={visitsByDate[formatDate(currentDate, tz)] || []}
               contacts={contacts}
               properties={properties}
               routes={routes}
@@ -582,7 +584,7 @@ export default function Scheduling() {
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
                 {weekDays.map((day, i) => {
-                  const dateKey = formatDate(day);
+                  const dateKey = formatDate(day, tz);
                   const dayVisits = visitsByDate[dateKey] || [];
                   const isToday = dateKey === todayStr;
                   return (
@@ -650,7 +652,7 @@ export default function Scheduling() {
                 </div>
                 <div className="grid grid-cols-7">
                   {calendarDays.map((day) => {
-                    const dateKey = formatDate(day);
+                    const dateKey = formatDate(day, tz);
                     const dayVisits = visitsByDate[dateKey] || [];
                     const isToday = dateKey === todayStr;
                     const isCurrentMonth = day.getMonth() === currentMonth;
@@ -1204,6 +1206,7 @@ function DayView({ date, visits, contacts, properties, routes, servicePlans, onV
   onVisitClick?: (visit: Visit) => void;
   onAddVisit?: (dateKey: string) => void;
 }) {
+  const tz = useCompanyTimezone();
   const statusGroups = useMemo(() => {
     const groups: Record<string, Visit[]> = { scheduled: [], in_progress: [], completed: [], skipped: [], cancelled: [] };
     visits.forEach((v) => {
@@ -1222,7 +1225,7 @@ function DayView({ date, visits, contacts, properties, routes, servicePlans, onV
           <p className="text-xs text-muted-foreground">{visits.length} visit{visits.length !== 1 ? "s" : ""}</p>
         </div>
         {onAddVisit && (
-          <Button variant="outline" size="sm" onClick={() => onAddVisit(formatDate(date))} data-testid="button-day-add-visit">
+          <Button variant="outline" size="sm" onClick={() => onAddVisit(formatDate(date, tz))} data-testid="button-day-add-visit">
             <Plus className="mr-1 h-4 w-4" /> Add Visit
           </Button>
         )}

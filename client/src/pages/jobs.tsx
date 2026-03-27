@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
+import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { ServicePlan, Contact, Property } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,6 +108,7 @@ function JobForm({
   initial?: Partial<ServicePlan>;
   submitLabel: string;
 }) {
+  const tz = useCompanyTimezone();
   const [jobType, setJobType] = useState<string>(initial?.jobType || "one_off");
   const [contactId, setContactId] = useState(initial?.contactId || "");
   const [propertyId, setPropertyId] = useState(initial?.propertyId || "");
@@ -114,7 +116,7 @@ function JobForm({
   const [frequency, setFrequency] = useState(initial?.frequency || "weekly");
   const [dayOfWeek, setDayOfWeek] = useState(initial?.dayOfWeek || "");
   const [pricePerVisit, setPricePerVisit] = useState(initial?.pricePerVisit || "");
-  const [startDate, setStartDate] = useState(initial?.startDate || toLocalDateString(new Date()));
+  const [startDate, setStartDate] = useState(initial?.startDate || toLocalDateString(new Date(), tz));
   const [startTime, setStartTime] = useState(initial?.startTime || "");
   const [endTime, setEndTime] = useState(initial?.endTime || "");
   const [anytime, setAnytime] = useState(initial?.anytime !== false);

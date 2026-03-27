@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { toLocalDateString } from "@/lib/utils";
+import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
@@ -851,12 +852,12 @@ const groupColors: Record<OperationalGroup, string> = {
   skipped: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
 };
 
-function deriveGroup(visit: PipelineVisit): OperationalGroup {
+function deriveGroup(visit: PipelineVisit, timezone?: string): OperationalGroup {
   if (visit.status === "completed") return "completed";
   if (visit.status === "skipped" || visit.status === "cancelled") return "skipped";
   if (visit.status === "in_progress") return "active";
   const now = new Date();
-  const today = toLocalDateString(now);
+  const today = toLocalDateString(now, timezone);
   if (visit.scheduledDate < today) return "overdue";
   if (visit.scheduledDate === today && now.getHours() >= 17) return "overdue";
   return "remaining";
@@ -875,6 +876,7 @@ function formatVisitTime(visit: PipelineVisit): string {
 }
 
 function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
+  const companyTimezone = useCompanyTimezone();
   const { toast } = useToast();
 
   const markVisitMutation = useMutation({
@@ -904,7 +906,7 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
   const grouped = useMemo(() => {
     const groups = new Map<OperationalGroup, PipelineVisit[]>();
     for (const v of visits) {
-      const group = deriveGroup(v);
+      const group = deriveGroup(v, companyTimezone);
       if (!groups.has(group)) groups.set(group, []);
       groups.get(group)!.push(v);
     }

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
+import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -73,7 +74,7 @@ type RouteGroup = {
   totalCount: number;
 };
 
-function getDateForDay(dayName: string): string {
+function getDateForDay(dayName: string, timezone?: string): string {
   const today = new Date();
   const todayDayIndex = today.getDay();
   const daysMap: Record<string, number> = {
@@ -84,7 +85,7 @@ function getDateForDay(dayName: string): string {
   const diff = targetDayIndex - todayDayIndex;
   const target = new Date(today);
   target.setDate(today.getDate() + diff);
-  return toLocalDateString(target);
+  return toLocalDateString(target, timezone);
 }
 
 function getTodayDayName(): string {
@@ -282,6 +283,7 @@ function VisitRow({ visit, onStatusChange, isUpdating, isExpanded, onToggleExpan
 }
 
 export default function TechRoutes() {
+  const tz = useCompanyTimezone();
   const { toast } = useToast();
   const offline = useOffline();
   const [selectedDay, setSelectedDay] = useState<string>(getTodayDayName());
@@ -290,7 +292,7 @@ export default function TechRoutes() {
   const [pendingAdvanceAfter, setPendingAdvanceAfter] = useState<string | null>(null);
   const [cachedVisits, setCachedVisits] = useState<EnrichedVisit[] | null>(null);
 
-  const selectedDate = useMemo(() => getDateForDay(selectedDay), [selectedDay]);
+  const selectedDate = useMemo(() => getDateForDay(selectedDay, tz), [selectedDay, tz]);
   const cacheKey = `visits-routes-${selectedDate}`;
 
   const { data: fetchedVisits, isLoading: fetchLoading, isError: fetchError } = useQuery<EnrichedVisit[]>({
