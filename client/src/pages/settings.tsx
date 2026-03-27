@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
@@ -13,7 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical } from "lucide-react";
+import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -70,7 +73,80 @@ type Company = {
   telnyxMessagingProfileId: string | null;
   telnyxApiKeySet?: boolean;
   venmoHandle: string | null;
+  settingsLayout?: any;
 };
+
+type SettingsLayoutItem = {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minW?: number;
+  minH?: number;
+};
+
+const SETTINGS_BLOCK_DEFS: { id: string; label: string; defaultW: number; defaultH: number; minW: number; minH: number }[] = [
+  { id: "company_logo", label: "Company Logo", defaultW: 6, defaultH: 3, minW: 4, minH: 3 },
+  { id: "company_info", label: "Company Information", defaultW: 6, defaultH: 8, minW: 4, minH: 6 },
+  { id: "reminder_settings", label: "Reminder Settings", defaultW: 6, defaultH: 6, minW: 4, minH: 4 },
+  { id: "team_members", label: "Team Members", defaultW: 6, defaultH: 5, minW: 4, minH: 4 },
+  { id: "change_password", label: "Change Password", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "data_import_export", label: "Data Import / Export", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "subscription", label: "Subscription", defaultW: 6, defaultH: 3, minW: 4, minH: 2 },
+  { id: "sms_provider", label: "SMS Provider", defaultW: 6, defaultH: 5, minW: 4, minH: 4 },
+  { id: "stripe_connect", label: "Stripe Connect", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "venmo", label: "Venmo", defaultW: 6, defaultH: 3, minW: 4, minH: 2 },
+  { id: "quickbooks", label: "QuickBooks", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "voice_api_docs", label: "Voice API Docs", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "signup_widget", label: "Signup Widget", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "webhook_lead", label: "Webhook Lead", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "sms_quote_template", label: "SMS Quote Template", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "auto_visit_generation", label: "Auto Visit Generation", defaultW: 6, defaultH: 3, minW: 4, minH: 2 },
+  { id: "lead_sources", label: "Lead Sources", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "audit_log", label: "Audit Log", defaultW: 12, defaultH: 5, minW: 6, minH: 4 },
+];
+
+const DEFAULT_SETTINGS_BLOCK_IDS = [
+  "company_logo", "subscription",
+  "company_info", "sms_provider",
+  "reminder_settings", "stripe_connect",
+  "team_members", "venmo",
+  "change_password", "quickbooks",
+  "data_import_export", "voice_api_docs",
+  "signup_widget", "webhook_lead",
+  "sms_quote_template", "auto_visit_generation",
+  "lead_sources", "audit_log",
+];
+
+function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
+  const items: SettingsLayoutItem[] = [];
+  let x = 0;
+  let y = 0;
+  for (const id of DEFAULT_SETTINGS_BLOCK_IDS) {
+    const def = SETTINGS_BLOCK_DEFS.find(b => b.id === id);
+    if (!def) continue;
+    if (x + def.defaultW > 12) {
+      x = 0;
+      y += 2;
+    }
+    items.push({
+      i: id,
+      x,
+      y,
+      w: def.defaultW,
+      h: def.defaultH,
+      minW: def.minW,
+      minH: def.minH,
+    });
+    x += def.defaultW;
+    if (x >= 12) {
+      x = 0;
+      y += def.defaultH;
+    }
+  }
+  return items;
+}
 
 type TeamMember = {
   id: string;
@@ -2297,6 +2373,20 @@ export default function Settings() {
   const [settingsColumnMapping, setSettingsColumnMapping] = useState<ColumnMapping[]>([]);
   const [settingsNewLeadSources, setSettingsNewLeadSources] = useState<string[]>([]);
   const [isValidating, setIsValidating] = useState(false);
+  const [localSettingsLayout, setLocalSettingsLayout] = useState<SettingsLayoutItem[] | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const settingsInitializedRef = useRef(false);
+  const settingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsUserInteractedRef = useRef(false);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const { width: gridWidth } = useContainerWidth(gridContainerRef);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const { data: currentUser } = useQuery<{ id: string; role?: string }>({
     queryKey: ["/api/auth/user"],
@@ -2423,6 +2513,91 @@ export default function Settings() {
     },
   });
 
+  const savedSettingsLayout = useMemo<SettingsLayoutItem[] | null>(() => {
+    if (!company) return null;
+    const raw = company.settingsLayout;
+    if (raw === null || raw === undefined) return null;
+    if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "object" && "i" in raw[0]) {
+      return raw as SettingsLayoutItem[];
+    }
+    return null;
+  }, [company]);
+
+  useEffect(() => {
+    if (savedSettingsLayout && !settingsInitializedRef.current) {
+      setLocalSettingsLayout(savedSettingsLayout);
+      settingsInitializedRef.current = true;
+    } else if (savedSettingsLayout && settingsInitializedRef.current && !settingsUserInteractedRef.current) {
+      setLocalSettingsLayout(savedSettingsLayout);
+    }
+  }, [savedSettingsLayout]);
+
+  const currentSettingsLayout = useMemo<SettingsLayoutItem[]>(() => {
+    if (localSettingsLayout !== null) return localSettingsLayout;
+    if (savedSettingsLayout !== null) return savedSettingsLayout;
+    return generateDefaultSettingsLayout();
+  }, [localSettingsLayout, savedSettingsLayout]);
+
+  const settingsGridLayouts = useMemo(() => ({ lg: currentSettingsLayout }), [currentSettingsLayout]);
+
+  const saveSettingsLayoutMutation = useMutation({
+    mutationFn: async (layout: SettingsLayoutItem[]) => {
+      await apiRequest("PATCH", "/api/company", { settingsLayout: layout });
+    },
+    onSuccess: () => {
+      settingsUserInteractedRef.current = false;
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save layout", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const debouncedSaveSettingsLayout = useCallback((layout: SettingsLayoutItem[]) => {
+    if (settingsSaveTimerRef.current) clearTimeout(settingsSaveTimerRef.current);
+    settingsSaveTimerRef.current = setTimeout(() => {
+      saveSettingsLayoutMutation.mutate(layout);
+    }, 800);
+  }, [saveSettingsLayoutMutation]);
+
+  const handleSettingsLayoutChange = useCallback((_current: any[], allLayouts: { [key: string]: any[] }) => {
+    if (!settingsUserInteractedRef.current) return;
+    const lgLayout = allLayouts.lg;
+    if (!lgLayout || lgLayout.length === 0) return;
+    const cleaned: SettingsLayoutItem[] = lgLayout.map((item: any) => ({
+      i: item.i,
+      x: item.x,
+      y: item.y,
+      w: item.w,
+      h: item.h,
+      minW: SETTINGS_BLOCK_DEFS.find(b => b.id === item.i)?.minW,
+      minH: SETTINGS_BLOCK_DEFS.find(b => b.id === item.i)?.minH,
+    }));
+    const OWNER_ONLY_BLOCKS = ["audit_log"];
+    const hiddenBlocks = currentSettingsLayout.filter(item =>
+      OWNER_ONLY_BLOCKS.includes(item.i) && !cleaned.find(c => c.i === item.i)
+    );
+    const merged = [...cleaned, ...hiddenBlocks];
+    setLocalSettingsLayout(merged);
+    debouncedSaveSettingsLayout(merged);
+  }, [debouncedSaveSettingsLayout, currentSettingsLayout]);
+
+  const handleSettingsDragStart = useCallback(() => {
+    settingsUserInteractedRef.current = true;
+  }, []);
+
+  const handleSettingsResizeStart = useCallback(() => {
+    settingsUserInteractedRef.current = true;
+  }, []);
+
+  const handleResetSettingsLayout = useCallback(() => {
+    const defaultLayout = generateDefaultSettingsLayout();
+    setLocalSettingsLayout(defaultLayout);
+    settingsUserInteractedRef.current = true;
+    saveSettingsLayoutMutation.mutate(defaultLayout);
+    toast({ title: "Settings reset to default layout" });
+  }, [saveSettingsLayoutMutation]);
+
   const { uploadFile, isUploading } = useUpload({
     onSuccess: async (response) => {
       await apiRequest("PATCH", "/api/company", { logoUrl: response.objectPath });
@@ -2485,13 +2660,11 @@ export default function Settings() {
 
   const displayLogo = logoPreview || (company?.logoUrl ? company.logoUrl : null);
 
-  return (
-    <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
-      <h1 className="text-2xl font-bold" data-testid="text-settings-heading">Settings</h1>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-6">
-          <Card>
+  const renderSettingsBlock = (blockId: string) => {
+    switch (blockId) {
+      case "company_logo":
+        return (
+          <Card className="h-full overflow-auto">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Image className="h-5 w-5" />
@@ -2531,8 +2704,10 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
-
-          <Card>
+        );
+      case "company_info":
+        return (
+          <Card className="h-full overflow-auto">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5" />
@@ -2654,10 +2829,12 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
-
-          <ReminderSettingsSection company={company} toast={toast} />
-
-          <Card>
+        );
+      case "reminder_settings":
+        return <div className="h-full overflow-auto"><ReminderSettingsSection company={company ?? null} toast={toast} /></div>;
+      case "team_members":
+        return (
+          <Card className="h-full overflow-auto">
             <CardHeader>
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
@@ -2750,8 +2927,10 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
-
-          <Card>
+        );
+      case "change_password":
+        return (
+          <Card className="h-full overflow-auto">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <KeyRound className="h-5 w-5" />
@@ -2811,8 +2990,10 @@ export default function Settings() {
               </form>
             </CardContent>
           </Card>
-
-          <Card>
+        );
+      case "data_import_export":
+        return (
+          <Card className="h-full overflow-auto">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5" />
@@ -2882,11 +3063,10 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
-
-        </div>
-
-        <div className="space-y-6">
-          <Card>
+        );
+      case "subscription":
+        return (
+          <Card className="h-full overflow-auto">
             <CardHeader>
               <CardTitle className="text-base">Subscription</CardTitle>
             </CardHeader>
@@ -2909,24 +3089,26 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
-
-          <SmsProviderSection company={company} />
-
-          <StripeConnectSection />
-
-          <VenmoSection company={company} />
-
-          <QuickBooksSection />
-
-          <VoiceApiDocsSection />
-
-          <SignupWidgetSection company={company ? { slug: company.slug, name: company.name } : null} />
-
-          <WebhookLeadSection />
-
-          <SmsQuoteTemplateSection company={company ?? null} />
-
-          <Card>
+        );
+      case "sms_provider":
+        return <div className="h-full overflow-auto"><SmsProviderSection company={company} /></div>;
+      case "stripe_connect":
+        return <div className="h-full overflow-auto"><StripeConnectSection /></div>;
+      case "venmo":
+        return <div className="h-full overflow-auto"><VenmoSection company={company} /></div>;
+      case "quickbooks":
+        return <div className="h-full overflow-auto"><QuickBooksSection /></div>;
+      case "voice_api_docs":
+        return <div className="h-full overflow-auto"><VoiceApiDocsSection /></div>;
+      case "signup_widget":
+        return <div className="h-full overflow-auto"><SignupWidgetSection company={company ? { slug: company.slug, name: company.name } : null} /></div>;
+      case "webhook_lead":
+        return <div className="h-full overflow-auto"><WebhookLeadSection /></div>;
+      case "sms_quote_template":
+        return <div className="h-full overflow-auto"><SmsQuoteTemplateSection company={company ?? null} /></div>;
+      case "auto_visit_generation":
+        return (
+          <Card className="h-full overflow-auto">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CalendarClock className="h-5 w-5" />
@@ -2951,8 +3133,10 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
-
-          <Card>
+        );
+      case "lead_sources":
+        return (
+          <Card className="h-full overflow-auto">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Info className="h-5 w-5" />
@@ -3013,10 +3197,86 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
+        );
+      case "audit_log":
+        return currentUser?.role === "owner"
+          ? <div className="h-full overflow-auto"><AuditLogSection /></div>
+          : null;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="p-4 md:p-6 overflow-auto h-full">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-settings-heading">Settings</h1>
+          {!isMobile && (
+            <span className="text-xs text-muted-foreground">Drag to reorder, resize from corners</span>
+          )}
         </div>
+        {!isMobile && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleResetSettingsLayout}
+            data-testid="button-reset-settings-layout"
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            Reset to Default Layout
+          </Button>
+        )}
       </div>
 
-      {currentUser?.role === "owner" && <AuditLogSection />}
+      {isMobile ? (
+        <div className="space-y-4">
+          {DEFAULT_SETTINGS_BLOCK_IDS
+            .filter(id => id !== "audit_log" || currentUser?.role === "owner")
+            .map(id => {
+              const content = renderSettingsBlock(id);
+              if (!content) return null;
+              return <div key={id}>{content}</div>;
+            })}
+        </div>
+      ) : (
+        <div ref={gridContainerRef}>
+          {gridWidth > 0 && (
+            <ResponsiveGridLayout
+              className="layout"
+              layouts={settingsGridLayouts}
+              breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480 }}
+              cols={{ lg: 12, md: 12, sm: 6, xs: 1 }}
+              rowHeight={60}
+              width={gridWidth}
+              isDraggable={true}
+              isResizable={true}
+              draggableHandle=".settings-drag-handle"
+              onLayoutChange={handleSettingsLayoutChange}
+              onDragStart={handleSettingsDragStart}
+              onResizeStart={handleSettingsResizeStart}
+              compactType="vertical"
+              margin={[16, 16]}
+            >
+              {currentSettingsLayout
+                .filter(item => item.i !== "audit_log" || currentUser?.role === "owner")
+                .map(item => {
+                  const content = renderSettingsBlock(item.i);
+                  if (!content) return null;
+                  return (
+                    <div key={item.i} className="relative group" data-testid={`settings-block-${item.i}`}>
+                      <div className="settings-drag-handle absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1 rounded bg-background/80 backdrop-blur-sm border shadow-sm">
+                        <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                      {content}
+                    </div>
+                  );
+                })}
+            </ResponsiveGridLayout>
+          )}
+        </div>
+      )}
+
 
       <Dialog open={importStep !== "idle"} onOpenChange={(open) => { if (!open) { setImportStep("idle"); setImportRows([]); setRawCsvRows([]); setSettingsColumnMapping([]); setSettingsNewLeadSources([]); } }}>
         <DialogContent className="max-w-[95vw] w-[900px] max-h-[90vh] flex flex-col">

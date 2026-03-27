@@ -138,6 +138,7 @@ export const companies = pgTable("companies", {
   invoiceReminderSettings: jsonb("invoice_reminder_settings").$type<InvoiceReminderSettings>(),
   autoVisitsEnabled: boolean("auto_visits_enabled").notNull().default(false),
   dashboardLayout: jsonb("dashboard_layout").$type<any>(),
+  settingsLayout: jsonb("settings_layout").$type<any>(),
   dashboardNotes: text("dashboard_notes"),
   aiImportMappingEnabled: boolean("ai_import_mapping_enabled").notNull().default(true),
   roverAiEnabled: boolean("rover_ai_enabled").notNull().default(true),

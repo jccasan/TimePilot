@@ -32,6 +32,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Admin Dashboard**: Platform-level administration for tenant management.
 - **Rover Chatbot**: AI-powered in-app assistant with SSE streaming responses and function calling.
 - **Dark Mode**: Full dark mode support.
+- **Draggable Grid Layouts**: Both the dashboard and the settings page use `react-grid-layout` (ResponsiveGridLayout) to support drag-and-drop reordering and resizing of blocks/widgets, with layouts persisted to the `companies` table (dashboardLayout and settingsLayout JSON columns).
 
 ### Key Features
 - **Data Management**: CRM for contacts and properties, CSV import with AI-assisted mapping, activity logs, and global search.
