@@ -3753,6 +3753,15 @@ export async function registerRoutes(
         }
       }
 
+      if (parsed.routeId) {
+        const routeStops = await storage.getServicePlans(companyId, { routeId: parsed.routeId, isActive: true });
+        parsed.stopOrder = routeStops.length + 1;
+        if (!parsed.dayOfWeek) {
+          const targetRoute = await storage.getRoute(parsed.routeId, companyId);
+          if (targetRoute) parsed.dayOfWeek = targetRoute.dayOfWeek;
+        }
+      }
+
       const plan = await storage.createServicePlan(parsed);
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", plan.id, "create", { new: { contactId: parsed.contactId, frequency: parsed.frequency, dayOfWeek: parsed.dayOfWeek } }, req.ip || undefined);
@@ -3846,8 +3855,18 @@ export async function registerRoutes(
       if (req.body.dayOfWeek && !validDays.includes(req.body.dayOfWeek)) {
         return res.status(400).json({ error: `Invalid dayOfWeek. Must be one of: ${validDays.join(", ")}` });
       }
-      const body = { ...req.body };
-      if (body.routeId === "" || body.routeId === undefined) body.routeId = null;
+
+      const allowedFields = [
+        "frequency", "dayOfWeek", "pricePerVisit", "isActive", "startDate", "endDate",
+        "routeId", "stopOrder", "serviceName", "jobType", "jobStatus", "startTime",
+        "endTime", "anytime", "endsAfterCount", "endsAfterUnit", "visitInstructions",
+        "assignedUserId", "isStopOnly", "pausedAt",
+      ];
+      const body: Record<string, any> = {};
+      for (const key of allowedFields) {
+        if (req.body[key] !== undefined) body[key] = req.body[key];
+      }
+      if (body.routeId === "") body.routeId = null;
 
       const dayChanged = body.dayOfWeek && body.dayOfWeek !== existing.dayOfWeek;
       if (dayChanged && !body.routeId) {
@@ -3867,7 +3886,20 @@ export async function registerRoutes(
         }
       }
 
-      const { addOns: addOnsData, ...updateBody } = body;
+      if (body.routeId && body.routeId !== existing.routeId && body.stopOrder === undefined) {
+        const routeStops = await storage.getServicePlans(companyId, { routeId: body.routeId, isActive: true });
+        body.stopOrder = routeStops.length + 1;
+      }
+
+      if (body.routeId && !body.dayOfWeek) {
+        const targetRoute = await storage.getRoute(body.routeId, companyId);
+        if (targetRoute) {
+          body.dayOfWeek = targetRoute.dayOfWeek;
+        }
+      }
+
+      const { addOns: addOnsData, ...rawBody } = req.body;
+      const updateBody = body;
       const plan = await storage.updateServicePlan(req.params.id, companyId, updateBody);
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", req.params.id, "update", { old: { frequency: existing.frequency, dayOfWeek: existing.dayOfWeek, routeId: existing.routeId }, new: updateBody }, req.ip || undefined);

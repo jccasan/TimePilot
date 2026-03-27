@@ -573,9 +573,43 @@ async function seedDemoCompany() {
   }
 }
 
+async function repairServicePlanDayOfWeek() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    const repairResult = await pool.query(`
+      UPDATE service_plans sp
+      SET day_of_week = r.day_of_week
+      FROM routes r
+      WHERE sp.route_id = r.id
+        AND (sp.day_of_week IS NULL OR sp.day_of_week != r.day_of_week)
+    `);
+    if (repairResult.rowCount && repairResult.rowCount > 0) {
+      console.log(`[Migration] Repaired day_of_week for ${repairResult.rowCount} service plans`);
+    }
+    const orderResult = await pool.query(`
+      WITH ranked AS (
+        SELECT sp.id, ROW_NUMBER() OVER (PARTITION BY sp.route_id ORDER BY sp.created_at) AS rn
+        FROM service_plans sp
+        WHERE sp.route_id IS NOT NULL AND sp.is_active = true AND sp.stop_order = 0
+      )
+      UPDATE service_plans SET stop_order = ranked.rn
+      FROM ranked WHERE service_plans.id = ranked.id
+    `);
+    if (orderResult.rowCount && orderResult.rowCount > 0) {
+      console.log(`[Migration] Set stop_order for ${orderResult.rowCount} service plans`);
+    }
+  } catch (err) {
+    console.error("[Migration] Service plan repair failed:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
+  await repairServicePlanDayOfWeek();
   await syncSubscriptionTiers();
   await seedDemoCompany();
   setupSession(app);
