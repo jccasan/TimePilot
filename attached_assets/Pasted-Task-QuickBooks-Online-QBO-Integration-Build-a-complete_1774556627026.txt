@@ -1,0 +1,56 @@
+Task: QuickBooks Online (QBO) Integration
+
+Build a complete QuickBooks Online integration with OAuth 2.0 connect flow, encrypted token storage, webhook processing, and CDC (Change Data Capture) polling.
+
+1. Database Schema
+
+Create a qbo_connections table with columns: id (serial PK), subscriber_id (FK to subscribers, cascade delete), realm_id (text, unique), access_token (text, encrypted at rest), refresh_token (text, encrypted at rest), token_expires_at (timestamptz), sync_token (text, nullable), created_at, updated_at.
+2. Encryption Layer
+
+AES-256-GCM encryption for all tokens at rest using ENCRYPTION_KEY env var (64-char hex string = 32 bytes).
+Encrypt on save, decrypt on read. IV + auth tag + ciphertext stored as base64.
+3. OAuth 2.0 Connect Flow
+
+GET /api/qbo/connect — (auth required, admin roles only) Generates Intuit OAuth2 authorization URL with CSRF state stored in session. Returns { url } for frontend redirect.
+GET /api/qbo/callback — (public, but session-validated) Handles OAuth redirect from Intuit. Validates CSRF state against session, exchanges authorization code for access/refresh tokens via https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer using Basic auth (base64 of client_id:client_secret). Encrypts and stores tokens. Redirects to settings page with success/error query params.
+GET /api/qbo/status — (auth required) Returns { configured, connected, realmId, tokenFresh }.
+POST /api/qbo/disconnect — (auth required, admin roles only) Deletes QBO connection.
+Intuit OAuth scope: com.intuit.quickbooks.accounting
+Redirect URI format: https://<YOUR_DOMAIN>/api/qbo/callback — must be registered in Intuit Developer portal.
+4. Token Refresh
+
+Auto-refresh when access token has <5 minutes remaining.
+Uses refresh_token grant type against Intuit token endpoint.
+Mutex/lock per subscriber to prevent concurrent refresh races.
+Re-encrypts and saves rotated tokens.
+5. Webhook Handler
+
+POST /api/webhooks/quickbooks — Receives real-time entity change notifications from Intuit.
+Verifies HMAC-SHA256 signature using QBO_WEBHOOK_VERIFIER_TOKEN.
+Looks up subscriber by realmId from the notification payload.
+Processes entity types: Customer, Invoice, Item (create/update/delete/void).
+Raw body must be captured for signature verification (configure body parser to preserve raw buffer for this route).
+6. CDC Polling (Safety Net)
+
+Scheduled job runs every 6 hours (initial run 60s after startup).
+Iterates all qbo_connections, refreshes tokens, calls Intuit CDC endpoint for Customer/Invoice/Item changes in the last 24 hours.
+Catches anything webhooks may have missed.
+7. Dashboard Settings UI
+
+Add a "QuickBooks" tab to the Settings page.
+Shows connection status (connected/not connected) with visual indicators.
+"Connect QuickBooks" button initiates OAuth flow.
+When connected: displays Company ID (realm), token status, what syncs automatically, Reconnect and Disconnect buttons.
+Handles success/error banners from OAuth redirect query params, clears params from URL after display.
+8. Required Environment Secrets
+
+QBO_CLIENT_ID — from Intuit Developer portal
+QBO_CLIENT_SECRET — from Intuit Developer portal
+QBO_WEBHOOK_VERIFIER_TOKEN — from Intuit webhook configuration
+ENCRYPTION_KEY — 64-character hex string (generate with openssl rand -hex 32)
+Optional: QBO_SANDBOX=true to use sandbox-quickbooks.api.intuit.com instead of production
+9. Intuit Developer Portal Setup Required
+
+Register redirect URI: https://<YOUR_DOMAIN>/api/qbo/callback
+Register webhook URL: https://<YOUR_DOMAIN>/api/webhooks/quickbooks
+Enable scope: com.intuit.quickbooks.accounting
