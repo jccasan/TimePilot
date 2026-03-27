@@ -217,8 +217,6 @@ export async function createCheckoutSession(params: {
     cancel_url: params.cancelUrl,
   };
 
-  sessionParams.automatic_payment_methods = { enabled: true };
-
   if (params.stripeConnectAccountId) {
     sessionParams.payment_intent_data = {
       on_behalf_of: params.stripeConnectAccountId,
