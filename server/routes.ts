@@ -6908,33 +6908,87 @@ export async function registerRoutes(
             await storage.updateContact(contact.id, companyId, { stripeCustomerId });
           }
 
+          const isStaleCustomerError = (err: any) =>
+            err?.type === "StripeInvalidRequestError" &&
+            typeof err?.message === "string" &&
+            err.message.toLowerCase().includes("no such customer");
+
+          const refreshStripeCustomer = async () => {
+            const newCustomerId = await createStripeCustomer({
+              email: contact.email || undefined,
+              name: `${contact.firstName} ${contact.lastName}`.trim(),
+              metadata: { contactId: contact.id, companyId },
+            });
+            await storage.updateContact(contact.id, companyId, { stripeCustomerId: newCustomerId });
+            console.log(`[send-email] Stale Stripe customer ${stripeCustomerId} replaced with ${newCustomerId} for contact ${contact.id}`);
+            stripeCustomerId = newCustomerId;
+          };
+
           const baseUrl = getBaseUrl(req);
           const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
           try {
-            const checkoutResult = await createCheckoutSession({
-              customerId: stripeCustomerId,
-              invoiceId: invoice.id,
-              invoiceNumber: invoice.invoiceNumber,
-              amount: parseFloat(invoice.total),
-              successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
-              cancelUrl: `${baseUrl}/portal`,
-              stripeConnectAccountId: connectAccountId,
-              tenantId: companyId,
-            });
-            paymentUrl = checkoutResult.url;
-          } catch (connectErr: any) {
-            if (connectAccountId) {
-              console.log(`[send-email] Stripe Connect checkout failed (${connectErr?.message}), retrying without Connect...`);
-              const fallbackResult = await createCheckoutSession({
+            let checkoutResult;
+            try {
+              checkoutResult = await createCheckoutSession({
                 customerId: stripeCustomerId,
                 invoiceId: invoice.id,
                 invoiceNumber: invoice.invoiceNumber,
                 amount: parseFloat(invoice.total),
                 successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
                 cancelUrl: `${baseUrl}/portal`,
-                stripeConnectAccountId: null,
+                stripeConnectAccountId: connectAccountId,
                 tenantId: companyId,
               });
+            } catch (primaryErr: any) {
+              if (isStaleCustomerError(primaryErr)) {
+                await refreshStripeCustomer();
+                checkoutResult = await createCheckoutSession({
+                  customerId: stripeCustomerId,
+                  invoiceId: invoice.id,
+                  invoiceNumber: invoice.invoiceNumber,
+                  amount: parseFloat(invoice.total),
+                  successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
+                  cancelUrl: `${baseUrl}/portal`,
+                  stripeConnectAccountId: connectAccountId,
+                  tenantId: companyId,
+                });
+              } else {
+                throw primaryErr;
+              }
+            }
+            paymentUrl = checkoutResult.url;
+          } catch (connectErr: any) {
+            if (connectAccountId) {
+              console.log(`[send-email] Stripe Connect checkout failed (${connectErr?.message}), retrying without Connect...`);
+              let fallbackResult;
+              try {
+                fallbackResult = await createCheckoutSession({
+                  customerId: stripeCustomerId,
+                  invoiceId: invoice.id,
+                  invoiceNumber: invoice.invoiceNumber,
+                  amount: parseFloat(invoice.total),
+                  successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
+                  cancelUrl: `${baseUrl}/portal`,
+                  stripeConnectAccountId: null,
+                  tenantId: companyId,
+                });
+              } catch (fallbackErr: any) {
+                if (isStaleCustomerError(fallbackErr)) {
+                  await refreshStripeCustomer();
+                  fallbackResult = await createCheckoutSession({
+                    customerId: stripeCustomerId,
+                    invoiceId: invoice.id,
+                    invoiceNumber: invoice.invoiceNumber,
+                    amount: parseFloat(invoice.total),
+                    successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
+                    cancelUrl: `${baseUrl}/portal`,
+                    stripeConnectAccountId: null,
+                    tenantId: companyId,
+                  });
+                } else {
+                  throw fallbackErr;
+                }
+              }
               paymentUrl = fallbackResult.url;
             } else {
               throw connectErr;
