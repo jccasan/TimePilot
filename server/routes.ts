@@ -1418,7 +1418,7 @@ export async function registerRoutes(
       const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
         "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "dashboardNotes", "timezone",
         "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug", "leadWebhookSmsTemplate",
-        "smsProvider", "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId"];
+        "smsProvider", "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -1478,6 +1478,13 @@ export async function registerRoutes(
         if (typeof s.maxReminders !== "number" || s.maxReminders < 1 || s.maxReminders > 100) {
           return res.status(400).json({ error: "maxReminders must be between 1 and 100" });
         }
+      }
+      if (updates.venmoHandle !== undefined) {
+        const raw = String(updates.venmoHandle).trim().replace(/^@+/, "").replace(/[^a-zA-Z0-9_.\-]/g, "");
+        if (raw.length > 0 && raw.length > 50) {
+          return res.status(400).json({ error: "Venmo handle must be 50 characters or fewer" });
+        }
+        updates.venmoHandle = raw || null;
       }
       const company = await storage.updateCompany(companyId, updates);
       auditLog(companyId, userId, "company", companyId, "update", { old: sanitizeCompany(existing), new: sanitizeCompany(company) }, req.ip);
@@ -7062,6 +7069,8 @@ export async function registerRoutes(
         payment_instructions: "",
         thank_you: "Thank you for your business!",
         paymentUrl: paymentUrl || "",
+        venmoHandle: company?.venmoHandle || "",
+        venmoHandleOnly: !paymentUrl && !!company?.venmoHandle ? company.venmoHandle : "",
       };
 
       const computed = computeInvoice(invoiceData);
@@ -7077,7 +7086,8 @@ export async function registerRoutes(
       const renderedHtml = renderInvoice(tpl, theme, computed);
 
       const subject = `Invoice ${invoice.invoiceNumber} from ${company?.name || "ScooPilot"}`;
-      const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}\n\nThank you for your business!`;
+      const venmoTextLine = company?.venmoHandle ? `\nOr pay via Venmo: @${company.venmoHandle}` : "";
+      const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}${venmoTextLine}\n\nThank you for your business!`;
 
       const msg = await storage.createMessage({
         companyId,
@@ -10274,6 +10284,8 @@ export async function registerRoutes(
         notes: "",
         payment_instructions: "",
         thank_you: "Thank you for your business!",
+        venmoHandle: company?.venmoHandle || "",
+        venmoHandleOnly: !!company?.venmoHandle ? company.venmoHandle : "",
       };
 
       const computed = computeInvoice(invoiceData);

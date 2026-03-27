@@ -121,18 +121,31 @@ export function generateInvoiceEmailHtml(data: {
   total: string;
   lineItems: { description: string; quantity: number; unitPrice: string; total: string }[];
   paymentUrl?: string;
+  venmoHandle?: string;
 }): { subject: string; text: string; html: string } {
   const subject = `Invoice ${data.invoiceNumber} from ${data.companyName}`;
 
   const paymentLine = data.paymentUrl ? `\nPay online: ${data.paymentUrl}\n` : "";
-  const text = `Hi ${data.contactName},\n\nYou have a new invoice from ${data.companyName}.\n\nInvoice #: ${data.invoiceNumber}\nDue Date: ${data.dueDate}\nTotal: $${data.total}\n\nItems:\n${data.lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentLine}\nThank you for your business!`;
+  const venmoLine = data.venmoHandle ? `\nOr pay via Venmo: @${data.venmoHandle}\n` : "";
+  const text = `Hi ${data.contactName},\n\nYou have a new invoice from ${data.companyName}.\n\nInvoice #: ${data.invoiceNumber}\nDue Date: ${data.dueDate}\nTotal: $${data.total}\n\nItems:\n${data.lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentLine}${venmoLine}\nThank you for your business!`;
+
+  const venmoSection = data.venmoHandle ? `
+          <p style="margin-top: 12px; font-size: 14px; color: #374151;">Or pay via Venmo: <span style="display: inline-block; background-color: #3D95CE; color: #ffffff; border-radius: 4px; padding: 2px 10px; font-weight: 700; font-size: 14px;">@${data.venmoHandle}</span></p>
+  ` : "";
 
   const payNowButton = data.paymentUrl ? `
-        <div style="text-align: center; margin: 28px 0 20px;">
-          <a href="${data.paymentUrl}" style="display: inline-block; background-color: #1a7a4c; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Pay Now — $${data.total}</a>
-          <p style="margin-top: 10px; font-size: 12px; color: #6b7280;">Pay securely with credit card or Venmo</p>
+        <div style="text-align: center; margin: 28px 0 20px; background-color: #f0fdf4; border: 2px solid #22c55e; border-radius: 10px; padding: 28px 24px;">
+          <p style="margin: 0 0 14px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #16a34a;">Payment Due</p>
+          <a href="${data.paymentUrl}" style="display: inline-block; background-color: #16a34a; color: #ffffff; text-decoration: none; padding: 18px 60px; border-radius: 8px; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 4px 14px rgba(22,163,74,0.35);">Pay Now — $${data.total}</a>
+          <p style="margin-top: 14px; font-size: 13px; color: #4b5563;">Pay securely online with credit card or bank transfer</p>
+          ${venmoSection}
         </div>
-  ` : "";
+  ` : (data.venmoHandle ? `
+        <div style="text-align: center; margin: 28px 0 20px; background-color: #f0fdf4; border: 2px solid #22c55e; border-radius: 10px; padding: 28px 24px;">
+          <p style="margin: 0 0 14px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #16a34a;">How to Pay</p>
+          ${venmoSection}
+        </div>
+  ` : "");
 
   const html = `
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8fafc;">

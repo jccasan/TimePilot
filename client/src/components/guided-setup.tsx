@@ -37,6 +37,7 @@ import {
   Loader2,
   PartyPopper,
   X,
+  Wallet,
 } from "lucide-react";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { ServiceZoneMap, type ZoneEntry } from "@/components/service-zone-map";
@@ -173,6 +174,8 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
   const [createdPlanId, setCreatedPlanId] = useState<string | null>(onboarding.firstServicePlan?.id || null);
   const [completionData, setCompletionData] = useState<{ routeName: string; visitCount: number } | null>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
+  const [venmoHandle, setVenmoHandle] = useState("");
+  const [venmoSaved, setVenmoSaved] = useState(false);
 
   useEffect(() => {
     const firstIncomplete = onboarding.steps.findIndex(s => !s.completed);
@@ -389,6 +392,22 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to create job", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const saveVenmoMutation = useMutation({
+    mutationFn: async (handle: string) => {
+      const cleanHandle = handle.startsWith("@") ? handle.slice(1) : handle;
+      const res = await apiRequest("PATCH", "/api/company", { venmoHandle: cleanHandle });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      setVenmoSaved(true);
+      toast({ title: "Venmo handle saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save Venmo handle", description: err.message, variant: "destructive" });
     },
   });
 
@@ -883,32 +902,70 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
         })}
 
         {activeStep >= 5 && (
-          <div className="rounded-lg bg-primary/5 border border-primary/20 p-6 text-center space-y-3" data-testid="setup-complete">
-            <PartyPopper className="h-10 w-10 text-primary mx-auto" />
-            <h3 className="text-lg font-bold" data-testid="text-setup-complete-title">You're all set!</h3>
-            <p className="text-sm text-muted-foreground" data-testid="text-setup-complete-description">
-              {completionData
-                ? `Your "${completionData.routeName}" has 1 stop and ${completionData.visitCount} upcoming visits.`
-                : "Your business is ready to go."}
-            </p>
-            <div className="flex gap-2 justify-center pt-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
-                  queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
-                }}
-                data-testid="button-done-dashboard"
-              >
-                Stay on Dashboard
-              </Button>
-              <Button
-                onClick={() => navigate("/routes")}
-                className="gap-1"
-                data-testid="button-view-routes"
-              >
-                View Route Builder <ArrowRight className="h-4 w-4" />
-              </Button>
+          <div className="space-y-3" data-testid="setup-complete">
+            <div className="rounded-lg bg-primary/5 border border-primary/20 p-6 text-center space-y-3">
+              <PartyPopper className="h-10 w-10 text-primary mx-auto" />
+              <h3 className="text-lg font-bold" data-testid="text-setup-complete-title">You're all set!</h3>
+              <p className="text-sm text-muted-foreground" data-testid="text-setup-complete-description">
+                {completionData
+                  ? `Your "${completionData.routeName}" has 1 stop and ${completionData.visitCount} upcoming visits.`
+                  : "Your business is ready to go."}
+              </p>
+              <div className="flex gap-2 justify-center pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+                  }}
+                  data-testid="button-done-dashboard"
+                >
+                  Stay on Dashboard
+                </Button>
+                <Button
+                  onClick={() => navigate("/routes")}
+                  className="gap-1"
+                  data-testid="button-view-routes"
+                >
+                  View Route Builder <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-dashed border-muted-foreground/30 p-4 space-y-3" data-testid="setup-venmo-step">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-full flex items-center justify-center bg-[#3D95CE]/10">
+                  <Wallet className="h-4 w-4 text-[#3D95CE]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Add your Venmo handle (optional)</p>
+                  <p className="text-xs text-muted-foreground">Clients will see it on invoices so they can pay you via Venmo</p>
+                </div>
+              </div>
+              {venmoSaved ? (
+                <div className="flex items-center gap-2 text-sm text-green-700" data-testid="text-venmo-saved">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Venmo handle saved: <span className="font-semibold">@{venmoHandle.startsWith("@") ? venmoHandle.slice(1) : venmoHandle}</span>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="@yourvenmo"
+                    value={venmoHandle}
+                    onChange={(e) => setVenmoHandle(e.target.value)}
+                    className="flex-1"
+                    data-testid="input-venmo-handle"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!venmoHandle.trim() || saveVenmoMutation.isPending}
+                    onClick={() => saveVenmoMutation.mutate(venmoHandle.trim())}
+                    data-testid="button-save-venmo"
+                  >
+                    {saveVenmoMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}

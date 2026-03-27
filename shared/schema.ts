@@ -175,6 +175,7 @@ export const companies = pgTable("companies", {
   telnyxMessagingProfileId: varchar("telnyx_messaging_profile_id", { length: 255 }),
   retellAgentId: varchar("retell_agent_id", { length: 255 }),
   retellKnowledgeBaseId: varchar("retell_knowledge_base_id", { length: 255 }),
+  venmoHandle: varchar("venmo_handle", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -304,23 +304,51 @@
     /* ---- Pay Now CTA ---- */
     .pay-now-section {
       text-align: center;
-      padding: 24px 0 8px;
+      padding: 32px 24px;
+      background-color: #f0fdf4;
+      border: 2px solid #22c55e;
+      border-radius: 10px;
+    }
+    .pay-now-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #16a34a;
+      margin-bottom: 12px;
     }
     .pay-now-btn {
       display: inline-block;
-      background-color: {{theme.primaryColor}};
+      background-color: #16a34a;
       color: #ffffff;
       text-decoration: none;
-      padding: 14px 48px;
-      border-radius: 6px;
-      font-size: 16px;
-      font-weight: 600;
+      padding: 18px 60px;
+      border-radius: 8px;
+      font-size: 20px;
+      font-weight: 700;
       letter-spacing: 0.5px;
+      box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
     }
     .pay-now-hint {
-      margin-top: 10px;
-      font-size: 12px;
-      color: {{theme.mutedColor}};
+      margin-top: 14px;
+      font-size: 13px;
+      color: #4b5563;
+    }
+    .venmo-info {
+      margin-top: 14px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #1a7a4c;
+    }
+    .venmo-handle {
+      display: inline-block;
+      background-color: #3D95CE;
+      color: #ffffff;
+      border-radius: 4px;
+      padding: 3px 10px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
     }
 
     /* ---- Print ---- */
@@ -507,10 +535,20 @@
     <!-- PAY NOW -->
     {{#paymentUrl}}
     <div class="card pay-now-section">
+      <p class="pay-now-label">Payment Due</p>
       <a href="{{paymentUrl}}" class="pay-now-btn">Pay Now — {{totals.total}}</a>
-      <p class="pay-now-hint">Pay securely with credit card, Venmo, or other methods</p>
+      <p class="pay-now-hint">Pay securely online with credit card or bank transfer</p>
+      {{#venmoHandle}}
+      <p class="venmo-info">Or pay via Venmo: <span class="venmo-handle">@{{venmoHandle}}</span></p>
+      {{/venmoHandle}}
     </div>
     {{/paymentUrl}}
+    {{#venmoHandleOnly}}
+    <div class="card pay-now-section">
+      <p class="pay-now-label">How to Pay</p>
+      <p class="venmo-info">Pay via Venmo: <span class="venmo-handle">@{{venmoHandle}}</span></p>
+    </div>
+    {{/venmoHandleOnly}}
 
     <!-- VISITS -->
     {{#visits}}
