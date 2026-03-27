@@ -6740,7 +6740,7 @@ export async function registerRoutes(
         const hash = crypto.createHmac("sha256", verifierToken)
           .update(rawBody)
           .digest("base64");
-        if (hash !== signature) {
+        if (!crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature))) {
           console.warn("[QBO Webhook] Signature mismatch");
           return res.status(401).json({ error: "Invalid signature" });
         }
