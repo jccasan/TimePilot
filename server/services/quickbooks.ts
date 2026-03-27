@@ -1,8 +1,10 @@
 import crypto from "crypto";
 import { db } from "../db";
 import { companies, contacts, invoices, invoiceLineItems, qboSyncLogs } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, isNotNull } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+
+const refreshLocks = new Map<string, Promise<{ access_token: string; refresh_token: string }>>();
 
 const QBO_AUTH_URL = "https://appcenter.intuit.com/connect/oauth2";
 const QBO_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
@@ -117,6 +119,19 @@ export async function exchangeQboCode(code: string, redirectUri: string): Promis
 }
 
 export async function refreshQboTokens(companyId: string): Promise<{ access_token: string; refresh_token: string }> {
+  const existing = refreshLocks.get(companyId);
+  if (existing) {
+    return existing;
+  }
+
+  const refreshPromise = doRefreshQboTokens(companyId).finally(() => {
+    refreshLocks.delete(companyId);
+  });
+  refreshLocks.set(companyId, refreshPromise);
+  return refreshPromise;
+}
+
+async function doRefreshQboTokens(companyId: string): Promise<{ access_token: string; refresh_token: string }> {
   const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
   if (!company?.qboRefreshToken) {
     throw new Error("No QBO refresh token found");
@@ -556,6 +571,256 @@ export async function runFullSync(companyId: string): Promise<{ contactsSynced: 
   }
 
   return { contactsSynced, invoicesSynced, errors };
+}
+
+export async function processWebhookEntity(
+  companyId: string,
+  entityName: string,
+  entityId: string,
+  operation: string,
+): Promise<void> {
+  const normalizedOp = operation.toLowerCase();
+  const normalizedEntity = entityName.toLowerCase();
+
+  try {
+    if (normalizedEntity === "customer") {
+      if (normalizedOp === "create" || normalizedOp === "update") {
+        await updateLocalContactFromQboCustomer(companyId, entityId);
+      } else if (normalizedOp === "delete") {
+        const matchingContacts = await db.select().from(contacts)
+          .where(and(eq(contacts.companyId, companyId), eq(contacts.qboCustomerId, entityId)));
+        for (const c of matchingContacts) {
+          await db.update(contacts).set({ qboCustomerId: null }).where(eq(contacts.id, c.id));
+          await logSync(companyId, "contact", c.id, "unlink", "synced", entityId);
+        }
+      }
+    } else if (normalizedEntity === "invoice") {
+      if (normalizedOp === "create" || normalizedOp === "update") {
+        await updateLocalInvoiceFromQboInvoice(companyId, entityId);
+      } else if (normalizedOp === "void") {
+        await handleQboInvoiceVoid(companyId, entityId);
+      } else if (normalizedOp === "delete") {
+        const matchingInvoices = await db.select().from(invoices)
+          .where(and(eq(invoices.companyId, companyId), eq(invoices.qboInvoiceId, entityId)));
+        for (const inv of matchingInvoices) {
+          await db.update(invoices).set({ qboInvoiceId: null }).where(eq(invoices.id, inv.id));
+          await logSync(companyId, "invoice", inv.id, "unlink", "synced", entityId);
+        }
+      }
+    } else if (normalizedEntity === "item") {
+      await logSync(companyId, "item", entityId, normalizedOp, "synced", entityId);
+      console.log(`[QBO Webhook] Item ${normalizedOp} id=${entityId} for company=${companyId} (logged, no local model)`);
+    }
+  } catch (err: any) {
+    console.error(`[QBO Webhook] Error processing ${entityName} ${operation} id=${entityId}:`, err.message);
+    await logSync(companyId, normalizedEntity, entityId, normalizedOp, "error", entityId, err.message);
+  }
+}
+
+async function updateLocalContactFromQboCustomer(companyId: string, qboCustomerId: string): Promise<void> {
+  const qboData = await qboRequest(companyId, "GET", `/customer/${qboCustomerId}`);
+  const customer = qboData?.Customer;
+  if (!customer) return;
+
+  const matchingContacts = await db.select().from(contacts)
+    .where(and(eq(contacts.companyId, companyId), eq(contacts.qboCustomerId, qboCustomerId)));
+
+  if (matchingContacts.length === 0) {
+    await logSync(companyId, "contact", qboCustomerId, "inbound-skip", "synced", qboCustomerId);
+    return;
+  }
+
+  for (const contact of matchingContacts) {
+    const updates: Record<string, any> = {};
+    if (customer.PrimaryEmailAddr?.Address && customer.PrimaryEmailAddr.Address !== contact.email) {
+      updates.email = customer.PrimaryEmailAddr.Address;
+    }
+    if (customer.PrimaryPhone?.FreeFormNumber && customer.PrimaryPhone.FreeFormNumber !== contact.phone) {
+      updates.phone = customer.PrimaryPhone.FreeFormNumber;
+    }
+    if (customer.GivenName && customer.GivenName !== contact.firstName) {
+      updates.firstName = customer.GivenName;
+    }
+    if (customer.FamilyName && customer.FamilyName !== contact.lastName) {
+      updates.lastName = customer.FamilyName;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await db.update(contacts).set(updates).where(eq(contacts.id, contact.id));
+      await logSync(companyId, "contact", contact.id, "inbound-update", "synced", qboCustomerId);
+    } else {
+      await logSync(companyId, "contact", contact.id, "inbound-noop", "synced", qboCustomerId);
+    }
+  }
+}
+
+async function updateLocalInvoiceFromQboInvoice(companyId: string, qboInvoiceId: string): Promise<void> {
+  const qboData = await qboRequest(companyId, "GET", `/invoice/${qboInvoiceId}`);
+  const qboInvoice = qboData?.Invoice;
+  if (!qboInvoice) return;
+
+  const matchingInvoices = await db.select().from(invoices)
+    .where(and(eq(invoices.companyId, companyId), eq(invoices.qboInvoiceId, qboInvoiceId)));
+
+  if (matchingInvoices.length === 0) {
+    await logSync(companyId, "invoice", qboInvoiceId, "inbound-skip", "synced", qboInvoiceId);
+    return;
+  }
+
+  for (const inv of matchingInvoices) {
+    const balance = parseFloat(qboInvoice.Balance ?? "0");
+    const totalAmt = parseFloat(qboInvoice.TotalAmt ?? "0");
+
+    if (qboInvoice.PrivateNote?.includes("Voided")) {
+      if (inv.status !== "void") {
+        await db.update(invoices).set({ status: "void" }).where(eq(invoices.id, inv.id));
+        await logSync(companyId, "invoice", inv.id, "inbound-void", "synced", qboInvoiceId);
+      }
+    } else if (balance === 0 && totalAmt > 0 && inv.status !== "paid") {
+      await db.update(invoices).set({ status: "paid", paidAt: new Date() }).where(eq(invoices.id, inv.id));
+      await logSync(companyId, "invoice", inv.id, "inbound-paid", "synced", qboInvoiceId);
+    } else {
+      await logSync(companyId, "invoice", inv.id, "inbound-update", "synced", qboInvoiceId);
+    }
+  }
+}
+
+async function handleQboInvoiceVoid(companyId: string, qboInvoiceId: string): Promise<void> {
+  const matchingInvoices = await db.select().from(invoices)
+    .where(and(eq(invoices.companyId, companyId), eq(invoices.qboInvoiceId, qboInvoiceId)));
+
+  for (const inv of matchingInvoices) {
+    if (inv.status !== "void") {
+      await db.update(invoices).set({ status: "void" }).where(eq(invoices.id, inv.id));
+      await logSync(companyId, "invoice", inv.id, "inbound-void", "synced", qboInvoiceId);
+    }
+  }
+}
+
+export async function lookupCompanyByRealmId(realmId: string): Promise<string | null> {
+  const [company] = await db.select({ id: companies.id }).from(companies)
+    .where(eq(companies.qboRealmId, realmId))
+    .limit(1);
+  return company?.id || null;
+}
+
+let cdcPollInFlight = false;
+
+export async function runCdcPoll(): Promise<void> {
+  if (cdcPollInFlight) {
+    console.log("[QBO CDC] Poll already in progress, skipping");
+    return;
+  }
+  cdcPollInFlight = true;
+
+  try {
+    console.log("[QBO CDC] Starting CDC poll...");
+
+    const connectedCompanies = await db.select({
+      id: companies.id,
+      qboRealmId: companies.qboRealmId,
+    }).from(companies)
+      .where(and(isNotNull(companies.qboRealmId), isNotNull(companies.qboAccessToken)));
+
+    if (connectedCompanies.length === 0) {
+      console.log("[QBO CDC] No connected companies, skipping");
+      return;
+    }
+
+    const changedSince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    for (const company of connectedCompanies) {
+      try {
+        await refreshQboTokens(company.id);
+
+        const cdcRes = await qboRequest(company.id, "GET",
+          `/cdc?entities=Customer,Invoice,Item&changedSince=${encodeURIComponent(changedSince)}`);
+
+        const cdcResponse = cdcRes?.CDCResponse;
+        if (!Array.isArray(cdcResponse)) continue;
+
+        for (const entitySet of cdcResponse) {
+          const queryResponses = entitySet?.QueryResponse;
+          if (!Array.isArray(queryResponses)) continue;
+
+          for (const qr of queryResponses) {
+            if (qr.Customer) {
+              const customers = Array.isArray(qr.Customer) ? qr.Customer : [qr.Customer];
+              for (const customer of customers) {
+                try {
+                  const qboId = String(customer.Id);
+                  if (customer.status === "Deleted") {
+                    const matching = await db.select().from(contacts)
+                      .where(and(eq(contacts.companyId, company.id), eq(contacts.qboCustomerId, qboId)));
+                    for (const c of matching) {
+                      await db.update(contacts).set({ qboCustomerId: null }).where(eq(contacts.id, c.id));
+                      await logSync(company.id, "contact", c.id, "cdc-unlink", "synced", qboId);
+                    }
+                  } else {
+                    await updateLocalContactFromQboCustomer(company.id, qboId);
+                  }
+                } catch (err: any) {
+                  console.error(`[QBO CDC] Customer processing error:`, err.message);
+                }
+              }
+            }
+
+            if (qr.Invoice) {
+              const qboInvoices = Array.isArray(qr.Invoice) ? qr.Invoice : [qr.Invoice];
+              for (const qboInv of qboInvoices) {
+                try {
+                  const qboId = String(qboInv.Id);
+                  if (qboInv.status === "Deleted") {
+                    const matching = await db.select().from(invoices)
+                      .where(and(eq(invoices.companyId, company.id), eq(invoices.qboInvoiceId, qboId)));
+                    for (const inv of matching) {
+                      await db.update(invoices).set({ qboInvoiceId: null }).where(eq(invoices.id, inv.id));
+                      await logSync(company.id, "invoice", inv.id, "cdc-unlink", "synced", qboId);
+                    }
+                  } else if (qboInv.PrivateNote?.includes("Voided")) {
+                    await handleQboInvoiceVoid(company.id, qboId);
+                  } else {
+                    await updateLocalInvoiceFromQboInvoice(company.id, qboId);
+                  }
+                } catch (err: any) {
+                  console.error(`[QBO CDC] Invoice processing error:`, err.message);
+                }
+              }
+            }
+
+            if (qr.Item) {
+              const items = Array.isArray(qr.Item) ? qr.Item : [qr.Item];
+              for (const item of items) {
+                await logSync(company.id, "item", String(item.Id), "cdc-update", "synced", String(item.Id));
+              }
+            }
+          }
+        }
+
+        console.log(`[QBO CDC] Completed poll for company ${company.id} (realm=${company.qboRealmId})`);
+      } catch (err: any) {
+        console.error(`[QBO CDC] Failed for company ${company.id}:`, err.message);
+      }
+    }
+
+    console.log("[QBO CDC] Poll complete");
+  } finally {
+    cdcPollInFlight = false;
+  }
+}
+
+export function startCdcPolling(): void {
+  const SIX_HOURS = 6 * 60 * 60 * 1000;
+
+  setTimeout(() => {
+    runCdcPoll().catch(err => console.error("[QBO CDC] Initial poll error:", err));
+
+    setInterval(() => {
+      runCdcPoll().catch(err => console.error("[QBO CDC] Scheduled poll error:", err));
+    }, SIX_HOURS);
+  }, 60_000);
+
+  console.log("[QBO CDC] Polling scheduled (first run in 60s, then every 6 hours)");
 }
 
 export async function disconnectQbo(companyId: string): Promise<void> {

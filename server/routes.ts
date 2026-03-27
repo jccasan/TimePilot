@@ -6745,16 +6745,28 @@ export async function registerRoutes(
           return res.status(401).json({ error: "Invalid signature" });
         }
       } else {
-        console.warn("[QBO Webhook] QBO_WEBHOOK_VERIFIER_TOKEN not set — skipping signature verification");
+        if (process.env.NODE_ENV === "production") {
+          console.error("[QBO Webhook] QBO_WEBHOOK_VERIFIER_TOKEN not set in production — rejecting request");
+          return res.status(401).json({ error: "Webhook verification not configured" });
+        }
+        console.warn("[QBO Webhook] QBO_WEBHOOK_VERIFIER_TOKEN not set — skipping signature verification (dev only)");
       }
 
       const payload = req.body;
       if (payload?.eventNotifications) {
+        const { lookupCompanyByRealmId, processWebhookEntity } = await import("./services/quickbooks");
         for (const notification of payload.eventNotifications) {
           const realmId = notification.realmId;
+          const companyId = await lookupCompanyByRealmId(realmId);
+          if (!companyId) {
+            console.warn(`[QBO Webhook] No company found for realmId=${realmId}`);
+            continue;
+          }
           const entities = notification.dataChangeEvent?.entities || [];
           for (const entity of entities) {
-            console.log(`[QBO Webhook] realmId=${realmId} operation=${entity.operation} entity=${entity.name} id=${entity.id} lastUpdated=${entity.lastUpdated}`);
+            console.log(`[QBO Webhook] realmId=${realmId} company=${companyId} operation=${entity.operation} entity=${entity.name} id=${entity.id}`);
+            processWebhookEntity(companyId, entity.name, String(entity.id), entity.operation)
+              .catch((err: any) => console.error(`[QBO Webhook] Async processing failed:`, err.message));
           }
         }
       }

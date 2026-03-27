@@ -610,6 +610,14 @@ async function seedDemoCompany() {
     },
     () => {
       log(`serving on port ${port}`);
+
+      import("./services/quickbooks").then(({ isQboConfigured, startCdcPolling }) => {
+        if (isQboConfigured()) {
+          startCdcPolling();
+        } else {
+          console.log("[QBO CDC] QBO not configured, skipping CDC polling");
+        }
+      }).catch(err => console.error("[QBO CDC] Failed to initialize CDC polling:", err));
     },
   );
 })();
