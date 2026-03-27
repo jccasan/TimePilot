@@ -902,7 +902,7 @@ export async function registerRoutes(
 
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const { email, password, firstName, lastName } = req.body;
+      const { email, password, firstName, lastName, companyName } = req.body;
       const result = await registerUser(email, password, firstName || "", lastName || "");
       if ("error" in result) {
         return res.status(400).json({ error: result.error });
@@ -916,26 +916,37 @@ export async function registerRoutes(
       let setupDone = false;
       let companyInfo: { companyId: string; alreadySetup: boolean } | null = null;
       try {
-        companyInfo = await ensureCompanySetup(result.user.id);
+        companyInfo = await ensureCompanySetup(result.user.id, companyName);
         setupDone = true;
       } catch (err) {
         console.error("Setup during register failed:", err);
       }
 
       const displayName = [firstName, lastName].filter(Boolean).join(" ") || "there";
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host || "localhost:5000";
+      const appUrl = `${protocol}://${host}`;
+      const resolvedCompanyName = companyName?.trim() || `${displayName}'s Company`;
+
       sendEmail({
         to: email,
-        subject: "Welcome to ScooPilot",
-        text: `Hi ${displayName},\n\nWelcome to ScooPilot! Your account has been created successfully.\n\nYou can now sign in and start managing your pet waste removal business.\n\nThank you for choosing ScooPilot!`,
+        subject: "Welcome to ScooPilot — Your 14-day free trial is active",
+        text: `Hi ${displayName},\n\nWelcome to ScooPilot! Your account "${resolvedCompanyName}" has been created with a 14-day free trial.\n\nLog in at: ${appUrl}\nEmail: ${email}\n\nThank you for choosing ScooPilot!`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
               <h1 style="color: white; margin: 0;">ScooPilot</h1>
             </div>
             <div style="padding: 20px; border: 1px solid #e5e7eb;">
-              <h2 style="color: #2d8a5e;">Welcome, ${displayName}!</h2>
-              <p>Your account has been created successfully.</p>
-              <p>You can now sign in and start managing your pet waste removal business with ScooPilot.</p>
+              <h2 style="margin-top: 0;">Welcome, ${displayName}!</h2>
+              <p>Your account <strong>"${resolvedCompanyName}"</strong> has been created with a <strong>14-day free trial</strong>.</p>
+              <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 4px 0;"><strong>Email:</strong> ${email}</p>
+                <p style="margin: 4px 0;"><strong>Trial ends:</strong> ${new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
+              </div>
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
+              </div>
               <p style="margin-top: 20px; color: #6b7280; font-size: 14px;">Thank you for choosing ScooPilot!</p>
             </div>
           </div>
@@ -943,20 +954,13 @@ export async function registerRoutes(
       }).catch((err) => console.error("Failed to send welcome email:", err));
 
       if (companyInfo && !companyInfo.alreadySetup) {
-        (async () => {
-          try {
-            const companyData = await storage.getCompany(companyInfo!.companyId);
-            await sendAdminSignupNotification({
-              companyName: companyData?.name || "Unknown Company",
-              ownerEmail: email,
-              ownerName: displayName,
-              tier: companyData?.subscriptionTier || "tier_1",
-              source: "Direct Registration",
-            });
-          } catch (err) {
-            console.error("[Signup Notification] Failed during direct registration:", err);
-          }
-        })();
+        sendAdminSignupNotification({
+          companyName: resolvedCompanyName,
+          ownerEmail: email,
+          ownerName: displayName,
+          tier: "free_trial",
+          source: "Direct Registration",
+        }).catch((err) => console.error("[Signup Notification] Failed during direct registration:", err));
       }
 
       return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
@@ -1177,22 +1181,37 @@ export async function registerRoutes(
 
   // ================ Setup / Onboarding ================
 
-  async function ensureCompanySetup(userId: string): Promise<{ companyId: string; alreadySetup: boolean }> {
+  async function ensureCompanySetup(userId: string, companyName?: string): Promise<{ companyId: string; alreadySetup: boolean }> {
     const existing = await storage.getCompaniesForUser(userId);
     if (existing.length > 0) {
       return { companyId: existing[0].companyId, alreadySetup: true };
     }
     const user = await getUserById(userId);
     const username = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User" : "User";
+    const resolvedName = companyName?.trim() || `${username}'s Company`;
+
+    const baseSlug = resolvedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
+    let slug = baseSlug;
+    let slugSuffix = 1;
+    while (true) {
+      const existingSlug = await storage.getCompanyBySlug(slug);
+      if (!existingSlug) break;
+      slug = `${baseSlug}-${slugSuffix++}`;
+    }
+
+    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
     const company = await storage.createCompany({
-      name: `${username}'s Company`,
-      email: "",
-      subscriptionTier: "tier_1",
-      subscriptionStatus: "active",
-    });
+      name: resolvedName,
+      email: user?.email || "",
+      slug,
+      subscriptionTier: "free_trial",
+      subscriptionStatus: "trialing",
+      trialEndsAt,
+    } as typeof companies.$inferInsert);
     await storage.addUserToCompany(userId, company.id, "owner");
 
     await seedDefaultLeadSources(company.id);
+    await storage.seedDefaultPricing(company.id);
 
     return { companyId: company.id, alreadySetup: false };
   }
@@ -12252,6 +12271,7 @@ export async function registerRoutes(
           slug,
           subscriptionTier: "free_trial",
           subscriptionStatus: "trialing",
+          trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
         }).returning();
 
         await tx.insert((await import("@shared/schema")).companyUsers).values({
