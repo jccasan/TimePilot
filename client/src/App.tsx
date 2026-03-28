@@ -128,9 +128,10 @@ function AuthenticatedLayout() {
     queryKey: ["/api/onboarding/status"],
     enabled: setupState === "ready",
   });
-  const { data: businessOnboarding, isLoading: businessOnboardingLoading } = useQuery<{ isComplete: boolean }>({
+  const { data: businessOnboarding, isLoading: businessOnboardingLoading, isError: businessOnboardingError } = useQuery<{ isComplete: boolean }>({
     queryKey: ["/api/onboarding/business-status"],
     enabled: setupState === "ready",
+    retry: 2,
   });
   const [businessOnboardingDone, setBusinessOnboardingDone] = useState(false);
   const [setupDismissed, setSetupDismissed] = useState(() => localStorage.getItem("scoopilot_setup_dismissed") === "true");
@@ -199,7 +200,7 @@ function AuthenticatedLayout() {
     );
   }
 
-  if (!businessOnboardingDone && (businessOnboardingLoading || !businessOnboarding || !businessOnboarding.isComplete)) {
+  if (!businessOnboardingDone && !businessOnboardingError && (businessOnboardingLoading || !businessOnboarding || !businessOnboarding.isComplete)) {
     if (businessOnboardingLoading || !businessOnboarding) {
       return (
         <div className="flex items-center justify-center h-screen bg-background">
