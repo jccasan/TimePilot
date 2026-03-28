@@ -12819,12 +12819,17 @@ Return ONLY valid JSON, no markdown.`,
     const dogs = contact.numberOfDogs ?? 1;
     const frequency = (contact.serviceFrequency || "weekly") as "weekly" | "biweekly" | "monthly" | "onetime";
 
-    const realPrice = await lookupRealPrice(company.id, dogs, frequency, yardSize);
+    const pricingItems = await storage.getServicePricing(company.id);
+    const hasActiveRecurring = pricingItems.some(p => p.isActive && p.category === "recurring_service");
+
     let priceDollars: string;
-    if (realPrice.priceCents > 0 && !realPrice.callForQuote) {
-      priceDollars = (realPrice.priceCents / 100).toFixed(2);
-    } else if (realPrice.callForQuote) {
-      priceDollars = "Call for Quote";
+    if (hasActiveRecurring) {
+      const realPrice = await lookupRealPrice(company.id, dogs, frequency, yardSize);
+      if (realPrice.priceCents > 0 && !realPrice.callForQuote) {
+        priceDollars = (realPrice.priceCents / 100).toFixed(2);
+      } else {
+        priceDollars = "Call for Quote";
+      }
     } else {
       const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
       const pricingInputs: PriceCalculatorInputs = {
@@ -13014,9 +13019,11 @@ Return ONLY valid JSON, no markdown.`,
       let quotePriceCents: number | null = null;
       let callForQuote = false;
 
+      const pricingItems = await storage.getServicePricing(company.id);
+      const hasActiveRecurring = pricingItems.some(p => p.isActive && p.category === "recurring_service");
+
       if (pricingItemId) {
-        const pricingItems = await storage.getServicePricing(company.id);
-        const selectedItem = pricingItems.find(p => p.id === pricingItemId && p.isActive);
+        const selectedItem = pricingItems.find(p => p.id === pricingItemId && p.isActive && p.category === "recurring_service");
         if (selectedItem) {
           const meta = selectedItem.metadata as { callForQuote?: boolean } | null;
           if (meta?.callForQuote) {
@@ -13025,7 +13032,7 @@ Return ONLY valid JSON, no markdown.`,
             quotePriceCents = Math.round(parseFloat(selectedItem.basePrice) * 100);
           }
           if (lotAddonId && quotePriceCents !== null) {
-            const lotItem = pricingItems.find(p => p.id === lotAddonId && p.isActive);
+            const lotItem = pricingItems.find(p => p.id === lotAddonId && p.isActive && p.category === "add_on");
             if (lotItem && parseFloat(lotItem.basePrice) > 0) {
               quotePriceCents += Math.round(parseFloat(lotItem.basePrice) * 100);
             }
@@ -13033,16 +13040,18 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      if (quotePriceCents === null && !callForQuote) {
+      if (quotePriceCents === null && !callForQuote && hasActiveRecurring) {
         const realPrice = await lookupRealPrice(company.id, numberOfDogs, serviceFrequency, yardSize);
         if (realPrice.callForQuote) {
           callForQuote = true;
         } else if (realPrice.priceCents > 0) {
           quotePriceCents = realPrice.priceCents;
+        } else {
+          callForQuote = true;
         }
       }
 
-      if (quotePriceCents === null && !callForQuote) {
+      if (quotePriceCents === null && !callForQuote && !hasActiveRecurring) {
         const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
         const pricingInputs: PriceCalculatorInputs = {
           yardSizeAcres: yardSizeMap[yardSize] || 0.1,
