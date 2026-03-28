@@ -12700,7 +12700,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const pricingItems = await storage.getServicePricing(company.id);
       const activePricing = pricingItems
-        .filter(p => p.isActive && (p.category === "recurring_service" || p.category === "add_on" || p.category === "one_time_service"))
+        .filter(p => p.isActive && (p.category === "recurring_service" || p.category === "add_on"))
         .map(p => ({
           id: p.id,
           name: p.name,
