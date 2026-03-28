@@ -8,13 +8,18 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle2, Dog, Loader2, Phone } from "lucide-react";
 
+type PricingMetadata = {
+  callForQuote?: boolean;
+  [key: string]: unknown;
+};
+
 type PricingItem = {
   id: string;
   name: string;
   basePrice: string;
   category: string;
   unit: string;
-  metadata: Record<string, any> | null;
+  metadata: PricingMetadata | null;
   sortOrder: number;
 };
 
@@ -40,6 +45,7 @@ type DogTier = {
   dogCount: number;
   surcharge: number;
   callForQuote: boolean;
+  pricingItemId: string;
 };
 
 type FrequencyOption = {
@@ -54,6 +60,7 @@ type LotAddon = {
   value: string;
   surcharge: number;
   callForQuote: boolean;
+  pricingItemId: string | null;
 };
 
 const FREQ_DISPLAY: Record<string, string> = {
@@ -121,12 +128,13 @@ function parsePricingData(pricing: PricingItem[]) {
     const dog = parseDogCount(item.name);
     if (!dog) continue;
     if (!freqGroups[freq]) freqGroups[freq] = [];
-    const cfq = !!(item.metadata && (item.metadata as any).callForQuote);
+    const cfq = !!(item.metadata?.callForQuote);
     freqGroups[freq].push({
       dogCount: dog.count,
       price: cfq ? 0 : Math.round(parseFloat(item.basePrice) * 100),
       callForQuote: cfq,
       isPlus: dog.isPlus,
+      itemId: item.id,
     });
   }
 
@@ -142,7 +150,7 @@ function parsePricingData(pricing: PricingItem[]) {
     const basePriceCents = dogItems[0].price;
 
     const regular = dogItems.filter(d => !d.isPlus && !d.callForQuote);
-    const plusItems = dogItems.filter(d => d.isPlus || d.callForQuote);
+    const plusDogItems = dogItems.filter(d => d.isPlus || d.callForQuote);
 
     for (let i = 0; i < regular.length; i += 2) {
       const first = regular[i];
@@ -158,6 +166,7 @@ function parsePricingData(pricing: PricingItem[]) {
           dogCount: first.dogCount,
           surcharge,
           callForQuote: false,
+          pricingItemId: first.itemId,
         });
       } else {
         tiers.push({
@@ -168,11 +177,12 @@ function parsePricingData(pricing: PricingItem[]) {
           dogCount: first.dogCount,
           surcharge,
           callForQuote: false,
+          pricingItemId: first.itemId,
         });
       }
     }
 
-    for (const plus of plusItems) {
+    for (const plus of plusDogItems) {
       const surcharge = plus.callForQuote ? 0 : (plus.price - basePriceCents);
       tiers.push({
         label: plus.callForQuote
@@ -184,6 +194,7 @@ function parsePricingData(pricing: PricingItem[]) {
         dogCount: plus.dogCount,
         surcharge: plus.callForQuote ? 0 : surcharge,
         callForQuote: plus.callForQuote,
+        pricingItemId: plus.itemId,
       });
     }
 
@@ -204,14 +215,15 @@ function parsePricingData(pricing: PricingItem[]) {
       value: String(acre || item.sortOrder),
       surcharge: Math.round(price * 100),
       callForQuote: false,
+      pricingItemId: item.id,
     });
   }
   if (lotAddons.length === 0) {
     lotAddons.push(
-      { label: "Small (under 1/4 acre)", value: "small", surcharge: 0, callForQuote: false },
-      { label: "Medium (1/4 - 1/2 acre)", value: "medium", surcharge: 0, callForQuote: false },
-      { label: "Large (1/2 - 1 acre)", value: "large", surcharge: 0, callForQuote: false },
-      { label: "Extra Large (1+ acre)", value: "extra-large", surcharge: 0, callForQuote: false },
+      { label: "Small (under 1/4 acre)", value: "small", surcharge: 0, callForQuote: false, pricingItemId: null },
+      { label: "Medium (1/4 - 1/2 acre)", value: "medium", surcharge: 0, callForQuote: false, pricingItemId: null },
+      { label: "Large (1/2 - 1 acre)", value: "large", surcharge: 0, callForQuote: false, pricingItemId: null },
+      { label: "Extra Large (1+ acre)", value: "extra-large", surcharge: 0, callForQuote: false, pricingItemId: null },
     );
   }
 
@@ -365,6 +377,8 @@ export default function SignupWidget() {
           yardSize = "medium";
         }
       }
+      const pricingItemId = currentTier?.pricingItemId || undefined;
+      const lotAddonId = currentLot?.pricingItemId || undefined;
       const res = await fetch(`/api/public/leads/${slug}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -374,6 +388,8 @@ export default function SignupWidget() {
           serviceDay: formData.serviceDay || undefined,
           yardSize,
           serviceFrequency: backendFreq,
+          pricingItemId,
+          lotAddonId,
         }),
       });
       if (!res.ok) {

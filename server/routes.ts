@@ -12792,7 +12792,8 @@ Return ONLY valid JSON, no markdown.`,
     }
 
     if (!matched) return { priceCents: 0, callForQuote: false };
-    if (matched.metadata && (matched.metadata as any).callForQuote) return { priceCents: 0, callForQuote: true };
+    const matchedMeta = matched.metadata as { callForQuote?: boolean } | null;
+    if (matchedMeta?.callForQuote) return { priceCents: 0, callForQuote: true };
 
     let priceCents = Math.round(parseFloat(matched.basePrice) * 100);
 
@@ -12949,6 +12950,8 @@ Return ONLY valid JSON, no markdown.`,
     yardSize: z.enum(["small", "medium", "large", "extra-large"]).default("medium"),
     serviceFrequency: z.enum(["twice_weekly", "weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
     serviceDay: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
+    pricingItemId: z.string().uuid().optional(),
+    lotAddonId: z.string().uuid().optional(),
   });
 
   const publicLeadRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -12973,7 +12976,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const parsed = publicLeadSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors });
-      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay } = parsed.data;
+      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay, pricingItemId, lotAddonId } = parsed.data;
 
       const contact = await storage.createContact({
         companyId: company.id,
@@ -13008,15 +13011,38 @@ Return ONLY valid JSON, no markdown.`,
 
       notify(company.id, "new_lead", "New Lead", `${firstName} ${lastName} signed up via your website widget.`.trim(), `/contacts/${contact.id}`);
 
-      const realPrice = await lookupRealPrice(company.id, numberOfDogs, serviceFrequency, yardSize);
       let quotePriceCents: number | null = null;
       let callForQuote = false;
 
-      if (realPrice.callForQuote) {
-        callForQuote = true;
-      } else if (realPrice.priceCents > 0) {
-        quotePriceCents = realPrice.priceCents;
-      } else {
+      if (pricingItemId) {
+        const pricingItems = await storage.getServicePricing(company.id);
+        const selectedItem = pricingItems.find(p => p.id === pricingItemId && p.isActive);
+        if (selectedItem) {
+          const meta = selectedItem.metadata as { callForQuote?: boolean } | null;
+          if (meta?.callForQuote) {
+            callForQuote = true;
+          } else {
+            quotePriceCents = Math.round(parseFloat(selectedItem.basePrice) * 100);
+          }
+          if (lotAddonId && quotePriceCents !== null) {
+            const lotItem = pricingItems.find(p => p.id === lotAddonId && p.isActive);
+            if (lotItem && parseFloat(lotItem.basePrice) > 0) {
+              quotePriceCents += Math.round(parseFloat(lotItem.basePrice) * 100);
+            }
+          }
+        }
+      }
+
+      if (quotePriceCents === null && !callForQuote) {
+        const realPrice = await lookupRealPrice(company.id, numberOfDogs, serviceFrequency, yardSize);
+        if (realPrice.callForQuote) {
+          callForQuote = true;
+        } else if (realPrice.priceCents > 0) {
+          quotePriceCents = realPrice.priceCents;
+        }
+      }
+
+      if (quotePriceCents === null && !callForQuote) {
         const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
         const pricingInputs: PriceCalculatorInputs = {
           yardSizeAcres: yardSizeMap[yardSize] || 0.1,
