@@ -140,55 +140,53 @@ function parsePricingData(pricing: PricingItem[]) {
     if (dogItems.length === 0) return [];
     const tiers: DogTier[] = [];
     const basePriceCents = dogItems[0].price;
-    let i = 0;
 
-    while (i < dogItems.length) {
-      const current = dogItems[i];
+    const regular = dogItems.filter(d => !d.isPlus && !d.callForQuote);
+    const plusItems = dogItems.filter(d => d.isPlus || d.callForQuote);
 
-      if (current.isPlus || current.callForQuote) {
-        const surcharge = current.callForQuote ? 0 : (current.price - basePriceCents);
-        tiers.push({
-          label: current.callForQuote
-            ? `${current.dogCount}+ dogs (Call for Quote)`
-            : surcharge > 0
-              ? `${current.dogCount}+ dogs (+$${(surcharge / 100).toFixed(0)})`
-              : `${current.dogCount}+ dogs`,
-          value: String(current.dogCount),
-          dogCount: current.dogCount,
-          surcharge: current.callForQuote ? 0 : surcharge,
-          callForQuote: current.callForQuote,
-        });
-        i++;
-        continue;
-      }
+    for (let i = 0; i < regular.length; i += 2) {
+      const first = regular[i];
+      const second = regular[i + 1];
+      const surcharge = first.price - basePriceCents;
 
-      const next = dogItems[i + 1];
-      if (next && !next.isPlus && !next.callForQuote && next.price === current.price) {
-        const surcharge = current.price - basePriceCents;
+      if (second) {
         tiers.push({
           label: surcharge > 0
-            ? `${current.dogCount}-${next.dogCount} dogs (+$${(surcharge / 100).toFixed(0)})`
-            : `${current.dogCount}-${next.dogCount} dogs (Base Price)`,
-          value: String(current.dogCount),
-          dogCount: current.dogCount,
+            ? `${first.dogCount}-${second.dogCount} dogs (+$${(surcharge / 100).toFixed(0)})`
+            : `${first.dogCount}-${second.dogCount} dogs (Base Price)`,
+          value: String(first.dogCount),
+          dogCount: first.dogCount,
           surcharge,
           callForQuote: false,
         });
-        i += 2;
       } else {
-        const surcharge = current.price - basePriceCents;
         tiers.push({
           label: surcharge > 0
-            ? `${current.dogCount} dog${current.dogCount > 1 ? "s" : ""} (+$${(surcharge / 100).toFixed(0)})`
-            : `${current.dogCount} dog${current.dogCount > 1 ? "s" : ""} (Base Price)`,
-          value: String(current.dogCount),
-          dogCount: current.dogCount,
+            ? `${first.dogCount} dog${first.dogCount > 1 ? "s" : ""} (+$${(surcharge / 100).toFixed(0)})`
+            : `${first.dogCount} dog${first.dogCount > 1 ? "s" : ""} (Base Price)`,
+          value: String(first.dogCount),
+          dogCount: first.dogCount,
           surcharge,
           callForQuote: false,
         });
-        i++;
       }
     }
+
+    for (const plus of plusItems) {
+      const surcharge = plus.callForQuote ? 0 : (plus.price - basePriceCents);
+      tiers.push({
+        label: plus.callForQuote
+          ? `${plus.dogCount}+ dogs (Call for Quote)`
+          : surcharge > 0
+            ? `${plus.dogCount}+ dogs (+$${(surcharge / 100).toFixed(0)})`
+            : `${plus.dogCount}+ dogs`,
+        value: String(plus.dogCount),
+        dogCount: plus.dogCount,
+        surcharge: plus.callForQuote ? 0 : surcharge,
+        callForQuote: plus.callForQuote,
+      });
+    }
+
     return tiers;
   };
 
@@ -310,13 +308,14 @@ export default function SignupWidget() {
   const [smsOptIn, setSmsOptIn] = useState(false);
   const [quoteResult, setQuoteResult] = useState<QuoteResult | null>(null);
 
-  const hasPricing = !!(company?.pricing && company.pricing.length > 0);
   const brandStyles = useMemo(() => getBrandStyles(company?.primaryColor || null), [company?.primaryColor]);
 
   const parsed = useMemo(() => {
     if (!company?.pricing) return null;
     return parsePricingData(company.pricing);
   }, [company?.pricing]);
+
+  const hasPricing = !!(parsed && parsed.availableFreqs.length > 0);
 
   const dogTiers = useMemo(() => {
     if (!parsed || !selectedFreq || !parsed.freqGroups[selectedFreq]) return [];
@@ -478,7 +477,7 @@ export default function SignupWidget() {
     formData.state.trim().length > 0 &&
     formData.zipCode.trim().length > 0 &&
     smsOptIn &&
-    (!hasPricing || (selectedFreq && selectedDogTier && selectedLot));
+    !!selectedFreq && !!selectedDogTier && !!selectedLot;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(to bottom, ${brandStyles.gradientFrom}, white)` }}>
@@ -598,8 +597,18 @@ export default function SignupWidget() {
                     <div className="space-y-1.5">
                       {parsed.availableFreqs.map(freq => {
                         const items = parsed.freqGroups[freq];
-                        const baseItem = items.find(i => !i.callForQuote);
-                        const basePrice = baseItem ? `$${(baseItem.price / 100).toFixed(2)}/visit` : "";
+                        let priceLabel = "";
+                        if (selectedDogTier) {
+                          const dogCount = parseInt(selectedDogTier);
+                          const matchedItem = items.find(i => i.dogCount === dogCount);
+                          if (matchedItem) {
+                            priceLabel = matchedItem.callForQuote ? "Call for Quote" : `$${(matchedItem.price / 100).toFixed(2)}/visit`;
+                          }
+                        }
+                        if (!priceLabel) {
+                          const baseItem = items.find(i => !i.callForQuote);
+                          priceLabel = baseItem ? `from $${(baseItem.price / 100).toFixed(2)}/visit` : "";
+                        }
                         const isSelected = selectedFreq === freq;
                         return (
                           <label
@@ -623,7 +632,7 @@ export default function SignupWidget() {
                               style={{ accentColor: brandStyles.accentText }}
                             />
                             <span className="flex-1 text-sm">{FREQ_DISPLAY[freq] || freq}</span>
-                            {basePrice && <span className="text-xs text-muted-foreground">from {basePrice}</span>}
+                            {priceLabel && <span className="text-xs text-muted-foreground">{priceLabel}</span>}
                           </label>
                         );
                       })}
@@ -716,7 +725,97 @@ export default function SignupWidget() {
                   </div>
                 )}
               </>
-            ) : null}
+            ) : (
+              <div className="border rounded-lg p-4 space-y-4" style={{ borderColor: brandStyles.lightBorder, backgroundColor: brandStyles.lightBg }}>
+                <h3 className="font-semibold text-sm" style={{ color: brandStyles.accentText }}>Service Options</h3>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Service Frequency *</Label>
+                  <div className="space-y-1.5">
+                    {[
+                      { value: "weekly", label: "Once a Week" },
+                      { value: "biweekly", label: "Every Other Week" },
+                      { value: "onetime", label: "One-Time Cleaning" },
+                    ].map(opt => {
+                      const isSelected = selectedFreq === opt.value;
+                      return (
+                        <label
+                          key={opt.value}
+                          className={`flex items-center gap-3 p-2.5 rounded-md border cursor-pointer transition-colors ${
+                            isSelected ? "border-2 bg-white shadow-sm" : "border-transparent hover:bg-white/60"
+                          }`}
+                          style={isSelected ? { borderColor: brandStyles.accentText } : {}}
+                          data-testid={`radio-freq-${opt.value}`}
+                        >
+                          <input type="radio" name="frequency" value={opt.value} checked={isSelected}
+                            onChange={() => setSelectedFreq(opt.value)} className="h-4 w-4"
+                            style={{ accentColor: brandStyles.accentText }} />
+                          <span className="flex-1 text-sm">{opt.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Number of Dogs *</Label>
+                  <div className="space-y-1.5">
+                    {[
+                      { value: "1", label: "1-2 dogs" },
+                      { value: "3", label: "3-4 dogs" },
+                      { value: "5", label: "5-6 dogs" },
+                      { value: "7", label: "7+ dogs" },
+                    ].map(opt => {
+                      const isSelected = selectedDogTier === opt.value;
+                      return (
+                        <label
+                          key={opt.value}
+                          className={`flex items-center gap-3 p-2.5 rounded-md border cursor-pointer transition-colors ${
+                            isSelected ? "border-2 bg-white shadow-sm" : "border-transparent hover:bg-white/60"
+                          }`}
+                          style={isSelected ? { borderColor: brandStyles.accentText } : {}}
+                          data-testid={`radio-dogs-${opt.value}`}
+                        >
+                          <input type="radio" name="dogs" value={opt.value} checked={isSelected}
+                            onChange={() => setSelectedDogTier(opt.value)} className="h-4 w-4"
+                            style={{ accentColor: brandStyles.accentText }} />
+                          <span className="text-sm">{opt.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Yard Size *</Label>
+                  <div className="space-y-1.5">
+                    {[
+                      { value: "small", label: "Small (under 1/4 acre)" },
+                      { value: "medium", label: "Medium (1/4 - 1/2 acre)" },
+                      { value: "large", label: "Large (1/2 - 3/4 acre)" },
+                      { value: "extra-large", label: "Extra Large (3/4+ acre)" },
+                    ].map(opt => {
+                      const isSelected = selectedLot === opt.value;
+                      return (
+                        <label
+                          key={opt.value}
+                          className={`flex items-center gap-3 p-2.5 rounded-md border cursor-pointer transition-colors ${
+                            isSelected ? "border-2 bg-white shadow-sm" : "border-transparent hover:bg-white/60"
+                          }`}
+                          style={isSelected ? { borderColor: brandStyles.accentText } : {}}
+                          data-testid={`radio-lot-${opt.value}`}
+                        >
+                          <input type="radio" name="lot" value={opt.value} checked={isSelected}
+                            onChange={() => setSelectedLot(opt.value)} className="h-4 w-4"
+                            style={{ accentColor: brandStyles.accentText }} />
+                          <span className="text-sm">{opt.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="serviceDay">Preferred Service Day</Label>

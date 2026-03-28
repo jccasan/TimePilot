@@ -12776,10 +12776,12 @@ Return ONLY valid JSON, no markdown.`,
 
     const matchDog = (name: string, d: number): boolean => {
       const lower = name.toLowerCase();
-      if (lower.includes(`${d} dog`)) return true;
-      if (lower.includes(`${d}+`) || lower.includes(`${d} +`)) return d >= d;
       const rangeMatch = lower.match(/(\d+)\s*[-–]\s*(\d+)\s*dog/);
       if (rangeMatch) return d >= parseInt(rangeMatch[1]) && d <= parseInt(rangeMatch[2]);
+      const plusMatch = lower.match(/(\d+)\s*\+\s*dog/);
+      if (plusMatch) return d >= parseInt(plusMatch[1]);
+      if (lower.includes(`${d}+`) || lower.includes(`${d} +`)) return true;
+      if (lower.includes(`${d} dog`)) return true;
       return false;
     };
 
