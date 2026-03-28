@@ -34,8 +34,12 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     const replyTo = options.replyTo
       || (options.from && options.from !== VERIFIED_SENDER ? options.from : undefined);
 
-    const from = options.senderName
-      ? { name: options.senderName, email: VERIFIED_SENDER }
+    const displayName = options.senderName && replyTo
+      ? `${options.senderName} (${replyTo})`
+      : options.senderName || undefined;
+
+    const from = displayName
+      ? { name: displayName, email: VERIFIED_SENDER }
       : VERIFIED_SENDER;
 
     const msg = {
