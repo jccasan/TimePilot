@@ -12697,9 +12697,33 @@ Return ONLY valid JSON, no markdown.`,
       const { slug } = req.params;
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const pricingItems = await storage.getServicePricing(company.id);
+      const activePricing = pricingItems
+        .filter(p => p.isActive && (p.category === "recurring_service" || p.category === "add_on" || p.category === "one_time_service"))
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          basePrice: p.basePrice,
+          category: p.category,
+          unit: p.unit,
+          metadata: p.metadata,
+          sortOrder: p.sortOrder,
+        }));
+
+      let primaryColor: string | null = null;
+      if (company.invoiceTheme) {
+        try {
+          const theme = JSON.parse(company.invoiceTheme as string);
+          if (theme.primaryColor) primaryColor = theme.primaryColor;
+        } catch {}
+      }
+
       res.json({
         name: company.name,
         logoUrl: company.logoUrl,
+        pricing: activePricing,
+        primaryColor,
       });
     } catch (err) { handleError(res, err); }
   });
@@ -12715,13 +12739,74 @@ Return ONLY valid JSON, no markdown.`,
     zipCode: z.string().max(20).optional().or(z.literal("")),
     numberOfDogs: z.union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)]).default(1),
     yardSize: z.enum(["small", "medium", "large", "extra-large"]).optional(),
-    serviceFrequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
+    serviceFrequency: z.enum(["twice_weekly", "weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
     serviceDay: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
     source: z.string().max(100).optional(),
     notes: z.string().max(2000).optional(),
   });
 
   const DEFAULT_SMS_QUOTE_TEMPLATE = "Hi {firstName}! Thanks for your interest in our pet waste removal service. Based on {dogs} dog(s) with {frequency} service, your estimated price is ${price}/visit. Reply YES to get started!";
+
+  async function lookupRealPrice(companyId: string, dogs: number, frequency: string, yardSize?: string): Promise<{ priceCents: number; callForQuote: boolean }> {
+    const pricingItems = await storage.getServicePricing(companyId);
+    const activeRecurring = pricingItems.filter(p => p.isActive && p.category === "recurring_service");
+    const activeAddOns = pricingItems.filter(p => p.isActive && p.category === "add_on");
+
+    if (activeRecurring.length === 0) return { priceCents: 0, callForQuote: false };
+
+    const freqMap: Record<string, string[]> = {
+      twice_weekly: ["twice weekly", "twice-weekly", "two times", "2x", "twice per week"],
+      weekly: ["weekly", "once a week", "once per week"],
+      biweekly: ["bi-weekly", "bi weekly", "every other week", "biweekly"],
+      monthly: ["monthly"],
+      onetime: ["one-time", "one time", "onetime"],
+    };
+    const twiceWeeklyKeys = freqMap["twice_weekly"];
+
+    const matchFreq = (name: string, freq: string): boolean => {
+      const lower = name.toLowerCase();
+      if (freq === "weekly") {
+        if (twiceWeeklyKeys.some(k => lower.includes(k))) return false;
+        if ((freqMap["biweekly"] || []).some(k => lower.includes(k))) return false;
+      }
+      return (freqMap[freq] || [freq]).some(k => lower.includes(k));
+    };
+
+    const freqItems = activeRecurring.filter(p => matchFreq(p.name, frequency));
+
+    const matchDog = (name: string, d: number): boolean => {
+      const lower = name.toLowerCase();
+      if (lower.includes(`${d} dog`)) return true;
+      if (lower.includes(`${d}+`) || lower.includes(`${d} +`)) return d >= d;
+      const rangeMatch = lower.match(/(\d+)\s*[-–]\s*(\d+)\s*dog/);
+      if (rangeMatch) return d >= parseInt(rangeMatch[1]) && d <= parseInt(rangeMatch[2]);
+      return false;
+    };
+
+    let matched = freqItems.find(p => matchDog(p.name, dogs));
+    if (!matched) {
+      const plusItems = freqItems.filter(p => { const m = p.name.match(/(\d+)\+/); return m && dogs >= parseInt(m[1]); });
+      if (plusItems.length > 0) matched = plusItems[plusItems.length - 1];
+    }
+
+    if (!matched) return { priceCents: 0, callForQuote: false };
+    if (matched.metadata && (matched.metadata as any).callForQuote) return { priceCents: 0, callForQuote: true };
+
+    let priceCents = Math.round(parseFloat(matched.basePrice) * 100);
+
+    const lotSizeAddOns = activeAddOns.filter(p => p.name.toLowerCase().includes("lot size") || p.name.toLowerCase().includes("acre"));
+    const yardAcreMap: Record<string, number> = { small: 0.1, medium: 0.35, large: 0.75, "extra-large": 1.0 };
+    const acreage = yardAcreMap[yardSize || "medium"] || 0.35;
+    let bestAddon: typeof activeAddOns[0] | null = null;
+    for (const addon of lotSizeAddOns.sort((a, b) => a.sortOrder - b.sortOrder)) {
+      const acreMatch = addon.name.match(/([\d.]+)\s*acre/i);
+      if (acreMatch && acreage <= parseFloat(acreMatch[1])) { bestAddon = addon; break; }
+    }
+    if (!bestAddon && lotSizeAddOns.length > 0) bestAddon = lotSizeAddOns[lotSizeAddOns.length - 1];
+    if (bestAddon && parseFloat(bestAddon.basePrice) > 0) priceCents += Math.round(parseFloat(bestAddon.basePrice) * 100);
+
+    return { priceCents, callForQuote: false };
+  }
 
   async function sendAutoQuoteSms(company: typeof companies.$inferSelect, contact: { firstName: string; phone: string | null; numberOfDogs: number | null; serviceFrequency: string | null }, yardSize?: string): Promise<boolean> {
     if (!contact.phone) return false;
@@ -12730,16 +12815,25 @@ Return ONLY valid JSON, no markdown.`,
 
     const dogs = contact.numberOfDogs ?? 1;
     const frequency = (contact.serviceFrequency || "weekly") as "weekly" | "biweekly" | "monthly" | "onetime";
-    const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
-    const pricingInputs: PriceCalculatorInputs = {
-      yardSizeAcres: yardSizeMap[yardSize || "medium"] || 0.1,
-      dogCount: dogs,
-      serviceFrequency: frequency,
-      yardDifficulty: "flat",
-      distanceFromNearestStopMiles: 0.5,
-    };
-    const priceResult = calculatePrice(pricingInputs, company.pricingConfig);
-    const priceDollars = (priceResult.recommendedPriceCents / 100).toFixed(2);
+
+    const realPrice = await lookupRealPrice(company.id, dogs, frequency, yardSize);
+    let priceDollars: string;
+    if (realPrice.priceCents > 0 && !realPrice.callForQuote) {
+      priceDollars = (realPrice.priceCents / 100).toFixed(2);
+    } else if (realPrice.callForQuote) {
+      priceDollars = "Call for Quote";
+    } else {
+      const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
+      const pricingInputs: PriceCalculatorInputs = {
+        yardSizeAcres: yardSizeMap[yardSize || "medium"] || 0.1,
+        dogCount: dogs,
+        serviceFrequency: frequency,
+        yardDifficulty: "flat",
+        distanceFromNearestStopMiles: 0.5,
+      };
+      const priceResult = calculatePrice(pricingInputs, company.pricingConfig);
+      priceDollars = (priceResult.recommendedPriceCents / 100).toFixed(2);
+    }
 
     const template = company.leadWebhookSmsTemplate || DEFAULT_SMS_QUOTE_TEMPLATE;
     const body = template
@@ -12851,7 +12945,7 @@ Return ONLY valid JSON, no markdown.`,
     zipCode: z.string().min(1).max(20),
     numberOfDogs: z.union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)]).default(1),
     yardSize: z.enum(["small", "medium", "large", "extra-large"]).default("medium"),
-    serviceFrequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
+    serviceFrequency: z.enum(["twice_weekly", "weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
     serviceDay: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
   });
 
@@ -12912,21 +13006,33 @@ Return ONLY valid JSON, no markdown.`,
 
       notify(company.id, "new_lead", "New Lead", `${firstName} ${lastName} signed up via your website widget.`.trim(), `/contacts/${contact.id}`);
 
-      const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
-      const pricingInputs: PriceCalculatorInputs = {
-        yardSizeAcres: yardSizeMap[yardSize] || 0.1,
-        dogCount: numberOfDogs,
-        serviceFrequency,
-        yardDifficulty: "flat",
-        distanceFromNearestStopMiles: 0.5,
-      };
-      const priceResult = calculatePrice(pricingInputs, company.pricingConfig);
+      const realPrice = await lookupRealPrice(company.id, numberOfDogs, serviceFrequency, yardSize);
+      let quotePriceCents: number | null = null;
+      let callForQuote = false;
+
+      if (realPrice.callForQuote) {
+        callForQuote = true;
+      } else if (realPrice.priceCents > 0) {
+        quotePriceCents = realPrice.priceCents;
+      } else {
+        const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
+        const pricingInputs: PriceCalculatorInputs = {
+          yardSizeAcres: yardSizeMap[yardSize] || 0.1,
+          dogCount: numberOfDogs,
+          serviceFrequency,
+          yardDifficulty: "flat",
+          distanceFromNearestStopMiles: 0.5,
+        };
+        const priceResult = calculatePrice(pricingInputs, company.pricingConfig);
+        quotePriceCents = priceResult.recommendedPriceCents;
+      }
 
       res.status(201).json({
         contactId: contact.id,
         quote: {
-          recommendedPriceCents: priceResult.recommendedPriceCents,
+          recommendedPriceCents: callForQuote ? 0 : (quotePriceCents || 0),
           frequency: serviceFrequency,
+          callForQuote,
         },
       });
     } catch (err) { handleError(res, err); }

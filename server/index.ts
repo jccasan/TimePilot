@@ -418,6 +418,16 @@ async function seedDemoCompany() {
 
     const existing = await pool.query("SELECT id FROM users WHERE email = 'demo@scoopilot.com'");
     if (existing.rows.length > 0) {
+      const demoCoRes = await pool.query("SELECT c.id FROM users u JOIN company_users cu ON cu.user_id = u.id JOIN companies c ON c.id = cu.company_id WHERE u.email = 'demo@scoopilot.com' LIMIT 1");
+      if (demoCoRes.rows.length > 0) {
+        const demoCoId = demoCoRes.rows[0].id;
+        const pricingCount = await pool.query("SELECT COUNT(*) FROM service_pricing WHERE company_id = $1", [demoCoId]);
+        if (parseInt(pricingCount.rows[0].count) === 0) {
+          const { storage } = await import("./storage");
+          await storage.seedDefaultPricing(demoCoId);
+          console.log("[Migration] Demo company service pricing seeded");
+        }
+      }
       console.log("[Migration] Demo company already exists");
       await pool.end();
       return;
@@ -617,6 +627,13 @@ async function seedDemoCompany() {
     const leadSources = ['Referral', 'Nextdoor', 'Facebook', 'Google', 'Yard Sign', 'Website'];
     for (const ls of leadSources) {
       await pool.query(`INSERT INTO lead_sources (company_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [companyId, ls]);
+    }
+
+    const pricingCount = await pool.query(`SELECT COUNT(*) FROM service_pricing WHERE company_id = $1`, [companyId]);
+    if (parseInt(pricingCount.rows[0].count) === 0) {
+      const { storage } = await import("./storage");
+      await storage.seedDefaultPricing(companyId);
+      console.log("[Migration] Demo company service pricing seeded");
     }
 
     await pool.end();
