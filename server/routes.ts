@@ -1370,7 +1370,8 @@ export async function registerRoutes(
 
   app.post("/api/onboarding/scrape-website", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
       const { websiteUrl } = req.body;
       if (!websiteUrl || typeof websiteUrl !== "string") return res.status(400).json({ error: "Website URL is required" });
 
@@ -1551,6 +1552,8 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/onboarding/import-pricing-csv", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const { role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
       const { csvText } = req.body;
       if (!csvText) return res.status(400).json({ error: "CSV text is required" });
 
