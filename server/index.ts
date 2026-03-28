@@ -351,6 +351,19 @@ async function ensureCompanyColumns() {
     await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS site_sqft INTEGER`);
     console.log("[Migration] Quotes table verified");
     console.log("[Migration] Company voice columns verified");
+    await pool.query(`
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS business_onboarding_step INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS business_onboarding_complete BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS website_url TEXT;
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS business_description TEXT;
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS service_area_description TEXT;
+    `);
+    await pool.query(`
+      UPDATE companies SET business_onboarding_complete = true, business_onboarding_step = 5
+      WHERE business_onboarding_complete = false
+      AND id IN (SELECT DISTINCT company_id FROM contacts)
+    `);
+    console.log("[Migration] Business onboarding columns verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure company columns:", err);
   } finally {

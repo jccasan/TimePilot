@@ -1290,6 +1290,200 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/onboarding/business-status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const result = await db.execute(sql`SELECT name, email, phone, address, logo_url, website_url, business_description, service_area_description, pricing_config, stripe_connect_account_id, stripe_connect_onboarded, business_onboarding_step, business_onboarding_complete FROM companies WHERE id = ${companyId}`);
+      const rows = result.rows as any[];
+      if (!rows || rows.length === 0) return res.status(404).json({ error: "Company not found" });
+      const row = rows[0];
+      res.json({
+        currentStep: row.business_onboarding_step ?? 0,
+        isComplete: row.business_onboarding_complete ?? false,
+        companyData: {
+          name: row.name,
+          email: row.email,
+          phone: row.phone,
+          address: row.address,
+          logoUrl: row.logo_url,
+          websiteUrl: row.website_url,
+          businessDescription: row.business_description,
+          serviceAreaDescription: row.service_area_description,
+          pricingConfig: row.pricing_config,
+          stripeConnectAccountId: row.stripe_connect_account_id,
+          stripeConnectOnboarded: row.stripe_connect_onboarded,
+        },
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/onboarding/business-step", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { step, data } = req.body;
+      if (typeof step !== "number" || step < 0 || step > 4) {
+        return res.status(400).json({ error: "Invalid step number" });
+      }
+
+      if (step === 0 && data) {
+        await db.execute(sql`UPDATE companies SET
+          name = ${data.name || sql`name`},
+          email = ${data.email || sql`email`},
+          phone = ${data.phone || sql`phone`},
+          address = ${data.address || sql`address`},
+          website_url = ${data.websiteUrl || null},
+          business_onboarding_step = ${step + 1}
+          WHERE id = ${companyId}`);
+      } else if (step === 1 && data) {
+        await db.execute(sql`UPDATE companies SET business_description = ${data.businessDescription || null}, service_area_description = ${data.serviceAreaDescription || null}, business_onboarding_step = ${step + 1} WHERE id = ${companyId}`);
+      } else if (step === 2 && data?.pricingConfig) {
+        await db.execute(sql`UPDATE companies SET pricing_config = ${JSON.stringify(data.pricingConfig)}::jsonb, business_onboarding_step = ${step + 1} WHERE id = ${companyId}`);
+      } else {
+        await db.execute(sql`UPDATE companies SET business_onboarding_step = ${step + 1} WHERE id = ${companyId}`);
+      }
+
+      res.json({ success: true, nextStep: step + 1 });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/onboarding/business-complete", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      await db.execute(
+        sql`UPDATE companies SET business_onboarding_complete = true, business_onboarding_step = 5 WHERE id = ${companyId}`
+      );
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/onboarding/scrape-website", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { websiteUrl } = req.body;
+      if (!websiteUrl) return res.status(400).json({ error: "Website URL is required" });
+
+      let pageText = "";
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const response = await fetch(websiteUrl, {
+          signal: controller.signal,
+          headers: { "User-Agent": "ScooPilot-Onboarding/1.0" },
+        });
+        clearTimeout(timeout);
+        const html = await response.text();
+        pageText = html
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 5000);
+      } catch (fetchErr: any) {
+        return res.json({
+          success: false,
+          error: "Could not fetch website. Please check the URL and try again.",
+          insights: null,
+        });
+      }
+
+      try {
+        const OpenAI = (await import("openai")).default;
+        const ai = new OpenAI({
+          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
+        });
+
+        const completion = await ai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: `You are a business analyst specializing in pet waste removal companies. Analyze the following website text and extract business intelligence. Return a JSON object with these fields:
+- businessDescription: string (1-2 sentence summary of what the business does)
+- serviceArea: string (geographic area they serve, if mentioned)
+- servicesOffered: string[] (list of services)
+- pricingInfo: { weeklyPrice?: number, biweeklyPrice?: number, monthlyPrice?: number, oneTimePrice?: number, perDogExtra?: number } (any pricing found, in dollars)
+- competitiveInsights: string (brief competitive positioning notes)
+- suggestedPricingMode: "aggressive" | "standard" | "premium" (based on their positioning)
+Return ONLY valid JSON, no markdown.`,
+            },
+            { role: "user", content: pageText },
+          ],
+          temperature: 0.3,
+          max_tokens: 1000,
+        });
+
+        const raw = completion.choices[0]?.message?.content || "{}";
+        let insights;
+        try {
+          insights = JSON.parse(raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim());
+        } catch {
+          insights = { businessDescription: raw, serviceArea: "", servicesOffered: [], pricingInfo: {}, competitiveInsights: "", suggestedPricingMode: "standard" };
+        }
+
+        res.json({ success: true, insights, rawTextLength: pageText.length });
+      } catch (aiErr: any) {
+        console.error("[Onboarding] AI analysis failed:", aiErr.message);
+        res.json({
+          success: true,
+          insights: { businessDescription: "Unable to analyze website content automatically.", serviceArea: "", servicesOffered: [], pricingInfo: {}, competitiveInsights: "", suggestedPricingMode: "standard" },
+          rawTextLength: pageText.length,
+        });
+      }
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/onboarding/import-pricing-csv", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { csvText } = req.body;
+      if (!csvText) return res.status(400).json({ error: "CSV text is required" });
+
+      const { parseCSV } = await import("./services/import-transforms");
+      const { headers, rows } = parseCSV(csvText);
+
+      if (rows.length === 0) return res.status(400).json({ error: "CSV has no data rows" });
+
+      const priceHeaders = headers.filter(h => {
+        const lower = h.toLowerCase();
+        return lower.includes("price") || lower.includes("rate") || lower.includes("cost") || lower.includes("amount") || lower.includes("fee") || lower.includes("charge");
+      });
+      const freqHeaders = headers.filter(h => {
+        const lower = h.toLowerCase();
+        return lower.includes("frequency") || lower.includes("schedule") || lower.includes("service");
+      });
+      const sizeHeaders = headers.filter(h => {
+        const lower = h.toLowerCase();
+        return lower.includes("yard") || lower.includes("size") || lower.includes("lot") || lower.includes("acre") || lower.includes("sqft");
+      });
+      const dogHeaders = headers.filter(h => {
+        const lower = h.toLowerCase();
+        return lower.includes("dog") || lower.includes("pet");
+      });
+
+      const pricingData: any[] = [];
+      for (const row of rows) {
+        const entry: any = {};
+        for (let i = 0; i < headers.length; i++) {
+          entry[headers[i]] = row[i] || "";
+        }
+        pricingData.push(entry);
+      }
+
+      const summary = {
+        totalRows: rows.length,
+        headers,
+        priceColumns: priceHeaders,
+        frequencyColumns: freqHeaders,
+        sizeColumns: sizeHeaders,
+        dogColumns: dogHeaders,
+        sampleRows: pricingData.slice(0, 5),
+      };
+
+      res.json({ success: true, summary });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/company/invite", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);

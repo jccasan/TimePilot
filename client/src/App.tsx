@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Component, useEffect, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import RoverChatbot from "@/components/rover-chatbot";
+import BusinessOnboarding from "@/components/business-onboarding";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
@@ -127,6 +128,11 @@ function AuthenticatedLayout() {
     queryKey: ["/api/onboarding/status"],
     enabled: setupState === "ready",
   });
+  const { data: businessOnboarding, isLoading: businessOnboardingLoading } = useQuery<{ isComplete: boolean }>({
+    queryKey: ["/api/onboarding/business-status"],
+    enabled: setupState === "ready",
+  });
+  const [businessOnboardingDone, setBusinessOnboardingDone] = useState(false);
   const [setupDismissed, setSetupDismissed] = useState(() => localStorage.getItem("scoopilot_setup_dismissed") === "true");
   useEffect(() => {
     const handler = () => setSetupDismissed(true);
@@ -190,6 +196,15 @@ function AuthenticatedLayout() {
           Retry
         </Button>
       </div>
+    );
+  }
+
+  if (!businessOnboardingLoading && businessOnboarding && !businessOnboarding.isComplete && !businessOnboardingDone) {
+    return (
+      <BusinessOnboarding onComplete={() => {
+        setBusinessOnboardingDone(true);
+        queryClient.invalidateQueries({ queryKey: ["/api/onboarding/business-status"] });
+      }} />
     );
   }
 
