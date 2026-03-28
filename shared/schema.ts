@@ -428,7 +428,7 @@ export const servicePlanAddOns = pgTable("service_plan_add_ons", {
 export const vacationHolds = pgTable("vacation_holds", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   servicePlanId: varchar("service_plan_id").notNull().references(() => servicePlans.id, { onDelete: "cascade" }),
-  agreementId: varchar("agreement_id"),
+  agreementId: varchar("agreement_id").references(() => agreements.id, { onDelete: "set null" }),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   reason: text("reason"),
@@ -439,7 +439,7 @@ export const visits = pgTable("visits", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   servicePlanId: varchar("service_plan_id").notNull().references(() => servicePlans.id, { onDelete: "cascade" }),
-  jobId: varchar("job_id"),
+  jobId: varchar("job_id").references(() => jobs.id, { onDelete: "set null" }),
   propertyId: varchar("property_id").notNull().references(() => properties.id, { onDelete: "cascade" }),
   routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),
   scheduledDate: date("scheduled_date").notNull(),

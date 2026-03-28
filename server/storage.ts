@@ -677,7 +677,7 @@ export class DatabaseStorage implements IStorage {
     if (filters?.agreementId) conditions.push(eq(jobs.agreementId, filters.agreementId));
     if (filters?.propertyId) conditions.push(eq(jobs.propertyId, filters.propertyId));
     if (filters?.routeId) conditions.push(eq(jobs.routeId, filters.routeId));
-    if (filters?.jobStatus) conditions.push(eq(jobs.jobStatus, filters.jobStatus as any));
+    if (filters?.jobStatus) conditions.push(sql`${jobs.jobStatus} = ${filters.jobStatus}`);
     return db.select().from(jobs).where(and(...conditions));
   }
 

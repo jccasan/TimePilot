@@ -480,62 +480,75 @@ async function migrateServicePlansToAgreementsAndJobs() {
       CREATE INDEX IF NOT EXISTS idx_jao_job ON job_add_ons(job_id);
     `);
 
-    await pool.query(`ALTER TABLE visits ADD COLUMN IF NOT EXISTS job_id VARCHAR`);
+    await pool.query(`ALTER TABLE visits ADD COLUMN IF NOT EXISTS job_id VARCHAR REFERENCES jobs(id) ON DELETE SET NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_visits_job ON visits(job_id)`);
 
-    await pool.query(`ALTER TABLE vacation_holds ADD COLUMN IF NOT EXISTS agreement_id VARCHAR`);
+    await pool.query(`ALTER TABLE vacation_holds ADD COLUMN IF NOT EXISTS agreement_id VARCHAR REFERENCES agreements(id) ON DELETE SET NULL`);
 
-    const countRes = await pool.query(`SELECT COUNT(*) FROM agreements`);
-    const agreementCount = parseInt(countRes.rows[0].count);
+    const unmigrated = await pool.query(`
+      SELECT sp.id FROM service_plans sp
+      LEFT JOIN agreements a ON a.service_plan_id = sp.id
+      WHERE a.id IS NULL
+    `);
 
-    if (agreementCount === 0) {
-      const spCount = await pool.query(`SELECT COUNT(*) FROM service_plans`);
-      const totalPlans = parseInt(spCount.rows[0].count);
+    if (unmigrated.rows.length > 0) {
+      const spIds = unmigrated.rows.map((r: any) => r.id);
+      console.log(`[Migration] Backfilling ${spIds.length} unmigrated service_plans → agreements + jobs...`);
 
-      if (totalPlans > 0) {
-        console.log(`[Migration] Backfilling ${totalPlans} service_plans → agreements + jobs...`);
+      await pool.query(`
+        INSERT INTO agreements (id, company_id, contact_id, frequency, price_per_visit, is_active, paused_at, start_date, end_date, ends_after_count, ends_after_unit, estimate_id, service_plan_id, created_at, updated_at)
+        SELECT gen_random_uuid(), company_id, contact_id, frequency, price_per_visit, is_active, paused_at, start_date, end_date, ends_after_count, ends_after_unit, estimate_id, id, created_at, updated_at
+        FROM service_plans
+        WHERE id = ANY($1)
+      `, [spIds]);
 
-        await pool.query(`
-          INSERT INTO agreements (id, company_id, contact_id, frequency, price_per_visit, is_active, paused_at, start_date, end_date, ends_after_count, ends_after_unit, estimate_id, service_plan_id, created_at, updated_at)
-          SELECT gen_random_uuid(), company_id, contact_id, frequency, price_per_visit, is_active, paused_at, start_date, end_date, ends_after_count, ends_after_unit, estimate_id, id, created_at, updated_at
-          FROM service_plans
-        `);
+      await pool.query(`
+        INSERT INTO jobs (id, company_id, agreement_id, property_id, route_id, stop_order, day_of_week, service_name, job_type, job_status, start_time, end_time, anytime, visit_instructions, assigned_user_id, is_stop_only, service_plan_id, created_at, updated_at)
+        SELECT gen_random_uuid(), sp.company_id, a.id, sp.property_id, sp.route_id, sp.stop_order, sp.day_of_week, sp.service_name, sp.job_type, sp.job_status, sp.start_time, sp.end_time, sp.anytime, sp.visit_instructions, sp.assigned_user_id, sp.is_stop_only, sp.id, sp.created_at, sp.updated_at
+        FROM service_plans sp
+        JOIN agreements a ON a.service_plan_id = sp.id
+        WHERE sp.id = ANY($1)
+        AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.service_plan_id = sp.id)
+      `, [spIds]);
 
-        await pool.query(`
-          INSERT INTO jobs (id, company_id, agreement_id, property_id, route_id, stop_order, day_of_week, service_name, job_type, job_status, start_time, end_time, anytime, visit_instructions, assigned_user_id, is_stop_only, service_plan_id, created_at, updated_at)
-          SELECT gen_random_uuid(), sp.company_id, a.id, sp.property_id, sp.route_id, sp.stop_order, sp.day_of_week, sp.service_name, sp.job_type, sp.job_status, sp.start_time, sp.end_time, sp.anytime, sp.visit_instructions, sp.assigned_user_id, sp.is_stop_only, sp.id, sp.created_at, sp.updated_at
-          FROM service_plans sp
-          JOIN agreements a ON a.service_plan_id = sp.id
-        `);
+      console.log(`[Migration] Backfilled ${spIds.length} agreements + jobs`);
+    }
 
-        await pool.query(`
-          UPDATE visits SET job_id = j.id
-          FROM jobs j
-          WHERE visits.service_plan_id = j.service_plan_id
-            AND visits.job_id IS NULL
-        `);
+    const unlinkedVisits = await pool.query(`
+      UPDATE visits SET job_id = j.id
+      FROM jobs j
+      WHERE visits.service_plan_id = j.service_plan_id
+        AND visits.job_id IS NULL
+      RETURNING visits.id
+    `);
+    if (unlinkedVisits.rowCount && unlinkedVisits.rowCount > 0) {
+      console.log(`[Migration] Linked ${unlinkedVisits.rowCount} visits to jobs`);
+    }
 
-        await pool.query(`
-          UPDATE vacation_holds SET agreement_id = a.id
-          FROM agreements a
-          WHERE vacation_holds.service_plan_id = a.service_plan_id
-            AND vacation_holds.agreement_id IS NULL
-        `);
+    const unlinkedHolds = await pool.query(`
+      UPDATE vacation_holds SET agreement_id = a.id
+      FROM agreements a
+      WHERE vacation_holds.service_plan_id = a.service_plan_id
+        AND vacation_holds.agreement_id IS NULL
+      RETURNING vacation_holds.id
+    `);
+    if (unlinkedHolds.rowCount && unlinkedHolds.rowCount > 0) {
+      console.log(`[Migration] Linked ${unlinkedHolds.rowCount} vacation holds to agreements`);
+    }
 
-        await pool.query(`
-          INSERT INTO job_add_ons (id, job_id, service_pricing_id, name, price, is_active, created_at)
-          SELECT gen_random_uuid(), j.id, spa.service_pricing_id, spa.name, spa.price, spa.is_active, spa.created_at
-          FROM service_plan_add_ons spa
-          JOIN jobs j ON j.service_plan_id = spa.service_plan_id
-        `);
-
-        const verifyAgreements = await pool.query(`SELECT COUNT(*) FROM agreements`);
-        const verifyJobs = await pool.query(`SELECT COUNT(*) FROM jobs`);
-        const verifyVisitsBackfilled = await pool.query(`SELECT COUNT(*) FROM visits WHERE job_id IS NOT NULL`);
-        console.log(`[Migration] Backfill complete: ${verifyAgreements.rows[0].count} agreements, ${verifyJobs.rows[0].count} jobs, ${verifyVisitsBackfilled.rows[0].count} visits linked`);
-      }
-    } else {
-      console.log("[Migration] agreements table already populated, skipping backfill");
+    const unlinkedAddOns = await pool.query(`
+      INSERT INTO job_add_ons (id, job_id, service_pricing_id, name, price, is_active, created_at)
+      SELECT gen_random_uuid(), j.id, spa.service_pricing_id, spa.name, spa.price, spa.is_active, spa.created_at
+      FROM service_plan_add_ons spa
+      JOIN jobs j ON j.service_plan_id = spa.service_plan_id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM job_add_ons jao
+        WHERE jao.job_id = j.id AND jao.service_pricing_id = spa.service_pricing_id
+      )
+      RETURNING id
+    `);
+    if (unlinkedAddOns.rowCount && unlinkedAddOns.rowCount > 0) {
+      console.log(`[Migration] Migrated ${unlinkedAddOns.rowCount} add-ons to job_add_ons`);
     }
 
     console.log("[Migration] agreements/jobs/job_add_ons tables verified");
