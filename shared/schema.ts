@@ -351,6 +351,68 @@ export const servicePlans = pgTable("service_plans", {
   index("idx_sp_job_status").on(table.jobStatus),
 ]);
 
+export const agreements = pgTable("agreements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  frequency: serviceFrequencyEnum("frequency").notNull(),
+  pricePerVisit: decimal("price_per_visit", { precision: 10, scale: 2 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  pausedAt: timestamp("paused_at"),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  endsAfterCount: integer("ends_after_count"),
+  endsAfterUnit: endsAfterUnitEnum("ends_after_unit"),
+  estimateId: varchar("estimate_id").references(() => estimates.id, { onDelete: "set null" }),
+  servicePlanId: varchar("service_plan_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_agreements_company").on(table.companyId),
+  index("idx_agreements_contact").on(table.contactId),
+  index("idx_agreements_active").on(table.isActive),
+]);
+
+export const jobs = pgTable("jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  agreementId: varchar("agreement_id").notNull().references(() => agreements.id, { onDelete: "cascade" }),
+  propertyId: varchar("property_id").notNull().references(() => properties.id, { onDelete: "cascade" }),
+  routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),
+  stopOrder: integer("stop_order").notNull().default(0),
+  dayOfWeek: dayOfWeekEnum("day_of_week"),
+  serviceName: varchar("service_name", { length: 255 }),
+  jobType: jobTypeEnum("job_type").default("recurring"),
+  jobStatus: jobStatusEnum("job_status").default("active"),
+  startTime: varchar("start_time", { length: 10 }),
+  endTime: varchar("end_time", { length: 10 }),
+  anytime: boolean("anytime").default(true),
+  visitInstructions: text("visit_instructions"),
+  assignedUserId: varchar("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+  isStopOnly: boolean("is_stop_only").notNull().default(false),
+  servicePlanId: varchar("service_plan_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_jobs_company").on(table.companyId),
+  index("idx_jobs_agreement").on(table.agreementId),
+  index("idx_jobs_property").on(table.propertyId),
+  index("idx_jobs_route").on(table.routeId),
+  index("idx_jobs_status").on(table.jobStatus),
+]);
+
+export const jobAddOns = pgTable("job_add_ons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  servicePricingId: varchar("service_pricing_id").notNull().references(() => servicePricing.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_jao_job").on(table.jobId),
+]);
+
 export const servicePlanAddOns = pgTable("service_plan_add_ons", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   servicePlanId: varchar("service_plan_id").notNull().references(() => servicePlans.id, { onDelete: "cascade" }),
@@ -366,6 +428,7 @@ export const servicePlanAddOns = pgTable("service_plan_add_ons", {
 export const vacationHolds = pgTable("vacation_holds", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   servicePlanId: varchar("service_plan_id").notNull().references(() => servicePlans.id, { onDelete: "cascade" }),
+  agreementId: varchar("agreement_id"),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   reason: text("reason"),
@@ -376,6 +439,7 @@ export const visits = pgTable("visits", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   servicePlanId: varchar("service_plan_id").notNull().references(() => servicePlans.id, { onDelete: "cascade" }),
+  jobId: varchar("job_id"),
   propertyId: varchar("property_id").notNull().references(() => properties.id, { onDelete: "cascade" }),
   routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),
   scheduledDate: date("scheduled_date").notNull(),
@@ -397,6 +461,7 @@ export const visits = pgTable("visits", {
   index("idx_visits_date").on(table.scheduledDate),
   index("idx_visits_status").on(table.status),
   index("idx_visits_route").on(table.routeId),
+  index("idx_visits_job").on(table.jobId),
 ]);
 
 export const invoices = pgTable("invoices", {
@@ -700,6 +765,28 @@ export const servicePlanRelations = relations(servicePlans, ({ one, many }) => (
   addOns: many(servicePlanAddOns),
 }));
 
+export const agreementRelations = relations(agreements, ({ one, many }) => ({
+  company: one(companies, { fields: [agreements.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [agreements.contactId], references: [contacts.id] }),
+  estimate: one(estimates, { fields: [agreements.estimateId], references: [estimates.id] }),
+  jobs: many(jobs),
+}));
+
+export const jobRelations = relations(jobs, ({ one, many }) => ({
+  company: one(companies, { fields: [jobs.companyId], references: [companies.id] }),
+  agreement: one(agreements, { fields: [jobs.agreementId], references: [agreements.id] }),
+  property: one(properties, { fields: [jobs.propertyId], references: [properties.id] }),
+  route: one(routes, { fields: [jobs.routeId], references: [routes.id] }),
+  assignedUser: one(users, { fields: [jobs.assignedUserId], references: [users.id] }),
+  visits: many(visits),
+  addOns: many(jobAddOns),
+}));
+
+export const jobAddOnRelations = relations(jobAddOns, ({ one }) => ({
+  job: one(jobs, { fields: [jobAddOns.jobId], references: [jobs.id] }),
+  servicePricing: one(servicePricing, { fields: [jobAddOns.servicePricingId], references: [servicePricing.id] }),
+}));
+
 export const servicePlanAddOnRelations = relations(servicePlanAddOns, ({ one }) => ({
   servicePlan: one(servicePlans, { fields: [servicePlanAddOns.servicePlanId], references: [servicePlans.id] }),
   servicePricing: one(servicePricing, { fields: [servicePlanAddOns.servicePricingId], references: [servicePricing.id] }),
@@ -712,6 +799,7 @@ export const vacationHoldRelations = relations(vacationHolds, ({ one }) => ({
 export const visitRelations = relations(visits, ({ one }) => ({
   company: one(companies, { fields: [visits.companyId], references: [companies.id] }),
   servicePlan: one(servicePlans, { fields: [visits.servicePlanId], references: [servicePlans.id] }),
+  job: one(jobs, { fields: [visits.jobId], references: [jobs.id] }),
   property: one(properties, { fields: [visits.propertyId], references: [properties.id] }),
   route: one(routes, { fields: [visits.routeId], references: [routes.id] }),
   completedByUser: one(users, { fields: [visits.completedBy], references: [users.id] }),
@@ -734,6 +822,9 @@ export const insertTagSchema = createInsertSchema(tags).omit({ id: true, created
 export const insertLeadSourceSchema = createInsertSchema(leadSources).omit({ id: true, createdAt: true });
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertRouteSchema = createInsertSchema(routes).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAgreementSchema = createInsertSchema(agreements).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertJobAddOnSchema = createInsertSchema(jobAddOns).omit({ id: true, createdAt: true });
 export const insertServicePlanSchema = createInsertSchema(servicePlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServicePlanAddOnSchema = createInsertSchema(servicePlanAddOns).omit({ id: true, createdAt: true });
 export const insertVacationHoldSchema = createInsertSchema(vacationHolds).omit({ id: true, createdAt: true });
@@ -759,6 +850,12 @@ export type Property = typeof properties.$inferSelect;
 export type InsertProperty = z.infer<typeof insertPropertySchema>;
 export type Route = typeof routes.$inferSelect;
 export type InsertRoute = z.infer<typeof insertRouteSchema>;
+export type Agreement = typeof agreements.$inferSelect;
+export type InsertAgreement = z.infer<typeof insertAgreementSchema>;
+export type Job = typeof jobs.$inferSelect;
+export type InsertJob = z.infer<typeof insertJobSchema>;
+export type JobAddOn = typeof jobAddOns.$inferSelect;
+export type InsertJobAddOn = z.infer<typeof insertJobAddOnSchema>;
 export type ServicePlan = typeof servicePlans.$inferSelect;
 export type InsertServicePlan = z.infer<typeof insertServicePlanSchema>;
 export type ServicePlanAddOn = typeof servicePlanAddOns.$inferSelect;

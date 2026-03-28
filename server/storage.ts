@@ -3,6 +3,7 @@ import { db } from "./db";
 import {
   companies, companyUsers, contacts, tags, contactTags, leadSources,
   properties, routes, servicePlans, vacationHolds,
+  agreements, jobs, jobAddOns,
   visits, invoices, invoiceLineItems, automationRules,
   automationEventLogs, apiKeys, webhooks, webhookDeliveries, attachments,
   servicePricing, servicePackages, messages, portalSessions, adminNotes,
@@ -18,6 +19,9 @@ import {
   type LeadSource, type InsertLeadSource,
   type Property, type InsertProperty,
   type Route, type InsertRoute,
+  type Agreement, type InsertAgreement,
+  type Job, type InsertJob,
+  type JobAddOn, type InsertJobAddOn,
   type ServicePlan, type InsertServicePlan,
   type ServicePlanAddOn, type InsertServicePlanAddOn,
   servicePlanAddOns,
@@ -120,7 +124,28 @@ export interface IStorage {
   updateRoute(id: string, companyId: string, data: Partial<InsertRoute>): Promise<Route>;
   deleteRoute(id: string, companyId: string): Promise<void>;
 
-  // Service Plans
+  // Agreements
+  getAgreement(id: string, companyId: string): Promise<Agreement | undefined>;
+  getAgreements(companyId: string, filters?: { contactId?: string; isActive?: boolean }): Promise<Agreement[]>;
+  createAgreement(data: InsertAgreement): Promise<Agreement>;
+  updateAgreement(id: string, companyId: string, data: Partial<InsertAgreement>): Promise<Agreement>;
+  deleteAgreement(id: string, companyId: string): Promise<void>;
+
+  // Jobs
+  getJob(id: string, companyId: string): Promise<Job | undefined>;
+  getJobs(companyId: string, filters?: { agreementId?: string; propertyId?: string; routeId?: string; jobStatus?: string }): Promise<Job[]>;
+  createJob(data: InsertJob): Promise<Job>;
+  updateJob(id: string, companyId: string, data: Partial<InsertJob>): Promise<Job>;
+  deleteJob(id: string, companyId: string): Promise<void>;
+  getJobAddOns(jobId: string): Promise<JobAddOn[]>;
+  setJobAddOns(jobId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<JobAddOn[]>;
+  getJobByServicePlanId(servicePlanId: string): Promise<Job | undefined>;
+  getAgreementByServicePlanId(servicePlanId: string): Promise<Agreement | undefined>;
+
+  cancelFutureVisitsForJobs(jobIds: string[], fromDate: string): Promise<number>;
+  unassignAllJobStops(routeId: string): Promise<number>;
+
+  // Service Plans (legacy — kept during migration)
   getServicePlan(id: string, companyId: string): Promise<ServicePlan | undefined>;
   getServicePlans(companyId: string, filters?: { contactId?: string; propertyId?: string; isActive?: boolean; routeId?: string }): Promise<ServicePlan[]>;
   createServicePlan(data: InsertServicePlan): Promise<ServicePlan>;
@@ -137,6 +162,7 @@ export interface IStorage {
   // Vacation Holds
   getVacationHolds(servicePlanId: string): Promise<VacationHold[]>;
   getVacationHoldsForPlans(planIds: string[]): Promise<VacationHold[]>;
+  getVacationHoldsForAgreements(agreementIds: string[]): Promise<VacationHold[]>;
   createVacationHold(data: InsertVacationHold): Promise<VacationHold>;
   deleteVacationHold(id: string, companyId: string): Promise<void>;
 
@@ -608,7 +634,117 @@ export class DatabaseStorage implements IStorage {
     await db.delete(routes).where(and(eq(routes.id, id), eq(routes.companyId, companyId)));
   }
 
-  // ================ Service Plans ================
+  // ================ Agreements ================
+  async getAgreement(id: string, companyId: string): Promise<Agreement | undefined> {
+    const [a] = await db.select().from(agreements).where(and(eq(agreements.id, id), eq(agreements.companyId, companyId)));
+    return a;
+  }
+
+  async getAgreements(companyId: string, filters?: { contactId?: string; isActive?: boolean }): Promise<Agreement[]> {
+    const conditions = [eq(agreements.companyId, companyId)];
+    if (filters?.contactId) conditions.push(eq(agreements.contactId, filters.contactId));
+    if (filters?.isActive !== undefined) conditions.push(eq(agreements.isActive, filters.isActive));
+    return db.select().from(agreements).where(and(...conditions));
+  }
+
+  async createAgreement(data: InsertAgreement): Promise<Agreement> {
+    const [a] = await db.insert(agreements).values(data).returning();
+    return a;
+  }
+
+  async updateAgreement(id: string, companyId: string, data: Partial<InsertAgreement>): Promise<Agreement> {
+    const [a] = await db.update(agreements).set({ ...data, updatedAt: new Date() }).where(and(eq(agreements.id, id), eq(agreements.companyId, companyId))).returning();
+    return a;
+  }
+
+  async deleteAgreement(id: string, companyId: string): Promise<void> {
+    await db.delete(agreements).where(and(eq(agreements.id, id), eq(agreements.companyId, companyId)));
+  }
+
+  async getAgreementByServicePlanId(servicePlanId: string): Promise<Agreement | undefined> {
+    const [a] = await db.select().from(agreements).where(eq(agreements.servicePlanId, servicePlanId));
+    return a;
+  }
+
+  // ================ Jobs ================
+  async getJob(id: string, companyId: string): Promise<Job | undefined> {
+    const [j] = await db.select().from(jobs).where(and(eq(jobs.id, id), eq(jobs.companyId, companyId)));
+    return j;
+  }
+
+  async getJobs(companyId: string, filters?: { agreementId?: string; propertyId?: string; routeId?: string; jobStatus?: string }): Promise<Job[]> {
+    const conditions = [eq(jobs.companyId, companyId)];
+    if (filters?.agreementId) conditions.push(eq(jobs.agreementId, filters.agreementId));
+    if (filters?.propertyId) conditions.push(eq(jobs.propertyId, filters.propertyId));
+    if (filters?.routeId) conditions.push(eq(jobs.routeId, filters.routeId));
+    if (filters?.jobStatus) conditions.push(eq(jobs.jobStatus, filters.jobStatus as any));
+    return db.select().from(jobs).where(and(...conditions));
+  }
+
+  async createJob(data: InsertJob): Promise<Job> {
+    const [j] = await db.insert(jobs).values(data).returning();
+    return j;
+  }
+
+  async updateJob(id: string, companyId: string, data: Partial<InsertJob>): Promise<Job> {
+    const [j] = await db.update(jobs).set({ ...data, updatedAt: new Date() }).where(and(eq(jobs.id, id), eq(jobs.companyId, companyId))).returning();
+    return j;
+  }
+
+  async deleteJob(id: string, companyId: string): Promise<void> {
+    await db.delete(jobs).where(and(eq(jobs.id, id), eq(jobs.companyId, companyId)));
+  }
+
+  async getJobByServicePlanId(servicePlanId: string): Promise<Job | undefined> {
+    const [j] = await db.select().from(jobs).where(eq(jobs.servicePlanId, servicePlanId));
+    return j;
+  }
+
+  async getJobAddOns(jobId: string): Promise<JobAddOn[]> {
+    return db.select().from(jobAddOns).where(eq(jobAddOns.jobId, jobId));
+  }
+
+  async setJobAddOns(jobId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<JobAddOn[]> {
+    await db.delete(jobAddOns).where(eq(jobAddOns.jobId, jobId));
+    if (addOns.length === 0) return [];
+    const rows = addOns.map(a => ({
+      jobId,
+      servicePricingId: a.servicePricingId,
+      name: a.name,
+      price: a.price,
+    }));
+    return db.insert(jobAddOns).values(rows).returning();
+  }
+
+  async cancelFutureVisitsForJobs(jobIds: string[], fromDate: string): Promise<number> {
+    if (jobIds.length === 0) return 0;
+    const result = await db.update(visits)
+      .set({ status: "cancelled" })
+      .where(and(
+        sql`${visits.jobId} IN (${sql.join(jobIds.map(id => sql`${id}`), sql`, `)})`,
+        gte(visits.scheduledDate, fromDate),
+        eq(visits.status, "scheduled")
+      ))
+      .returning();
+    return result.length;
+  }
+
+  async unassignAllJobStops(routeId: string): Promise<number> {
+    const result = await db.update(jobs)
+      .set({ routeId: null, stopOrder: 0, updatedAt: new Date() })
+      .where(and(eq(jobs.routeId, routeId), eq(jobs.jobStatus, "active")))
+      .returning();
+    return result.length;
+  }
+
+  async getVacationHoldsForAgreements(agreementIds: string[]): Promise<VacationHold[]> {
+    if (agreementIds.length === 0) return [];
+    return db.select().from(vacationHolds).where(
+      sql`${vacationHolds.agreementId} IN (${sql.join(agreementIds.map(id => sql`${id}`), sql`, `)})`
+    );
+  }
+
+  // ================ Service Plans (legacy) ================
   async getServicePlan(id: string, companyId: string): Promise<ServicePlan | undefined> {
     const [sp] = await db.select().from(servicePlans).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
     return sp;

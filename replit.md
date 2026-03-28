@@ -61,3 +61,13 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **OpenAI**: Used for AI-assisted import wizard and Rover AI chatbot.
 - **QuickBooks Online**: Accounting integration for syncing contacts, invoices, and payments.
 - **Retell AI**: Voice agent integration for lead creation and customer lookup, with webhook handling for call events and usage tracking.
+
+## Data Model (Task #95 Refactor — In Progress)
+The core scheduling data model is being refactored from a single `service_plans` table into three clean layers:
+- **`agreements`** — Billing/contract layer: contactId, frequency, pricePerVisit, isActive, pausedAt, startDate, endDate, estimateId. Links back to the original `service_plan_id` for migration traceability.
+- **`jobs`** — Work/routing layer: agreementId, propertyId, routeId, stopOrder, dayOfWeek, serviceName, jobType, jobStatus, startTime, visitInstructions, assignedUserId, isStopOnly. Links back to original `service_plan_id`.
+- **`visits`** — Instance layer: jobId (new), servicePlanId (legacy). Each visit is now linked to a job.
+- **`job_add_ons`** — Add-ons per job (replaces `service_plan_add_ons`).
+- **`vacation_holds`** — Now has both `service_plan_id` (legacy) and `agreement_id` (new).
+- The old `service_plans` table and its related types/storage methods remain for backward compatibility during the migration.
+- Migration runs idempotently at startup via `migrateServicePlansToAgreementsAndJobs()` in `server/index.ts`.

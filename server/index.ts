@@ -411,6 +411,141 @@ async function ensureConnectedAccountsTable() {
   }
 }
 
+async function migrateServicePlansToAgreementsAndJobs() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS agreements (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        contact_id VARCHAR NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+        frequency service_frequency NOT NULL,
+        price_per_visit DECIMAL(10,2) NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        paused_at TIMESTAMP,
+        start_date DATE NOT NULL,
+        end_date DATE,
+        ends_after_count INTEGER,
+        ends_after_unit ends_after_unit,
+        estimate_id VARCHAR REFERENCES estimates(id) ON DELETE SET NULL,
+        service_plan_id VARCHAR,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_agreements_company ON agreements(company_id);
+      CREATE INDEX IF NOT EXISTS idx_agreements_contact ON agreements(contact_id);
+      CREATE INDEX IF NOT EXISTS idx_agreements_active ON agreements(is_active);
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS jobs (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        agreement_id VARCHAR NOT NULL REFERENCES agreements(id) ON DELETE CASCADE,
+        property_id VARCHAR NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+        route_id VARCHAR REFERENCES routes(id) ON DELETE SET NULL,
+        stop_order INTEGER NOT NULL DEFAULT 0,
+        day_of_week day_of_week,
+        service_name VARCHAR(255),
+        job_type job_type DEFAULT 'recurring',
+        job_status job_status DEFAULT 'active',
+        start_time VARCHAR(10),
+        end_time VARCHAR(10),
+        anytime BOOLEAN DEFAULT true,
+        visit_instructions TEXT,
+        assigned_user_id VARCHAR REFERENCES users(id) ON DELETE SET NULL,
+        is_stop_only BOOLEAN NOT NULL DEFAULT false,
+        service_plan_id VARCHAR,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company_id);
+      CREATE INDEX IF NOT EXISTS idx_jobs_agreement ON jobs(agreement_id);
+      CREATE INDEX IF NOT EXISTS idx_jobs_property ON jobs(property_id);
+      CREATE INDEX IF NOT EXISTS idx_jobs_route ON jobs(route_id);
+      CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(job_status);
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS job_add_ons (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        job_id VARCHAR NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        service_pricing_id VARCHAR NOT NULL REFERENCES service_pricing(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        price DECIMAL(10,2) NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_jao_job ON job_add_ons(job_id);
+    `);
+
+    await pool.query(`ALTER TABLE visits ADD COLUMN IF NOT EXISTS job_id VARCHAR`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_visits_job ON visits(job_id)`);
+
+    await pool.query(`ALTER TABLE vacation_holds ADD COLUMN IF NOT EXISTS agreement_id VARCHAR`);
+
+    const countRes = await pool.query(`SELECT COUNT(*) FROM agreements`);
+    const agreementCount = parseInt(countRes.rows[0].count);
+
+    if (agreementCount === 0) {
+      const spCount = await pool.query(`SELECT COUNT(*) FROM service_plans`);
+      const totalPlans = parseInt(spCount.rows[0].count);
+
+      if (totalPlans > 0) {
+        console.log(`[Migration] Backfilling ${totalPlans} service_plans → agreements + jobs...`);
+
+        await pool.query(`
+          INSERT INTO agreements (id, company_id, contact_id, frequency, price_per_visit, is_active, paused_at, start_date, end_date, ends_after_count, ends_after_unit, estimate_id, service_plan_id, created_at, updated_at)
+          SELECT gen_random_uuid(), company_id, contact_id, frequency, price_per_visit, is_active, paused_at, start_date, end_date, ends_after_count, ends_after_unit, estimate_id, id, created_at, updated_at
+          FROM service_plans
+        `);
+
+        await pool.query(`
+          INSERT INTO jobs (id, company_id, agreement_id, property_id, route_id, stop_order, day_of_week, service_name, job_type, job_status, start_time, end_time, anytime, visit_instructions, assigned_user_id, is_stop_only, service_plan_id, created_at, updated_at)
+          SELECT gen_random_uuid(), sp.company_id, a.id, sp.property_id, sp.route_id, sp.stop_order, sp.day_of_week, sp.service_name, sp.job_type, sp.job_status, sp.start_time, sp.end_time, sp.anytime, sp.visit_instructions, sp.assigned_user_id, sp.is_stop_only, sp.id, sp.created_at, sp.updated_at
+          FROM service_plans sp
+          JOIN agreements a ON a.service_plan_id = sp.id
+        `);
+
+        await pool.query(`
+          UPDATE visits SET job_id = j.id
+          FROM jobs j
+          WHERE visits.service_plan_id = j.service_plan_id
+            AND visits.job_id IS NULL
+        `);
+
+        await pool.query(`
+          UPDATE vacation_holds SET agreement_id = a.id
+          FROM agreements a
+          WHERE vacation_holds.service_plan_id = a.service_plan_id
+            AND vacation_holds.agreement_id IS NULL
+        `);
+
+        await pool.query(`
+          INSERT INTO job_add_ons (id, job_id, service_pricing_id, name, price, is_active, created_at)
+          SELECT gen_random_uuid(), j.id, spa.service_pricing_id, spa.name, spa.price, spa.is_active, spa.created_at
+          FROM service_plan_add_ons spa
+          JOIN jobs j ON j.service_plan_id = spa.service_plan_id
+        `);
+
+        const verifyAgreements = await pool.query(`SELECT COUNT(*) FROM agreements`);
+        const verifyJobs = await pool.query(`SELECT COUNT(*) FROM jobs`);
+        const verifyVisitsBackfilled = await pool.query(`SELECT COUNT(*) FROM visits WHERE job_id IS NOT NULL`);
+        console.log(`[Migration] Backfill complete: ${verifyAgreements.rows[0].count} agreements, ${verifyJobs.rows[0].count} jobs, ${verifyVisitsBackfilled.rows[0].count} visits linked`);
+      }
+    } else {
+      console.log("[Migration] agreements table already populated, skipping backfill");
+    }
+
+    console.log("[Migration] agreements/jobs/job_add_ons tables verified");
+  } catch (err) {
+    console.error("[Migration] Failed to migrate service_plans to agreements/jobs:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function seedDemoCompany() {
   try {
     const { Pool } = await import("pg");
@@ -680,6 +815,7 @@ async function repairServicePlanDayOfWeek() {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
   await ensureConnectedAccountsTable();
+  await migrateServicePlansToAgreementsAndJobs();
   await repairServicePlanDayOfWeek();
   await syncSubscriptionTiers();
   await seedDemoCompany();
