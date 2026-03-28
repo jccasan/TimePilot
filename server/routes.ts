@@ -4097,45 +4097,7 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      const { plan, job } = await db.transaction(async (tx) => {
-        const [sp] = await tx.insert(servicePlansTable).values(parsed).returning();
-
-        const [agreement] = await tx.insert(agreementsTable).values({
-          companyId,
-          contactId: parsed.contactId,
-          frequency: parsed.frequency,
-          pricePerVisit: parsed.pricePerVisit,
-          isActive: parsed.isActive ?? true,
-          pausedAt: parsed.pausedAt ?? null,
-          startDate: parsed.startDate || new Date().toISOString().split("T")[0],
-          endDate: parsed.endDate ?? null,
-          endsAfterCount: parsed.endsAfterCount ?? null,
-          endsAfterUnit: parsed.endsAfterUnit ?? null,
-          estimateId: parsed.estimateId ?? null,
-          servicePlanId: sp.id,
-        }).returning();
-
-        const [j] = await tx.insert(jobsTable).values({
-          companyId,
-          agreementId: agreement.id,
-          propertyId: parsed.propertyId,
-          routeId: parsed.routeId ?? null,
-          stopOrder: parsed.stopOrder ?? 0,
-          dayOfWeek: parsed.dayOfWeek ?? null,
-          serviceName: parsed.serviceName ?? null,
-          jobType: parsed.jobType ?? "recurring",
-          jobStatus: parsed.jobStatus ?? "active",
-          startTime: parsed.startTime ?? null,
-          endTime: parsed.endTime ?? null,
-          anytime: parsed.anytime ?? true,
-          visitInstructions: parsed.visitInstructions ?? null,
-          assignedUserId: parsed.assignedUserId ?? null,
-          isStopOnly: parsed.isStopOnly ?? false,
-          servicePlanId: sp.id,
-        }).returning();
-
-        return { plan: sp, job: j };
-      });
+      const plan = await storage.createServicePlan(parsed);
 
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", plan.id, "create", { new: { contactId: parsed.contactId, frequency: parsed.frequency, dayOfWeek: parsed.dayOfWeek } }, req.ip || undefined);
@@ -4153,7 +4115,8 @@ Return ONLY valid JSON, no markdown.`,
       if (req.body.addOns && Array.isArray(req.body.addOns)) {
         const validatedAddOns = await validateAndResolveAddOns(req.body.addOns, companyId);
         const addOns = await storage.setServicePlanAddOns(plan.id, validatedAddOns);
-        await storage.setJobAddOns(job.id, validatedAddOns);
+        const linkedJob = await storage.getJobByServicePlanId(plan.id);
+        if (linkedJob) await storage.setJobAddOns(linkedJob.id, validatedAddOns);
         return res.status(201).json({ ...plan, addOns });
       }
 
@@ -4335,70 +4298,35 @@ Return ONLY valid JSON, no markdown.`,
       if (body.anytime === undefined) body.anytime = true;
       const isActive = body.jobStatus === "active";
 
-      const result = await db.transaction(async (tx) => {
-        const [sp] = await tx.insert(servicePlansTable).values({
-          companyId,
-          contactId: body.contactId,
-          propertyId: body.propertyId,
-          frequency: body.frequency || "weekly",
-          pricePerVisit: body.pricePerVisit || "0",
-          isActive,
-          startDate: body.startDate || new Date().toISOString().split("T")[0],
-          endDate: body.endDate || null,
-          endsAfterCount: body.endsAfterCount || null,
-          endsAfterUnit: body.endsAfterUnit || null,
-          estimateId: body.estimateId || null,
-          routeId: body.routeId || null,
-          stopOrder: body.stopOrder || 0,
-          dayOfWeek: body.dayOfWeek || null,
-          serviceName: body.serviceName || null,
-          jobType: body.jobType,
-          jobStatus: body.jobStatus,
-          startTime: body.startTime || null,
-          endTime: body.endTime || null,
-          anytime: body.anytime,
-          visitInstructions: body.visitInstructions || null,
-          assignedUserId: body.assignedUserId || null,
-          isStopOnly: body.isStopOnly || false,
-        }).returning();
-
-        const [agreement] = await tx.insert(agreementsTable).values({
-          companyId,
-          contactId: body.contactId,
-          frequency: body.frequency || "weekly",
-          pricePerVisit: body.pricePerVisit || "0",
-          isActive,
-          startDate: body.startDate || new Date().toISOString().split("T")[0],
-          endDate: body.endDate || null,
-          endsAfterCount: body.endsAfterCount || null,
-          endsAfterUnit: body.endsAfterUnit || null,
-          estimateId: body.estimateId || null,
-          servicePlanId: sp.id,
-        }).returning();
-
-        const [job] = await tx.insert(jobsTable).values({
-          companyId,
-          agreementId: agreement.id,
-          propertyId: body.propertyId,
-          routeId: body.routeId || null,
-          stopOrder: body.stopOrder || 0,
-          dayOfWeek: body.dayOfWeek || null,
-          serviceName: body.serviceName || null,
-          jobType: body.jobType,
-          jobStatus: body.jobStatus,
-          startTime: body.startTime || null,
-          endTime: body.endTime || null,
-          anytime: body.anytime,
-          visitInstructions: body.visitInstructions || null,
-          assignedUserId: body.assignedUserId || null,
-          isStopOnly: body.isStopOnly || false,
-          servicePlanId: sp.id,
-        }).returning();
-
-        return { sp, agreement, job };
+      const sp = await storage.createServicePlan({
+        companyId,
+        contactId: body.contactId,
+        propertyId: body.propertyId,
+        frequency: body.frequency || "weekly",
+        pricePerVisit: body.pricePerVisit || "0",
+        isActive,
+        startDate: body.startDate || new Date().toISOString().split("T")[0],
+        endDate: body.endDate || null,
+        endsAfterCount: body.endsAfterCount || null,
+        endsAfterUnit: body.endsAfterUnit || null,
+        estimateId: body.estimateId || null,
+        routeId: body.routeId || null,
+        stopOrder: body.stopOrder || 0,
+        dayOfWeek: body.dayOfWeek || null,
+        serviceName: body.serviceName || null,
+        jobType: body.jobType,
+        jobStatus: body.jobStatus,
+        startTime: body.startTime || null,
+        endTime: body.endTime || null,
+        anytime: body.anytime,
+        visitInstructions: body.visitInstructions || null,
+        assignedUserId: body.assignedUserId || null,
+        isStopOnly: body.isStopOnly || false,
       });
 
-      res.status(201).json({ ...result.job, agreementId: result.agreement.id, contactId: body.contactId, frequency: body.frequency, servicePlanId: result.sp.id });
+      const linkedJob = await storage.getJobByServicePlanId(sp.id);
+      const linkedAgreement = await storage.getAgreementByServicePlanId(sp.id);
+      res.status(201).json({ ...(linkedJob || {}), agreementId: linkedAgreement?.id, contactId: body.contactId, frequency: body.frequency, servicePlanId: sp.id });
     } catch (err) { handleError(res, err); }
   });
 
@@ -8883,25 +8811,6 @@ Return ONLY valid JSON, no markdown.`,
             jobStatus: "active",
             stopOrder: 0,
           });
-          const qAgreement = await storage.createAgreement({
-            companyId,
-            contactId: quote.contactId,
-            frequency: normalizeQuoteFrequency(quote.frequency),
-            pricePerVisit: selectedPrice,
-            isActive: true,
-            startDate: today,
-            servicePlanId: servicePlan.id,
-          });
-          await storage.createJob({
-            companyId,
-            agreementId: qAgreement.id,
-            propertyId: quote.propertyId,
-            serviceName: svcName,
-            jobType: "recurring",
-            jobStatus: "active",
-            stopOrder: 0,
-            servicePlanId: servicePlan.id,
-          });
         } catch (spErr) {
           console.error("Failed to create service plan from accepted quote:", spErr);
         }
@@ -10064,25 +9973,6 @@ Return ONLY valid JSON, no markdown.`,
             jobType: "recurring",
             jobStatus: "active",
             stopOrder: 0,
-          });
-          const portalAgreement = await storage.createAgreement({
-            companyId,
-            contactId,
-            frequency: normalizeQuoteFrequency(frequency),
-            pricePerVisit: String(selectedPrice),
-            isActive: true,
-            startDate: today,
-            servicePlanId: portalSp.id,
-          });
-          await storage.createJob({
-            companyId,
-            agreementId: portalAgreement.id,
-            propertyId,
-            serviceName: portalSvcName,
-            jobType: "recurring",
-            jobStatus: "active",
-            stopOrder: 0,
-            servicePlanId: portalSp.id,
           });
         } catch (spErr) {
           console.error("Failed to create service plan from portal quote acceptance:", spErr);

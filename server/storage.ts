@@ -791,8 +791,45 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createServicePlan(data: InsertServicePlan): Promise<ServicePlan> {
-    const [sp] = await db.insert(servicePlans).values(data).returning();
-    return sp;
+    return db.transaction(async (tx) => {
+      const [sp] = await tx.insert(servicePlans).values(data).returning();
+
+      const [agreement] = await tx.insert(agreements).values({
+        companyId: data.companyId,
+        contactId: data.contactId,
+        frequency: data.frequency,
+        pricePerVisit: data.pricePerVisit,
+        isActive: data.isActive ?? true,
+        pausedAt: data.pausedAt ?? null,
+        startDate: data.startDate || new Date().toISOString().split("T")[0],
+        endDate: data.endDate ?? null,
+        endsAfterCount: data.endsAfterCount ?? null,
+        endsAfterUnit: data.endsAfterUnit ?? null,
+        estimateId: data.estimateId ?? null,
+        servicePlanId: sp.id,
+      }).returning();
+
+      await tx.insert(jobs).values({
+        companyId: data.companyId,
+        agreementId: agreement.id,
+        propertyId: data.propertyId,
+        routeId: data.routeId ?? null,
+        stopOrder: data.stopOrder ?? 0,
+        dayOfWeek: data.dayOfWeek ?? null,
+        serviceName: data.serviceName ?? null,
+        jobType: data.jobType ?? "recurring",
+        jobStatus: data.jobStatus ?? "active",
+        startTime: data.startTime ?? null,
+        endTime: data.endTime ?? null,
+        anytime: data.anytime ?? true,
+        visitInstructions: data.visitInstructions ?? null,
+        assignedUserId: data.assignedUserId ?? null,
+        isStopOnly: data.isStopOnly ?? false,
+        servicePlanId: sp.id,
+      });
+
+      return sp;
+    });
   }
 
   async updateServicePlan(id: string, companyId: string, data: Partial<InsertServicePlan>): Promise<ServicePlan> {
