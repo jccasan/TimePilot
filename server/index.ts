@@ -358,6 +358,37 @@ async function ensureCompanyColumns() {
   }
 }
 
+/**
+ * Ensures the `connected_accounts` table exists for the Stripe Connect V2 integration.
+ * This is an idempotent CREATE TABLE IF NOT EXISTS so it is safe to run on every boot.
+ * The table tracks the mapping between companies and their V2 Stripe account IDs plus
+ * platform subscription status.
+ */
+async function ensureConnectedAccountsTable() {
+  try {
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS connected_accounts (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        stripe_account_id VARCHAR(255) NOT NULL UNIQUE,
+        subscription_status VARCHAR(50) NOT NULL DEFAULT 'none',
+        stripe_subscription_id VARCHAR(255),
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_connected_accounts_company ON connected_accounts(company_id);
+    `);
+
+    console.log("[Migration] connected_accounts table verified");
+    await pool.end();
+  } catch (err) {
+    console.error("[Migration] Failed to ensure connected_accounts table:", err);
+  }
+}
+
 async function seedDemoCompany() {
   try {
     const { Pool } = await import("pg");
@@ -609,6 +640,7 @@ async function repairServicePlanDayOfWeek() {
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
+  await ensureConnectedAccountsTable();
   await repairServicePlanDayOfWeek();
   await syncSubscriptionTiers();
   await seedDemoCompany();

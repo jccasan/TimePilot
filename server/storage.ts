@@ -64,6 +64,8 @@ import {
   serviceZones,
   type Quote, type InsertQuote,
   quotes,
+  type ConnectedAccount, type InsertConnectedAccount,
+  connectedAccounts,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -384,6 +386,12 @@ export interface IStorage {
   updateQuote(id: string, companyId: string, data: Partial<InsertQuote>): Promise<Quote>;
   deleteQuote(id: string, companyId: string): Promise<void>;
   getNextQuoteNumber(companyId: string): Promise<string>;
+
+  // Connected Accounts (Stripe Connect V2)
+  getConnectedAccount(companyId: string): Promise<ConnectedAccount | undefined>;
+  getConnectedAccountByStripeId(stripeAccountId: string): Promise<ConnectedAccount | undefined>;
+  createConnectedAccount(data: InsertConnectedAccount): Promise<ConnectedAccount>;
+  updateConnectedAccount(id: string, data: Partial<InsertConnectedAccount>): Promise<ConnectedAccount>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2212,6 +2220,31 @@ export class DatabaseStorage implements IStorage {
     if (!match) return "Q-0001";
     const next = parseInt(match[1], 10) + 1;
     return `Q-${String(next).padStart(4, "0")}`;
+  }
+
+  // ================ Connected Accounts (Stripe Connect V2) ================
+
+  async getConnectedAccount(companyId: string): Promise<ConnectedAccount | undefined> {
+    const [row] = await db.select().from(connectedAccounts).where(eq(connectedAccounts.companyId, companyId));
+    return row;
+  }
+
+  async getConnectedAccountByStripeId(stripeAccountId: string): Promise<ConnectedAccount | undefined> {
+    const [row] = await db.select().from(connectedAccounts).where(eq(connectedAccounts.stripeAccountId, stripeAccountId));
+    return row;
+  }
+
+  async createConnectedAccount(data: InsertConnectedAccount): Promise<ConnectedAccount> {
+    const [row] = await db.insert(connectedAccounts).values(data).returning();
+    return row;
+  }
+
+  async updateConnectedAccount(id: string, data: Partial<InsertConnectedAccount>): Promise<ConnectedAccount> {
+    const [row] = await db.update(connectedAccounts)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(connectedAccounts.id, id))
+      .returning();
+    return row;
   }
 }
 
