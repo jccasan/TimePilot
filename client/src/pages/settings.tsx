@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical, Rocket } from "lucide-react";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -2722,11 +2722,28 @@ export default function Settings() {
         return (
           <Card className="h-full overflow-auto">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Company Information
-              </CardTitle>
-              <CardDescription>Update your business details</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    Company Information
+                  </CardTitle>
+                  <CardDescription>Update your business details</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    await apiRequest("POST", "/api/onboarding/business-step", { step: 0, data: null, resetWizard: true });
+                    queryClient.invalidateQueries({ queryKey: ["/api/onboarding/business-status"] });
+                    window.location.href = "/";
+                  }}
+                  data-testid="button-rerun-setup-wizard"
+                >
+                  <Rocket className="h-4 w-4 mr-1" />
+                  Re-run Setup Wizard
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {loadingCompany ? (

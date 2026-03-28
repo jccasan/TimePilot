@@ -1294,12 +1294,15 @@ export async function registerRoutes(
     try {
       const { companyId } = await getCompanyContext(req);
       const result = await db.execute(sql`SELECT name, email, phone, address, logo_url, website_url, business_description, service_area_description, pricing_config, stripe_connect_account_id, stripe_connect_onboarded, business_onboarding_step, business_onboarding_complete FROM companies WHERE id = ${companyId}`);
-      const rows = result.rows as any[];
+      const rows = result.rows as Record<string, unknown>[];
       if (!rows || rows.length === 0) return res.status(404).json({ error: "Company not found" });
       const row = rows[0];
+      const step = (row.business_onboarding_step as number) ?? 0;
+      const completedSteps: number[] = Array.from({ length: step }, (_, i) => i);
       res.json({
-        currentStep: row.business_onboarding_step ?? 0,
-        isComplete: row.business_onboarding_complete ?? false,
+        currentStep: step,
+        isComplete: (row.business_onboarding_complete as boolean) ?? false,
+        completedSteps,
         companyData: {
           name: row.name,
           email: row.email,
@@ -1320,7 +1323,13 @@ export async function registerRoutes(
   app.post("/api/onboarding/business-step", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { step, data } = req.body;
+      const { step, data, resetWizard } = req.body;
+
+      if (resetWizard) {
+        await db.execute(sql`UPDATE companies SET business_onboarding_step = 0, business_onboarding_complete = false WHERE id = ${companyId}`);
+        return res.json({ success: true, nextStep: 0 });
+      }
+
       if (typeof step !== "number" || step < 0 || step > 4) {
         return res.status(400).json({ error: "Invalid step number" });
       }

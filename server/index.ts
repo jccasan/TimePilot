@@ -95,6 +95,15 @@ app.use("/api/auth/register", authLimiter);
 app.use("/api/auth/forgot-password", authLimiter);
 app.use("/api/portal/auth/login", authLimiter);
 
+const scrapeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many website analysis requests, please try again later" },
+});
+app.use("/api/onboarding/scrape-website", scrapeLimiter);
+
 app.use(
   express.json({
     limit: "10mb",
