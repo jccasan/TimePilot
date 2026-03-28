@@ -139,9 +139,13 @@ async function generateVisitsFromJobs(companyId: string, jobsWithAgreements: Job
           const dateStr = candidate.toISOString().split("T")[0];
           const key = `${spId}_${dateStr}`;
           if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, spId, holdsByPlan)) {
+            if (!job.servicePlanId) {
+              console.warn(`[auto-visits] Job ${job.id} missing servicePlanId, skipping visit for ${dateStr}`);
+              continue;
+            }
             await storage.createVisit({
               companyId,
-              servicePlanId: job.servicePlanId || "",
+              servicePlanId: job.servicePlanId,
               jobId: job.id,
               propertyId: job.propertyId,
               routeId: job.routeId || null,
@@ -184,9 +188,13 @@ async function generateVisitsFromJobs(companyId: string, jobsWithAgreements: Job
           }
 
           if (shouldGenerate) {
+            if (!job.servicePlanId) {
+              console.warn(`[auto-visits] Job ${job.id} missing servicePlanId, skipping visit for ${dateStr}`);
+              continue;
+            }
             await storage.createVisit({
               companyId,
-              servicePlanId: job.servicePlanId || "",
+              servicePlanId: job.servicePlanId,
               jobId: job.id,
               propertyId: job.propertyId,
               routeId: job.routeId || null,
