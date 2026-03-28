@@ -4293,11 +4293,6 @@ Return ONLY valid JSON, no markdown.`,
       const existing = await storage.getServicePlan(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Scheduled service not found" });
 
-      const existingJob = await storage.getJobByServicePlanId(req.params.id);
-      if (existingJob) await storage.deleteJob(existingJob.id, companyId);
-      const existingAgreement = await storage.getAgreementByServicePlanId(req.params.id);
-      if (existingAgreement) await storage.deleteAgreement(existingAgreement.id, companyId);
-
       await storage.deleteServicePlan(req.params.id, companyId);
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", req.params.id, "delete", { deleted: { contactId: existing.contactId, frequency: existing.frequency, dayOfWeek: existing.dayOfWeek } }, req.ip || undefined);
@@ -4335,45 +4330,70 @@ Return ONLY valid JSON, no markdown.`,
       if (body.anytime === undefined) body.anytime = true;
       const isActive = body.jobStatus === "active";
 
-      const agreement = await storage.createAgreement({
-        companyId,
-        contactId: body.contactId,
-        frequency: body.frequency || "weekly",
-        pricePerVisit: body.pricePerVisit || "0",
-        isActive,
-        startDate: body.startDate || new Date().toISOString().split("T")[0],
-        endDate: body.endDate || null,
-        endsAfterCount: body.endsAfterCount || null,
-        endsAfterUnit: body.endsAfterUnit || null,
-        estimateId: body.estimateId || null,
+      const result = await db.transaction(async (tx) => {
+        const [sp] = await tx.insert(servicePlansTable).values({
+          companyId,
+          contactId: body.contactId,
+          propertyId: body.propertyId,
+          frequency: body.frequency || "weekly",
+          pricePerVisit: body.pricePerVisit || "0",
+          isActive,
+          startDate: body.startDate || new Date().toISOString().split("T")[0],
+          endDate: body.endDate || null,
+          endsAfterCount: body.endsAfterCount || null,
+          endsAfterUnit: body.endsAfterUnit || null,
+          estimateId: body.estimateId || null,
+          routeId: body.routeId || null,
+          stopOrder: body.stopOrder || 0,
+          dayOfWeek: body.dayOfWeek || null,
+          serviceName: body.serviceName || null,
+          jobType: body.jobType,
+          jobStatus: body.jobStatus,
+          startTime: body.startTime || null,
+          endTime: body.endTime || null,
+          anytime: body.anytime,
+          visitInstructions: body.visitInstructions || null,
+          assignedUserId: body.assignedUserId || null,
+          isStopOnly: body.isStopOnly || false,
+        }).returning();
+
+        const [agreement] = await tx.insert(agreementsTable).values({
+          companyId,
+          contactId: body.contactId,
+          frequency: body.frequency || "weekly",
+          pricePerVisit: body.pricePerVisit || "0",
+          isActive,
+          startDate: body.startDate || new Date().toISOString().split("T")[0],
+          endDate: body.endDate || null,
+          endsAfterCount: body.endsAfterCount || null,
+          endsAfterUnit: body.endsAfterUnit || null,
+          estimateId: body.estimateId || null,
+          servicePlanId: sp.id,
+        }).returning();
+
+        const [job] = await tx.insert(jobsTable).values({
+          companyId,
+          agreementId: agreement.id,
+          propertyId: body.propertyId,
+          routeId: body.routeId || null,
+          stopOrder: body.stopOrder || 0,
+          dayOfWeek: body.dayOfWeek || null,
+          serviceName: body.serviceName || null,
+          jobType: body.jobType,
+          jobStatus: body.jobStatus,
+          startTime: body.startTime || null,
+          endTime: body.endTime || null,
+          anytime: body.anytime,
+          visitInstructions: body.visitInstructions || null,
+          assignedUserId: body.assignedUserId || null,
+          isStopOnly: body.isStopOnly || false,
+          servicePlanId: sp.id,
+        }).returning();
+
+        return { sp, agreement, job };
       });
 
-      const job = await storage.createJob({
-        companyId,
-        agreementId: agreement.id,
-        propertyId: body.propertyId,
-        routeId: body.routeId || null,
-        stopOrder: body.stopOrder || 0,
-        dayOfWeek: body.dayOfWeek || null,
-        serviceName: body.serviceName || null,
-        jobType: body.jobType,
-        jobStatus: body.jobStatus,
-        startTime: body.startTime || null,
-        endTime: body.endTime || null,
-        anytime: body.anytime,
-        visitInstructions: body.visitInstructions || null,
-        assignedUserId: body.assignedUserId || null,
-        isStopOnly: body.isStopOnly || false,
-      });
-
-      body.isActive = isActive;
-      const parsed = insertServicePlanSchema.parse(body);
-      const sp = await storage.createServicePlan(parsed);
-
-      await storage.updateAgreement(agreement.id, companyId, { servicePlanId: sp.id });
-      await storage.updateJob(job.id, companyId, { servicePlanId: sp.id });
-
-      res.status(201).json({ ...job, agreementId: agreement.id, contactId: body.contactId, frequency: body.frequency });
+      res.status(201).json({ ...result.job, agreementId: result.agreement.id, contactId: body.contactId, frequency: body.frequency, servicePlanId: result.sp.id });
     } catch (err) { handleError(res, err); }
   });
 

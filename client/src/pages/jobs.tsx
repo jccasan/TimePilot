@@ -888,7 +888,7 @@ export default function Jobs() {
           </DialogHeader>
           {editJob && contacts && properties && team && (
             <JobForm
-              onSubmit={data => updateMutation.mutate({ id: (editJob as any).servicePlanId || editJob.id, data })}
+              onSubmit={data => updateMutation.mutate({ id: ('servicePlanId' in editJob && editJob.servicePlanId) ? editJob.servicePlanId : editJob.id, data })}
               isPending={updateMutation.isPending}
               contacts={contacts}
               properties={properties}

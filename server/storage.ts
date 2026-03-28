@@ -827,13 +827,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteServicePlan(id: string, companyId: string): Promise<void> {
-    const [existingJob] = await db.select().from(jobs).where(eq(jobs.servicePlanId, id));
-    if (existingJob) {
-      await db.delete(jobAddOns).where(eq(jobAddOns.jobId, existingJob.id));
-      await db.delete(jobs).where(eq(jobs.id, existingJob.id));
-    }
-    await db.delete(agreements).where(eq(agreements.servicePlanId, id));
-    await db.delete(servicePlans).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
+    await db.transaction(async (tx) => {
+      const [existingJob] = await tx.select().from(jobs).where(and(eq(jobs.servicePlanId, id), eq(jobs.companyId, companyId)));
+      if (existingJob) {
+        await tx.delete(jobAddOns).where(eq(jobAddOns.jobId, existingJob.id));
+        await tx.delete(jobs).where(and(eq(jobs.id, existingJob.id), eq(jobs.companyId, companyId)));
+      }
+      await tx.delete(agreements).where(and(eq(agreements.servicePlanId, id), eq(agreements.companyId, companyId)));
+      await tx.delete(servicePlans).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
+    });
   }
 
   async getServicePlanAddOns(servicePlanId: string): Promise<ServicePlanAddOn[]> {
@@ -2361,46 +2363,49 @@ export class DatabaseStorage implements IStorage {
     const totalDollars = (estimate.totalCents / 100).toFixed(2);
     const today = new Date().toISOString().split("T")[0];
     const svcName = estimate.description || "Job from estimate";
-    const [sp] = await db.insert(servicePlans).values({
-      companyId: estimate.companyId,
-      contactId,
-      propertyId: estimate.propertyId!,
-      frequency: "onetime",
-      pricePerVisit: totalDollars,
-      startDate: today,
-      isActive: false,
-      serviceName: svcName,
-      jobType: "one_off",
-      jobStatus: "draft",
-      anytime: true,
-      estimateId: estimate.id,
-      stopOrder: 0,
-    }).returning();
 
-    const [agreement] = await db.insert(agreements).values({
-      companyId: estimate.companyId,
-      contactId,
-      frequency: "onetime",
-      pricePerVisit: totalDollars,
-      isActive: false,
-      startDate: today,
-      estimateId: estimate.id,
-      servicePlanId: sp.id,
-    }).returning();
+    return db.transaction(async (tx) => {
+      const [sp] = await tx.insert(servicePlans).values({
+        companyId: estimate.companyId,
+        contactId,
+        propertyId: estimate.propertyId!,
+        frequency: "onetime",
+        pricePerVisit: totalDollars,
+        startDate: today,
+        isActive: false,
+        serviceName: svcName,
+        jobType: "one_off",
+        jobStatus: "draft",
+        anytime: true,
+        estimateId: estimate.id,
+        stopOrder: 0,
+      }).returning();
 
-    await db.insert(jobs).values({
-      companyId: estimate.companyId,
-      agreementId: agreement.id,
-      propertyId: estimate.propertyId!,
-      serviceName: svcName,
-      jobType: "one_off",
-      jobStatus: "draft",
-      anytime: true,
-      stopOrder: 0,
-      servicePlanId: sp.id,
+      const [agreement] = await tx.insert(agreements).values({
+        companyId: estimate.companyId,
+        contactId,
+        frequency: "onetime",
+        pricePerVisit: totalDollars,
+        isActive: false,
+        startDate: today,
+        estimateId: estimate.id,
+        servicePlanId: sp.id,
+      }).returning();
+
+      await tx.insert(jobs).values({
+        companyId: estimate.companyId,
+        agreementId: agreement.id,
+        propertyId: estimate.propertyId!,
+        serviceName: svcName,
+        jobType: "one_off",
+        jobStatus: "draft",
+        anytime: true,
+        stopOrder: 0,
+        servicePlanId: sp.id,
+      });
+
+      return sp;
     });
-
-    return sp;
   }
   // ================ Quotes ================
   async getQuote(id: string, companyId: string): Promise<Quote | undefined> {
