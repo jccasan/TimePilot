@@ -63,6 +63,7 @@ import {
 import {
   ChevronLeft, ChevronRight, Plus, Wand2, Calendar, CalendarDays, CalendarRange,
   CheckCircle, XCircle, Ban, Clock, MapPin, DollarSign, User, CalendarCheck, Loader2, GripVertical,
+  Send, MessageSquare,
 } from "lucide-react";
 import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
@@ -802,6 +803,9 @@ function VisitDetailSheet({
 }) {
   const { toast } = useToast();
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [showSmsDialog, setShowSmsDialog] = useState(false);
+  const [smsMessage, setSmsMessage] = useState("");
+  const [smsSending, setSmsSending] = useState(false);
 
   const statusMutation = useMutation({
     mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
@@ -837,6 +841,31 @@ function VisitDetailSheet({
   const route = routes?.find((r) => r.id === visit.routeId);
   const frequencyLabel = plan ? plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1) : "";
   const pricePerVisit = plan ? parseFloat(plan.pricePerVisit) || 0 : 0;
+  const contactHasPhone = !!(contact?.phone);
+
+  const openOnMyWayDialog = () => {
+    const name = contact?.firstName || "there";
+    const defaultMsg = `Hi ${name}, we're on our way to your property! Please make sure your yard is accessible and any pets are inside. See you soon!`;
+    setSmsMessage(defaultMsg);
+    setShowSmsDialog(true);
+  };
+
+  const sendCustomSms = async () => {
+    if (!visit || !smsMessage.trim()) return;
+    setSmsSending(true);
+    try {
+      const res = await apiRequest("POST", `/api/visits/${visit.id}/send-custom-sms`, { message: smsMessage.trim() });
+      const data = await res.json();
+      toast({ title: "Message sent", description: `SMS sent to ${data.contactName}` });
+      setShowSmsDialog(false);
+      setSmsMessage("");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send SMS";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setSmsSending(false);
+    }
+  };
 
   const statusActions: { status: string; label: string; icon: typeof CheckCircle; color: string; show: boolean }[] = [
     {
@@ -870,6 +899,7 @@ function VisitDetailSheet({
   ];
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto" data-testid="sheet-visit-detail">
         <SheetHeader className="pb-4">
@@ -987,6 +1017,16 @@ function VisitDetailSheet({
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</p>
             <div className="grid grid-cols-1 gap-2">
+              <Button
+                variant="outline"
+                className="justify-start gap-2 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 border-teal-200 dark:border-teal-800"
+                onClick={openOnMyWayDialog}
+                disabled={!contactHasPhone}
+                data-testid="button-on-my-way"
+              >
+                <Send className="h-4 w-4" />
+                {contactHasPhone ? "On My Way" : "On My Way (No phone)"}
+              </Button>
               {statusActions.filter(a => a.show).map((action) => {
                 const Icon = action.icon;
                 const isUpdating = updatingStatus === action.status;
@@ -1009,6 +1049,56 @@ function VisitDetailSheet({
         </div>
       </SheetContent>
     </Sheet>
+    <Dialog open={showSmsDialog} onOpenChange={setShowSmsDialog}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-teal-600" />
+            Send "On My Way" Message
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <p className="text-sm text-muted-foreground">
+              To: <span className="font-medium text-foreground">{contact?.firstName} {contact?.lastName}</span>
+              {contact?.phone && <span className="ml-1 text-xs">({contact.phone})</span>}
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="sms-message" className="text-sm font-medium">Message</Label>
+            <textarea
+              id="sms-message"
+              className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+              value={smsMessage}
+              onChange={(e) => setSmsMessage(e.target.value)}
+              maxLength={1000}
+              disabled={smsSending}
+              data-testid="textarea-sms-message"
+            />
+            <p className="text-xs text-muted-foreground text-right">{smsMessage.length}/1000</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowSmsDialog(false)}
+              disabled={smsSending}
+              data-testid="button-cancel-sms"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={sendCustomSms}
+              disabled={smsSending || !smsMessage.trim()}
+              data-testid="button-send-sms"
+            >
+              {smsSending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+              Send Message
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

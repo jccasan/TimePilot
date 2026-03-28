@@ -4698,6 +4698,71 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  const customSmsCooldowns = new Map<string, number>();
+  app.post("/api/visits/:id/send-custom-sms", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId, role } = await getCompanyContext(req);
+      const visit = await storage.getVisit(req.params.id, companyId);
+      if (!visit) return res.status(404).json({ error: "Visit not found" });
+
+      if (role === "tech") {
+        if (!visit.routeId) return res.status(403).json({ error: "Visit has no assigned route" });
+        const route = await storage.getRoute(visit.routeId, companyId);
+        if (!route || route.technicianId !== userId) {
+          return res.status(403).json({ error: "You are not assigned to this visit's route" });
+        }
+      }
+
+      if (typeof req.body.message !== "string") {
+        return res.status(400).json({ error: "Message must be a string" });
+      }
+      const messageBody = req.body.message.trim();
+      if (!messageBody || messageBody.length > 1000) {
+        return res.status(400).json({ error: "Message is required and must be under 1000 characters" });
+      }
+
+      const cooldownKey = `${companyId}:${visit.id}`;
+      const lastSent = customSmsCooldowns.get(cooldownKey);
+      if (lastSent && Date.now() - lastSent < 5 * 60 * 1000) {
+        const secsLeft = Math.ceil((5 * 60 * 1000 - (Date.now() - lastSent)) / 1000);
+        return res.status(429).json({ error: `Please wait ${secsLeft}s before sending another message for this visit` });
+      }
+
+      const plan = await storage.getServicePlan(visit.servicePlanId, companyId);
+      if (!plan) return res.status(404).json({ error: "Service plan not found" });
+
+      const contact = await storage.getContact(plan.contactId, companyId);
+      if (!contact?.phone) return res.status(400).json({ error: "Customer has no phone number on file" });
+
+      const smsReady = await isSmsConfiguredForCompany(companyId);
+      if (!smsReady) return res.status(503).json({ error: "SMS is not configured for your company" });
+
+      const smsResult = await sendSmsForCompany({ to: contact.phone, body: messageBody, companyId });
+      if (!smsResult.success) return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
+
+      customSmsCooldowns.set(cooldownKey, Date.now());
+
+      try {
+        const fromPhone = await getFromPhoneForCompany(companyId);
+        await storage.createMessage({
+          companyId,
+          contactId: contact.id,
+          channel: "sms",
+          direction: "outbound",
+          status: "sent",
+          fromAddress: fromPhone,
+          toAddress: contact.phone,
+          body: messageBody,
+          externalId: smsResult.messageSid,
+        });
+      } catch (logErr) {
+        console.error("Custom visit SMS message logging failed (SMS was sent):", logErr);
+      }
+
+      res.json({ sent: true, contactName: `${contact.firstName} ${contact.lastName}` });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/visits/:id/complete-notify", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId, role } = await getCompanyContext(req);
