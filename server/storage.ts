@@ -796,8 +796,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateServicePlan(id: string, companyId: string, data: Partial<InsertServicePlan>): Promise<ServicePlan> {
-    const [sp] = await db.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId))).returning();
-
     const agreementFields: (keyof InsertAgreement)[] = ["frequency", "pricePerVisit", "isActive", "pausedAt", "startDate", "endDate", "endsAfterCount", "endsAfterUnit"];
     const jobFields: (keyof InsertJob)[] = ["routeId", "stopOrder", "dayOfWeek", "serviceName", "jobType", "jobStatus", "startTime", "endTime", "anytime", "visitInstructions", "assignedUserId", "isStopOnly"];
 
@@ -810,20 +808,31 @@ export class DatabaseStorage implements IStorage {
       if ((data as Record<string, unknown>)[k] !== undefined) jUpd[k] = (data as Record<string, unknown>)[k];
     }
 
-    if (Object.keys(aUpd).length > 0) {
-      const [existingAgreement] = await db.select().from(agreements).where(eq(agreements.servicePlanId, id));
-      if (existingAgreement) {
-        await db.update(agreements).set({ ...aUpd, updatedAt: new Date() }).where(eq(agreements.id, existingAgreement.id));
-      }
-    }
-    if (Object.keys(jUpd).length > 0) {
-      const [existingJob] = await db.select().from(jobs).where(eq(jobs.servicePlanId, id));
-      if (existingJob) {
-        await db.update(jobs).set({ ...jUpd, updatedAt: new Date() }).where(eq(jobs.id, existingJob.id));
-      }
+    const hasSyncUpdates = Object.keys(aUpd).length > 0 || Object.keys(jUpd).length > 0;
+
+    if (!hasSyncUpdates) {
+      const [sp] = await db.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId))).returning();
+      return sp;
     }
 
-    return sp;
+    return db.transaction(async (tx) => {
+      const [sp] = await tx.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId))).returning();
+
+      if (Object.keys(aUpd).length > 0) {
+        const [existingAgreement] = await tx.select().from(agreements).where(and(eq(agreements.servicePlanId, id), eq(agreements.companyId, companyId)));
+        if (existingAgreement) {
+          await tx.update(agreements).set({ ...aUpd, updatedAt: new Date() }).where(eq(agreements.id, existingAgreement.id));
+        }
+      }
+      if (Object.keys(jUpd).length > 0) {
+        const [existingJob] = await tx.select().from(jobs).where(and(eq(jobs.servicePlanId, id), eq(jobs.companyId, companyId)));
+        if (existingJob) {
+          await tx.update(jobs).set({ ...jUpd, updatedAt: new Date() }).where(eq(jobs.id, existingJob.id));
+        }
+      }
+
+      return sp;
+    });
   }
 
   async deleteServicePlan(id: string, companyId: string): Promise<void> {
