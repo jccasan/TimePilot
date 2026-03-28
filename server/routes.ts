@@ -1341,6 +1341,7 @@ export async function registerRoutes(
           phone = ${data.phone || sql`phone`},
           address = ${data.address || sql`address`},
           website_url = ${data.websiteUrl || null},
+          timezone = ${data.timezone || sql`timezone`},
           business_onboarding_step = ${step + 1}
           WHERE id = ${companyId}`);
       } else if (step === 1 && data) {
@@ -1381,24 +1382,40 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Only HTTP/HTTPS URLs are allowed" });
       }
       const hostname = parsed.hostname.toLowerCase();
-      const blockedPatterns = [
+      const hostnameBlockedPatterns = [
         /^localhost$/i,
-        /^127\./,
-        /^10\./,
-        /^172\.(1[6-9]|2\d|3[01])\./,
-        /^192\.168\./,
-        /^169\.254\./,
-        /^0\./,
-        /^fc00:/i,
-        /^fe80:/i,
-        /^::1$/,
-        /^::$/,
         /metadata\.google/i,
         /\.internal$/i,
+        /\.local$/i,
       ];
-      if (blockedPatterns.some(p => p.test(hostname))) {
+      if (hostnameBlockedPatterns.some(p => p.test(hostname))) {
         return res.status(400).json({ error: "URL points to a restricted network address" });
       }
+
+      const dns = await import("dns");
+      const { promisify } = await import("util");
+      const dnsResolve = promisify(dns.resolve);
+      const isPrivateIP = (ip: string): boolean => {
+        const parts = ip.split(".").map(Number);
+        if (parts.length === 4) {
+          if (parts[0] === 127) return true;
+          if (parts[0] === 10) return true;
+          if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+          if (parts[0] === 192 && parts[1] === 168) return true;
+          if (parts[0] === 169 && parts[1] === 254) return true;
+          if (parts[0] === 0) return true;
+        }
+        if (ip === "::1" || ip === "::" || ip.startsWith("fc00:") || ip.startsWith("fd") || ip.startsWith("fe80:")) return true;
+        return false;
+      };
+      try {
+        let resolvedIPs: string[] = [];
+        try { resolvedIPs = resolvedIPs.concat(await dnsResolve(hostname, "A")); } catch {}
+        try { resolvedIPs = resolvedIPs.concat(await dnsResolve(hostname, "AAAA")); } catch {}
+        if (resolvedIPs.length > 0 && resolvedIPs.every(isPrivateIP)) {
+          return res.status(400).json({ error: "URL resolves to a private network address" });
+        }
+      } catch {}
 
       let pageText = "";
       try {
@@ -1407,21 +1424,61 @@ export async function registerRoutes(
         const response = await fetch(parsed.toString(), {
           signal: controller.signal,
           headers: { "User-Agent": "ScooPilot-Onboarding/1.0" },
-          redirect: "follow",
+          redirect: "manual",
         });
-        clearTimeout(timeout);
-        const contentType = response.headers.get("content-type") || "";
-        if (!contentType.includes("text/html") && !contentType.includes("text/plain")) {
-          return res.json({ success: false, error: "URL did not return an HTML page.", insights: null });
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get("location");
+          if (location) {
+            try {
+              const redirectUrl = new URL(location, parsed.toString());
+              if (!["http:", "https:"].includes(redirectUrl.protocol)) {
+                return res.json({ success: false, error: "Redirect to non-HTTP URL blocked.", insights: null });
+              }
+              const rHost = redirectUrl.hostname.toLowerCase();
+              if (hostnameBlockedPatterns.some(p => p.test(rHost))) {
+                return res.json({ success: false, error: "Redirect to restricted address blocked.", insights: null });
+              }
+              let rIPs: string[] = [];
+              try { rIPs = rIPs.concat(await dnsResolve(rHost, "A")); } catch {}
+              try { rIPs = rIPs.concat(await dnsResolve(rHost, "AAAA")); } catch {}
+              if (rIPs.length > 0 && rIPs.every(isPrivateIP)) {
+                return res.json({ success: false, error: "Redirect resolves to private address.", insights: null });
+              }
+              const controller2 = new AbortController();
+              const timeout2 = setTimeout(() => controller2.abort(), 10000);
+              const response2 = await fetch(redirectUrl.toString(), {
+                signal: controller2.signal,
+                headers: { "User-Agent": "ScooPilot-Onboarding/1.0" },
+                redirect: "manual",
+              });
+              clearTimeout(timeout2);
+              const ct2 = response2.headers.get("content-type") || "";
+              if (!ct2.includes("text/html") && !ct2.includes("text/plain")) {
+                return res.json({ success: false, error: "URL did not return an HTML page.", insights: null });
+              }
+              const html2 = await response2.text();
+              pageText = html2.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 5000);
+            } catch {
+              return res.json({ success: false, error: "Could not follow redirect.", insights: null });
+            }
+          } else {
+            return res.json({ success: false, error: "Redirect without location header.", insights: null });
+          }
+        } else {
+          clearTimeout(timeout);
+          const contentType = response.headers.get("content-type") || "";
+          if (!contentType.includes("text/html") && !contentType.includes("text/plain")) {
+            return res.json({ success: false, error: "URL did not return an HTML page.", insights: null });
+          }
+          const html = await response.text();
+          pageText = html
+            .replace(/<script[\s\S]*?<\/script>/gi, "")
+            .replace(/<style[\s\S]*?<\/style>/gi, "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 5000);
         }
-        const html = await response.text();
-        pageText = html
-          .replace(/<script[\s\S]*?<\/script>/gi, "")
-          .replace(/<style[\s\S]*?<\/style>/gi, "")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 5000);
       } catch (fetchErr) {
         return res.json({
           success: false,

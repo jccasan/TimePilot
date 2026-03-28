@@ -93,6 +93,7 @@ const profileSchema = z.object({
   phone: z.string().optional().or(z.literal("")),
   address: z.string().optional().or(z.literal("")),
   websiteUrl: z.string().optional().or(z.literal("")),
+  timezone: z.string().optional().or(z.literal("")),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -183,6 +184,7 @@ function CompanyProfileStep({
       phone: companyData.phone || "",
       address: companyData.address || "",
       websiteUrl: companyData.websiteUrl || "",
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York",
     },
   });
 
@@ -259,6 +261,15 @@ function CompanyProfileStep({
             <FormItem>
               <FormLabel>Website URL</FormLabel>
               <FormControl><Input placeholder="https://yourcompany.com" {...field} data-testid="input-company-website" /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+
+          <FormField control={form.control} name="timezone" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Timezone</FormLabel>
+              <FormControl><Input {...field} data-testid="input-company-timezone" /></FormControl>
+              <p className="text-xs text-muted-foreground mt-1">Auto-detected from your browser. Used for scheduling and notifications.</p>
               <FormMessage />
             </FormItem>
           )} />
