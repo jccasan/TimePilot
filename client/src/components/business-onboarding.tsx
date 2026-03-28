@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useUpload } from "@/hooks/use-upload";
 import { DEFAULT_PRICING_CONFIG, type PricingConfig } from "@shared/schema";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,20 +24,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Building2,
   Globe,
   DollarSign,
   CreditCard,
   Rocket,
   CheckCircle2,
-  Circle,
   ArrowRight,
   ArrowLeft,
   Loader2,
@@ -47,9 +41,8 @@ import {
   SkipForward,
   ExternalLink,
   PartyPopper,
-  FileText,
-  TrendingUp,
   AlertCircle,
+  Image,
 } from "lucide-react";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 
@@ -146,9 +139,42 @@ function CompanyProfileStep({
   isPending,
 }: {
   companyData: BusinessOnboardingStatus["companyData"];
-  onNext: (data: ProfileFormValues) => void;
+  onNext: (data: ProfileFormValues & { logoUrl?: string }) => void;
   isPending: boolean;
 }) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(companyData.logoUrl || null);
+
+  const { uploadFile, isUploading } = useUpload({
+    onSuccess: async (response) => {
+      await apiRequest("PATCH", "/api/company", { logoUrl: response.objectPath });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/business-status"] });
+      toast({ title: "Logo uploaded", description: "Your company logo has been saved." });
+    },
+    onError: () => {
+      toast({ title: "Upload failed", description: "Could not upload logo. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please select an image file (PNG or JPG).", variant: "destructive" });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Logo must be under 2 MB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setLogoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+    await uploadFile(file);
+  };
+
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
@@ -167,8 +193,26 @@ function CompanyProfileStep({
         <p className="text-muted-foreground mt-1">This information will appear on invoices, quotes, and customer communications.</p>
       </div>
 
+      <div className="flex items-center gap-4 mb-6 p-4 rounded-lg border bg-muted/30">
+        <div className="w-16 h-16 rounded-lg border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0">
+          {logoPreview ? (
+            <img src={logoPreview} alt="Company logo" className="w-full h-full object-cover rounded-lg" data-testid="img-onboarding-logo" />
+          ) : (
+            <Image className="h-6 w-6 text-muted-foreground/50" />
+          )}
+        </div>
+        <div>
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading} data-testid="button-upload-logo">
+            <Upload className="mr-1 h-4 w-4" />
+            {isUploading ? "Uploading..." : logoPreview ? "Change Logo" : "Upload Logo"}
+          </Button>
+          <p className="text-xs text-muted-foreground mt-1">PNG or JPG, max 2 MB</p>
+        </div>
+      </div>
+
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onNext)} className="space-y-4">
+        <form onSubmit={form.handleSubmit((data) => onNext({ ...data, logoUrl: logoPreview || undefined }))} className="space-y-4">
           <FormField control={form.control} name="name" render={({ field }) => (
             <FormItem>
               <FormLabel>Company Name *</FormLabel>
@@ -196,7 +240,17 @@ function CompanyProfileStep({
           <FormField control={form.control} name="address" render={({ field }) => (
             <FormItem>
               <FormLabel>Business Address</FormLabel>
-              <FormControl><Input placeholder="123 Main St, City, State ZIP" {...field} data-testid="input-company-address" /></FormControl>
+              <FormControl>
+                <AddressAutocomplete
+                  value={field.value || ""}
+                  onChange={field.onChange}
+                  onSelect={(parsed) => {
+                    form.setValue("address", `${parsed.streetAddress}, ${parsed.city}, ${parsed.state} ${parsed.zipCode}`);
+                  }}
+                  placeholder="Start typing your business address..."
+                  data-testid="input-company-address"
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )} />
@@ -239,7 +293,7 @@ function BusinessIntelligenceStep({
   const [insights, setInsights] = useState<WebsiteInsights | null>(null);
   const [businessDescription, setBusinessDescription] = useState(companyData.businessDescription || "");
   const [serviceArea, setServiceArea] = useState(companyData.serviceAreaDescription || "");
-  const [csvSummary, setCsvSummary] = useState<any>(null);
+  const [csvSummary, setCsvSummary] = useState<{ totalRows: number; priceColumns: string[]; frequencyColumns: string[] } | null>(null);
 
   const scrapeMutation = useMutation({
     mutationFn: async (url: string) => {
@@ -624,7 +678,7 @@ function PaymentProcessingStep({
     onSuccess: (data: { url: string }) => {
       window.location.href = data.url;
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: "Error", description: err.message || "Failed to start Stripe onboarding.", variant: "destructive" });
     },
   });
@@ -809,7 +863,7 @@ export default function BusinessOnboarding({ onComplete }: { onComplete: () => v
   }, [status]);
 
   const stepMutation = useMutation({
-    mutationFn: async ({ step, data }: { step: number; data?: any }) => {
+    mutationFn: async ({ step, data }: { step: number; data?: Record<string, unknown> }) => {
       const res = await apiRequest("POST", "/api/onboarding/business-step", { step, data });
       return res.json();
     },

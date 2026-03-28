@@ -11,7 +11,7 @@ import { useFeatureTour, FeatureTourOverlay } from "@/components/feature-tour";
 import { TutorialProvider } from "@/hooks/use-tutorials";
 import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard } from "lucide-react";
+import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Component, useEffect, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
@@ -199,7 +199,17 @@ function AuthenticatedLayout() {
     );
   }
 
-  if (!businessOnboardingLoading && businessOnboarding && !businessOnboarding.isComplete && !businessOnboardingDone) {
+  if (!businessOnboardingDone && (businessOnboardingLoading || !businessOnboarding || !businessOnboarding.isComplete)) {
+    if (businessOnboardingLoading || !businessOnboarding) {
+      return (
+        <div className="flex items-center justify-center h-screen bg-background">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+            <p className="mt-3 text-muted-foreground">Loading your workspace...</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <BusinessOnboarding onComplete={() => {
         setBusinessOnboardingDone(true);

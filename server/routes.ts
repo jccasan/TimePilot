@@ -1360,17 +1360,51 @@ export async function registerRoutes(
     try {
       const { companyId } = await getCompanyContext(req);
       const { websiteUrl } = req.body;
-      if (!websiteUrl) return res.status(400).json({ error: "Website URL is required" });
+      if (!websiteUrl || typeof websiteUrl !== "string") return res.status(400).json({ error: "Website URL is required" });
+
+      let parsed: URL;
+      try {
+        parsed = new URL(websiteUrl);
+      } catch {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return res.status(400).json({ error: "Only HTTP/HTTPS URLs are allowed" });
+      }
+      const hostname = parsed.hostname.toLowerCase();
+      const blockedPatterns = [
+        /^localhost$/i,
+        /^127\./,
+        /^10\./,
+        /^172\.(1[6-9]|2\d|3[01])\./,
+        /^192\.168\./,
+        /^169\.254\./,
+        /^0\./,
+        /^fc00:/i,
+        /^fe80:/i,
+        /^::1$/,
+        /^::$/,
+        /metadata\.google/i,
+        /\.internal$/i,
+      ];
+      if (blockedPatterns.some(p => p.test(hostname))) {
+        return res.status(400).json({ error: "URL points to a restricted network address" });
+      }
 
       let pageText = "";
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
-        const response = await fetch(websiteUrl, {
+        const response = await fetch(parsed.toString(), {
           signal: controller.signal,
           headers: { "User-Agent": "ScooPilot-Onboarding/1.0" },
+          redirect: "follow",
         });
         clearTimeout(timeout);
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("text/html") && !contentType.includes("text/plain")) {
+          return res.json({ success: false, error: "URL did not return an HTML page.", insights: null });
+        }
         const html = await response.text();
         pageText = html
           .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -1379,7 +1413,7 @@ export async function registerRoutes(
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 5000);
-      } catch (fetchErr: any) {
+      } catch (fetchErr) {
         return res.json({
           success: false,
           error: "Could not fetch website. Please check the URL and try again.",
@@ -1423,8 +1457,8 @@ Return ONLY valid JSON, no markdown.`,
         }
 
         res.json({ success: true, insights, rawTextLength: pageText.length });
-      } catch (aiErr: any) {
-        console.error("[Onboarding] AI analysis failed:", aiErr.message);
+      } catch (aiErr) {
+        console.error("[Onboarding] AI analysis failed:", aiErr instanceof Error ? aiErr.message : aiErr);
         res.json({
           success: true,
           insights: { businessDescription: "Unable to analyze website content automatically.", serviceArea: "", servicesOffered: [], pricingInfo: {}, competitiveInsights: "", suggestedPricingMode: "standard" },
