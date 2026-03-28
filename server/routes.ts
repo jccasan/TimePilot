@@ -1322,7 +1322,8 @@ export async function registerRoutes(
 
   app.post("/api/onboarding/business-step", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
       const { step, data, resetWizard } = req.body;
 
       if (resetWizard) {
@@ -1358,7 +1359,8 @@ export async function registerRoutes(
 
   app.post("/api/onboarding/business-complete", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
       await db.execute(
         sql`UPDATE companies SET business_onboarding_complete = true, business_onboarding_step = 5 WHERE id = ${companyId}`
       );
@@ -1392,9 +1394,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: "URL points to a restricted network address" });
       }
 
-      const dns = await import("dns");
-      const { promisify } = await import("util");
-      const dnsResolve = promisify(dns.resolve);
       const isPrivateIP = (ip: string): boolean => {
         const parts = ip.split(".").map(Number);
         if (parts.length === 4) {
@@ -1408,14 +1407,30 @@ export async function registerRoutes(
         if (ip === "::1" || ip === "::" || ip.startsWith("fc00:") || ip.startsWith("fd") || ip.startsWith("fe80:")) return true;
         return false;
       };
-      try {
+
+      const ipLiteralMatch = hostname.match(/^\[?([0-9a-f.:]+)\]?$/i);
+      if (ipLiteralMatch && isPrivateIP(ipLiteralMatch[1])) {
+        return res.status(400).json({ error: "URL points to a restricted network address" });
+      }
+      if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) && isPrivateIP(hostname)) {
+        return res.status(400).json({ error: "URL points to a restricted network address" });
+      }
+
+      const dns = await import("dns");
+      const { promisify } = await import("util");
+      const dnsResolve = promisify(dns.resolve);
+
+      const validateResolvedIPs = async (host: string): Promise<boolean> => {
         let resolvedIPs: string[] = [];
-        try { resolvedIPs = resolvedIPs.concat(await dnsResolve(hostname, "A")); } catch {}
-        try { resolvedIPs = resolvedIPs.concat(await dnsResolve(hostname, "AAAA")); } catch {}
-        if (resolvedIPs.length > 0 && resolvedIPs.every(isPrivateIP)) {
-          return res.status(400).json({ error: "URL resolves to a private network address" });
-        }
-      } catch {}
+        try { resolvedIPs = resolvedIPs.concat(await dnsResolve(host, "A")); } catch {}
+        try { resolvedIPs = resolvedIPs.concat(await dnsResolve(host, "AAAA")); } catch {}
+        if (resolvedIPs.length === 0) return true;
+        return !resolvedIPs.some(isPrivateIP);
+      };
+
+      if (!(await validateResolvedIPs(hostname))) {
+        return res.status(400).json({ error: "URL resolves to a private network address" });
+      }
 
       let pageText = "";
       try {
@@ -1438,10 +1453,10 @@ export async function registerRoutes(
               if (hostnameBlockedPatterns.some(p => p.test(rHost))) {
                 return res.json({ success: false, error: "Redirect to restricted address blocked.", insights: null });
               }
-              let rIPs: string[] = [];
-              try { rIPs = rIPs.concat(await dnsResolve(rHost, "A")); } catch {}
-              try { rIPs = rIPs.concat(await dnsResolve(rHost, "AAAA")); } catch {}
-              if (rIPs.length > 0 && rIPs.every(isPrivateIP)) {
+              if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(rHost) && isPrivateIP(rHost)) {
+                return res.json({ success: false, error: "Redirect to private IP blocked.", insights: null });
+              }
+              if (!(await validateResolvedIPs(rHost))) {
                 return res.json({ success: false, error: "Redirect resolves to private address.", insights: null });
               }
               const controller2 = new AbortController();
