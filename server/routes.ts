@@ -4097,43 +4097,48 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      const plan = await storage.createServicePlan(parsed);
+      const { plan, job } = await db.transaction(async (tx) => {
+        const [sp] = await tx.insert(servicePlansTable).values(parsed).returning();
+
+        const [agreement] = await tx.insert(agreementsTable).values({
+          companyId,
+          contactId: parsed.contactId,
+          frequency: parsed.frequency,
+          pricePerVisit: parsed.pricePerVisit,
+          isActive: parsed.isActive ?? true,
+          pausedAt: parsed.pausedAt ?? null,
+          startDate: parsed.startDate || new Date().toISOString().split("T")[0],
+          endDate: parsed.endDate ?? null,
+          endsAfterCount: parsed.endsAfterCount ?? null,
+          endsAfterUnit: parsed.endsAfterUnit ?? null,
+          estimateId: parsed.estimateId ?? null,
+          servicePlanId: sp.id,
+        }).returning();
+
+        const [j] = await tx.insert(jobsTable).values({
+          companyId,
+          agreementId: agreement.id,
+          propertyId: parsed.propertyId,
+          routeId: parsed.routeId ?? null,
+          stopOrder: parsed.stopOrder ?? 0,
+          dayOfWeek: parsed.dayOfWeek ?? null,
+          serviceName: parsed.serviceName ?? null,
+          jobType: parsed.jobType ?? "recurring",
+          jobStatus: parsed.jobStatus ?? "active",
+          startTime: parsed.startTime ?? null,
+          endTime: parsed.endTime ?? null,
+          anytime: parsed.anytime ?? true,
+          visitInstructions: parsed.visitInstructions ?? null,
+          assignedUserId: parsed.assignedUserId ?? null,
+          isStopOnly: parsed.isStopOnly ?? false,
+          servicePlanId: sp.id,
+        }).returning();
+
+        return { plan: sp, job: j };
+      });
+
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", plan.id, "create", { new: { contactId: parsed.contactId, frequency: parsed.frequency, dayOfWeek: parsed.dayOfWeek } }, req.ip || undefined);
-
-      const agreement = await storage.createAgreement({
-        companyId,
-        contactId: parsed.contactId,
-        frequency: parsed.frequency,
-        pricePerVisit: parsed.pricePerVisit,
-        isActive: parsed.isActive ?? true,
-        pausedAt: parsed.pausedAt ?? null,
-        startDate: parsed.startDate || new Date().toISOString().split("T")[0],
-        endDate: parsed.endDate ?? null,
-        endsAfterCount: parsed.endsAfterCount ?? null,
-        endsAfterUnit: parsed.endsAfterUnit ?? null,
-        estimateId: parsed.estimateId ?? null,
-        servicePlanId: plan.id,
-      });
-
-      const job = await storage.createJob({
-        companyId,
-        agreementId: agreement.id,
-        propertyId: parsed.propertyId,
-        routeId: parsed.routeId ?? null,
-        stopOrder: parsed.stopOrder ?? 0,
-        dayOfWeek: parsed.dayOfWeek ?? null,
-        serviceName: parsed.serviceName ?? null,
-        jobType: parsed.jobType ?? "recurring",
-        jobStatus: parsed.jobStatus ?? "active",
-        startTime: parsed.startTime ?? null,
-        endTime: parsed.endTime ?? null,
-        anytime: parsed.anytime ?? true,
-        visitInstructions: parsed.visitInstructions ?? null,
-        assignedUserId: parsed.assignedUserId ?? null,
-        isStopOnly: parsed.isStopOnly ?? false,
-        servicePlanId: plan.id,
-      });
 
       const contact = await storage.getContact(parsed.contactId, companyId);
       if (contact && (contact.status === "lead" || contact.status === "estimate")) {
@@ -13541,13 +13546,15 @@ Return ONLY valid JSON, no markdown.`,
       if (!streetAddress || !city || !state || !zipCode) {
         return res.status(400).json({ error: "streetAddress, city, state, and zipCode are required" });
       }
-      const validFrequencies = ["weekly", "biweekly", "monthly", "onetime"];
-      const freq = frequency || "weekly";
+      type Frequency = "weekly" | "biweekly" | "monthly" | "onetime";
+      const validFrequencies: Frequency[] = ["weekly", "biweekly", "monthly", "onetime"];
+      const freq: Frequency = (frequency || "weekly") as Frequency;
       if (!validFrequencies.includes(freq)) {
         return res.status(400).json({ error: `frequency must be one of: ${validFrequencies.join(", ")}` });
       }
-      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-      const day = dayOfWeek || "tbd";
+      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+      type DayOfWeek = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | "tbd";
+      const day: DayOfWeek = (dayOfWeek || "tbd") as DayOfWeek;
       if (day !== "tbd" && !validDays.includes(day)) {
         return res.status(400).json({ error: `dayOfWeek must be one of: ${validDays.join(", ")}, or omit for auto-assignment` });
       }
@@ -13596,8 +13603,8 @@ Return ONLY valid JSON, no markdown.`,
           companyId,
           contactId: contact.id,
           propertyId: property.id,
-          frequency: freq as any,
-          dayOfWeek: day as any,
+          frequency: freq,
+          dayOfWeek: day,
           pricePerVisit: "0",
           isActive: true,
           startDate: new Date().toISOString().split("T")[0],
@@ -13621,7 +13628,7 @@ Return ONLY valid JSON, no markdown.`,
           propertyId: property.id,
           routeId,
           stopOrder: 0,
-          dayOfWeek: day !== "tbd" ? day as any : null,
+          dayOfWeek: day !== "tbd" ? day : null,
           jobType: "recurring",
           jobStatus: "active",
           anytime: true,
