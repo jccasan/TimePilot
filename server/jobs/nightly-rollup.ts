@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { eq, and, sql, gte, lte, count } from "drizzle-orm";
-import { companies, visits, invoices, smsMessages, emailsSent, contacts, servicePlans } from "@shared/schema";
+import { companies, visits, invoices, smsMessages, emailsSent, contacts, agreements } from "@shared/schema";
 import { storage } from "../storage";
 
 export async function runNightlyRollup() {
@@ -139,8 +139,8 @@ async function computeChurnRisk(companyId: string, dateStr: string, yesterdayOut
 
     if (daysSinceCreation > 7) {
       const [contactCount] = await db.select({ count: count() }).from(contacts).where(eq(contacts.companyId, companyId));
-      const [activePlanCount] = await db.select({ count: count() }).from(servicePlans).where(
-        and(eq(servicePlans.companyId, companyId), eq(servicePlans.isActive, true))
+      const [activePlanCount] = await db.select({ count: count() }).from(agreements).where(
+        and(eq(agreements.companyId, companyId), eq(agreements.isActive, true))
       );
       const [paidInvoiceCount] = await db.select({ count: count() }).from(invoices).where(
         and(eq(invoices.companyId, companyId), eq(invoices.status, "paid"))

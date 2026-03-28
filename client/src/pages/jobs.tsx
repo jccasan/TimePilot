@@ -840,7 +840,7 @@ export default function Jobs() {
                           size="sm"
                           variant="outline"
                           className="text-destructive"
-                          onClick={(e) => { e.stopPropagation(); setDeleteId(job.id); }}
+                          onClick={(e) => { e.stopPropagation(); setDeleteId(job.servicePlanId || job.id); }}
                           data-testid={`button-delete-job-${job.id}`}
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
@@ -888,7 +888,7 @@ export default function Jobs() {
           </DialogHeader>
           {editJob && contacts && properties && team && (
             <JobForm
-              onSubmit={data => updateMutation.mutate({ id: editJob.id, data })}
+              onSubmit={data => updateMutation.mutate({ id: (editJob as any).servicePlanId || editJob.id, data })}
               isPending={updateMutation.isPending}
               contacts={contacts}
               properties={properties}

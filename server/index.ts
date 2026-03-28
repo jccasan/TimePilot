@@ -491,8 +491,12 @@ async function migrateServicePlansToAgreementsAndJobs() {
       WHERE a.id IS NULL
     `);
 
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agreements_sp_id ON agreements(service_plan_id) WHERE service_plan_id IS NOT NULL`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_sp_id ON jobs(service_plan_id) WHERE service_plan_id IS NOT NULL`);
+
     if (unmigrated.rows.length > 0) {
-      const spIds = unmigrated.rows.map((r: any) => r.id);
+      interface SpIdRow { id: string }
+      const spIds = (unmigrated.rows as SpIdRow[]).map((r) => r.id);
       console.log(`[Migration] Backfilling ${spIds.length} unmigrated service_plans → agreements + jobs...`);
 
       await pool.query(`
@@ -500,7 +504,22 @@ async function migrateServicePlansToAgreementsAndJobs() {
         SELECT gen_random_uuid(), company_id, contact_id, frequency, price_per_visit, is_active, paused_at, start_date, end_date, ends_after_count, ends_after_unit, estimate_id, id, created_at, updated_at
         FROM service_plans
         WHERE id = ANY($1)
+        ON CONFLICT (service_plan_id) DO NOTHING
       `, [spIds]);
+
+      console.log(`[Migration] Backfilled ${spIds.length} agreements`);
+    }
+
+    const missingJobs = await pool.query(`
+      SELECT sp.id FROM service_plans sp
+      JOIN agreements a ON a.service_plan_id = sp.id
+      LEFT JOIN jobs j ON j.service_plan_id = sp.id
+      WHERE j.id IS NULL
+    `);
+    if (missingJobs.rows.length > 0) {
+      interface SpIdRow { id: string }
+      const spIds = (missingJobs.rows as SpIdRow[]).map((r) => r.id);
+      console.log(`[Migration] Backfilling ${spIds.length} missing jobs...`);
 
       await pool.query(`
         INSERT INTO jobs (id, company_id, agreement_id, property_id, route_id, stop_order, day_of_week, service_name, job_type, job_status, start_time, end_time, anytime, visit_instructions, assigned_user_id, is_stop_only, service_plan_id, created_at, updated_at)
@@ -508,10 +527,10 @@ async function migrateServicePlansToAgreementsAndJobs() {
         FROM service_plans sp
         JOIN agreements a ON a.service_plan_id = sp.id
         WHERE sp.id = ANY($1)
-        AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.service_plan_id = sp.id)
+        ON CONFLICT (service_plan_id) DO NOTHING
       `, [spIds]);
 
-      console.log(`[Migration] Backfilled ${spIds.length} agreements + jobs`);
+      console.log(`[Migration] Backfilled ${spIds.length} jobs`);
     }
 
     const unlinkedVisits = await pool.query(`

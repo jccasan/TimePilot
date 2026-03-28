@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { eq, and, lte, sql, isNull, lt, inArray, desc } from "drizzle-orm";
-import { contacts, visits, invoices, servicePlans, properties, routes, reminderLogs, type ReminderRule, type InvoiceReminderSettings } from "@shared/schema";
+import { contacts, visits, invoices, jobs, agreements, properties, routes, reminderLogs, type ReminderRule, type InvoiceReminderSettings } from "@shared/schema";
 import { storage } from "../storage";
 import { sendEmail } from "../services/email";
 import { sendSmsForCompany, isSmsConfiguredForCompany } from "../services/sms";
@@ -167,7 +167,7 @@ async function hasChannelLog(
 }
 
 async function getVisitTechInfo(
-  cv: { visit: { routeId: string | null }; plan: { id: string } },
+  cv: { visit: { routeId: string | null; jobId: string | null }; job: { id: string } },
   isMorningOf: boolean,
   companyId: string
 ): Promise<{ techName: string; arrivalWindow: string }> {
@@ -185,9 +185,9 @@ async function getVisitTechInfo(
       }
     }
     let arrivalWindow = "";
-    const routePlans = await storage.getServicePlans(companyId, { routeId: route.id, isActive: true });
-    const sortedPlans = routePlans.sort((a, b) => (a.stopOrder || 0) - (b.stopOrder || 0));
-    const stopIndex = sortedPlans.findIndex(p => p.id === cv.plan.id);
+    const routeJobs = await storage.getJobs(companyId, { routeId: route.id, jobStatus: "active" });
+    const sortedJobs = routeJobs.sort((a, b) => (a.stopOrder || 0) - (b.stopOrder || 0));
+    const stopIndex = sortedJobs.findIndex(j => j.id === cv.job.id);
     if (stopIndex >= 0) {
       const avgMinutesPerStop = 15;
       const startHour = 8;
@@ -243,11 +243,12 @@ async function sendServiceRemindersForRule(
       visit: visits,
       contact: contacts,
       property: properties,
-      plan: servicePlans,
+      job: jobs,
     })
     .from(visits)
-    .innerJoin(servicePlans, eq(visits.servicePlanId, servicePlans.id))
-    .innerJoin(contacts, eq(servicePlans.contactId, contacts.id))
+    .innerJoin(jobs, eq(visits.jobId, jobs.id))
+    .innerJoin(agreements, eq(jobs.agreementId, agreements.id))
+    .innerJoin(contacts, eq(agreements.contactId, contacts.id))
     .innerJoin(properties, eq(visits.propertyId, properties.id))
     .where(
       and(
@@ -259,7 +260,7 @@ async function sendServiceRemindersForRule(
     );
 
   const inWindow = candidateVisits.filter(row =>
-    isVisitInRuleWindow(rule, row.visit.scheduledDate, row.plan.startTime ?? null, timezone)
+    isVisitInRuleWindow(rule, row.visit.scheduledDate, row.job.startTime ?? null, timezone)
   );
 
   const smsQuiet = isQuietHours(timezone);
@@ -267,7 +268,7 @@ async function sendServiceRemindersForRule(
   const deferredVisits: typeof candidateVisits = [];
   if (!smsQuiet) {
     const outOfWindow = candidateVisits.filter(row =>
-      !isVisitInRuleWindow(rule, row.visit.scheduledDate, row.plan.startTime ?? null, timezone)
+      !isVisitInRuleWindow(rule, row.visit.scheduledDate, row.job.startTime ?? null, timezone)
     );
     for (const row of outOfWindow) {
       const hasEmailLog = await hasChannelLog(companyId, row.contact.id, rule.id, row.visit.id, "email");
@@ -284,7 +285,7 @@ async function sendServiceRemindersForRule(
 
   type ContactGroup = {
     contact: typeof eligibleVisits[0]["contact"];
-    visits: { visitId: string; address: string; plan: typeof eligibleVisits[0]["plan"]; visit: typeof eligibleVisits[0]["visit"] }[];
+    visits: { visitId: string; address: string; job: typeof eligibleVisits[0]["job"]; visit: typeof eligibleVisits[0]["visit"] }[];
   };
   const contactGroups = new Map<string, ContactGroup>();
 
@@ -292,11 +293,11 @@ async function sendServiceRemindersForRule(
     const addr = `${row.property.streetAddress}, ${row.property.city}`;
     const existing = contactGroups.get(row.contact.id);
     if (existing) {
-      existing.visits.push({ visitId: row.visit.id, address: addr, plan: row.plan, visit: row.visit });
+      existing.visits.push({ visitId: row.visit.id, address: addr, job: row.job, visit: row.visit });
     } else {
       contactGroups.set(row.contact.id, {
         contact: row.contact,
-        visits: [{ visitId: row.visit.id, address: addr, plan: row.plan, visit: row.visit }],
+        visits: [{ visitId: row.visit.id, address: addr, job: row.job, visit: row.visit }],
       });
     }
   }
@@ -332,7 +333,7 @@ async function sendServiceRemindersForRule(
       const addresses = [cv.address];
       const techInfo = await getVisitTechInfo(cv, isMorningOf, companyId);
 
-      const scheduledServiceTime = cv.plan.startTime || "";
+      const scheduledServiceTime = cv.job.startTime || "";
       let serviceTimeDisplay = "during the day";
       if (isMorningOf && techInfo.arrivalWindow) {
         serviceTimeDisplay = techInfo.arrivalWindow;

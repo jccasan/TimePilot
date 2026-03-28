@@ -62,12 +62,14 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **QuickBooks Online**: Accounting integration for syncing contacts, invoices, and payments.
 - **Retell AI**: Voice agent integration for lead creation and customer lookup, with webhook handling for call events and usage tracking.
 
-## Data Model (Task #95 Refactor — In Progress)
-The core scheduling data model is being refactored from a single `service_plans` table into three clean layers:
+## Data Model (Task #95 Refactor — Dual-Write Active)
+The core scheduling data model has been refactored from a single `service_plans` table into three clean layers:
 - **`agreements`** — Billing/contract layer: contactId, frequency, pricePerVisit, isActive, pausedAt, startDate, endDate, estimateId. Links back to the original `service_plan_id` for migration traceability.
 - **`jobs`** — Work/routing layer: agreementId, propertyId, routeId, stopOrder, dayOfWeek, serviceName, jobType, jobStatus, startTime, visitInstructions, assignedUserId, isStopOnly. Links back to original `service_plan_id`.
 - **`visits`** — Instance layer: jobId (new), servicePlanId (legacy). Each visit is now linked to a job.
 - **`job_add_ons`** — Add-ons per job (replaces `service_plan_add_ons`).
 - **`vacation_holds`** — Now has both `service_plan_id` (legacy) and `agreement_id` (new).
+- **Dual-write strategy**: All write operations (create, update, delete) to `service_plans` are automatically mirrored to `agreements`+`jobs`. `updateServicePlan()` auto-syncs relevant fields. `deleteServicePlan()` cascades deletes. Read operations still use the legacy table during transition.
+- **`JobWithAgreement`** type merges Job + Agreement fields and includes `isActive`/`pausedAt` compat fields for frontend backward compatibility.
 - The old `service_plans` table and its related types/storage methods remain for backward compatibility during the migration.
 - Migration runs idempotently at startup via `migrateServicePlansToAgreementsAndJobs()` in `server/index.ts`.

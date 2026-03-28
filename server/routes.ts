@@ -6,7 +6,7 @@ import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, gte, isNotNull, like, or, inArray, desc } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -4101,6 +4101,40 @@ Return ONLY valid JSON, no markdown.`,
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", plan.id, "create", { new: { contactId: parsed.contactId, frequency: parsed.frequency, dayOfWeek: parsed.dayOfWeek } }, req.ip || undefined);
 
+      const agreement = await storage.createAgreement({
+        companyId,
+        contactId: parsed.contactId,
+        frequency: parsed.frequency,
+        pricePerVisit: parsed.pricePerVisit,
+        isActive: parsed.isActive ?? true,
+        pausedAt: parsed.pausedAt ?? null,
+        startDate: parsed.startDate || new Date().toISOString().split("T")[0],
+        endDate: parsed.endDate ?? null,
+        endsAfterCount: parsed.endsAfterCount ?? null,
+        endsAfterUnit: parsed.endsAfterUnit ?? null,
+        estimateId: parsed.estimateId ?? null,
+        servicePlanId: plan.id,
+      });
+
+      const job = await storage.createJob({
+        companyId,
+        agreementId: agreement.id,
+        propertyId: parsed.propertyId,
+        routeId: parsed.routeId ?? null,
+        stopOrder: parsed.stopOrder ?? 0,
+        dayOfWeek: parsed.dayOfWeek ?? null,
+        serviceName: parsed.serviceName ?? null,
+        jobType: parsed.jobType ?? "recurring",
+        jobStatus: parsed.jobStatus ?? "active",
+        startTime: parsed.startTime ?? null,
+        endTime: parsed.endTime ?? null,
+        anytime: parsed.anytime ?? true,
+        visitInstructions: parsed.visitInstructions ?? null,
+        assignedUserId: parsed.assignedUserId ?? null,
+        isStopOnly: parsed.isStopOnly ?? false,
+        servicePlanId: plan.id,
+      });
+
       const contact = await storage.getContact(parsed.contactId, companyId);
       if (contact && (contact.status === "lead" || contact.status === "estimate")) {
         await storage.updateContact(parsed.contactId, companyId, { status: "active" });
@@ -4114,6 +4148,7 @@ Return ONLY valid JSON, no markdown.`,
       if (req.body.addOns && Array.isArray(req.body.addOns)) {
         const validatedAddOns = await validateAndResolveAddOns(req.body.addOns, companyId);
         const addOns = await storage.setServicePlanAddOns(plan.id, validatedAddOns);
+        await storage.setJobAddOns(job.id, validatedAddOns);
         return res.status(201).json({ ...plan, addOns });
       }
 
@@ -4242,6 +4277,8 @@ Return ONLY valid JSON, no markdown.`,
       if (addOnsData && Array.isArray(addOnsData)) {
         const validatedAddOns = await validateAndResolveAddOns(addOnsData, companyId);
         const addOns = await storage.setServicePlanAddOns(req.params.id, validatedAddOns);
+        const existingJob = await storage.getJobByServicePlanId(req.params.id);
+        if (existingJob) await storage.setJobAddOns(existingJob.id, validatedAddOns);
         return res.json({ ...plan, addOns });
       }
 
@@ -4255,6 +4292,12 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getServicePlan(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Scheduled service not found" });
+
+      const existingJob = await storage.getJobByServicePlanId(req.params.id);
+      if (existingJob) await storage.deleteJob(existingJob.id, companyId);
+      const existingAgreement = await storage.getAgreementByServicePlanId(req.params.id);
+      if (existingAgreement) await storage.deleteAgreement(existingAgreement.id, companyId);
+
       await storage.deleteServicePlan(req.params.id, companyId);
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", req.params.id, "delete", { deleted: { contactId: existing.contactId, frequency: existing.frequency, dayOfWeek: existing.dayOfWeek } }, req.ip || undefined);
@@ -4262,21 +4305,22 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
-  // ================ Jobs API (thin wrappers over service_plans) ================
+  // ================ Jobs API ================
 
   app.get("/api/jobs", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const filters: any = {};
+      const filters: { isActive?: boolean; routeId?: string; propertyId?: string; contactId?: string } = {};
       if (req.query.contactId) filters.contactId = req.query.contactId as string;
       if (req.query.propertyId) filters.propertyId = req.query.propertyId as string;
       if (req.query.isActive !== undefined) filters.isActive = req.query.isActive === "true";
-      const plans = await storage.getServicePlans(companyId, filters);
+      if (req.query.routeId) filters.routeId = req.query.routeId as string;
+      const jobsList = await storage.getJobsWithAgreements(companyId, Object.keys(filters).length > 0 ? filters : undefined);
       const jobStatus = req.query.jobStatus as string | undefined;
       const jobType = req.query.jobType as string | undefined;
-      let filtered = plans;
-      if (jobStatus) filtered = filtered.filter(p => p.jobStatus === jobStatus);
-      if (jobType) filtered = filtered.filter(p => p.jobType === jobType);
+      let filtered = jobsList;
+      if (jobStatus) filtered = filtered.filter(j => j.jobStatus === jobStatus);
+      if (jobType) filtered = filtered.filter(j => j.jobType === jobType);
       res.json(filtered);
     } catch (err) { handleError(res, err); }
   });
@@ -4289,12 +4333,47 @@ Return ONLY valid JSON, no markdown.`,
       if (!body.jobType) body.jobType = body.frequency === "onetime" ? "one_off" : "recurring";
       if (!body.jobStatus) body.jobStatus = "draft";
       if (body.anytime === undefined) body.anytime = true;
-      body.isActive = body.jobStatus === "active";
+      const isActive = body.jobStatus === "active";
 
+      const agreement = await storage.createAgreement({
+        companyId,
+        contactId: body.contactId,
+        frequency: body.frequency || "weekly",
+        pricePerVisit: body.pricePerVisit || "0",
+        isActive,
+        startDate: body.startDate || new Date().toISOString().split("T")[0],
+        endDate: body.endDate || null,
+        endsAfterCount: body.endsAfterCount || null,
+        endsAfterUnit: body.endsAfterUnit || null,
+        estimateId: body.estimateId || null,
+      });
+
+      const job = await storage.createJob({
+        companyId,
+        agreementId: agreement.id,
+        propertyId: body.propertyId,
+        routeId: body.routeId || null,
+        stopOrder: body.stopOrder || 0,
+        dayOfWeek: body.dayOfWeek || null,
+        serviceName: body.serviceName || null,
+        jobType: body.jobType,
+        jobStatus: body.jobStatus,
+        startTime: body.startTime || null,
+        endTime: body.endTime || null,
+        anytime: body.anytime,
+        visitInstructions: body.visitInstructions || null,
+        assignedUserId: body.assignedUserId || null,
+        isStopOnly: body.isStopOnly || false,
+      });
+
+      body.isActive = isActive;
       const parsed = insertServicePlanSchema.parse(body);
-      const job = await storage.createServicePlan(parsed);
+      const sp = await storage.createServicePlan(parsed);
 
-      res.status(201).json(job);
+      await storage.updateAgreement(agreement.id, companyId, { servicePlanId: sp.id });
+      await storage.updateJob(job.id, companyId, { servicePlanId: sp.id });
+
+      res.status(201).json({ ...job, agreementId: agreement.id, contactId: body.contactId, frequency: body.frequency });
     } catch (err) { handleError(res, err); }
   });
 
@@ -4302,16 +4381,21 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
-      const job = await storage.getServicePlan(req.params.id, companyId);
+      const job = await storage.getJob(req.params.id, companyId);
       if (!job) return res.status(404).json({ error: "Job not found" });
       if (job.jobStatus !== "draft") {
         return res.status(400).json({ error: `Cannot approve a job with status '${job.jobStatus}'` });
       }
 
-      const updated = await storage.updateServicePlan(job.id, companyId, {
-        jobStatus: "active",
-        isActive: true,
-      });
+      const updated = await storage.updateJob(job.id, companyId, { jobStatus: "active" });
+      const agreement = await storage.getAgreement(job.agreementId, companyId);
+      if (agreement) {
+        await storage.updateAgreement(agreement.id, companyId, { isActive: true });
+      }
+
+      if (job.servicePlanId) {
+        await storage.updateServicePlan(job.servicePlanId, companyId, { jobStatus: "active", isActive: true });
+      }
 
       res.json(updated);
     } catch (err) { handleError(res, err); }
@@ -8760,6 +8844,7 @@ Return ONLY valid JSON, no markdown.`,
       if (quote.contactId && quote.propertyId) {
         try {
           const today = new Date().toISOString().split("T")[0];
+          const svcName = `${tier.charAt(0).toUpperCase() + tier.slice(1)} Service (Quote #${quote.quoteNumber})`;
           servicePlan = await storage.createServicePlan({
             companyId,
             contactId: quote.contactId,
@@ -8768,10 +8853,29 @@ Return ONLY valid JSON, no markdown.`,
             pricePerVisit: selectedPrice,
             startDate: today,
             isActive: true,
-            serviceName: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Service (Quote #${quote.quoteNumber})`,
+            serviceName: svcName,
             jobType: "recurring",
             jobStatus: "active",
             stopOrder: 0,
+          });
+          const qAgreement = await storage.createAgreement({
+            companyId,
+            contactId: quote.contactId,
+            frequency: normalizeQuoteFrequency(quote.frequency),
+            pricePerVisit: selectedPrice,
+            isActive: true,
+            startDate: today,
+            servicePlanId: servicePlan.id,
+          });
+          await storage.createJob({
+            companyId,
+            agreementId: qAgreement.id,
+            propertyId: quote.propertyId,
+            serviceName: svcName,
+            jobType: "recurring",
+            jobStatus: "active",
+            stopOrder: 0,
+            servicePlanId: servicePlan.id,
           });
         } catch (spErr) {
           console.error("Failed to create service plan from accepted quote:", spErr);
@@ -9922,7 +10026,8 @@ Return ONLY valid JSON, no markdown.`,
       if (contactId && propertyId) {
         try {
           const today = new Date().toISOString().split("T")[0];
-          await storage.createServicePlan({
+          const portalSvcName = `${tier.charAt(0).toUpperCase() + tier.slice(1)} Service (Quote #${quoteNumber || quoteId})`;
+          const portalSp = await storage.createServicePlan({
             companyId,
             contactId,
             propertyId,
@@ -9930,10 +10035,29 @@ Return ONLY valid JSON, no markdown.`,
             pricePerVisit: String(selectedPrice),
             startDate: today,
             isActive: true,
-            serviceName: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Service (Quote #${quoteNumber || quoteId})`,
+            serviceName: portalSvcName,
             jobType: "recurring",
             jobStatus: "active",
             stopOrder: 0,
+          });
+          const portalAgreement = await storage.createAgreement({
+            companyId,
+            contactId,
+            frequency: normalizeQuoteFrequency(frequency),
+            pricePerVisit: String(selectedPrice),
+            isActive: true,
+            startDate: today,
+            servicePlanId: portalSp.id,
+          });
+          await storage.createJob({
+            companyId,
+            agreementId: portalAgreement.id,
+            propertyId,
+            serviceName: portalSvcName,
+            jobType: "recurring",
+            jobStatus: "active",
+            stopOrder: 0,
+            servicePlanId: portalSp.id,
           });
         } catch (spErr) {
           console.error("Failed to create service plan from portal quote acceptance:", spErr);
@@ -13460,6 +13584,29 @@ Return ONLY valid JSON, no markdown.`,
           routeId,
           stopOrder: 0,
         }).returning();
+
+        const [agreement] = await tx.insert(agreementsTable).values({
+          companyId,
+          contactId: contact.id,
+          frequency: freq,
+          pricePerVisit: "0",
+          isActive: true,
+          startDate: new Date().toISOString().split("T")[0],
+          servicePlanId: servicePlan.id,
+        }).returning();
+
+        await tx.insert(jobsTable).values({
+          companyId,
+          agreementId: agreement.id,
+          propertyId: property.id,
+          routeId,
+          stopOrder: 0,
+          dayOfWeek: day !== "tbd" ? day as any : null,
+          jobType: "recurring",
+          jobStatus: "active",
+          anytime: true,
+          servicePlanId: servicePlan.id,
+        });
 
         return { contact, property, servicePlan };
       });

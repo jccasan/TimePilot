@@ -22,6 +22,7 @@ import {
   type Agreement, type InsertAgreement,
   type Job, type InsertJob,
   type JobAddOn, type InsertJobAddOn,
+  type JobWithAgreement,
   type ServicePlan, type InsertServicePlan,
   type ServicePlanAddOn, type InsertServicePlanAddOn,
   servicePlanAddOns,
@@ -141,6 +142,7 @@ export interface IStorage {
   setJobAddOns(jobId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<JobAddOn[]>;
   getJobByServicePlanId(servicePlanId: string): Promise<Job | undefined>;
   getAgreementByServicePlanId(servicePlanId: string): Promise<Agreement | undefined>;
+  getJobsWithAgreements(companyId: string, filters?: { isActive?: boolean; routeId?: string; propertyId?: string; contactId?: string }): Promise<JobWithAgreement[]>;
 
   cancelFutureVisitsForJobs(jobIds: string[], fromDate: string): Promise<number>;
   unassignAllJobStops(routeId: string): Promise<number>;
@@ -700,6 +702,35 @@ export class DatabaseStorage implements IStorage {
     return j;
   }
 
+  async getJobsWithAgreements(companyId: string, filters?: { isActive?: boolean; routeId?: string; propertyId?: string; contactId?: string }): Promise<JobWithAgreement[]> {
+    const conditions = [eq(jobs.companyId, companyId)];
+    if (filters?.isActive !== undefined) conditions.push(eq(agreements.isActive, filters.isActive));
+    if (filters?.routeId) conditions.push(eq(jobs.routeId, filters.routeId));
+    if (filters?.propertyId) conditions.push(eq(jobs.propertyId, filters.propertyId));
+    if (filters?.contactId) conditions.push(eq(agreements.contactId, filters.contactId));
+    const rows = await db.select({
+      job: jobs,
+      agreement: agreements,
+    }).from(jobs)
+      .innerJoin(agreements, eq(jobs.agreementId, agreements.id))
+      .where(and(...conditions));
+    return rows.map(r => ({
+      ...r.job,
+      contactId: r.agreement.contactId,
+      frequency: r.agreement.frequency,
+      pricePerVisit: r.agreement.pricePerVisit,
+      startDate: r.agreement.startDate,
+      endDate: r.agreement.endDate,
+      endsAfterCount: r.agreement.endsAfterCount,
+      endsAfterUnit: r.agreement.endsAfterUnit,
+      estimateId: r.agreement.estimateId,
+      agreementIsActive: r.agreement.isActive,
+      agreementPausedAt: r.agreement.pausedAt,
+      isActive: r.agreement.isActive,
+      pausedAt: r.agreement.pausedAt,
+    }));
+  }
+
   async getJobAddOns(jobId: string): Promise<JobAddOn[]> {
     return db.select().from(jobAddOns).where(eq(jobAddOns.jobId, jobId));
   }
@@ -766,10 +797,42 @@ export class DatabaseStorage implements IStorage {
 
   async updateServicePlan(id: string, companyId: string, data: Partial<InsertServicePlan>): Promise<ServicePlan> {
     const [sp] = await db.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId))).returning();
+
+    const agreementFields: (keyof InsertAgreement)[] = ["frequency", "pricePerVisit", "isActive", "pausedAt", "startDate", "endDate", "endsAfterCount", "endsAfterUnit"];
+    const jobFields: (keyof InsertJob)[] = ["routeId", "stopOrder", "dayOfWeek", "serviceName", "jobType", "jobStatus", "startTime", "endTime", "anytime", "visitInstructions", "assignedUserId", "isStopOnly"];
+
+    const aUpd: Record<string, unknown> = {};
+    for (const k of agreementFields) {
+      if ((data as Record<string, unknown>)[k] !== undefined) aUpd[k] = (data as Record<string, unknown>)[k];
+    }
+    const jUpd: Record<string, unknown> = {};
+    for (const k of jobFields) {
+      if ((data as Record<string, unknown>)[k] !== undefined) jUpd[k] = (data as Record<string, unknown>)[k];
+    }
+
+    if (Object.keys(aUpd).length > 0) {
+      const [existingAgreement] = await db.select().from(agreements).where(eq(agreements.servicePlanId, id));
+      if (existingAgreement) {
+        await db.update(agreements).set({ ...aUpd, updatedAt: new Date() }).where(eq(agreements.id, existingAgreement.id));
+      }
+    }
+    if (Object.keys(jUpd).length > 0) {
+      const [existingJob] = await db.select().from(jobs).where(eq(jobs.servicePlanId, id));
+      if (existingJob) {
+        await db.update(jobs).set({ ...jUpd, updatedAt: new Date() }).where(eq(jobs.id, existingJob.id));
+      }
+    }
+
     return sp;
   }
 
   async deleteServicePlan(id: string, companyId: string): Promise<void> {
+    const [existingJob] = await db.select().from(jobs).where(eq(jobs.servicePlanId, id));
+    if (existingJob) {
+      await db.delete(jobAddOns).where(eq(jobAddOns.jobId, existingJob.id));
+      await db.delete(jobs).where(eq(jobs.id, existingJob.id));
+    }
+    await db.delete(agreements).where(eq(agreements.servicePlanId, id));
     await db.delete(servicePlans).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
   }
 
@@ -2297,7 +2360,8 @@ export class DatabaseStorage implements IStorage {
   async createJobFromEstimate(estimate: Estimate, contactId: string): Promise<ServicePlan> {
     const totalDollars = (estimate.totalCents / 100).toFixed(2);
     const today = new Date().toISOString().split("T")[0];
-    const [job] = await db.insert(servicePlans).values({
+    const svcName = estimate.description || "Job from estimate";
+    const [sp] = await db.insert(servicePlans).values({
       companyId: estimate.companyId,
       contactId,
       propertyId: estimate.propertyId!,
@@ -2305,14 +2369,38 @@ export class DatabaseStorage implements IStorage {
       pricePerVisit: totalDollars,
       startDate: today,
       isActive: false,
-      serviceName: estimate.description || "Job from estimate",
+      serviceName: svcName,
       jobType: "one_off",
       jobStatus: "draft",
       anytime: true,
       estimateId: estimate.id,
       stopOrder: 0,
     }).returning();
-    return job;
+
+    const [agreement] = await db.insert(agreements).values({
+      companyId: estimate.companyId,
+      contactId,
+      frequency: "onetime",
+      pricePerVisit: totalDollars,
+      isActive: false,
+      startDate: today,
+      estimateId: estimate.id,
+      servicePlanId: sp.id,
+    }).returning();
+
+    await db.insert(jobs).values({
+      companyId: estimate.companyId,
+      agreementId: agreement.id,
+      propertyId: estimate.propertyId!,
+      serviceName: svcName,
+      jobType: "one_off",
+      jobStatus: "draft",
+      anytime: true,
+      stopOrder: 0,
+      servicePlanId: sp.id,
+    });
+
+    return sp;
   }
   // ================ Quotes ================
   async getQuote(id: string, companyId: string): Promise<Quote | undefined> {

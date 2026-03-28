@@ -58,11 +58,11 @@ function getMissedDates(lastRun: string | null | undefined, today: string): stri
 async function processCompanyAutoInvoice(companyId: string, todayStr: string, timezone: string) {
   let invoicesCreated = 0;
 
-  const allActiveServicePlans = await storage.getServicePlans(companyId, { isActive: true });
-  const activeServicePlans = allActiveServicePlans.filter(sp => !sp.pausedAt && !sp.isStopOnly);
-  if (activeServicePlans.length === 0) return { invoicesCreated };
+  const allActiveJobs = await storage.getJobsWithAgreements(companyId, { isActive: true });
+  const activeJobs = allActiveJobs.filter(j => !j.agreementPausedAt && !j.isStopOnly);
+  if (activeJobs.length === 0) return { invoicesCreated };
 
-  const contactIdSet = new Set(activeServicePlans.map(sp => sp.contactId));
+  const contactIdSet = new Set(activeJobs.map(j => j.contactId));
   const contactIds = Array.from(contactIdSet);
 
   for (const contactId of contactIds) {
@@ -72,7 +72,7 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, ti
       if (contact.status !== "active") continue;
       if (contact.autoInvoiceEnabled === false) continue;
 
-      const contactPlans = activeServicePlans.filter(sp => sp.contactId === contactId);
+      const contactJobs = activeJobs.filter(j => j.contactId === contactId);
 
       const lookbackStartDate = getLookbackStartDate(todayStr, contact.invoiceFrequency || "per_service");
 
@@ -83,8 +83,8 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, ti
         todayStr
       );
 
-      const activePlanIds = new Set(contactPlans.map(p => p.id));
-      const uninvoicedVisits = allUninvoicedVisits.filter(v => activePlanIds.has(v.servicePlanId));
+      const activeSpIds = new Set(contactJobs.map(j => j.servicePlanId).filter(Boolean));
+      const uninvoicedVisits = allUninvoicedVisits.filter(v => activeSpIds.has(v.servicePlanId));
 
       if (uninvoicedVisits.length === 0) continue;
 
@@ -96,18 +96,18 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, ti
 
       if (!shouldInvoice) continue;
 
-      const planMap = new Map(contactPlans.map(p => [p.id, p]));
+      const jobBySpId = new Map(contactJobs.map(j => [j.servicePlanId, j]));
 
-      const planAddOnsMap = new Map<string, { name: string; price: string }[]>();
-      for (const plan of contactPlans) {
-        const addOns = await storage.getServicePlanAddOns(plan.id);
-        planAddOnsMap.set(plan.id, addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })));
+      const jobAddOnsMap = new Map<string, { name: string; price: string }[]>();
+      for (const job of contactJobs) {
+        const addOns = await storage.getJobAddOns(job.id);
+        jobAddOnsMap.set(job.id, addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })));
       }
 
       const lineItems: { visitId: string; description: string; quantity: number; unitPrice: string; total: string }[] = [];
       for (const visit of uninvoicedVisits) {
-        const plan = planMap.get(visit.servicePlanId);
-        const unitPrice = plan ? plan.pricePerVisit : "0";
+        const job = jobBySpId.get(visit.servicePlanId);
+        const unitPrice = job ? job.pricePerVisit : "0";
         lineItems.push({
           visitId: visit.id,
           description: `Service on ${visit.scheduledDate}`,
@@ -115,15 +115,17 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, ti
           unitPrice: unitPrice.toString(),
           total: unitPrice.toString(),
         });
-        const addOns = planAddOnsMap.get(visit.servicePlanId) || [];
-        for (const addon of addOns) {
-          lineItems.push({
-            visitId: visit.id,
-            description: `${addon.name} on ${visit.scheduledDate}`,
-            quantity: 1,
-            unitPrice: addon.price,
-            total: addon.price,
-          });
+        if (job) {
+          const addOns = jobAddOnsMap.get(job.id) || [];
+          for (const addon of addOns) {
+            lineItems.push({
+              visitId: visit.id,
+              description: `${addon.name} on ${visit.scheduledDate}`,
+              quantity: 1,
+              unitPrice: addon.price,
+              total: addon.price,
+            });
+          }
         }
       }
 
