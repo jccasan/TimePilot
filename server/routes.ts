@@ -7411,7 +7411,8 @@ export async function registerRoutes(
 
   app.get("/api/stripe-connect/dashboard-link", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
       if (!company.stripeConnectAccountId) return res.status(400).json({ error: "No Stripe Connect account" });

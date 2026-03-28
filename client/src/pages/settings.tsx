@@ -410,6 +410,13 @@ function StripeConnectSection() {
     }
   }, []);
 
+  const { data: currentUser } = useQuery<{ id: string; role?: string }>({
+    queryKey: ["/api/auth/user"],
+  });
+
+  const canManageStripeConnect = currentUser?.role === "owner" || currentUser?.role === "admin";
+  const userRoleLoaded = !!currentUser?.role;
+
   const { data: connectStatus, isLoading: loadingStatus } = useQuery<{
     status: "not_started" | "pending" | "connected";
     accountId?: string;
@@ -509,7 +516,13 @@ function StripeConnectSection() {
               </div>
             </div>
 
-            {status === "not_started" && (
+            {userRoleLoaded && !canManageStripeConnect && (
+              <p className="text-sm text-muted-foreground" data-testid="text-stripe-permission-notice">
+                Only owners and admins can manage Stripe Connect.
+              </p>
+            )}
+
+            {canManageStripeConnect && status === "not_started" && (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
                   Connect your Stripe account to receive payments directly from your customers. Funds will be deposited into your bank account automatically.
@@ -534,7 +547,7 @@ function StripeConnectSection() {
               </div>
             )}
 
-            {status === "pending" && (
+            {canManageStripeConnect && status === "pending" && (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
                   Your Stripe account setup is not yet complete. Please finish onboarding to start receiving payments.
@@ -559,7 +572,7 @@ function StripeConnectSection() {
               </div>
             )}
 
-            {status === "connected" && (
+            {canManageStripeConnect && status === "connected" && (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
                   Your Stripe account is connected. Payments from your customers will be deposited directly into your bank account.
