@@ -1341,11 +1341,13 @@ export async function registerRoutes(
         await sendEmail({
           to: email,
           subject: `You've been invited to ${companyName} on ScooPilot`,
+          senderName: company?.name || undefined,
+          replyTo: company?.email || undefined,
           text: `Hi ${firstName},\n\nYou've been added as a ${targetRole || "tech"} on ${companyName}'s ScooPilot account.\n\nLog in at: ${appUrl}\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.\n\nFor the best experience on your phone, open the link above and install the app when prompted.`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-                <h1 style="color: white; margin: 0;">ScooPilot</h1>
+                <h1 style="color: white; margin: 0;">${companyName}</h1>
               </div>
               <div style="padding: 20px; border: 1px solid #e5e7eb;">
                 <h2 style="margin-top: 0;">Welcome to ${companyName}!</h2>
@@ -1368,11 +1370,13 @@ export async function registerRoutes(
         await sendEmail({
           to: email,
           subject: `You've been added to ${companyName} on ScooPilot`,
+          senderName: company?.name || undefined,
+          replyTo: company?.email || undefined,
           text: `Hi ${firstName},\n\nYou've been added as a ${targetRole || "tech"} on ${companyName}'s ScooPilot account. Log in with your existing credentials at: ${appUrl}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-                <h1 style="color: white; margin: 0;">ScooPilot</h1>
+                <h1 style="color: white; margin: 0;">${companyName}</h1>
               </div>
               <div style="padding: 20px; border: 1px solid #e5e7eb;">
                 <h2 style="margin-top: 0;">You've been added to ${companyName}</h2>
