@@ -18,7 +18,7 @@ export async function runAutoVisits() {
       const startDate = new Date(companyToday + "T00:00:00Z");
       startDate.setUTCDate(startDate.getUTCDate() + 1);
       const endDate = new Date(companyToday + "T00:00:00Z");
-      endDate.setUTCDate(endDate.getUTCDate() + 56);
+      endDate.setUTCDate(endDate.getUTCDate() + 182);
 
       const startStr = startDate.toISOString().split("T")[0];
       const endStr = endDate.toISOString().split("T")[0];
@@ -32,7 +32,7 @@ export async function runAutoVisits() {
           companyId: company.id,
           type: "general",
           title: "Visits Auto-Generated",
-          message: `${created} visit${created !== 1 ? "s" : ""} created for the next 8 weeks (${startStr} to ${endStr}).`,
+          message: `${created} visit${created !== 1 ? "s" : ""} created for the next 6 months (${startStr} to ${endStr}).`,
           isRead: false,
           linkUrl: "/scheduling",
         }).catch(console.error);
