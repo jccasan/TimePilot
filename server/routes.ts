@@ -116,10 +116,6 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
     }
   }
   if (!userId) {
-    const hasCookie = !!req.headers.cookie?.includes("connect.sid");
-    const hasBearer = !!req.headers.authorization;
-    const hasApiKey = !!req.headers["x-api-key"];
-    console.log(`[auth] 401 on ${req.method} ${req.path} | cookie=${hasCookie} bearer=${hasBearer} apiKey=${hasApiKey} method=${authMethod} ua=${(req.headers["user-agent"] || "").substring(0, 80)}`);
     return res.status(401).json({ message: "Unauthorized" });
   }
   if (authMethod !== "api-key" && !CHANGE_PASSWORD_EXEMPT_PATHS.includes(req.path)) {
