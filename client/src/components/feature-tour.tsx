@@ -31,8 +31,8 @@ const WELCOME_TOUR: TourDefinition = {
       disableBeacon: true,
     },
     {
-      target: '[data-testid="link-customers"]',
-      title: "Customers",
+      target: '[data-testid="link-contacts"]',
+      title: "Contacts",
       content: "Manage all your clients here. Add contacts, track properties, and view service history.",
       placement: "right",
       disableBeacon: true,

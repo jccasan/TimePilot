@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard,
-  Users,
   Calendar,
   MapPin,
   Smartphone,
@@ -29,6 +28,7 @@ import {
   Compass,
   Sparkles,
   ClipboardCheck,
+  ContactRound,
 } from "lucide-react";
 import {
   Sidebar,
@@ -58,7 +58,15 @@ const menuSections = [
     label: "Main",
     items: [
       { title: "Dashboard", url: "/", icon: LayoutDashboard },
-      { title: "Customers", url: "/contacts", icon: Users },
+    ],
+  },
+  {
+    label: "CRM",
+    items: [
+      { title: "Contacts", url: "/contacts", icon: ContactRound },
+      { title: "Service Plans", url: "/service-plans", icon: ClipboardList },
+      { title: "Quotes & Proposals", url: "/quotes", icon: ClipboardCheck },
+      { title: "Messages", url: "/communications", icon: MessageSquare },
     ],
   },
   {
@@ -67,11 +75,8 @@ const menuSections = [
       { title: "Scheduling", url: "/scheduling", icon: Calendar },
       { title: "Routes", url: "/routes", icon: MapPin },
       { title: "Jobs", url: "/jobs", icon: Briefcase },
-      { title: "Service Plans", url: "/service-plans", icon: ClipboardList },
-      { title: "Quotes", url: "/quotes", icon: ClipboardCheck },
       { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Field View", url: "/m/today", icon: Smartphone },
-      { title: "Messages", url: "/communications", icon: MessageSquare },
       { title: "Reports", url: "/reports", icon: BarChart3 },
       { title: "Analytics", url: "/analytics", icon: TrendingUp },
     ],
