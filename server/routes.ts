@@ -4242,6 +4242,14 @@ Return ONLY valid JSON, no markdown.`,
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", req.params.id, "update", { old: { frequency: existing.frequency, dayOfWeek: existing.dayOfWeek, routeId: existing.routeId }, new: updateBody }, req.ip || undefined);
 
+      if (body.isActive === false && existing.isActive === true) {
+        const today = new Date().toISOString().split("T")[0];
+        const cancelledCount = await storage.cancelFutureVisitsForPlans([req.params.id], today);
+        if (cancelledCount > 0) {
+          console.log(`[admin-pause] Cancelled ${cancelledCount} future visits for plan ${req.params.id}`);
+        }
+      }
+
       if (addOnsData && Array.isArray(addOnsData)) {
         const validatedAddOns = await validateAndResolveAddOns(addOnsData, companyId);
         const addOns = await storage.setServicePlanAddOns(req.params.id, validatedAddOns);
