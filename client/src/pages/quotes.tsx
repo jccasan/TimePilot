@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useSearch } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
@@ -117,6 +118,16 @@ export default function Quotes() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const searchString = useSearch();
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    if (params.get("create") === "true") {
+      setEditingQuote(null);
+      setDialogOpen(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [searchString]);
   const [sendQuoteId, setSendQuoteId] = useState<string | null>(null);
   const [sendVia, setSendVia] = useState("email");
   const [previewOpen, setPreviewOpen] = useState(false);

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
   Calendar,
@@ -29,6 +31,9 @@ import {
   Sparkles,
   ClipboardCheck,
   ContactRound,
+  Plus,
+  UserPlus,
+  Receipt,
 } from "lucide-react";
 import {
   Sidebar,
@@ -52,6 +57,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { GlobalSearch } from "@/components/global-search";
 import { getAvailableTours } from "@/components/feature-tour";
+import { AddContactDialog } from "@/components/add-contact-dialog";
+import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 
 const menuSections = [
   {
@@ -116,7 +123,9 @@ const menuSections = [
 ];
 
 export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => void }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+  const [addContactOpen, setAddContactOpen] = useState(false);
+  const [generateInvoiceOpen, setGenerateInvoiceOpen] = useState(false);
   const { data: company } = useQuery<{ logoUrl: string | null; name: string }>({
     queryKey: ["/api/company"],
   });
@@ -140,6 +149,50 @@ export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => 
           )}
           <span className="text-lg font-bold truncate" data-testid="text-company-name">{company?.name || "My Company"}</span>
         </Link>
+        <div className="px-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="w-full justify-start gap-2" size="sm" data-testid="button-quick-create">
+                <Plus className="h-4 w-4" />
+                Create
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuLabel>Quick Create</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setAddContactOpen(true)}
+                data-testid="quick-create-contact"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                New Contact
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => navigate("/quotes?create=true")}
+                data-testid="quick-create-quote"
+              >
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                New Quote
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setGenerateInvoiceOpen(true)}
+                data-testid="quick-create-invoice"
+              >
+                <Receipt className="h-4 w-4 mr-2" />
+                New Invoice
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => navigate("/jobs")}
+                data-testid="quick-create-job"
+              >
+                <Briefcase className="h-4 w-4 mr-2" />
+                New Job
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <AddContactDialog open={addContactOpen} onOpenChange={setAddContactOpen} />
+        <GenerateInvoiceDialog open={generateInvoiceOpen} onOpenChange={setGenerateInvoiceOpen} showContactPicker />
       </SidebarHeader>
       <SidebarContent>
         <div className="px-3 pt-1 pb-3">

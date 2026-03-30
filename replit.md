@@ -35,6 +35,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Draggable Grid Layouts**: Both the dashboard and the settings page use `react-grid-layout` (ResponsiveGridLayout) to support drag-and-drop reordering and resizing of blocks/widgets, with layouts persisted to the `companies` table (dashboardLayout and settingsLayout JSON columns).
 
 ### Key Features
+- **Quick Create**: Sidebar dropdown button for rapidly creating contacts, quotes, invoices, and jobs from anywhere in the app. Contact and invoice creation open inline dialogs; quotes navigate with auto-open param.
 - **Data Management**: CRM for contacts and properties, CSV import with AI-assisted mapping, activity logs, and global search.
 - **Jobs System**: Management for one-off and recurring services, including "Stop Only" flags for non-revenue visits.
 - **Scheduling & Routing**: Recurring service plans, visit management, drag-and-drop route builder with map visualization, and visit completion tracking. Includes a route lock feature to preserve optimized stop orders.
