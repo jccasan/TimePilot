@@ -76,7 +76,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
       headers["References"] = `<${options.emailThreadId}@${messageIdDomain}>`;
     }
 
-    const msg: any = {
+    const mailData: sgMail.MailDataRequired & { headers?: Record<string, string> } = {
       to: options.to,
       from,
       subject: options.subject,
@@ -86,10 +86,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     };
 
     if (Object.keys(headers).length > 0) {
-      msg.headers = headers;
+      mailData.headers = headers;
     }
 
-    const [response] = await sgMail.send(msg);
+    const [response] = await sgMail.send(mailData);
     return {
       success: true,
       messageId: response.headers["x-message-id"] as string,

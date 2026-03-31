@@ -7305,8 +7305,8 @@ Return ONLY valid JSON, no markdown.`,
       if (!channelFilter || channelFilter === "email") {
         const allEmail = await storage.getMessages(companyId, { channel: "email" });
         for (const msg of allEmail) {
-          const threadId = msg.emailThreadId || msg.id;
-          const key = `email:${threadId}`;
+          const canonicalThreadId = msg.emailThreadId || msg.id;
+          const key = `email:${canonicalThreadId}`;
           const existing = threadMap.get(key);
           const contact = msg.contactId ? contactMap.get(msg.contactId) : null;
           const emailAddr = msg.direction === "inbound" ? msg.fromAddress : msg.toAddress;
@@ -7322,7 +7322,7 @@ Return ONLY valid JSON, no markdown.`,
               unreadCount: (msg.direction === "inbound" && !msg.isRead) ? 1 : 0,
               messageCount: 1,
               channel: "email",
-              emailThreadId: msg.emailThreadId || "",
+              emailThreadId: canonicalThreadId,
               subject: msg.subject || "",
             });
           } else {
@@ -7374,7 +7374,14 @@ Return ONLY valid JSON, no markdown.`,
 
       const company = await storage.getCompany(companyId);
       const fromAddress = company?.email || "jeremy@scoopilot.com";
-      const emailThreadId = existingThreadId || generateEmailThreadId();
+
+      let emailThreadId = generateEmailThreadId();
+      if (existingThreadId) {
+        const existingThread = await storage.getMessagesByEmailThreadId(existingThreadId);
+        if (existingThread.length > 0 && existingThread[0].companyId === companyId) {
+          emailThreadId = existingThreadId;
+        }
+      }
 
       const msg = await storage.createMessage({
         companyId,
@@ -8009,7 +8016,7 @@ Return ONLY valid JSON, no markdown.`,
 
   const inboundEmailUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024, files: 10 },
+    limits: { fileSize: MMS_MAX_PER_FILE, files: MMS_MAX_ATTACHMENTS },
   });
 
   app.post("/api/webhooks/sendgrid/inbound", inboundEmailUpload.any(), async (req: Request, res: Response) => {
@@ -8100,15 +8107,21 @@ Return ONLY valid JSON, no markdown.`,
 
       const files = req.files as Express.Multer.File[] | undefined;
       if (files && files.length > 0) {
-        const ALLOWED_EMAIL_ATTACH_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"];
-        const EMAIL_MAX_ATTACH_BYTES = parseInt(process.env.EMAIL_INBOUND_MAX_FILE_BYTES || String(10 * 1024 * 1024), 10);
+        const ALLOWED_EMAIL_ATTACH_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+        const EMAIL_MAX_ATTACH_BYTES = parseInt(process.env.MMS_MAX_FILE_BYTES || String(5 * 1024 * 1024), 10);
+        const EMAIL_MAX_ATTACHMENTS = parseInt(process.env.MMS_MAX_ATTACHMENTS || "5", 10);
 
         try {
           const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
           const objStorage = new ObjectStorageService();
           const storedUrls: string[] = [];
 
+          let attachCount = 0;
           for (const file of files) {
+            if (attachCount >= EMAIL_MAX_ATTACHMENTS) {
+              console.log(`[Inbound Email] Attachment limit reached (${EMAIL_MAX_ATTACHMENTS}), skipping remaining`);
+              break;
+            }
             if (!ALLOWED_EMAIL_ATTACH_MIME.includes(file.mimetype)) {
               console.log(`[Inbound Email] Skipping attachment with unsupported MIME: ${file.mimetype}`);
               continue;
@@ -8132,6 +8145,7 @@ Return ONLY valid JSON, no markdown.`,
             }
 
             storedUrls.push(storagePath);
+            attachCount++;
             await storage.createMessageAttachment({
               messageId: savedMsg.id,
               companyId,
