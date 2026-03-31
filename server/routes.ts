@@ -8043,6 +8043,10 @@ Return ONLY valid JSON, no markdown.`,
   }, async (req: Request, res: Response) => {
     try {
       const webhookToken = process.env.SENDGRID_INBOUND_WEBHOOK_TOKEN;
+      if (!webhookToken && process.env.NODE_ENV === "production") {
+        console.error("[Inbound Email] SENDGRID_INBOUND_WEBHOOK_TOKEN not set in production — rejecting request");
+        return res.status(503).json({ error: "Inbound email not configured" });
+      }
       if (webhookToken) {
         const providedToken = req.query.token || req.headers["x-webhook-token"];
         if (providedToken !== webhookToken) {
