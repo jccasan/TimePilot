@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +24,74 @@ type ChatMessage = {
 
 type View = "chat" | "ticket-form";
 
+const DRAG_THRESHOLD = 8;
+const EDGE_MARGIN = 20;
+const BTN_SIZE = 56;
+const BTN_SIZE_SM = 48;
+const PANEL_W = 380;
+const PANEL_H = 520;
+
+function getStorageKey(userId: string) {
+  return `rover_fab_pos_${userId}`;
+}
+
+function clampPos(x: number, y: number, btnSize: number) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  return {
+    x: Math.max(EDGE_MARGIN, Math.min(x, vw - btnSize - EDGE_MARGIN)),
+    y: Math.max(EDGE_MARGIN, Math.min(y, vh - btnSize - EDGE_MARGIN)),
+  };
+}
+
+function snapToEdge(x: number, y: number, btnSize: number) {
+  const vw = window.innerWidth;
+  const centerX = x + btnSize / 2;
+  const snappedX = centerX < vw / 2 ? EDGE_MARGIN : vw - btnSize - EDGE_MARGIN;
+  return clampPos(snappedX, y, btnSize);
+}
+
+function loadPosition(userId: string, btnSize: number): { x: number; y: number } {
+  try {
+    const raw = localStorage.getItem(getStorageKey(userId));
+    if (raw) {
+      const { x, y } = JSON.parse(raw);
+      return clampPos(x, y, btnSize);
+    }
+  } catch {}
+  return { x: window.innerWidth - btnSize - EDGE_MARGIN, y: window.innerHeight - btnSize - EDGE_MARGIN };
+}
+
+function getPanelStyle(fabX: number, fabY: number, btnSize: number) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const fabCenterX = fabX + btnSize / 2;
+  const fabCenterY = fabY + btnSize / 2;
+
+  const pw = Math.min(PANEL_W, vw - 40);
+  const ph = Math.min(PANEL_H, vh - 100);
+
+  let left: number;
+  let top: number;
+
+  if (fabCenterX < vw / 2) {
+    left = fabX;
+  } else {
+    left = fabX + btnSize - pw;
+  }
+
+  if (fabCenterY < vh / 2) {
+    top = fabY + btnSize + 8;
+  } else {
+    top = fabY - ph - 8;
+  }
+
+  left = Math.max(20, Math.min(left, vw - pw - 20));
+  top = Math.max(20, Math.min(top, vh - ph - 20));
+
+  return { left, top, width: pw, height: ph };
+}
+
 export default function RoverChatbot() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -46,6 +114,14 @@ export default function RoverChatbot() {
   const [ticketDescription, setTicketDescription] = useState("");
   const [submittingTicket, setSubmittingTicket] = useState(false);
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
+
+  const btnSize = typeof window !== "undefined" && window.innerWidth < 640 ? BTN_SIZE_SM : BTN_SIZE;
+  const [fabPos, setFabPos] = useState<{ x: number; y: number }>(() =>
+    user ? loadPosition(user.id.toString(), btnSize) : { x: window.innerWidth - btnSize - EDGE_MARGIN, y: window.innerHeight - btnSize - EDGE_MARGIN }
+  );
+  const draggingRef = useRef(false);
+  const dragStartRef = useRef<{ mx: number; my: number; fx: number; fy: number } | null>(null);
+  const didDragRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -83,6 +159,74 @@ export default function RoverChatbot() {
     return () => {
       abortRef.current?.abort();
     };
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      setFabPos(loadPosition(user.id.toString(), btnSize));
+    }
+  }, [user, btnSize]);
+
+  useEffect(() => {
+    const onResize = () => {
+      setFabPos((prev) => clampPos(prev.x, prev.y, btnSize));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [btnSize]);
+
+  const savePosition = useCallback(
+    (pos: { x: number; y: number }) => {
+      if (user) {
+        localStorage.setItem(getStorageKey(user.id.toString()), JSON.stringify(pos));
+      }
+    },
+    [user]
+  );
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      dragStartRef.current = { mx: e.clientX, my: e.clientY, fx: fabPos.x, fy: fabPos.y };
+      didDragRef.current = false;
+      draggingRef.current = false;
+    },
+    [fabPos]
+  );
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragStartRef.current) return;
+      const dx = e.clientX - dragStartRef.current.mx;
+      const dy = e.clientY - dragStartRef.current.my;
+      if (!draggingRef.current && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
+      draggingRef.current = true;
+      didDragRef.current = true;
+      const newPos = clampPos(dragStartRef.current.fx + dx, dragStartRef.current.fy + dy, btnSize);
+      setFabPos(newPos);
+    },
+    [btnSize]
+  );
+
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      if (draggingRef.current) {
+        const snapped = snapToEdge(fabPos.x, fabPos.y, btnSize);
+        setFabPos(snapped);
+        savePosition(snapped);
+      }
+      dragStartRef.current = null;
+      draggingRef.current = false;
+    },
+    [fabPos, btnSize, savePosition]
+  );
+
+  const handleFabClick = useCallback(() => {
+    if (!didDragRef.current) {
+      setOpen(true);
+    }
   }, []);
 
   if (!user) return null;
@@ -400,7 +544,7 @@ export default function RoverChatbot() {
                 </li>
               </ul>
               <p className="text-xs text-muted-foreground">
-                Look for the green button in the bottom-right corner anytime.
+                Look for the green button on the screen anytime. You can drag it to move it.
               </p>
               <div className="flex gap-2 pt-1">
                 <Button variant="outline" className="flex-1" onClick={dismissIntro} data-testid="button-rover-intro-dismiss">
@@ -417,17 +561,33 @@ export default function RoverChatbot() {
 
       {!open && !showIntro && (
         <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-[100] flex items-center justify-center w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onClick={handleFabClick}
+          className="fixed z-[100] flex items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow select-none touch-none"
+          style={{
+            left: fabPos.x,
+            top: fabPos.y,
+            width: btnSize,
+            height: btnSize,
+            cursor: draggingRef.current ? "grabbing" : "grab",
+          }}
           data-testid="button-rover-open"
           aria-label="Open Rover assistant"
         >
-          <MessageCircle className="h-6 w-6" />
+          <MessageCircle className={btnSize === BTN_SIZE_SM ? "h-5 w-5" : "h-6 w-6"} />
         </button>
       )}
 
-      {open && (
-        <div className="fixed bottom-5 right-5 z-[100] w-[380px] max-w-[calc(100vw-40px)] h-[520px] max-h-[calc(100vh-100px)] flex flex-col bg-background border rounded-xl shadow-2xl overflow-hidden" data-testid="rover-chatbot-panel">
+      {open && (() => {
+        const ps = getPanelStyle(fabPos.x, fabPos.y, btnSize);
+        return (
+        <div
+          className="fixed z-[100] flex flex-col bg-background border rounded-xl shadow-2xl overflow-hidden"
+          style={{ left: ps.left, top: ps.top, width: ps.width, height: ps.height }}
+          data-testid="rover-chatbot-panel"
+        >
           <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground shrink-0">
             <div className="flex items-center gap-2">
               {view === "ticket-form" && (
@@ -592,7 +752,8 @@ export default function RoverChatbot() {
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
     </>
   );
 }
