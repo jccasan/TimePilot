@@ -414,6 +414,37 @@ async function ensureConnectedAccountsTable() {
   }
 }
 
+async function ensureMmsSchema() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_urls TEXT[] DEFAULT '{}';
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_count INTEGER DEFAULT 0;
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS message_attachments (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        message_id VARCHAR NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        mime_type VARCHAR(100) NOT NULL,
+        original_filename VARCHAR(500),
+        original_size_bytes INTEGER NOT NULL DEFAULT 0,
+        compressed_size_bytes INTEGER NOT NULL DEFAULT 0,
+        storage_url TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_message_attachments_message ON message_attachments(message_id);
+      CREATE INDEX IF NOT EXISTS idx_message_attachments_company ON message_attachments(company_id);
+    `);
+    console.log("[Migration] MMS schema (media_urls, message_attachments) verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure MMS schema:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function migrateServicePlansToAgreementsAndJobs() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -867,6 +898,7 @@ async function repairServicePlanDayOfWeek() {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
   await ensureConnectedAccountsTable();
+  await ensureMmsSchema();
   await migrateServicePlansToAgreementsAndJobs();
   await repairServicePlanDayOfWeek();
   await syncSubscriptionTiers();

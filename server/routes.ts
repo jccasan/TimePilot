@@ -7799,11 +7799,24 @@ Return ONLY valid JSON, no markdown.`,
         const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
         const ingestStorage = new ObjectStorageService();
         const storedPaths: string[] = [];
-        const INBOUND_ALLOWED_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+        const INBOUND_ALLOWED_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
         const INBOUND_MAX_BYTES = parseInt(process.env.MMS_INBOUND_MAX_FILE_BYTES || String(10 * 1024 * 1024), 10);
+        const TELNYX_MEDIA_HOSTS = ["media.telnyx.com", "storage.telnyx.com", "telnyx-mms.s3.amazonaws.com"];
 
         for (const media of inboundMedia) {
           try {
+            let mediaHost: string;
+            try {
+              mediaHost = new URL(media.url).hostname;
+            } catch {
+              console.warn(`[Telnyx MMS] Skipping invalid media URL: ${media.url}`);
+              continue;
+            }
+            if (!TELNYX_MEDIA_HOSTS.some(allowed => mediaHost === allowed || mediaHost.endsWith(`.${allowed}`))) {
+              console.warn(`[Telnyx MMS] Skipping media from disallowed host ${mediaHost}: ${media.url}`);
+              continue;
+            }
+
             if (media.size && media.size > INBOUND_MAX_BYTES) {
               console.warn(`[Telnyx MMS] Skipping oversized media (${media.size} bytes > ${INBOUND_MAX_BYTES}): ${media.url}`);
               continue;
