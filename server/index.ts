@@ -589,6 +589,7 @@ async function migrateServicePlansToAgreementsAndJobs() {
     await pool.query(`ALTER TABLE routes ADD COLUMN IF NOT EXISTS date DATE`);
     await pool.query(`ALTER TABLE routes ALTER COLUMN day_of_week DROP NOT NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_routes_date ON routes(company_id, date)`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_routes_company_date ON routes(company_id, date) WHERE date IS NOT NULL`);
     console.log("[Migration] routes date column and index verified");
   } catch (err) {
     console.error("[Migration] Failed to add date column to routes:", err);

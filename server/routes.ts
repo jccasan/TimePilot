@@ -4156,10 +4156,10 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
+      let planAddOns: any[] = [];
       if (req.body.addOns && Array.isArray(req.body.addOns)) {
         const validatedAddOns = await validateAndResolveAddOns(req.body.addOns, companyId);
-        const addOns = await storage.setServicePlanAddOns(plan.id, validatedAddOns);
-        return res.status(201).json({ ...plan, addOns });
+        planAddOns = await storage.setServicePlanAddOns(plan.id, validatedAddOns);
       }
 
       try {
@@ -4172,7 +4172,7 @@ Return ONLY valid JSON, no markdown.`,
         console.error("[service-plan] Failed to auto-generate visits:", genErr);
       }
 
-      res.status(201).json({ ...plan, addOns: [] });
+      res.status(201).json({ ...plan, addOns: planAddOns });
     } catch (err) { handleError(res, err); }
   });
 

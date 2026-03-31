@@ -1,4 +1,4 @@
-import { pgTable, varchar, timestamp, boolean, text, integer, decimal, jsonb, date, pgEnum, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, varchar, timestamp, boolean, text, integer, decimal, jsonb, date, pgEnum, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -317,6 +317,7 @@ export const routes = pgTable("routes", {
 }, (table) => [
   index("idx_routes_company").on(table.companyId),
   index("idx_routes_date").on(table.companyId, table.date),
+  uniqueIndex("idx_routes_company_date").on(table.companyId, table.date).where(sql`date IS NOT NULL`),
 ]);
 
 export const servicePlans = pgTable("service_plans", {

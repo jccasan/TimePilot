@@ -633,17 +633,28 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getRouteByDate(companyId, date);
     if (existing) return existing;
     const d = new Date(date + "T00:00:00Z");
-    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const dayName = dayNames[d.getUTCDay()];
+    const dayNameMap: Record<number, "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"> = {
+      0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
+      4: "thursday", 5: "friday", 6: "saturday",
+    };
+    const displayNames: Record<number, string> = {
+      0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday",
+      4: "Thursday", 5: "Friday", 6: "Saturday",
+    };
+    const dayOfWeek = dayNameMap[d.getUTCDay()];
+    const displayName = displayNames[d.getUTCDay()];
     const formatted = `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
-    const name = `${dayName} ${formatted}`;
+    const name = `${displayName} ${formatted}`;
     const [route] = await db.insert(routes).values({
       companyId,
       name,
       date,
-      dayOfWeek: dayName.toLowerCase() as any,
-    }).returning();
-    return route;
+      dayOfWeek,
+    }).onConflictDoNothing().returning();
+    if (route) return route;
+    const raceWinner = await this.getRouteByDate(companyId, date);
+    if (raceWinner) return raceWinner;
+    throw new Error(`Failed to create or find daily route for ${date}`);
   }
 
   async createRoute(data: InsertRoute): Promise<Route> {
