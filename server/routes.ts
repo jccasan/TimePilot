@@ -7389,7 +7389,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/messages/mms", isAuthenticated, upload.single("media"), async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const { contactId, to, body } = req.body;
+      const { contactId, to, body, originalSize } = req.body;
       if (!to) return res.status(400).json({ error: "to is required" });
       if (!req.file) return res.status(400).json({ error: "media file is required" });
 
@@ -7443,12 +7443,13 @@ Return ONLY valid JSON, no markdown.`,
       });
 
       try {
+        const parsedOriginalSize = originalSize ? parseInt(originalSize, 10) : null;
         await storage.createMessageAttachment({
           messageId: msg.id,
           companyId,
           mimeType,
           originalFilename: req.file.originalname,
-          originalSizeBytes: req.file.size,
+          originalSizeBytes: (parsedOriginalSize && parsedOriginalSize > 0) ? parsedOriginalSize : req.file.size,
           compressedSizeBytes: req.file.size,
           storageUrl: objectPath,
         });
@@ -7638,10 +7639,14 @@ Return ONLY valid JSON, no markdown.`,
 
       console.log(`[Telnyx SMS] Parsed: from=${fromNumber}, to=${toNumber}, messageId=${messageId}`);
 
-      const inboundMediaUrls: string[] = (payload.media || []).map((m: any) => m.url).filter(Boolean);
+      type TelnyxMedia = { url?: string; content_type?: string; size?: number };
+      const rawMedia: TelnyxMedia[] = Array.isArray(payload.media) ? payload.media : [];
+      const inboundMedia = rawMedia.filter(
+        (m): m is TelnyxMedia & { url: string } => typeof m.url === "string" && m.url.startsWith("https://")
+      );
 
-      if (!fromNumber || (!textBody && inboundMediaUrls.length === 0)) {
-        console.log(`[Telnyx SMS] Missing required fields: fromNumber=${fromNumber}, textBody=${textBody ? "present" : "missing"}, media=${inboundMediaUrls.length}`);
+      if (!fromNumber || (!textBody && inboundMedia.length === 0)) {
+        console.log(`[Telnyx SMS] Missing required fields: fromNumber=${fromNumber}, textBody=${textBody ? "present" : "missing"}, media=${inboundMedia.length}`);
         return res.status(200).json({ ok: true });
       }
 
@@ -7764,27 +7769,65 @@ Return ONLY valid JSON, no markdown.`,
         toAddress: toNumber,
         body: textBody || "",
         externalId: messageId,
-        mediaUrls: inboundMediaUrls.length > 0 ? inboundMediaUrls : [],
-        mediaCount: inboundMediaUrls.length,
+        mediaUrls: [],
+        mediaCount: 0,
       });
 
-      if (inboundMediaUrls.length > 0) {
-        for (const mediaUrl of inboundMediaUrls) {
+      if (inboundMedia.length > 0) {
+        const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+        const ingestStorage = new ObjectStorageService();
+        const storedPaths: string[] = [];
+
+        for (const media of inboundMedia) {
           try {
+            const mediaResp = await fetch(media.url);
+            if (!mediaResp.ok) {
+              console.warn(`[Telnyx MMS] Failed to download media from ${media.url}: ${mediaResp.status}`);
+              continue;
+            }
+            const mediaBuffer = Buffer.from(await mediaResp.arrayBuffer());
+            const detectedMime = media.content_type || mediaResp.headers.get("content-type") || "application/octet-stream";
+            const mediaSize = mediaBuffer.length;
+
+            const uploadURL = await ingestStorage.getObjectEntityUploadURL();
+            const storagePath = ingestStorage.normalizeObjectEntityPath(uploadURL);
+
+            const putResp = await fetch(uploadURL, {
+              method: "PUT",
+              body: mediaBuffer,
+              headers: { "Content-Type": detectedMime },
+            });
+            if (!putResp.ok) {
+              console.warn(`[Telnyx MMS] Failed to upload media to object storage: ${putResp.status}`);
+              continue;
+            }
+
+            storedPaths.push(storagePath);
+
             await storage.createMessageAttachment({
               messageId: savedMsg.id,
               companyId,
-              mimeType: "image/jpeg",
-              originalFilename: mediaUrl.split("/").pop() || "media",
-              originalSizeBytes: 0,
-              compressedSizeBytes: 0,
-              storageUrl: mediaUrl,
+              mimeType: detectedMime,
+              originalFilename: media.url.split("/").pop()?.split("?")[0] || "media",
+              originalSizeBytes: media.size || mediaSize,
+              compressedSizeBytes: mediaSize,
+              storageUrl: storagePath,
             });
           } catch (attachErr) {
-            console.error(`[Telnyx MMS] Failed to save attachment record for ${mediaUrl}:`, attachErr);
+            console.error(`[Telnyx MMS] Failed to ingest media from ${media.url}:`, attachErr);
           }
         }
-        console.log(`[Telnyx MMS] Saved ${inboundMediaUrls.length} media attachment(s) for message ${savedMsg.id}`);
+
+        if (storedPaths.length > 0) {
+          try {
+            await db.update(messagesTable)
+              .set({ mediaUrls: storedPaths, mediaCount: storedPaths.length })
+              .where(eq(messagesTable.id, savedMsg.id));
+          } catch (updateErr) {
+            console.error("[Telnyx MMS] Failed to update message mediaUrls:", updateErr);
+          }
+          console.log(`[Telnyx MMS] Ingested ${storedPaths.length}/${inboundMedia.length} media to object storage for message ${savedMsg.id}`);
+        }
       }
 
       console.log(`[Telnyx SMS] Message saved successfully for company ${matchedCompany.name}`);

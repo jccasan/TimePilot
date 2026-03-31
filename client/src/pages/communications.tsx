@@ -108,6 +108,7 @@ function ConversationThread({
   const [replyText, setReplyText] = useState("");
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [attachedPreview, setAttachedPreview] = useState<string | null>(null);
+  const [originalFileSize, setOriginalFileSize] = useState<number | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -178,7 +179,9 @@ function ConversationThread({
 
     setIsCompressing(true);
     try {
+      const preCompressSize = file.size;
       const compressed = await compressImage(file);
+      setOriginalFileSize(preCompressSize);
       setAttachedPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return URL.createObjectURL(compressed);
@@ -197,6 +200,7 @@ function ConversationThread({
       return null;
     });
     setAttachedFile(null);
+    setOriginalFileSize(null);
   }, []);
 
   const sendReplyMutation = useMutation({
@@ -207,6 +211,7 @@ function ConversationThread({
         formData.append("to", phone);
         formData.append("body", body);
         if (contactId) formData.append("contactId", contactId);
+        if (originalFileSize) formData.append("originalSize", String(originalFileSize));
         const res = await fetch("/api/messages/mms", {
           method: "POST",
           body: formData,
