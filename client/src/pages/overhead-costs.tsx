@@ -28,6 +28,9 @@ import {
   TrendingUp,
   Calculator,
   Lock,
+  Fuel,
+  Car,
+  Route,
 } from "lucide-react";
 
 type OverheadCostItem = {
@@ -254,6 +257,121 @@ function CostItemRow({
   );
 }
 
+function FuelVehicleCard({ companyData, onSave }: {
+  companyData: any;
+  onSave: (updates: Record<string, unknown>) => void;
+}) {
+  const config = companyData?.pricingConfig || {};
+  const gasPriceCents = config.averageGasPriceCentsPerGallon ?? 350;
+  const mpg = config.vehicleMPG ?? null;
+  const costPerMileCents = config.vehicleCostPerMileCents ?? 65;
+
+  const [gasPrice, setGasPrice] = useState((gasPriceCents / 100).toFixed(2));
+  const [vehicleMpg, setVehicleMpg] = useState(mpg ? String(mpg) : "");
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setGasPrice((gasPriceCents / 100).toFixed(2));
+    setVehicleMpg(mpg ? String(mpg) : "");
+    setDirty(false);
+  }, [gasPriceCents, mpg]);
+
+  const gasParsed = parseFloat(gasPrice);
+  const mpgParsed = parseFloat(vehicleMpg);
+  const validGas = !isNaN(gasParsed) && gasParsed > 0;
+  const validMpg = !isNaN(mpgParsed) && mpgParsed > 0;
+
+  const computedCostPerMile = validGas && validMpg
+    ? (gasParsed / mpgParsed)
+    : costPerMileCents / 100;
+
+  const handleSave = () => {
+    const updates: Record<string, unknown> = {};
+    if (validGas) updates.averageGasPriceCentsPerGallon = Math.round(gasParsed * 100);
+    if (validMpg) {
+      updates.vehicleMPG = mpgParsed;
+      if (validGas) {
+        updates.vehicleCostPerMileCents = Math.round((gasParsed / mpgParsed) * 100);
+      }
+    } else {
+      updates.vehicleMPG = null;
+    }
+    onSave(updates);
+    setDirty(false);
+  };
+
+  return (
+    <Card className="border-primary/20 bg-primary/[0.02]" data-testid="card-fuel-vehicle">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Fuel className="h-4 w-4 text-primary" />
+          <span className="font-medium text-sm">Fuel & Vehicle</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Gas Price ($/gal)</label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                className="h-9 pl-6 text-sm tabular-nums"
+                value={gasPrice}
+                onChange={(e) => { setGasPrice(e.target.value); setDirty(true); }}
+                data-testid="input-gas-price"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Vehicle MPG</label>
+            <div className="relative">
+              <Car className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="e.g. 18"
+                className="h-9 pl-8 text-sm tabular-nums"
+                value={vehicleMpg}
+                onChange={(e) => { setVehicleMpg(e.target.value); setDirty(true); }}
+                data-testid="input-vehicle-mpg"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Cost Per Mile</label>
+            <div className="flex items-center gap-1.5">
+              <Route className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-lg font-bold tabular-nums" data-testid="text-cost-per-mile">
+                ${computedCostPerMile.toFixed(2)}
+              </span>
+              <span className="text-xs text-muted-foreground">/mi</span>
+            </div>
+            {validGas && validMpg && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Computed from gas & MPG
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end">
+            {dirty && (
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={!validGas}
+                data-testid="button-save-fuel"
+              >
+                Save
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function OverheadCosts() {
   const { toast } = useToast();
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
@@ -321,6 +439,18 @@ export default function OverheadCosts() {
       setNewItemName("");
       setNewItemType("fixed");
       toast({ title: "Item added" });
+    },
+  });
+
+  const fuelMutation = useMutation({
+    mutationFn: (updates: Record<string, unknown>) =>
+      apiRequest("PATCH", "/api/pricing-config", updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Fuel & vehicle settings saved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to save", variant: "destructive" });
     },
   });
 
@@ -407,6 +537,11 @@ export default function OverheadCosts() {
           Overhead Costs
         </h1>
       </div>
+
+      <FuelVehicleCard
+        companyData={companyData}
+        onSave={(updates) => fuelMutation.mutate(updates)}
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
