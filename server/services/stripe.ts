@@ -458,17 +458,11 @@ export function validateStripeConfig(): void {
   }
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
-  console.log("[Twilio Config] Startup validation");
-  const twilioVars = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER"];
-  const missingTwilio = twilioVars.filter(v => !process.env[v]);
-  const presentTwilio = twilioVars.filter(v => !!process.env[v]);
-  if (presentTwilio.length === twilioVars.length) {
-    console.log(`[Twilio Config] ✓ All ${twilioVars.length} Twilio env vars set`);
+  console.log("[Telnyx Config] Startup validation");
+  if (process.env.TELNYX_API_KEY) {
+    console.log("[Telnyx Config] ✓ TELNYX_API_KEY env var set (fallback for per-company config)");
   } else {
-    if (presentTwilio.length > 0) {
-      console.log(`[Twilio Config] ✓ ${presentTwilio.length}/${twilioVars.length} Twilio env vars set`);
-    }
-    console.warn(`[Twilio Config] ⚠ Missing Twilio env vars: ${missingTwilio.join(", ")} — SMS features disabled`);
+    console.log("[Telnyx Config] ℹ TELNYX_API_KEY not set — per-company Telnyx config required in Settings");
   }
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 

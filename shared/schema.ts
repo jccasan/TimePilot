@@ -170,7 +170,7 @@ export const companies = pgTable("companies", {
   voicePlanOverageRate: decimal("voice_plan_overage_rate", { precision: 5, scale: 2 }),
   stripeVoiceSubscriptionId: varchar("stripe_voice_subscription_id", { length: 255 }),
   dedicatedPhoneNumber: varchar("dedicated_phone_number", { length: 20 }),
-  smsProvider: varchar("sms_provider", { length: 20 }).notNull().default("twilio"),
+  smsProvider: varchar("sms_provider", { length: 20 }).notNull().default("telnyx"),
   telnyxApiKey: text("telnyx_api_key"),
   telnyxPhoneNumber: varchar("telnyx_phone_number", { length: 20 }),
   telnyxMessagingProfileId: varchar("telnyx_messaging_profile_id", { length: 255 }),

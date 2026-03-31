@@ -226,7 +226,6 @@ const ENTITY_TYPES = [
 
 function SmsProviderSection({ company }: { company: Company | null | undefined }) {
   const { toast } = useToast();
-  const [smsProvider, setSmsProvider] = useState(company?.smsProvider || "twilio");
   const [telnyxApiKey, setTelnyxApiKey] = useState("");
   const [telnyxPhoneNumber, setTelnyxPhoneNumber] = useState(company?.telnyxPhoneNumber || "");
   const [telnyxMessagingProfileId, setTelnyxMessagingProfileId] = useState(company?.telnyxMessagingProfileId || "");
@@ -234,7 +233,6 @@ function SmsProviderSection({ company }: { company: Company | null | undefined }
 
   useEffect(() => {
     if (company) {
-      setSmsProvider(company.smsProvider || "twilio");
       setTelnyxPhoneNumber(company.telnyxPhoneNumber || "");
       setTelnyxMessagingProfileId(company.telnyxMessagingProfileId || "");
       setTelnyxApiKey("");
@@ -243,19 +241,17 @@ function SmsProviderSection({ company }: { company: Company | null | undefined }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload: Record<string, string> = { smsProvider };
-      if (smsProvider === "telnyx") {
-        if (telnyxApiKey) payload.telnyxApiKey = telnyxApiKey;
-        if (telnyxPhoneNumber) payload.telnyxPhoneNumber = telnyxPhoneNumber;
-        if (telnyxMessagingProfileId) payload.telnyxMessagingProfileId = telnyxMessagingProfileId;
-      }
+      const payload: Record<string, string> = {};
+      if (telnyxApiKey) payload.telnyxApiKey = telnyxApiKey;
+      if (telnyxPhoneNumber) payload.telnyxPhoneNumber = telnyxPhoneNumber;
+      if (telnyxMessagingProfileId) payload.telnyxMessagingProfileId = telnyxMessagingProfileId;
       const res = await apiRequest("PATCH", "/api/company", payload);
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
       queryClient.invalidateQueries({ queryKey: ["/api/messages/config"] });
-      toast({ title: "SMS provider settings saved" });
+      toast({ title: "SMS settings saved" });
       setTelnyxApiKey("");
     },
     onError: (err: any) => {
@@ -278,94 +274,63 @@ function SmsProviderSection({ company }: { company: Company | null | undefined }
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Phone className="h-5 w-5" />
-          SMS Provider
+          SMS Configuration
         </CardTitle>
-        <CardDescription>Choose which SMS provider to use for sending and receiving text messages</CardDescription>
+        <CardDescription>Configure your Telnyx account for sending and receiving text messages</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>Provider</Label>
-          <Select value={smsProvider} onValueChange={setSmsProvider} data-testid="select-sms-provider">
-            <SelectTrigger data-testid="select-trigger-sms-provider">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="twilio">Twilio (Global)</SelectItem>
-              <SelectItem value="telnyx">Telnyx (Per-Tenant)</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label htmlFor="telnyx-api-key">Telnyx API Key</Label>
+          <Input
+            id="telnyx-api-key"
+            type="password"
+            placeholder={company?.telnyxApiKey && company.telnyxApiKey !== "null" ? "••••••••••••••••" : "KEY..."}
+            value={telnyxApiKey}
+            onChange={(e) => setTelnyxApiKey(e.target.value)}
+            data-testid="input-telnyx-api-key"
+          />
+          <p className="text-xs text-muted-foreground">Your Telnyx v2 API key. Found in the Telnyx portal under Auth &gt; API Keys.</p>
         </div>
 
-        {smsProvider === "twilio" && (
-          <div className="bg-muted/50 rounded-lg p-4 border">
-            <div className="flex items-start gap-3">
-              <Info className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-medium mb-1">Using Global Twilio Config</p>
-                <p className="text-sm text-muted-foreground">
-                  SMS is sent through the platform's shared Twilio account. No additional configuration needed.
-                </p>
-              </div>
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="telnyx-phone">Telnyx Phone Number</Label>
+          <Input
+            id="telnyx-phone"
+            placeholder="+15551234567"
+            value={telnyxPhoneNumber}
+            onChange={(e) => setTelnyxPhoneNumber(e.target.value)}
+            data-testid="input-telnyx-phone"
+          />
+          <p className="text-xs text-muted-foreground">The phone number purchased in your Telnyx account for sending SMS.</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="telnyx-profile">Messaging Profile ID</Label>
+          <Input
+            id="telnyx-profile"
+            placeholder="4001..."
+            value={telnyxMessagingProfileId}
+            onChange={(e) => setTelnyxMessagingProfileId(e.target.value)}
+            data-testid="input-telnyx-profile"
+          />
+          <p className="text-xs text-muted-foreground">Your Telnyx messaging profile ID. Found under Messaging &gt; Profiles in the Telnyx portal.</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Inbound Webhook URL</Label>
+          <div className="flex gap-2">
+            <Input
+              readOnly
+              value={webhookUrl}
+              className="font-mono text-xs"
+              data-testid="input-telnyx-webhook-url"
+            />
+            <Button variant="outline" size="sm" onClick={handleCopy} data-testid="button-copy-telnyx-webhook">
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </Button>
           </div>
-        )}
-
-        {smsProvider === "telnyx" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="telnyx-api-key">Telnyx API Key</Label>
-              <Input
-                id="telnyx-api-key"
-                type="password"
-                placeholder={company?.telnyxApiKey && company.telnyxApiKey !== "null" ? "••••••••••••••••" : "KEY..."}
-                value={telnyxApiKey}
-                onChange={(e) => setTelnyxApiKey(e.target.value)}
-                data-testid="input-telnyx-api-key"
-              />
-              <p className="text-xs text-muted-foreground">Your Telnyx v2 API key. Found in the Telnyx portal under Auth &gt; API Keys.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="telnyx-phone">Telnyx Phone Number</Label>
-              <Input
-                id="telnyx-phone"
-                placeholder="+15551234567"
-                value={telnyxPhoneNumber}
-                onChange={(e) => setTelnyxPhoneNumber(e.target.value)}
-                data-testid="input-telnyx-phone"
-              />
-              <p className="text-xs text-muted-foreground">The phone number purchased in your Telnyx account for sending SMS.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="telnyx-profile">Messaging Profile ID</Label>
-              <Input
-                id="telnyx-profile"
-                placeholder="4001..."
-                value={telnyxMessagingProfileId}
-                onChange={(e) => setTelnyxMessagingProfileId(e.target.value)}
-                data-testid="input-telnyx-profile"
-              />
-              <p className="text-xs text-muted-foreground">Your Telnyx messaging profile ID. Found under Messaging &gt; Profiles in the Telnyx portal.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Inbound Webhook URL</Label>
-              <div className="flex gap-2">
-                <Input
-                  readOnly
-                  value={webhookUrl}
-                  className="font-mono text-xs"
-                  data-testid="input-telnyx-webhook-url"
-                />
-                <Button variant="outline" size="sm" onClick={handleCopy} data-testid="button-copy-telnyx-webhook">
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">Paste this URL in your Telnyx Messaging Profile's webhook settings to receive inbound SMS.</p>
-            </div>
-          </div>
-        )}
+          <p className="text-xs text-muted-foreground">Paste this URL in your Telnyx Messaging Profile's webhook settings to receive inbound SMS.</p>
+        </div>
 
         <Button
           onClick={() => saveMutation.mutate()}
@@ -1712,7 +1677,7 @@ function WebhookLeadSection() {
                 </div>
               </div>
               <div className="text-xs text-muted-foreground space-y-1">
-                <p>If the lead includes a phone number and Twilio is configured, an auto-quote SMS will be sent immediately using your SMS template.</p>
+                <p>If the lead includes a phone number and SMS is configured, an auto-quote SMS will be sent immediately using your SMS template.</p>
                 <p>The response includes the created contact ID, calculated price quote, and whether an SMS was sent.</p>
               </div>
             </div>

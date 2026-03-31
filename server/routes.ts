@@ -14,7 +14,7 @@ import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordRes
 import type { RequestHandler } from "express";
 import { sendEmail, sendAdminSignupNotification } from "./services/email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
-import { sendSms, getTwilioPhoneNumber, isTwilioConfigured, sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "./services/sms";
+import { sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "./services/sms";
 import {
   isStripeConfigured,
   createStripeCustomer,
@@ -1766,17 +1766,7 @@ Return ONLY valid JSON, no markdown.`,
         updates.slug = cleanSlug;
       }
       if (updates.smsProvider !== undefined) {
-        if (!["twilio", "telnyx"].includes(updates.smsProvider)) {
-          return res.status(400).json({ error: "smsProvider must be 'twilio' or 'telnyx'" });
-        }
-        if (updates.smsProvider === "telnyx") {
-          const telnyxKey = updates.telnyxApiKey || existing?.telnyxApiKey;
-          const telnyxPhone = updates.telnyxPhoneNumber || existing?.telnyxPhoneNumber;
-          const telnyxProfile = updates.telnyxMessagingProfileId || existing?.telnyxMessagingProfileId;
-          if (!telnyxKey || !telnyxPhone || !telnyxProfile) {
-            return res.status(400).json({ error: "Telnyx API key, phone number, and messaging profile ID are all required when using Telnyx" });
-          }
-        }
+        updates.smsProvider = "telnyx";
       }
       if (updates.telnyxApiKey && typeof updates.telnyxApiKey === "string" && updates.telnyxApiKey.length > 0) {
         const { encrypt } = await import("./utils/encryption");
@@ -7112,7 +7102,7 @@ Return ONLY valid JSON, no markdown.`,
           direction: "inbound",
           status: "received",
           fromAddress: From,
-          toAddress: getTwilioPhoneNumber(),
+          toAddress: await getFromPhoneForCompany(companyId),
           body: Body,
           externalId: MessageSid,
         });
@@ -8908,10 +8898,7 @@ Return ONLY valid JSON, no markdown.`,
           });
           const smsConfigured = await isSmsConfiguredForCompany(companyId);
           if (smsConfigured) {
-            await sendSmsForCompany(companyId, quote.contactPhone, smsText);
-          } else if (isTwilioConfigured()) {
-            const from = getTwilioPhoneNumber();
-            await sendSms(from!, quote.contactPhone, smsText);
+            await sendSmsForCompany({ to: quote.contactPhone, body: smsText, companyId });
           }
           results.sent.push("sms");
         } catch (smsErr: any) {

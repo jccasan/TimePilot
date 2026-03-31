@@ -267,7 +267,7 @@ async function ensureCompanyColumns() {
   try {
     await pool.query(`
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS dedicated_phone_number VARCHAR(20);
-      ALTER TABLE companies ADD COLUMN IF NOT EXISTS sms_provider VARCHAR(20) NOT NULL DEFAULT 'twilio';
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS sms_provider VARCHAR(20) NOT NULL DEFAULT 'telnyx';
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS telnyx_api_key TEXT;
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS telnyx_phone_number VARCHAR(20);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS telnyx_messaging_profile_id VARCHAR(255);
@@ -276,6 +276,8 @@ async function ensureCompanyColumns() {
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS venmo_handle VARCHAR(100);
       ALTER TABLE routes ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false;
     `);
+    await pool.query(`UPDATE companies SET sms_provider = 'telnyx' WHERE sms_provider = 'twilio'`);
+    console.log("[Migration] SMS provider migrated to telnyx-only");
     await pool.query(`
       CREATE TABLE IF NOT EXISTS voice_calls (
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -610,7 +612,7 @@ async function seedDemoCompany() {
 
     const compRes = await pool.query(
       `INSERT INTO companies (name, slug, timezone, subscription_tier, subscription_status, charge_timing, mrr_cents, route_credits, reminders_enabled, auto_visits_enabled, ai_import_mapping_enabled, rover_ai_enabled, sms_provider)
-       VALUES ('Clean Paws Fredericksburg', 'clean-paws-fredericksburg', 'America/New_York', 'tier_1', 'active', 'day_before', 0, 10, true, true, true, true, 'twilio')
+       VALUES ('Clean Paws Fredericksburg', 'clean-paws-fredericksburg', 'America/New_York', 'tier_1', 'active', 'day_before', 0, 10, true, true, true, true, 'telnyx')
        RETURNING id`
     );
     const companyId = compRes.rows[0].id;
