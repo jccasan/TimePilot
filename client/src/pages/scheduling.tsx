@@ -245,7 +245,7 @@ export default function Scheduling() {
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
-      toast({ title: `${data.generated} visit${data.generated === 1 ? "" : "s"} generated`, description: data.generated > 0 ? "Visits created from active services." : "No new visits needed." });
+      toast({ title: `${data.generated} visit${data.generated === 1 ? "" : "s"} generated`, description: data.generated > 0 ? "Visits created from active jobs." : "No new visits needed." });
     },
     onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
   });
@@ -259,7 +259,7 @@ export default function Scheduling() {
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
-      toast({ title: "Service created", description: "New service added successfully." });
+      toast({ title: "Job created", description: "New job added successfully." });
       setDialogOpen(false);
       form.reset();
     },
@@ -413,7 +413,7 @@ export default function Scheduling() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Create Visits</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will create visits for all active services in the selected date range ({dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}). Existing visits won't be duplicated.
+                  This will create visits for all active jobs in the selected date range ({dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}). Existing visits won't be duplicated.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -424,10 +424,10 @@ export default function Scheduling() {
           </AlertDialog>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Add Service</Button>
+              <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Add Job</Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Add Service</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Add Job</DialogTitle></DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
                   <FormField control={form.control} name="contactId" render={({ field }) => (
@@ -496,13 +496,13 @@ export default function Scheduling() {
                   )} />
                   <FormField control={form.control} name="startDate" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{selectedFrequency === "onetime" ? "Service Date" : "Start Date"}</FormLabel>
+                      <FormLabel>{selectedFrequency === "onetime" ? "Job Date" : "Start Date"}</FormLabel>
                       <FormControl><Input type="date" {...field} data-testid="input-start-date" /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
                   <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-service-plan">
-                    {createMutation.isPending ? "Creating..." : "Create Service"}
+                    {createMutation.isPending ? "Creating..." : "Create Job"}
                   </Button>
                 </form>
               </Form>
@@ -717,10 +717,10 @@ export default function Scheduling() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Service</Label>
+              <Label className="text-sm font-medium">Job</Label>
               <Select value={quickAddPlanId} onValueChange={setQuickAddPlanId}>
                 <SelectTrigger data-testid="select-quick-add-plan">
-                  <SelectValue placeholder={activeServicePlans.length === 0 ? "No active services" : "Select a service"} />
+                  <SelectValue placeholder={activeServicePlans.length === 0 ? "No active jobs" : "Select a job"} />
                 </SelectTrigger>
                 <SelectContent>
                   {activeServicePlans.map((sp) => {
@@ -948,7 +948,7 @@ function VisitDetailSheet({
               <div className="flex items-start gap-3">
                 <CalendarCheck className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                 <div>
-                  <p className="text-xs text-muted-foreground">Service</p>
+                  <p className="text-xs text-muted-foreground">Job</p>
                   <p className="text-sm" data-testid="text-visit-service">{frequencyLabel} Cleanup</p>
                 </div>
               </div>

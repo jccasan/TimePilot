@@ -1794,7 +1794,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
-      toast({ title: "Service created" });
+      toast({ title: "Job created" });
       setCreateDialogOpen(false);
       createForm.reset();
       setCreateSelectedAddOns([]);
@@ -1819,7 +1819,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
-      toast({ title: "Service updated" });
+      toast({ title: "Job updated" });
       setEditingPlan(null);
       setEditSelectedAddOns([]);
     },
@@ -1839,7 +1839,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
-      toast({ title: "Service deleted" });
+      toast({ title: "Job deleted" });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1858,7 +1858,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
-      toast({ title: "Service cancelled" });
+      toast({ title: "Job cancelled" });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1877,7 +1877,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
-      toast({ title: "Service updated" });
+      toast({ title: "Job updated" });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -2278,21 +2278,21 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-        <CardTitle className="text-lg">Services</CardTitle>
+        <CardTitle className="text-lg">Jobs</CardTitle>
         <Dialog open={createDialogOpen} onOpenChange={(open) => {
           setCreateDialogOpen(open);
           if (!open) createForm.reset();
         }}>
           <DialogTrigger asChild>
             <Button size="sm" data-testid="button-add-service-plan">
-              <Plus className="mr-1 h-4 w-4" /> Add Service
+              <Plus className="mr-1 h-4 w-4" /> Add Job
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add Service</DialogTitle>
+              <DialogTitle>Add Job</DialogTitle>
             </DialogHeader>
-            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Service", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns, createTemplateId, setCreateTemplateId)}
+            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Job", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns, createTemplateId, setCreateTemplateId)}
           </DialogContent>
         </Dialog>
       </CardHeader>
@@ -2312,7 +2312,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               <div key={plan.id} className="border rounded-md p-3" data-testid={`text-plan-${plan.id}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="font-medium capitalize">{plan.serviceName || `${frequencyLabelsMap[plan.frequency] || plan.frequency} service`}</p>
+                    <p className="font-medium capitalize">{plan.serviceName || `${frequencyLabelsMap[plan.frequency] || plan.frequency} job`}</p>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <span>${plan.pricePerVisit}/visit</span>
                       {discountVal && parseFloat(discountVal) > 0 && (
@@ -2369,18 +2369,18 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Cancel Service</AlertDialogTitle>
+                            <AlertDialogTitle>Cancel Job</AlertDialogTitle>
                             <AlertDialogDescription>
-                              This will cancel this service. Future visits will no longer be generated. You can still view the service history.
+                              This will cancel this job. Future visits will no longer be generated. You can still view the job history.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel>Keep Service</AlertDialogCancel>
+                            <AlertDialogCancel>Keep Job</AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() => cancelMutation.mutate(plan.id)}
                               data-testid={`button-confirm-cancel-plan-${plan.id}`}
                             >
-                              Cancel Service
+                              Cancel Job
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
@@ -2394,9 +2394,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Service</AlertDialogTitle>
+                          <AlertDialogTitle>Delete Job</AlertDialogTitle>
                           <AlertDialogDescription>
-                            This will permanently delete this service and all its data. This action cannot be undone.
+                            This will permanently delete this job and all its data. This action cannot be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -2423,7 +2423,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                   <div key={plan.id} className="border rounded-md p-3 opacity-60" data-testid={`text-plan-cancelled-${plan.id}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="font-medium capitalize line-through">{plan.serviceName || `${frequencyLabelsMap[plan.frequency] || plan.frequency} service`}</p>
+                        <p className="font-medium capitalize line-through">{plan.serviceName || `${frequencyLabelsMap[plan.frequency] || plan.frequency} job`}</p>
                         <p className="text-sm text-muted-foreground">${plan.pricePerVisit}/visit</p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -2436,8 +2436,8 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Service</AlertDialogTitle>
-                              <AlertDialogDescription>This will permanently delete this service and all its data. This action cannot be undone.</AlertDialogDescription>
+                              <AlertDialogTitle>Delete Job</AlertDialogTitle>
+                              <AlertDialogDescription>This will permanently delete this job and all its data. This action cannot be undone.</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Keep</AlertDialogCancel>
@@ -2454,19 +2454,19 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
           </div>
           );
         })() : (
-          <p className="text-sm text-muted-foreground">No services yet.</p>
+          <p className="text-sm text-muted-foreground">No jobs yet.</p>
         )}
 
         <Dialog open={!!editingPlan} onOpenChange={(open) => { if (!open) setEditingPlan(null); }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Service</DialogTitle>
+              <DialogTitle>Edit Job</DialogTitle>
             </DialogHeader>
             {editingPlan && renderPlanForm(
               editForm,
               (v) => updateMutation.mutate({ id: editingPlan.id, data: v }),
               updateMutation.isPending,
-              "Save Service",
+              "Save Job",
               true,
               editCalcResult,
               editCalcLoading,
