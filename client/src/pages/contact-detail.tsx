@@ -1846,6 +1846,25 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     },
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PATCH", `/api/service-plans/${id}`, {
+        isActive: false,
+        jobStatus: "cancelled",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      toast({ title: "Service cancelled" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const togglePauseMutation = useMutation({
     mutationFn: async ({ id, isPaused }: { id: string; isPaused: boolean }) => {
       await apiRequest("PATCH", `/api/service-plans/${id}`, {
@@ -2312,18 +2331,20 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                     {plan.isStopOnly && (
                       <Badge variant="outline" className="text-xs" data-testid={`badge-stop-only-${plan.id}`}>Stop Only</Badge>
                     )}
-                    <Badge variant={isPaused ? "secondary" : plan.isActive ? "default" : "secondary"}>
-                      {isPaused ? "Paused" : plan.isActive ? "Active" : "Inactive"}
+                    <Badge variant={plan.jobStatus === "cancelled" ? "destructive" : isPaused ? "secondary" : plan.isActive ? "default" : "secondary"}>
+                      {plan.jobStatus === "cancelled" ? "Cancelled" : isPaused ? "Paused" : plan.isActive ? "Active" : "Inactive"}
                     </Badge>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => togglePauseMutation.mutate({ id: plan.id, isPaused })}
-                      disabled={togglePauseMutation.isPending}
-                      data-testid={`button-pause-plan-${plan.id}`}
-                    >
-                      {isPaused ? "Resume" : "Pause"}
-                    </Button>
+                    {plan.jobStatus !== "cancelled" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => togglePauseMutation.mutate({ id: plan.id, isPaused })}
+                        disabled={togglePauseMutation.isPending}
+                        data-testid={`button-pause-plan-${plan.id}`}
+                      >
+                        {isPaused ? "Resume" : "Pause"}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -2332,6 +2353,32 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                     >
                       <Edit2 className="h-4 w-4" />
                     </Button>
+                    {plan.jobStatus !== "cancelled" && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-orange-600 hover:text-orange-700" data-testid={`button-cancel-plan-${plan.id}`}>
+                            Cancel
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Cancel Service</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will cancel this service. Future visits will no longer be generated. You can still view the service history.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Keep Service</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => cancelMutation.mutate(plan.id)}
+                              data-testid={`button-confirm-cancel-plan-${plan.id}`}
+                            >
+                              Cancel Service
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="icon" data-testid={`button-delete-plan-${plan.id}`}>
@@ -2342,11 +2389,11 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                         <AlertDialogHeader>
                           <AlertDialogTitle>Delete Service</AlertDialogTitle>
                           <AlertDialogDescription>
-                            This will permanently delete this service. This action cannot be undone.
+                            This will permanently delete this service and all its data. This action cannot be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogCancel>Keep</AlertDialogCancel>
                           <AlertDialogAction
                             onClick={() => deleteMutation.mutate(plan.id)}
                             data-testid={`button-confirm-delete-plan-${plan.id}`}

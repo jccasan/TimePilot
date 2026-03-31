@@ -65,7 +65,6 @@ import VoiceSignup from "@/pages/voice-signup";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import SmsTerms from "@/pages/sms-terms";
 import Jobs from "@/pages/jobs";
-import ServicePlansPage from "@/pages/service-plans";
 import Pipeline from "@/pages/pipeline";
 import ConnectV2Dashboard from "@/pages/connect-v2-dashboard";
 import { StorefrontPage, StorefrontSuccessPage } from "@/pages/storefront";
@@ -91,7 +90,6 @@ function Router() {
       <Route path="/scheduling" component={Scheduling} />
       <Route path="/routes" component={RoutesPage} />
       <Route path="/jobs" component={Jobs} />
-      <Route path="/service-plans" component={ServicePlansPage} />
       <Route path="/pipeline" component={Pipeline} />
       <Route path="/connect-v2" component={ConnectV2Dashboard} />
       <Route path="/m/today" component={TechMobile} />
