@@ -82,10 +82,9 @@ function pixelToLngLat(px: number, py: number, centerLng: number, centerLat: num
   return [lng, lat];
 }
 
-function StaticMapMeasure({ lat, lng, mapboxToken, existingPolygon, onSave, onCancel }: {
+function StaticMapMeasure({ lat, lng, existingPolygon, onSave, onCancel }: {
   lat: number;
   lng: number;
-  mapboxToken: string;
   existingPolygon?: number[][] | null;
   onSave: (polygon: number[][], areaSqft: number) => void;
   onCancel?: () => void;
@@ -93,6 +92,9 @@ function StaticMapMeasure({ lat, lng, mapboxToken, existingPolygon, onSave, onCa
   const [zoom, setZoom] = useState(19);
   const [points, setPoints] = useState<number[][]>(existingPolygon || []);
   const [closed, setClosed] = useState(!!existingPolygon && existingPolygon.length >= 3);
+  const [imgError, setImgError] = useState(false);
+  const [imgLoading, setImgLoading] = useState(true);
+  const [imgBlobUrl, setImgBlobUrl] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: IMG_W, h: IMG_H });
 
@@ -108,10 +110,39 @@ function StaticMapMeasure({ lat, lng, mapboxToken, existingPolygon, onSave, onCa
     return () => obs.disconnect();
   }, []);
 
-  const imgW = containerSize.w;
-  const imgH = containerSize.h;
+  const imgW = Math.min(Math.round(containerSize.w), 1280);
+  const imgH = Math.min(Math.round(containerSize.h), 1280);
 
-  const tileUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${lng},${lat},${zoom},0/${Math.round(imgW)}x${Math.round(imgH)}@2x?access_token=${mapboxToken}`;
+  useEffect(() => {
+    if (imgW <= 0 || imgH <= 0) return;
+    let cancelled = false;
+    setImgLoading(true);
+    setImgError(false);
+
+    const headers: Record<string, string> = {};
+    const token = localStorage.getItem("sessionToken");
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    fetch(`/api/mapbox-static-image?lat=${lat}&lng=${lng}&zoom=${zoom}&w=${imgW}&h=${imgH}`, {
+      credentials: "include",
+      headers,
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed");
+        return r.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        setImgBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
+        setImgLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) { setImgLoading(false); setImgError(true); }
+      });
+
+    return () => { cancelled = true; };
+  }, [lat, lng, zoom, imgW, imgH]);
 
   const areaSqft = points.length >= 3 ? calculatePolygonArea(points) : 0;
   const category = areaSqft > 0 ? getYardCategory(areaSqft) : null;
@@ -157,12 +188,24 @@ function StaticMapMeasure({ lat, lng, mapboxToken, existingPolygon, onSave, onCa
         className="w-full h-[350px] rounded-md border overflow-hidden relative select-none"
         data-testid="yard-measure-map"
       >
-        <img
-          src={tileUrl}
-          alt="Satellite view"
-          className="absolute inset-0 w-full h-full object-cover"
-          draggable={false}
-        />
+        {imgLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted">
+            <p className="text-sm text-muted-foreground">Loading satellite view...</p>
+          </div>
+        )}
+        {imgError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted">
+            <p className="text-sm text-muted-foreground">Satellite view unavailable</p>
+          </div>
+        )}
+        {imgBlobUrl && (
+          <img
+            src={imgBlobUrl}
+            alt="Satellite view"
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity ${imgLoading || imgError ? "opacity-0" : "opacity-100"}`}
+            draggable={false}
+          />
+        )}
         <svg
           className="absolute inset-0 w-full h-full"
           style={{ cursor: closed ? "default" : "crosshair" }}
@@ -490,34 +533,15 @@ export function YardMeasureTool({ lat, lng, propertyId, existingPolygon, existin
 
   const category = areaSqft > 0 ? getYardCategory(areaSqft) : null;
 
-  if (mapError && mapboxToken) {
+  if (mapError) {
     return (
       <StaticMapMeasure
         lat={lat}
         lng={lng}
-        mapboxToken={mapboxToken}
         existingPolygon={existingPolygon}
         onSave={onSave}
         onCancel={onCancel}
       />
-    );
-  }
-
-  if (mapError && !mapboxToken) {
-    return (
-      <div className="space-y-3" data-testid="yard-measure-tool">
-        <div className="w-full h-[200px] rounded-md border flex items-center justify-center bg-muted" data-testid="yard-measure-map">
-          <div className="text-center text-muted-foreground p-4">
-            <p className="text-sm font-medium mb-1">Map unavailable</p>
-            <p className="text-xs">Unable to load the map. Please check your Mapbox configuration.</p>
-          </div>
-        </div>
-        {onCancel && (
-          <Button size="sm" variant="ghost" onClick={onCancel} data-testid="button-cancel-measure">
-            Close
-          </Button>
-        )}
-      </div>
     );
   }
 

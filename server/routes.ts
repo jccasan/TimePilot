@@ -894,6 +894,37 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/mapbox-static-image", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
+      if (!token) return res.status(503).json({ error: "Mapbox not configured" });
+
+      const { lat, lng, zoom, w, h } = req.query;
+      if (!lat || !lng) return res.status(400).json({ error: "lat and lng required" });
+
+      const safeLat = parseFloat(lat as string);
+      const safeLng = parseFloat(lng as string);
+      const safeZoom = Math.min(22, Math.max(0, parseInt(zoom as string) || 19));
+      const safeW = Math.min(1280, Math.max(1, parseInt(w as string) || 640));
+      const safeH = Math.min(1280, Math.max(1, parseInt(h as string) || 400));
+
+      const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${safeLng},${safeLat},${safeZoom},0/${safeW}x${safeH}@2x?access_token=${token}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        return res.status(response.status).json({ error: "Mapbox static image request failed" });
+      }
+
+      res.set("Content-Type", response.headers.get("content-type") || "image/png");
+      res.set("Cache-Control", "public, max-age=604800");
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.send(buffer);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // ================ Auth Routes ================
 
   app.post("/api/auth/register", async (req: Request, res: Response) => {
