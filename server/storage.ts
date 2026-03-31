@@ -74,8 +74,10 @@ import {
   connectedAccounts,
   messageRouting,
   messageExceptions,
+  messageAttachments,
   type MessageRouting, type InsertMessageRouting,
   type MessageException, type InsertMessageException,
+  type MessageAttachment, type InsertMessageAttachment,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -431,6 +433,10 @@ export interface IStorage {
   // Message Routing (shared number)
   findMessageRouting(sharedNumber: string, customerPhone: string): Promise<MessageRouting[]>;
   upsertMessageRouting(data: InsertMessageRouting): Promise<MessageRouting>;
+
+  // Message Attachments
+  createMessageAttachment(data: InsertMessageAttachment): Promise<MessageAttachment>;
+  getMessageAttachments(messageId: string): Promise<MessageAttachment[]>;
 
   // Message Exceptions
   getMessageExceptions(filters?: { resolved?: boolean; companyId?: string }): Promise<MessageException[]>;
@@ -2569,6 +2575,19 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+
+  // ================ Message Attachments ================
+
+  async createMessageAttachment(data: InsertMessageAttachment): Promise<MessageAttachment> {
+    const [row] = await db.insert(messageAttachments).values(data).returning();
+    return row;
+  }
+
+  async getMessageAttachments(messageId: string): Promise<MessageAttachment[]> {
+    return await db.select().from(messageAttachments)
+      .where(eq(messageAttachments.messageId, messageId))
+      .orderBy(asc(messageAttachments.createdAt));
   }
 
   // ================ Message Exceptions ================

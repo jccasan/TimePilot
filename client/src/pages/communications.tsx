@@ -35,10 +35,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mail, MessageSquare, Send, ArrowUpRight, ArrowDownLeft, AlertCircle, CheckCircle2, ArrowLeft, User, Loader2 } from "lucide-react";
+import { Mail, MessageSquare, Send, ArrowUpRight, ArrowDownLeft, AlertCircle, CheckCircle2, ArrowLeft, User, Loader2, Paperclip, X, Image as ImageIcon } from "lucide-react";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { formatDistanceToNow } from "date-fns";
 import { useLocation } from "wouter";
+import { compressImage, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/image-compress";
 
 const emailFormSchema = z.object({
   contactId: z.string().optional(),
@@ -105,6 +106,10 @@ function ConversationThread({
 }) {
   const { toast } = useToast();
   const [replyText, setReplyText] = useState("");
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachedPreview, setAttachedPreview] = useState<string | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const threadKey = contactId || `phone:${phone}`;
@@ -151,15 +156,76 @@ function ConversationThread({
     }
   }, [threadMessages]);
 
-  const sendReplyMutation = useMutation({
-    mutationFn: async (body: string) => {
-      await apiRequest("POST", "/api/messages/sms", {
-        contactId: contactId || undefined,
-        to: phone,
-        body,
+  useEffect(() => {
+    return () => {
+      if (attachedPreview) URL.revokeObjectURL(attachedPreview);
+    };
+  }, []);
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (e.target) e.target.value = "";
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      toast({ title: "Unsupported file type", description: "Only JPG, PNG, and WebP images are allowed.", variant: "destructive" });
+      return;
+    }
+    if (file.size > MAX_ATTACHMENT_SIZE) {
+      toast({ title: "File too large", description: `Maximum size is ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
+      return;
+    }
+
+    setIsCompressing(true);
+    try {
+      const compressed = await compressImage(file);
+      setAttachedPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(compressed);
       });
+      setAttachedFile(compressed);
+    } catch {
+      toast({ title: "Compression failed", description: "Could not process the image.", variant: "destructive" });
+    } finally {
+      setIsCompressing(false);
+    }
+  }, [toast]);
+
+  const clearAttachment = useCallback(() => {
+    setAttachedPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setAttachedFile(null);
+  }, []);
+
+  const sendReplyMutation = useMutation({
+    mutationFn: async ({ body, file }: { body: string; file: File | null }) => {
+      if (file) {
+        const formData = new FormData();
+        formData.append("media", file);
+        formData.append("to", phone);
+        formData.append("body", body);
+        if (contactId) formData.append("contactId", contactId);
+        const res = await fetch("/api/messages/mms", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Send failed" }));
+          throw new Error(err.error || "Failed to send MMS");
+        }
+        return res.json();
+      } else {
+        await apiRequest("POST", "/api/messages/sms", {
+          contactId: contactId || undefined,
+          to: phone,
+          body,
+        });
+      }
     },
-    onMutate: async (body: string) => {
+    onMutate: async ({ body }) => {
       const cacheKey = ["/api/messages", "sms", threadKey];
       await queryClient.cancelQueries({ queryKey: cacheKey });
       const previous = queryClient.getQueryData<Message[]>(cacheKey);
@@ -181,13 +247,15 @@ function ConversationThread({
         errorMessage: null,
         isRead: true,
         createdAt: new Date().toISOString(),
+        mediaUrls: [],
+        mediaCount: 0,
       };
       queryClient.setQueryData<Message[]>(cacheKey, (old) =>
         old ? [...old, optimisticMsg] : [optimisticMsg]
       );
       return { previous, cacheKey };
     },
-    onError: (error: Error, _body, context) => {
+    onError: (error: Error, _vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(context.cacheKey, context.previous);
       }
@@ -195,6 +263,7 @@ function ConversationThread({
     },
     onSuccess: () => {
       setReplyText("");
+      clearAttachment();
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
@@ -204,10 +273,10 @@ function ConversationThread({
 
   const handleSendReply = useCallback(() => {
     const trimmed = replyText.trim();
-    if (!trimmed) return;
+    if (!trimmed && !attachedFile) return;
     setReplyText("");
-    sendReplyMutation.mutate(trimmed);
-  }, [replyText, sendReplyMutation]);
+    sendReplyMutation.mutate({ body: trimmed, file: attachedFile });
+  }, [replyText, attachedFile, sendReplyMutation]);
 
   const sortedMessages = threadMessages
     ? [...threadMessages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
@@ -253,7 +322,22 @@ function ConversationThread({
                     : "bg-muted"
                 }`}
               >
-                <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>
+                {msg.mediaUrls && msg.mediaUrls.length > 0 && (
+                  <div className="mb-1.5 space-y-1">
+                    {msg.mediaUrls.map((url, idx) => (
+                      <a key={idx} href={url} target="_blank" rel="noopener noreferrer" data-testid={`media-link-${msg.id}-${idx}`}>
+                        <img
+                          src={url}
+                          alt="Attached image"
+                          className="rounded max-w-full max-h-48 object-cover cursor-pointer"
+                          loading="lazy"
+                          data-testid={`media-img-${msg.id}-${idx}`}
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {msg.body && <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>}
                 <div className={`flex items-center gap-1.5 mt-1 ${msg.direction === "outbound" ? "justify-end" : ""}`}>
                   <span className={`text-[10px] ${msg.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -268,8 +352,44 @@ function ConversationThread({
         )}
       </div>
 
-      <div className="p-3 border-t shrink-0">
+      <div className="p-3 border-t shrink-0 space-y-2">
+        {attachedPreview && (
+          <div className="relative inline-block" data-testid="mms-preview-container">
+            <img src={attachedPreview} alt="Attached" className="h-16 w-16 object-cover rounded border" data-testid="mms-preview-img" />
+            <button
+              onClick={clearAttachment}
+              className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
+              data-testid="button-remove-attachment"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+        {isCompressing && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Compressing image...
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handleFileSelect}
+          data-testid="input-mms-file"
+        />
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sendReplyMutation.isPending || isCompressing}
+            data-testid="button-attach-image"
+            title="Attach image"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
           <Input
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
@@ -285,7 +405,7 @@ function ConversationThread({
           />
           <Button
             onClick={handleSendReply}
-            disabled={!replyText.trim() || sendReplyMutation.isPending}
+            disabled={(!replyText.trim() && !attachedFile) || sendReplyMutation.isPending}
             size="icon"
             data-testid="button-send-reply"
           >

@@ -3,6 +3,7 @@ import { type Server } from "http";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import multer from "multer";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, gte, isNotNull, like, or, inArray, desc } from "drizzle-orm";
@@ -317,6 +318,8 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   registerObjectStorageRoutes(app, isAuthenticated);
+
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
   validateStripeConfig();
   fetchStripePrices().catch((err: unknown) => {
@@ -7341,7 +7344,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/messages/sms", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const { contactId, to, body } = req.body;
+      const { contactId, to, body, mediaUrl } = req.body;
       if (!to || !body) {
         return res.status(400).json({ error: "to and body are required" });
       }
@@ -7353,6 +7356,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const fromPhone = await getFromPhoneForCompany(companyId);
 
+      const mediaUrls = mediaUrl ? [mediaUrl] : [];
       const msg = await storage.createMessage({
         companyId,
         contactId: contactId || null,
@@ -7363,9 +7367,96 @@ Return ONLY valid JSON, no markdown.`,
         toAddress: to,
         body,
         sentBy: userId,
+        mediaUrls,
+        mediaCount: mediaUrls.length,
       });
 
-      const result = await sendSmsForCompany({ to, body, companyId, contactId: contactId || undefined });
+      const result = await sendSmsForCompany({ to, body, companyId, contactId: contactId || undefined, mediaUrl });
+
+      if (result.success) {
+        const updated = await storage.updateMessageStatus(msg.id, "sent");
+        res.json(updated);
+      } else {
+        const updated = await storage.updateMessageStatus(msg.id, "failed", result.error);
+        res.status(500).json({ error: result.error, message: updated });
+      }
+    } catch (err) { handleError(res, err); }
+  });
+
+  const ALLOWED_MMS_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+  const MAX_MMS_SIZE = 10 * 1024 * 1024;
+
+  app.post("/api/messages/mms", isAuthenticated, upload.single("media"), async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId } = await getCompanyContext(req);
+      const { contactId, to, body } = req.body;
+      if (!to) return res.status(400).json({ error: "to is required" });
+      if (!req.file) return res.status(400).json({ error: "media file is required" });
+
+      const mimeType = req.file.mimetype;
+      if (!ALLOWED_MMS_TYPES.includes(mimeType)) {
+        return res.status(400).json({ error: `Unsupported file type: ${mimeType}. Allowed: JPG, PNG, WebP` });
+      }
+      if (req.file.size > MAX_MMS_SIZE) {
+        return res.status(400).json({ error: `File too large (${Math.round(req.file.size / 1024)}KB). Maximum: ${MAX_MMS_SIZE / 1024 / 1024}MB` });
+      }
+
+      if (contactId) {
+        const contact = await storage.getContact(contactId, companyId);
+        if (!contact) return res.status(400).json({ error: "Contact not found in your company" });
+      }
+
+      const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+      const objStorage = new ObjectStorageService();
+      const uploadURL = await objStorage.getObjectEntityUploadURL();
+      const objectPath = objStorage.normalizeObjectEntityPath(uploadURL);
+
+      const putResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: req.file.buffer,
+        headers: { "Content-Type": mimeType },
+      });
+      if (!putResponse.ok) {
+        return res.status(500).json({ error: "Failed to upload media to storage" });
+      }
+
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host || "localhost:5000";
+      const publicMediaUrl = `${protocol}://${host}${objectPath}`;
+
+      const fromPhone = await getFromPhoneForCompany(companyId);
+      const mediaUrls = [objectPath];
+      const messageBody = body || "";
+
+      const msg = await storage.createMessage({
+        companyId,
+        contactId: contactId || null,
+        channel: "sms",
+        direction: "outbound",
+        status: "queued",
+        fromAddress: fromPhone,
+        toAddress: to,
+        body: messageBody,
+        sentBy: userId,
+        mediaUrls,
+        mediaCount: 1,
+      });
+
+      try {
+        await storage.createMessageAttachment({
+          messageId: msg.id,
+          companyId,
+          mimeType,
+          originalFilename: req.file.originalname,
+          originalSizeBytes: req.file.size,
+          compressedSizeBytes: req.file.size,
+          storageUrl: objectPath,
+        });
+      } catch (attachErr) {
+        console.error("[MMS] Failed to create attachment record:", attachErr);
+      }
+
+      const result = await sendSmsForCompany({ to, body: messageBody, companyId, contactId: contactId || undefined, mediaUrl: publicMediaUrl });
 
       if (result.success) {
         const updated = await storage.updateMessageStatus(msg.id, "sent");
@@ -7547,8 +7638,10 @@ Return ONLY valid JSON, no markdown.`,
 
       console.log(`[Telnyx SMS] Parsed: from=${fromNumber}, to=${toNumber}, messageId=${messageId}`);
 
-      if (!fromNumber || !textBody) {
-        console.log(`[Telnyx SMS] Missing required fields: fromNumber=${fromNumber}, textBody=${textBody ? "present" : "missing"}`);
+      const inboundMediaUrls: string[] = (payload.media || []).map((m: any) => m.url).filter(Boolean);
+
+      if (!fromNumber || (!textBody && inboundMediaUrls.length === 0)) {
+        console.log(`[Telnyx SMS] Missing required fields: fromNumber=${fromNumber}, textBody=${textBody ? "present" : "missing"}, media=${inboundMediaUrls.length}`);
         return res.status(200).json({ ok: true });
       }
 
@@ -7661,7 +7754,7 @@ Return ONLY valid JSON, no markdown.`,
 
       console.log(`[Telnyx SMS] Contact match: ${matchedContact ? `${matchedContact.firstName} ${matchedContact.lastName} (id: ${matchedContact.id})` : "no match found"} for from number: ${fromNumber}`);
 
-      await storage.createMessage({
+      const savedMsg = await storage.createMessage({
         companyId,
         contactId: matchedContact?.id || null,
         channel: "sms",
@@ -7669,9 +7762,30 @@ Return ONLY valid JSON, no markdown.`,
         status: "received",
         fromAddress: fromNumber,
         toAddress: toNumber,
-        body: textBody,
+        body: textBody || "",
         externalId: messageId,
+        mediaUrls: inboundMediaUrls.length > 0 ? inboundMediaUrls : [],
+        mediaCount: inboundMediaUrls.length,
       });
+
+      if (inboundMediaUrls.length > 0) {
+        for (const mediaUrl of inboundMediaUrls) {
+          try {
+            await storage.createMessageAttachment({
+              messageId: savedMsg.id,
+              companyId,
+              mimeType: "image/jpeg",
+              originalFilename: mediaUrl.split("/").pop() || "media",
+              originalSizeBytes: 0,
+              compressedSizeBytes: 0,
+              storageUrl: mediaUrl,
+            });
+          } catch (attachErr) {
+            console.error(`[Telnyx MMS] Failed to save attachment record for ${mediaUrl}:`, attachErr);
+          }
+        }
+        console.log(`[Telnyx MMS] Saved ${inboundMediaUrls.length} media attachment(s) for message ${savedMsg.id}`);
+      }
 
       console.log(`[Telnyx SMS] Message saved successfully for company ${matchedCompany.name}`);
 

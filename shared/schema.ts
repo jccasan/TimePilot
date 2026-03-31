@@ -679,12 +679,33 @@ export const messages = pgTable("messages", {
   sentBy: varchar("sent_by").references(() => users.id),
   errorMessage: text("error_message"),
   isRead: boolean("is_read").notNull().default(false),
+  mediaUrls: text("media_urls").array().default(sql`'{}'`),
+  mediaCount: integer("media_count").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_messages_company").on(table.companyId),
   index("idx_messages_contact").on(table.contactId),
   index("idx_messages_channel").on(table.channel),
 ]);
+
+export const messageAttachments = pgTable("message_attachments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  mimeType: varchar("mime_type", { length: 100 }).notNull(),
+  originalFilename: varchar("original_filename", { length: 255 }),
+  originalSizeBytes: integer("original_size_bytes"),
+  compressedSizeBytes: integer("compressed_size_bytes"),
+  storageUrl: text("storage_url").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ma_message").on(table.messageId),
+  index("idx_ma_company").on(table.companyId),
+]);
+
+export const insertMessageAttachmentSchema = createInsertSchema(messageAttachments).omit({ id: true, createdAt: true });
+export type MessageAttachment = typeof messageAttachments.$inferSelect;
+export type InsertMessageAttachment = z.infer<typeof insertMessageAttachmentSchema>;
 
 export const pricingCategoryEnum = pgEnum("pricing_category", [
   "recurring_service", "one_time_service", "add_on", "package"
