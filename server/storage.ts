@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, like, or, gte, lte, lt, inArray, count } from "drizzle-orm";
+import { eq, and, desc, asc, sql, like, or, gte, lte, lt, inArray, count, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   companies, companyUsers, contacts, tags, contactTags, leadSources,
@@ -1519,7 +1519,14 @@ export class DatabaseStorage implements IStorage {
         or(eq(messages.fromAddress, filters.phone), eq(messages.toAddress, filters.phone))!
       );
     }
-    if (filters?.emailThreadId) conditions.push(eq(messages.emailThreadId, filters.emailThreadId));
+    if (filters?.emailThreadId) {
+      conditions.push(
+        or(
+          eq(messages.emailThreadId, filters.emailThreadId),
+          and(isNull(messages.emailThreadId), eq(messages.id, filters.emailThreadId))
+        )!
+      );
+    }
     return db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt));
   }
 
