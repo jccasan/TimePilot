@@ -9,6 +9,7 @@ interface TelnyxSmsOptions {
   messagingProfileId: string;
   companyId: string;
   mediaUrl?: string;
+  mediaUrls?: string[];
 }
 
 interface SendSmsResult {
@@ -41,7 +42,11 @@ export async function sendTelnyxSms(options: TelnyxSmsOptions): Promise<SendSmsR
         to,
         text: options.body,
         messaging_profile_id: options.messagingProfileId,
-        ...(options.mediaUrl ? { media_urls: [options.mediaUrl] } : {}),
+        ...(options.mediaUrls && options.mediaUrls.length > 0
+          ? { media_urls: options.mediaUrls }
+          : options.mediaUrl
+            ? { media_urls: [options.mediaUrl] }
+            : {}),
       }),
     });
 

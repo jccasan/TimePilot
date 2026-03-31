@@ -55,6 +55,7 @@ interface SendSmsForCompanyOptions {
   body: string;
   companyId: string;
   mediaUrl?: string;
+  mediaUrls?: string[];
   contactId?: string;
 }
 
@@ -96,6 +97,7 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
     messagingProfileId: profileId,
     companyId: options.companyId,
     mediaUrl: options.mediaUrl,
+    mediaUrls: options.mediaUrls,
   });
 
   if (result.success && isSharedNumber(phoneNumber)) {

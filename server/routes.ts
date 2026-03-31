@@ -7384,21 +7384,33 @@ Return ONLY valid JSON, no markdown.`,
   });
 
   const ALLOWED_MMS_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-  const MAX_MMS_SIZE = 10 * 1024 * 1024;
+  const MMS_MAX_PER_FILE = parseInt(process.env.MMS_MAX_FILE_BYTES || String(5 * 1024 * 1024), 10);
+  const MMS_MAX_TOTAL = parseInt(process.env.MMS_MAX_TOTAL_BYTES || String(10 * 1024 * 1024), 10);
+  const MMS_MAX_ATTACHMENTS = parseInt(process.env.MMS_MAX_ATTACHMENTS || "5", 10);
 
-  app.post("/api/messages/mms", isAuthenticated, upload.single("media"), async (req: Request, res: Response) => {
+  const mmsUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MMS_MAX_PER_FILE, files: MMS_MAX_ATTACHMENTS },
+  });
+
+  app.post("/api/messages/mms", isAuthenticated, mmsUpload.array("media", MMS_MAX_ATTACHMENTS), async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const { contactId, to, body, originalSize } = req.body;
+      const { contactId, to, body, originalSizes } = req.body;
       if (!to) return res.status(400).json({ error: "to is required" });
-      if (!req.file) return res.status(400).json({ error: "media file is required" });
 
-      const mimeType = req.file.mimetype;
-      if (!ALLOWED_MMS_TYPES.includes(mimeType)) {
-        return res.status(400).json({ error: `Unsupported file type: ${mimeType}. Allowed: JPG, PNG, WebP` });
+      const files = req.files as Express.Multer.File[] | undefined;
+      if (!files || files.length === 0) return res.status(400).json({ error: "At least one media file is required" });
+
+      let totalBytes = 0;
+      for (const file of files) {
+        if (!ALLOWED_MMS_TYPES.includes(file.mimetype)) {
+          return res.status(400).json({ error: `Unsupported file type: ${file.mimetype}. Allowed: JPG, PNG, WebP` });
+        }
+        totalBytes += file.size;
       }
-      if (req.file.size > MAX_MMS_SIZE) {
-        return res.status(400).json({ error: `File too large (${Math.round(req.file.size / 1024)}KB). Maximum: ${MAX_MMS_SIZE / 1024 / 1024}MB` });
+      if (totalBytes > MMS_MAX_TOTAL) {
+        return res.status(400).json({ error: `Total payload too large (${Math.round(totalBytes / 1024)}KB). Maximum: ${Math.round(MMS_MAX_TOTAL / 1024 / 1024)}MB` });
       }
 
       if (contactId) {
@@ -7408,24 +7420,32 @@ Return ONLY valid JSON, no markdown.`,
 
       const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
       const objStorage = new ObjectStorageService();
-      const uploadURL = await objStorage.getObjectEntityUploadURL();
-      const objectPath = objStorage.normalizeObjectEntityPath(uploadURL);
-
-      const putResponse = await fetch(uploadURL, {
-        method: "PUT",
-        body: req.file.buffer,
-        headers: { "Content-Type": mimeType },
-      });
-      if (!putResponse.ok) {
-        return res.status(500).json({ error: "Failed to upload media to storage" });
-      }
-
       const protocol = req.headers["x-forwarded-proto"] || "https";
       const host = req.headers.host || "localhost:5000";
-      const publicMediaUrl = `${protocol}://${host}${objectPath}`;
+
+      const storedPaths: string[] = [];
+      const publicUrls: string[] = [];
+      const parsedOriginals: number[] = (() => {
+        try { return originalSizes ? JSON.parse(originalSizes) : []; } catch { return []; }
+      })();
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const uploadURL = await objStorage.getObjectEntityUploadURL();
+        const objectPath = objStorage.normalizeObjectEntityPath(uploadURL);
+        const putResponse = await fetch(uploadURL, {
+          method: "PUT",
+          body: file.buffer,
+          headers: { "Content-Type": file.mimetype },
+        });
+        if (!putResponse.ok) {
+          return res.status(500).json({ error: `Failed to upload media file ${i + 1} to storage` });
+        }
+        storedPaths.push(objectPath);
+        publicUrls.push(`${protocol}://${host}${objectPath}`);
+      }
 
       const fromPhone = await getFromPhoneForCompany(companyId);
-      const mediaUrls = [objectPath];
       const messageBody = body || "";
 
       const msg = await storage.createMessage({
@@ -7438,26 +7458,28 @@ Return ONLY valid JSON, no markdown.`,
         toAddress: to,
         body: messageBody,
         sentBy: userId,
-        mediaUrls,
-        mediaCount: 1,
+        mediaUrls: storedPaths,
+        mediaCount: storedPaths.length,
       });
 
-      try {
-        const parsedOriginalSize = originalSize ? parseInt(originalSize, 10) : null;
-        await storage.createMessageAttachment({
-          messageId: msg.id,
-          companyId,
-          mimeType,
-          originalFilename: req.file.originalname,
-          originalSizeBytes: (parsedOriginalSize && parsedOriginalSize > 0) ? parsedOriginalSize : req.file.size,
-          compressedSizeBytes: req.file.size,
-          storageUrl: objectPath,
-        });
-      } catch (attachErr) {
-        console.error("[MMS] Failed to create attachment record:", attachErr);
+      for (let i = 0; i < files.length; i++) {
+        try {
+          const origSize = (parsedOriginals[i] && parsedOriginals[i] > 0) ? parsedOriginals[i] : files[i].size;
+          await storage.createMessageAttachment({
+            messageId: msg.id,
+            companyId,
+            mimeType: files[i].mimetype,
+            originalFilename: files[i].originalname,
+            originalSizeBytes: origSize,
+            compressedSizeBytes: files[i].size,
+            storageUrl: storedPaths[i],
+          });
+        } catch (attachErr) {
+          console.error(`[MMS] Failed to create attachment record ${i}:`, attachErr);
+        }
       }
 
-      const result = await sendSmsForCompany({ to, body: messageBody, companyId, contactId: contactId || undefined, mediaUrl: publicMediaUrl });
+      const result = await sendSmsForCompany({ to, body: messageBody, companyId, contactId: contactId || undefined, mediaUrls: publicUrls });
 
       if (result.success) {
         const updated = await storage.updateMessageStatus(msg.id, "sent");
@@ -7777,16 +7799,44 @@ Return ONLY valid JSON, no markdown.`,
         const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
         const ingestStorage = new ObjectStorageService();
         const storedPaths: string[] = [];
+        const INBOUND_ALLOWED_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+        const INBOUND_MAX_BYTES = parseInt(process.env.MMS_INBOUND_MAX_FILE_BYTES || String(10 * 1024 * 1024), 10);
 
         for (const media of inboundMedia) {
           try {
+            if (media.size && media.size > INBOUND_MAX_BYTES) {
+              console.warn(`[Telnyx MMS] Skipping oversized media (${media.size} bytes > ${INBOUND_MAX_BYTES}): ${media.url}`);
+              continue;
+            }
+
+            if (media.content_type && !INBOUND_ALLOWED_MIME.includes(media.content_type)) {
+              console.warn(`[Telnyx MMS] Skipping disallowed MIME type ${media.content_type}: ${media.url}`);
+              continue;
+            }
+
             const mediaResp = await fetch(media.url);
             if (!mediaResp.ok) {
               console.warn(`[Telnyx MMS] Failed to download media from ${media.url}: ${mediaResp.status}`);
               continue;
             }
+
+            const contentLength = parseInt(mediaResp.headers.get("content-length") || "0", 10);
+            if (contentLength > INBOUND_MAX_BYTES) {
+              console.warn(`[Telnyx MMS] Skipping oversized media (content-length ${contentLength} > ${INBOUND_MAX_BYTES}): ${media.url}`);
+              continue;
+            }
+
             const mediaBuffer = Buffer.from(await mediaResp.arrayBuffer());
+            if (mediaBuffer.length > INBOUND_MAX_BYTES) {
+              console.warn(`[Telnyx MMS] Skipping oversized downloaded media (${mediaBuffer.length} bytes): ${media.url}`);
+              continue;
+            }
+
             const detectedMime = media.content_type || mediaResp.headers.get("content-type") || "application/octet-stream";
+            if (!INBOUND_ALLOWED_MIME.includes(detectedMime)) {
+              console.warn(`[Telnyx MMS] Skipping disallowed detected MIME ${detectedMime}: ${media.url}`);
+              continue;
+            }
             const mediaSize = mediaBuffer.length;
 
             const uploadURL = await ingestStorage.getObjectEntityUploadURL();

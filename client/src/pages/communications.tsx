@@ -106,9 +106,9 @@ function ConversationThread({
 }) {
   const { toast } = useToast();
   const [replyText, setReplyText] = useState("");
-  const [attachedFile, setAttachedFile] = useState<File | null>(null);
-  const [attachedPreview, setAttachedPreview] = useState<string | null>(null);
-  const [originalFileSize, setOriginalFileSize] = useState<number | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [attachedPreviews, setAttachedPreviews] = useState<string[]>([]);
+  const [originalFileSizes, setOriginalFileSizes] = useState<number[]>([]);
   const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -159,59 +159,81 @@ function ConversationThread({
 
   useEffect(() => {
     return () => {
-      if (attachedPreview) URL.revokeObjectURL(attachedPreview);
+      attachedPreviews.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const selectedFiles = e.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
     if (e.target) e.target.value = "";
 
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-      toast({ title: "Unsupported file type", description: "Only JPG, PNG, and WebP images are allowed.", variant: "destructive" });
-      return;
-    }
-    if (file.size > MAX_ATTACHMENT_SIZE) {
-      toast({ title: "File too large", description: `Maximum size is ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
+    const maxAttach = 5;
+    if (attachedFiles.length >= maxAttach) {
+      toast({ title: "Limit reached", description: `Maximum ${maxAttach} images per message.`, variant: "destructive" });
       return;
     }
 
     setIsCompressing(true);
     try {
-      const preCompressSize = file.size;
-      const compressed = await compressImage(file);
-      setOriginalFileSize(preCompressSize);
-      setAttachedPreview((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(compressed);
-      });
-      setAttachedFile(compressed);
+      const newFiles: File[] = [];
+      const newPreviews: string[] = [];
+      const newOrigSizes: number[] = [];
+
+      for (let i = 0; i < selectedFiles.length && (attachedFiles.length + newFiles.length) < maxAttach; i++) {
+        const file = selectedFiles[i];
+        if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+          toast({ title: "Unsupported file type", description: `${file.name}: Only JPG, PNG, and WebP images are allowed.`, variant: "destructive" });
+          continue;
+        }
+        if (file.size > MAX_ATTACHMENT_SIZE) {
+          toast({ title: "File too large", description: `${file.name}: Maximum size is ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
+          continue;
+        }
+        const preCompressSize = file.size;
+        const compressed = await compressImage(file);
+        newFiles.push(compressed);
+        newPreviews.push(URL.createObjectURL(compressed));
+        newOrigSizes.push(preCompressSize);
+      }
+
+      if (newFiles.length > 0) {
+        setAttachedFiles((prev) => [...prev, ...newFiles]);
+        setAttachedPreviews((prev) => [...prev, ...newPreviews]);
+        setOriginalFileSizes((prev) => [...prev, ...newOrigSizes]);
+      }
     } catch {
       toast({ title: "Compression failed", description: "Could not process the image.", variant: "destructive" });
     } finally {
       setIsCompressing(false);
     }
-  }, [toast]);
+  }, [toast, attachedFiles.length]);
 
-  const clearAttachment = useCallback(() => {
-    setAttachedPreview((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
+  const removeAttachment = useCallback((index: number) => {
+    setAttachedPreviews((prev) => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
     });
-    setAttachedFile(null);
-    setOriginalFileSize(null);
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+    setOriginalFileSizes((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  const clearAllAttachments = useCallback(() => {
+    attachedPreviews.forEach((url) => URL.revokeObjectURL(url));
+    setAttachedFiles([]);
+    setAttachedPreviews([]);
+    setOriginalFileSizes([]);
+  }, [attachedPreviews]);
+
   const sendReplyMutation = useMutation({
-    mutationFn: async ({ body, file }: { body: string; file: File | null }) => {
-      if (file) {
+    mutationFn: async ({ body, files, origSizes }: { body: string; files: File[]; origSizes: number[] }) => {
+      if (files.length > 0) {
         const formData = new FormData();
-        formData.append("media", file);
+        files.forEach((f) => formData.append("media", f));
         formData.append("to", phone);
         formData.append("body", body);
         if (contactId) formData.append("contactId", contactId);
-        if (originalFileSize) formData.append("originalSize", String(originalFileSize));
+        if (origSizes.length > 0) formData.append("originalSizes", JSON.stringify(origSizes));
         const res = await fetch("/api/messages/mms", {
           method: "POST",
           body: formData,
@@ -268,7 +290,7 @@ function ConversationThread({
     },
     onSuccess: () => {
       setReplyText("");
-      clearAttachment();
+      clearAllAttachments();
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
@@ -278,10 +300,10 @@ function ConversationThread({
 
   const handleSendReply = useCallback(() => {
     const trimmed = replyText.trim();
-    if (!trimmed && !attachedFile) return;
+    if (!trimmed && attachedFiles.length === 0) return;
     setReplyText("");
-    sendReplyMutation.mutate({ body: trimmed, file: attachedFile });
-  }, [replyText, attachedFile, sendReplyMutation]);
+    sendReplyMutation.mutate({ body: trimmed, files: attachedFiles, origSizes: originalFileSizes });
+  }, [replyText, attachedFiles, originalFileSizes, sendReplyMutation]);
 
   const sortedMessages = threadMessages
     ? [...threadMessages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
@@ -358,16 +380,20 @@ function ConversationThread({
       </div>
 
       <div className="p-3 border-t shrink-0 space-y-2">
-        {attachedPreview && (
-          <div className="relative inline-block" data-testid="mms-preview-container">
-            <img src={attachedPreview} alt="Attached" className="h-16 w-16 object-cover rounded border" data-testid="mms-preview-img" />
-            <button
-              onClick={clearAttachment}
-              className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
-              data-testid="button-remove-attachment"
-            >
-              <X className="h-3 w-3" />
-            </button>
+        {attachedPreviews.length > 0 && (
+          <div className="flex gap-2 flex-wrap" data-testid="mms-preview-container">
+            {attachedPreviews.map((preview, idx) => (
+              <div key={idx} className="relative inline-block">
+                <img src={preview} alt={`Attached ${idx + 1}`} className="h-16 w-16 object-cover rounded border" data-testid={`mms-preview-img-${idx}`} />
+                <button
+                  onClick={() => removeAttachment(idx)}
+                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
+                  data-testid={`button-remove-attachment-${idx}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
         {isCompressing && (
@@ -380,6 +406,7 @@ function ConversationThread({
           ref={fileInputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"
+          multiple
           className="hidden"
           onChange={handleFileSelect}
           data-testid="input-mms-file"
@@ -410,7 +437,7 @@ function ConversationThread({
           />
           <Button
             onClick={handleSendReply}
-            disabled={(!replyText.trim() && !attachedFile) || sendReplyMutation.isPending}
+            disabled={(!replyText.trim() && attachedFiles.length === 0) || sendReplyMutation.isPending}
             size="icon"
             data-testid="button-send-reply"
           >
