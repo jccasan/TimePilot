@@ -11553,6 +11553,20 @@ Return ONLY valid JSON, no markdown.`,
             body: exception.body,
             externalId: exception.providerMessageId || undefined,
           });
+
+          if (matchedContact) {
+            const { isSharedNumber } = await import("./services/sms");
+            if (isSharedNumber(exception.toAddress)) {
+              await storage.upsertMessageRouting({
+                sharedNumber: exception.toAddress,
+                customerPhone: exception.fromAddress,
+                companyId,
+                contactId: matchedContact.id,
+                channel: "sms",
+                lastUsedAt: new Date(),
+              });
+            }
+          }
         } catch (msgErr) {
           console.error(`[Admin MessageException] Resolved exception ${req.params.id} but message delivery failed:`, msgErr);
         }
