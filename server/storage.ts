@@ -12,6 +12,7 @@ import {
   notifications, timeEntries, activityLog, auditTrail,
   importRuns, invoicePayments,
   estimates, serviceChangeRequests,
+  DEFAULT_PRICING_RULES,
   type Company, type InsertCompany,
   type CompanyUser, type InsertCompanyUser,
   type Contact, type InsertContact,
@@ -1402,6 +1403,14 @@ export class DatabaseStorage implements IStorage {
     if (existingPricing.length === 0) {
       for (const item of defaultPricing) {
         await this.createServicePricingItem({ ...item, companyId });
+      }
+
+      const company = await this.getCompany(companyId);
+      if (company) {
+        const existingConfig = (company.pricingConfig || {}) as Record<string, any>;
+        await this.updateCompany(companyId, {
+          pricingConfig: { ...existingConfig, pricingRules: DEFAULT_PRICING_RULES },
+        } as any);
       }
     }
 

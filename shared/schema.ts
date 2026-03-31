@@ -27,7 +27,44 @@ export const automationTriggerEnum = pgEnum("automation_trigger", ["lead_created
 export const yardDifficultyEnum = pgEnum("yard_difficulty", ["flat", "moderate", "difficult"]);
 export const priceRecommendationSourceEnum = pgEnum("price_recommendation_source", ["manual", "auto", "ai_optimizer"]);
 
+export interface PricingRulesConfig {
+  basePrices: {
+    weekly: number;
+    biWeekly: number;
+    twiceWeekly: number;
+  };
+  perDogRule: {
+    incrementDogs: number;
+    surchargeAmount: number;
+    maxDogs: number;
+  };
+  yardSizeTiers: Array<{
+    upToAcres: number;
+    surcharge: number;
+  }>;
+}
+
+export const DEFAULT_PRICING_RULES: PricingRulesConfig = {
+  basePrices: {
+    weekly: 19.99,
+    biWeekly: 26.99,
+    twiceWeekly: 17.99,
+  },
+  perDogRule: {
+    incrementDogs: 1,
+    surchargeAmount: 5.00,
+    maxDogs: 6,
+  },
+  yardSizeTiers: [
+    { upToAcres: 0.25, surcharge: 0 },
+    { upToAcres: 0.5, surcharge: 7.00 },
+    { upToAcres: 0.75, surcharge: 14.00 },
+    { upToAcres: 1.0, surcharge: 21.00 },
+  ],
+};
+
 export interface PricingConfig {
+  pricingRules?: PricingRulesConfig;
   techHourlyWageCents: number;
   burdenMultiplier: number;
   averageGasPriceCentsPerGallon: number;

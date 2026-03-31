@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { ServicePricingItem, ServicePackage } from "@shared/schema";
+import type { ServicePricingItem, ServicePackage, PricingRulesConfig } from "@shared/schema";
+import { DEFAULT_PRICING_RULES } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, DollarSign, Package, Sparkles, RefreshCw, CheckCircle2, Phone } from "lucide-react";
+import { Plus, Trash2, DollarSign, Package, Sparkles, RefreshCw, CheckCircle2, Phone, Settings2, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -107,7 +108,7 @@ function EditablePriceCell({
           autoFocus
           onKeyDown={(e) => {
             if (e.key === "Enter") {
-              onSave(item.id, { basePrice: price });
+              onSave(item.id, { basePrice: price, metadata: { ...(item.metadata as any || {}), manualOverride: true } } as any);
               setEditing(false);
             }
             if (e.key === "Escape") {
@@ -116,7 +117,7 @@ function EditablePriceCell({
             }
           }}
           onBlur={() => {
-            onSave(item.id, { basePrice: price });
+            onSave(item.id, { basePrice: price, metadata: { ...(item.metadata as any || {}), manualOverride: true } } as any);
             setEditing(false);
           }}
         />
@@ -140,6 +141,253 @@ function getDogCount(name: string): number | null {
   return match ? parseInt(match[1]) : null;
 }
 
+function PricingRulesPanel({
+  rules,
+  onGenerate,
+  isGenerating,
+}: {
+  rules: PricingRulesConfig;
+  onGenerate: (rules: PricingRulesConfig) => void;
+  isGenerating: boolean;
+}) {
+  const [localRules, setLocalRules] = useState<PricingRulesConfig>(rules);
+
+  useEffect(() => {
+    setLocalRules(rules);
+  }, [rules]);
+
+  const updateBasePrice = (key: keyof PricingRulesConfig["basePrices"], value: string) => {
+    const num = parseFloat(value);
+    if (!isNaN(num)) {
+      setLocalRules((prev) => ({
+        ...prev,
+        basePrices: { ...prev.basePrices, [key]: num },
+      }));
+    }
+  };
+
+  const updatePerDogRule = (key: keyof PricingRulesConfig["perDogRule"], value: string) => {
+    const num = key === "surchargeAmount" ? parseFloat(value) : parseInt(value);
+    if (!isNaN(num)) {
+      setLocalRules((prev) => ({
+        ...prev,
+        perDogRule: { ...prev.perDogRule, [key]: num },
+      }));
+    }
+  };
+
+  const updateYardTier = (index: number, key: "upToAcres" | "surcharge", value: string) => {
+    const num = parseFloat(value);
+    if (!isNaN(num)) {
+      setLocalRules((prev) => {
+        const tiers = [...prev.yardSizeTiers];
+        tiers[index] = { ...tiers[index], [key]: num };
+        return { ...prev, yardSizeTiers: tiers };
+      });
+    }
+  };
+
+  const addYardTier = () => {
+    setLocalRules((prev) => {
+      const lastTier = prev.yardSizeTiers[prev.yardSizeTiers.length - 1];
+      return {
+        ...prev,
+        yardSizeTiers: [
+          ...prev.yardSizeTiers,
+          { upToAcres: (lastTier?.upToAcres || 0) + 0.25, surcharge: (lastTier?.surcharge || 0) + 7 },
+        ],
+      };
+    });
+  };
+
+  const removeYardTier = (index: number) => {
+    setLocalRules((prev) => ({
+      ...prev,
+      yardSizeTiers: prev.yardSizeTiers.filter((_, i) => i !== index),
+    }));
+  };
+
+  return (
+    <div className="space-y-4" data-testid="pricing-rules-panel">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            Base Prices (1 Dog)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Weekly</label>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={localRules.basePrices.weekly}
+                  onChange={(e) => updateBasePrice("weekly", e.target.value)}
+                  data-testid="input-base-weekly"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Bi-Weekly</label>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={localRules.basePrices.biWeekly}
+                  onChange={(e) => updateBasePrice("biWeekly", e.target.value)}
+                  data-testid="input-base-biweekly"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Twice Weekly</label>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={localRules.basePrices.twiceWeekly}
+                  onChange={(e) => updateBasePrice("twiceWeekly", e.target.value)}
+                  data-testid="input-base-twiceweekly"
+                />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
+            Per-Dog Pricing Rule
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">For every</label>
+              <Input
+                type="number"
+                min={1}
+                value={localRules.perDogRule.incrementDogs}
+                onChange={(e) => updatePerDogRule("incrementDogs", e.target.value)}
+                className="w-20"
+                data-testid="input-increment-dogs"
+              />
+            </div>
+            <span className="text-sm text-muted-foreground pb-2">dog(s), add</span>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Surcharge</label>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={localRules.perDogRule.surchargeAmount}
+                  onChange={(e) => updatePerDogRule("surchargeAmount", e.target.value)}
+                  className="w-24"
+                  data-testid="input-surcharge-amount"
+                />
+              </div>
+            </div>
+            <span className="text-sm text-muted-foreground pb-2">up to</span>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Max Dogs</label>
+              <Input
+                type="number"
+                min={1}
+                max={20}
+                value={localRules.perDogRule.maxDogs}
+                onChange={(e) => updatePerDogRule("maxDogs", e.target.value)}
+                className="w-20"
+                data-testid="input-max-dogs"
+              />
+            </div>
+            <span className="text-sm text-muted-foreground pb-2">dogs</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Dogs beyond the max will be marked "Call for Quote"
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
+            Yard Size Adjustments
+          </CardTitle>
+          <Button variant="outline" size="sm" onClick={addYardTier} data-testid="button-add-yard-tier">
+            <Plus className="h-3 w-3 mr-1" /> Add Tier
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {localRules.yardSizeTiers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-2">No yard size tiers defined.</p>
+          ) : (
+            <div className="space-y-2">
+              {localRules.yardSizeTiers.map((tier, index) => (
+                <div key={index} className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">Up to</span>
+                  <Input
+                    type="number"
+                    step="0.05"
+                    min={0}
+                    value={tier.upToAcres}
+                    onChange={(e) => updateYardTier(index, "upToAcres", e.target.value)}
+                    className="w-24"
+                    data-testid={`input-yard-acres-${index}`}
+                  />
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">acre =</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">$</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={tier.surcharge}
+                      onChange={(e) => updateYardTier(index, "surcharge", e.target.value)}
+                      className="w-24"
+                      data-testid={`input-yard-surcharge-${index}`}
+                    />
+                  </div>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">surcharge</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => removeYardTier(index)}
+                    data-testid={`button-remove-yard-tier-${index}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Button
+        onClick={() => onGenerate(localRules)}
+        disabled={isGenerating}
+        className="w-full"
+        data-testid="button-generate-prices"
+      >
+        <RefreshCw className={`mr-2 h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
+        {isGenerating ? "Generating..." : "Generate Prices from Rules"}
+      </Button>
+    </div>
+  );
+}
+
 export default function Pricing() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("recurring_service");
@@ -153,6 +401,12 @@ export default function Pricing() {
   const { data: packages, isLoading: packagesLoading } = useQuery<ServicePackage[]>({
     queryKey: ["/api/packages"],
   });
+
+  const { data: pricingConfig } = useQuery<Record<string, any>>({
+    queryKey: ["/api/pricing-config"],
+  });
+
+  const pricingRules: PricingRulesConfig = pricingConfig?.pricingRules || DEFAULT_PRICING_RULES;
 
   const pricingForm = useForm<PricingFormValues>({
     resolver: zodResolver(pricingFormSchema),
@@ -183,7 +437,26 @@ export default function Pricing() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
       queryClient.invalidateQueries({ queryKey: ["/api/packages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
       toast({ title: "Pricing loaded", description: "Default pricing has been set up. Review and confirm your pricing." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const generateFromRulesMutation = useMutation({
+    mutationFn: async (rules: PricingRulesConfig) => {
+      const res = await apiRequest("POST", "/api/pricing/generate-from-rules", rules);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
+      toast({
+        title: "Prices generated",
+        description: `${data.itemsGenerated} pricing items generated from your rules.`,
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -422,6 +695,14 @@ export default function Pricing() {
             </TabsList>
           </Tabs>
 
+          {activeTab === "recurring_service" && (
+            <PricingRulesPanel
+              rules={pricingRules}
+              onGenerate={(rules) => generateFromRulesMutation.mutate(rules)}
+              isGenerating={generateFromRulesMutation.isPending}
+            />
+          )}
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-lg">{CATEGORY_LABELS[activeTab]}</CardTitle>
@@ -439,6 +720,7 @@ export default function Pricing() {
                       const isCallForQuote = (item.metadata as any)?.callForQuote === true;
                       const is7Plus = item.name.includes("7+");
                       const canToggleQuote = dogCount !== null && dogCount >= 4;
+                      const isManualOverride = (item.metadata as any)?.manualOverride === true;
 
                       return (
                         <div
@@ -455,6 +737,11 @@ export default function Pricing() {
                               {is7Plus && (
                                 <Badge variant="outline" className="no-default-active-elevate text-muted-foreground">
                                   <Phone className="h-3 w-3 mr-1" /> Custom Quote
+                                </Badge>
+                              )}
+                              {isManualOverride && activeTab === "recurring_service" && (
+                                <Badge variant="outline" className="no-default-active-elevate text-xs">
+                                  Override
                                 </Badge>
                               )}
                               {!item.isActive && (

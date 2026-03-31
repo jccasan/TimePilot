@@ -6,7 +6,7 @@ import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, gte, isNotNull, like, or, inArray, desc } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -6194,6 +6194,172 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/pricing/generate-from-rules", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+
+      const rulesSchema = z.object({
+        basePrices: z.object({
+          weekly: z.number().min(0),
+          biWeekly: z.number().min(0),
+          twiceWeekly: z.number().min(0),
+        }),
+        perDogRule: z.object({
+          incrementDogs: z.number().int().min(1),
+          surchargeAmount: z.number().min(0),
+          maxDogs: z.number().int().min(1).max(20),
+        }),
+        yardSizeTiers: z.array(z.object({
+          upToAcres: z.number().min(0),
+          surcharge: z.number().min(0),
+        })),
+      });
+
+      const rules: PricingRulesConfig = rulesSchema.parse(req.body);
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const existingConfig = (company.pricingConfig || {}) as PricingConfig;
+      await storage.updateCompany(companyId, {
+        pricingConfig: { ...existingConfig, pricingRules: rules },
+      } as any);
+
+      const existingPricing = await storage.getServicePricing(companyId, "recurring_service");
+      const existingByName = new Map<string, typeof existingPricing[0]>();
+      for (const item of existingPricing) {
+        existingByName.set(item.name, item);
+      }
+
+      const frequencies = [
+        { key: "weekly", label: "Weekly Scooping", base: rules.basePrices.weekly, unit: "per_week" },
+        { key: "twiceWeekly", label: "Twice Weekly Scooping", base: rules.basePrices.twiceWeekly, unit: "per_visit" },
+        { key: "biWeekly", label: "Bi-Weekly Scooping", base: rules.basePrices.biWeekly, unit: "per_visit" },
+      ];
+
+      let sortOrder = 1;
+      const generatedNames = new Set<string>();
+      const inc = rules.perDogRule.incrementDogs;
+
+      for (const freq of frequencies) {
+        for (let dogs = 1; dogs <= rules.perDogRule.maxDogs; dogs++) {
+          const surchargeSteps = Math.floor((dogs - 1) / inc);
+          const price = freq.base + surchargeSteps * rules.perDogRule.surchargeAmount;
+          const name = `${freq.label} ${dogs} ${dogs === 1 ? "Dog" : "Dogs"}`;
+          generatedNames.add(name);
+
+          const existing = existingByName.get(name);
+          if (existing) {
+            const isOverridden = (existing.metadata as any)?.manualOverride === true;
+            if (!isOverridden) {
+              await storage.updateServicePricingItem(existing.id, companyId, {
+                basePrice: price.toFixed(2),
+                sortOrder,
+                unit: freq.unit,
+                metadata: { ...(existing.metadata as any || {}), callForQuote: false, ruleGenerated: true },
+              } as any);
+            } else {
+              await storage.updateServicePricingItem(existing.id, companyId, {
+                sortOrder,
+              } as any);
+            }
+          } else {
+            await storage.createServicePricingItem({
+              companyId,
+              category: "recurring_service",
+              name,
+              description: `${freq.label.replace("Scooping", "").trim()} service for ${dogs} ${dogs === 1 ? "dog" : "dogs"}`,
+              basePrice: price.toFixed(2),
+              unit: freq.unit,
+              sortOrder,
+              metadata: { ruleGenerated: true },
+            });
+          }
+          sortOrder++;
+        }
+
+        const callName = `${freq.label} ${rules.perDogRule.maxDogs + 1}+ Dogs`;
+        generatedNames.add(callName);
+        const existingCall = existingByName.get(callName);
+        if (existingCall) {
+          await storage.updateServicePricingItem(existingCall.id, companyId, {
+            sortOrder,
+            metadata: { ...(existingCall.metadata as any || {}), callForQuote: true, ruleGenerated: true },
+          } as any);
+        } else {
+          await storage.createServicePricingItem({
+            companyId,
+            category: "recurring_service",
+            name: callName,
+            description: `${freq.label.replace("Scooping", "").trim()} service for ${rules.perDogRule.maxDogs + 1}+ dogs - call for quote`,
+            basePrice: "0.00",
+            unit: freq.unit,
+            sortOrder,
+            metadata: { callForQuote: true, ruleGenerated: true },
+          });
+        }
+        sortOrder++;
+      }
+
+      for (const item of existingPricing) {
+        if (!generatedNames.has(item.name) && (item.metadata as any)?.ruleGenerated && !(item.metadata as any)?.manualOverride) {
+          await storage.deleteServicePricingItem(item.id, companyId);
+        }
+      }
+
+      const allAddOns = await storage.getServicePricing(companyId, "add_on");
+      const existingAddOnsByName = new Map<string, typeof allAddOns[0]>();
+      for (const a of allAddOns) {
+        existingAddOnsByName.set(a.name, a);
+      }
+      const generatedYardNames = new Set<string>();
+      let yardSort = 100;
+      for (const tier of rules.yardSizeTiers) {
+        const tierName = `Lot Size up to ${tier.upToAcres} Acre`;
+        generatedYardNames.add(tierName);
+        const existingAddon = existingAddOnsByName.get(tierName);
+        if (existingAddon) {
+          const isOverridden = (existingAddon.metadata as any)?.manualOverride === true;
+          if (!isOverridden) {
+            await storage.updateServicePricingItem(existingAddon.id, companyId, {
+              basePrice: tier.surcharge.toFixed(2),
+              sortOrder: yardSort,
+              metadata: { ...(existingAddon.metadata as any || {}), ruleGenerated: true },
+            } as any);
+          }
+        } else {
+          await storage.createServicePricingItem({
+            companyId,
+            category: "add_on",
+            name: tierName,
+            description: tier.surcharge === 0
+              ? `No additional charge for lots up to ${tier.upToAcres} acre`
+              : `Additional charge for lots up to ${tier.upToAcres} acre`,
+            basePrice: tier.surcharge.toFixed(2),
+            unit: "per_visit",
+            sortOrder: yardSort,
+            metadata: { ruleGenerated: true },
+          });
+        }
+        yardSort++;
+      }
+
+      for (const addon of allAddOns) {
+        if (
+          addon.name.startsWith("Lot Size up to") &&
+          !generatedYardNames.has(addon.name) &&
+          (addon.metadata as any)?.ruleGenerated &&
+          !(addon.metadata as any)?.manualOverride
+        ) {
+          await storage.deleteServicePricingItem(addon.id, companyId);
+        }
+      }
+
+      const updatedPricing = await storage.getServicePricing(companyId, "recurring_service");
+      res.json({ success: true, itemsGenerated: generatedNames.size, items: updatedPricing });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Service Packages ================
   app.get("/api/packages", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -6309,12 +6475,33 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId } = await getCompanyContext(req);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
-      const config = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
-      res.json(config);
+      const raw = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
+      if (!raw.pricingRules) {
+        raw.pricingRules = DEFAULT_PRICING_RULES;
+      }
+      res.json(raw);
     } catch (err) { handleError(res, err); }
   });
 
+  const pricingRulesSchema = z.object({
+    basePrices: z.object({
+      weekly: z.number().min(0),
+      biWeekly: z.number().min(0),
+      twiceWeekly: z.number().min(0),
+    }),
+    perDogRule: z.object({
+      incrementDogs: z.number().int().min(1),
+      surchargeAmount: z.number().min(0),
+      maxDogs: z.number().int().min(1).max(20),
+    }),
+    yardSizeTiers: z.array(z.object({
+      upToAcres: z.number().min(0),
+      surcharge: z.number().min(0),
+    })),
+  }).optional();
+
   const pricingConfigSchema = z.object({
+    pricingRules: pricingRulesSchema,
     techHourlyWageCents: z.number().min(0).optional(),
     burdenMultiplier: z.number().min(1).max(5).optional(),
     averageGasPriceCentsPerGallon: z.number().min(0).optional(),
