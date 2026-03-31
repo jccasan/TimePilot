@@ -8019,7 +8019,28 @@ Return ONLY valid JSON, no markdown.`,
     limits: { fileSize: MMS_MAX_PER_FILE, files: MMS_MAX_ATTACHMENTS },
   });
 
-  app.post("/api/webhooks/sendgrid/inbound", inboundEmailUpload.any(), async (req: Request, res: Response) => {
+  app.post("/api/webhooks/sendgrid/inbound", (req: Request, res: Response, next: Function) => {
+    inboundEmailUpload.any()(req, res, (err: any) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          console.warn(`[Inbound Email] Attachment too large, processing body without attachments`);
+          req.files = [];
+          return next();
+        }
+        if (err.code === "LIMIT_FILE_COUNT") {
+          console.warn(`[Inbound Email] Too many attachments, processing with already parsed files`);
+          return next();
+        }
+        console.warn(`[Inbound Email] Multer error: ${err.code}`);
+        return res.status(400).json({ error: `Upload error: ${err.message}` });
+      }
+      if (err) {
+        console.error(`[Inbound Email] Upload error:`, err);
+        return res.status(400).json({ error: "Failed to parse inbound email" });
+      }
+      next();
+    });
+  }, async (req: Request, res: Response) => {
     try {
       const webhookToken = process.env.SENDGRID_INBOUND_WEBHOOK_TOKEN;
       if (webhookToken) {
