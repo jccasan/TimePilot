@@ -83,7 +83,8 @@ function EditablePriceCell({
 }) {
   const [editing, setEditing] = useState(false);
   const [price, setPrice] = useState(item.basePrice);
-  const isCallForQuote = (item.metadata as any)?.callForQuote === true;
+  const meta = (item.metadata as Record<string, unknown>) || {};
+  const isCallForQuote = meta.callForQuote === true;
 
   if (isCallForQuote || disabled) {
     return (
@@ -108,7 +109,7 @@ function EditablePriceCell({
           autoFocus
           onKeyDown={(e) => {
             if (e.key === "Enter") {
-              onSave(item.id, { basePrice: price, metadata: { ...(item.metadata as any || {}), manualOverride: true } } as any);
+              onSave(item.id, { basePrice: price, metadata: { ...meta, manualOverride: true } } as Partial<ServicePricingItem>);
               setEditing(false);
             }
             if (e.key === "Escape") {
@@ -117,7 +118,7 @@ function EditablePriceCell({
             }
           }}
           onBlur={() => {
-            onSave(item.id, { basePrice: price, metadata: { ...(item.metadata as any || {}), manualOverride: true } } as any);
+            onSave(item.id, { basePrice: price, metadata: { ...meta, manualOverride: true } } as Partial<ServicePricingItem>);
             setEditing(false);
           }}
         />
@@ -145,10 +146,14 @@ function PricingRulesPanel({
   rules,
   onGenerate,
   isGenerating,
+  onSave,
+  isSaving,
 }: {
   rules: PricingRulesConfig;
   onGenerate: (rules: PricingRulesConfig) => void;
   isGenerating: boolean;
+  onSave: (rules: PricingRulesConfig) => void;
+  isSaving: boolean;
 }) {
   const [localRules, setLocalRules] = useState<PricingRulesConfig>(rules);
 
@@ -375,15 +380,27 @@ function PricingRulesPanel({
         </CardContent>
       </Card>
 
-      <Button
-        onClick={() => onGenerate(localRules)}
-        disabled={isGenerating}
-        className="w-full"
-        data-testid="button-generate-prices"
-      >
-        <RefreshCw className={`mr-2 h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
-        {isGenerating ? "Generating..." : "Generate Prices from Rules"}
-      </Button>
+      <div className="flex gap-3">
+        <Button
+          variant="outline"
+          onClick={() => onSave(localRules)}
+          disabled={isSaving}
+          className="flex-1"
+          data-testid="button-save-rules"
+        >
+          <CheckCircle2 className="mr-2 h-4 w-4" />
+          {isSaving ? "Saving..." : "Save Rules"}
+        </Button>
+        <Button
+          onClick={() => onGenerate(localRules)}
+          disabled={isGenerating}
+          className="flex-1"
+          data-testid="button-generate-prices"
+        >
+          <RefreshCw className={`mr-2 h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
+          {isGenerating ? "Generating..." : "Generate Prices from Rules"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -445,12 +462,26 @@ export default function Pricing() {
     },
   });
 
+  const saveRulesMutation = useMutation({
+    mutationFn: async (rules: PricingRulesConfig) => {
+      const res = await apiRequest("PATCH", "/api/pricing-config", { pricingRules: rules });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
+      toast({ title: "Rules saved" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error saving rules", description: error.message, variant: "destructive" });
+    },
+  });
+
   const generateFromRulesMutation = useMutation({
     mutationFn: async (rules: PricingRulesConfig) => {
       const res = await apiRequest("POST", "/api/pricing/generate-from-rules", rules);
       return res.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { itemsGenerated: number }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
       queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
       toast({
@@ -556,19 +587,19 @@ export default function Pricing() {
   };
 
   const handleToggleActive = (id: string, isActive: boolean) => {
-    updatePricingMutation.mutate({ id, data: { isActive } as any });
+    updatePricingMutation.mutate({ id, data: { isActive } as Partial<ServicePricingItem> });
   };
 
   const handleToggleCallForQuote = (item: ServicePricingItem, checked: boolean) => {
-    const currentMeta = (item.metadata as Record<string, any>) || {};
+    const currentMeta = (item.metadata as Record<string, unknown>) || {};
     updatePricingMutation.mutate({
       id: item.id,
-      data: { metadata: { ...currentMeta, callForQuote: checked } } as any,
+      data: { metadata: { ...currentMeta, callForQuote: checked } } as Partial<ServicePricingItem>,
     });
   };
 
   const handlePackageToggleActive = (id: string, isActive: boolean) => {
-    updatePackageMutation.mutate({ id, data: { isActive } as any });
+    updatePackageMutation.mutate({ id, data: { isActive } as Partial<ServicePackage> });
   };
 
   const filteredItems = pricingItems?.filter((item) => item.category === activeTab) || [];
@@ -700,6 +731,8 @@ export default function Pricing() {
               rules={pricingRules}
               onGenerate={(rules) => generateFromRulesMutation.mutate(rules)}
               isGenerating={generateFromRulesMutation.isPending}
+              onSave={(rules) => saveRulesMutation.mutate(rules)}
+              isSaving={saveRulesMutation.isPending}
             />
           )}
 
@@ -717,10 +750,11 @@ export default function Pricing() {
                     .sort((a, b) => a.sortOrder - b.sortOrder)
                     .map((item) => {
                       const dogCount = getDogCount(item.name);
-                      const isCallForQuote = (item.metadata as any)?.callForQuote === true;
+                      const itemMeta = (item.metadata as Record<string, unknown>) || {};
+                      const isCallForQuote = itemMeta.callForQuote === true;
                       const is7Plus = item.name.includes("7+");
                       const canToggleQuote = dogCount !== null && dogCount >= 4;
-                      const isManualOverride = (item.metadata as any)?.manualOverride === true;
+                      const isManualOverride = itemMeta.manualOverride === true;
 
                       return (
                         <div

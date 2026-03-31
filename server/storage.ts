@@ -1366,51 +1366,79 @@ export class DatabaseStorage implements IStorage {
     const existingPricing = await this.getServicePricing(companyId);
     const existingPackages = await this.getServicePackages(companyId);
 
-    const defaultPricing: Omit<InsertServicePricing, "companyId">[] = [
-      { category: "recurring_service", name: "Weekly Scooping 1 Dog", description: "Once per week yard cleanup for 1 dog", basePrice: "19.99", unit: "per_week", sortOrder: 1 },
-      { category: "recurring_service", name: "Weekly Scooping 2 Dogs", description: "Once per week yard cleanup for 2 dogs", basePrice: "24.99", unit: "per_week", sortOrder: 2 },
-      { category: "recurring_service", name: "Weekly Scooping 3 Dogs", description: "Once per week yard cleanup for 3 dogs", basePrice: "29.99", unit: "per_week", sortOrder: 3 },
-      { category: "recurring_service", name: "Weekly Scooping 4 Dogs", description: "Once per week yard cleanup for 4 dogs", basePrice: "34.99", unit: "per_week", sortOrder: 4 },
-      { category: "recurring_service", name: "Weekly Scooping 5 Dogs", description: "Once per week yard cleanup for 5 dogs", basePrice: "39.99", unit: "per_week", sortOrder: 5 },
-      { category: "recurring_service", name: "Weekly Scooping 6 Dogs", description: "Once per week yard cleanup for 6 dogs", basePrice: "44.99", unit: "per_week", sortOrder: 6 },
-      { category: "recurring_service", name: "Weekly Scooping 7+ Dogs", description: "Once per week yard cleanup for 7 or more dogs", basePrice: "0.00", unit: "per_week", sortOrder: 7, metadata: { callForQuote: true } },
-      { category: "recurring_service", name: "Twice Weekly Scooping 1 Dog", description: "Two visits per week for 1 dog", basePrice: "17.99", unit: "per_visit", sortOrder: 8 },
-      { category: "recurring_service", name: "Twice Weekly Scooping 2 Dogs", description: "Two visits per week for 2 dogs", basePrice: "22.99", unit: "per_visit", sortOrder: 9 },
-      { category: "recurring_service", name: "Twice Weekly Scooping 3 Dogs", description: "Two visits per week for 3 dogs", basePrice: "27.99", unit: "per_visit", sortOrder: 10 },
-      { category: "recurring_service", name: "Twice Weekly Scooping 4 Dogs", description: "Two visits per week for 4 dogs", basePrice: "32.99", unit: "per_visit", sortOrder: 11 },
-      { category: "recurring_service", name: "Twice Weekly Scooping 5 Dogs", description: "Two visits per week for 5 dogs", basePrice: "37.99", unit: "per_visit", sortOrder: 12 },
-      { category: "recurring_service", name: "Twice Weekly Scooping 6 Dogs", description: "Two visits per week for 6 dogs", basePrice: "42.99", unit: "per_visit", sortOrder: 13 },
-      { category: "recurring_service", name: "Twice Weekly Scooping 7+ Dogs", description: "Two visits per week for 7 or more dogs", basePrice: "0.00", unit: "per_visit", sortOrder: 14, metadata: { callForQuote: true } },
-      { category: "recurring_service", name: "Bi-Weekly Scooping 1 Dog", description: "Every other week yard cleanup for 1 dog", basePrice: "26.99", unit: "per_visit", sortOrder: 15 },
-      { category: "recurring_service", name: "Bi-Weekly Scooping 2 Dogs", description: "Every other week yard cleanup for 2 dogs", basePrice: "31.99", unit: "per_visit", sortOrder: 16 },
-      { category: "recurring_service", name: "Bi-Weekly Scooping 3 Dogs", description: "Every other week yard cleanup for 3 dogs", basePrice: "36.99", unit: "per_visit", sortOrder: 17 },
-      { category: "recurring_service", name: "Bi-Weekly Scooping 4 Dogs", description: "Every other week yard cleanup for 4 dogs", basePrice: "41.99", unit: "per_visit", sortOrder: 18 },
-      { category: "recurring_service", name: "Bi-Weekly Scooping 5 Dogs", description: "Every other week yard cleanup for 5 dogs", basePrice: "46.99", unit: "per_visit", sortOrder: 19 },
-      { category: "recurring_service", name: "Bi-Weekly Scooping 6 Dogs", description: "Every other week yard cleanup for 6 dogs", basePrice: "51.99", unit: "per_visit", sortOrder: 20 },
-      { category: "recurring_service", name: "Bi-Weekly Scooping 7+ Dogs", description: "Every other week yard cleanup for 7 or more dogs", basePrice: "0.00", unit: "per_visit", sortOrder: 21, metadata: { callForQuote: true } },
-      { category: "one_time_service", name: "One-Time Cleaning (First 5-Gal Bucket)", description: "Initial one-time cleanup, first 5-gallon bucket", basePrice: "49.99", unit: "flat_rate", sortOrder: 1 },
-      { category: "one_time_service", name: "One-Time Cleaning (Additional 5-Gal Bucket)", description: "Additional 5-gallon bucket for one-time cleanup", basePrice: "24.99", unit: "flat_rate", sortOrder: 2 },
-      { category: "add_on", name: "Front/Side Yard", description: "Additional service for front or side yard areas", basePrice: "7.99", unit: "per_visit", sortOrder: 1 },
-      { category: "add_on", name: "Deck", description: "Deck cleaning and waste removal", basePrice: "5.99", unit: "per_visit", sortOrder: 2 },
-      { category: "add_on", name: "Deodorizing (with Scoop)", description: "Deodorizing treatment included with scooping service", basePrice: "9.99", unit: "per_visit", sortOrder: 3 },
-      { category: "add_on", name: "Waste Take-Away", description: "Removal of collected waste from property", basePrice: "5.99", unit: "per_visit", sortOrder: 4 },
-      { category: "add_on", name: "Lot Size up to .25 Acre", description: "No additional charge for lots up to 0.25 acre", basePrice: "0.00", unit: "per_visit", sortOrder: 5 },
-      { category: "add_on", name: "Lot Size up to .5 Acre", description: "Additional charge for lots up to 0.5 acre", basePrice: "7.00", unit: "per_visit", sortOrder: 6 },
-      { category: "add_on", name: "Lot Size up to .75 Acre", description: "Additional charge for lots up to 0.75 acre", basePrice: "14.00", unit: "per_visit", sortOrder: 7 },
-      { category: "add_on", name: "Lot Size up to 1 Acre", description: "Additional charge for lots up to 1 acre", basePrice: "21.00", unit: "per_visit", sortOrder: 8 },
-    ];
-
     if (existingPricing.length === 0) {
-      for (const item of defaultPricing) {
+      const rules = DEFAULT_PRICING_RULES;
+      const inc = rules.perDogRule.incrementDogs;
+
+      const frequencies = [
+        { label: "Weekly Scooping", base: rules.basePrices.weekly, unit: "per_week", descPrefix: "Once per week yard cleanup" },
+        { label: "Twice Weekly Scooping", base: rules.basePrices.twiceWeekly, unit: "per_visit", descPrefix: "Two visits per week" },
+        { label: "Bi-Weekly Scooping", base: rules.basePrices.biWeekly, unit: "per_visit", descPrefix: "Every other week yard cleanup" },
+      ];
+
+      let sortOrder = 1;
+      for (const freq of frequencies) {
+        for (let dogs = 1; dogs <= rules.perDogRule.maxDogs; dogs++) {
+          const surchargeSteps = Math.floor((dogs - 1) / inc);
+          const price = freq.base + surchargeSteps * rules.perDogRule.surchargeAmount;
+          await this.createServicePricingItem({
+            companyId,
+            category: "recurring_service",
+            name: `${freq.label} ${dogs} ${dogs === 1 ? "Dog" : "Dogs"}`,
+            description: `${freq.descPrefix} for ${dogs} ${dogs === 1 ? "dog" : "dogs"}`,
+            basePrice: price.toFixed(2),
+            unit: freq.unit,
+            sortOrder: sortOrder++,
+            metadata: { ruleGenerated: true },
+          });
+        }
+        await this.createServicePricingItem({
+          companyId,
+          category: "recurring_service",
+          name: `${freq.label} ${rules.perDogRule.maxDogs + 1}+ Dogs`,
+          description: `${freq.descPrefix} for ${rules.perDogRule.maxDogs + 1}+ dogs - call for quote`,
+          basePrice: "0.00",
+          unit: freq.unit,
+          sortOrder: sortOrder++,
+          metadata: { callForQuote: true, ruleGenerated: true },
+        });
+      }
+
+      const defaultNonRecurring: Omit<InsertServicePricing, "companyId">[] = [
+        { category: "one_time_service", name: "One-Time Cleaning (First 5-Gal Bucket)", description: "Initial one-time cleanup, first 5-gallon bucket", basePrice: "49.99", unit: "flat_rate", sortOrder: 1 },
+        { category: "one_time_service", name: "One-Time Cleaning (Additional 5-Gal Bucket)", description: "Additional 5-gallon bucket for one-time cleanup", basePrice: "24.99", unit: "flat_rate", sortOrder: 2 },
+        { category: "add_on", name: "Front/Side Yard", description: "Additional service for front or side yard areas", basePrice: "7.99", unit: "per_visit", sortOrder: 1 },
+        { category: "add_on", name: "Deck", description: "Deck cleaning and waste removal", basePrice: "5.99", unit: "per_visit", sortOrder: 2 },
+        { category: "add_on", name: "Deodorizing (with Scoop)", description: "Deodorizing treatment included with scooping service", basePrice: "9.99", unit: "per_visit", sortOrder: 3 },
+        { category: "add_on", name: "Waste Take-Away", description: "Removal of collected waste from property", basePrice: "5.99", unit: "per_visit", sortOrder: 4 },
+      ];
+
+      for (const item of defaultNonRecurring) {
         await this.createServicePricingItem({ ...item, companyId });
+      }
+
+      let yardSort = 100;
+      for (const tier of rules.yardSizeTiers) {
+        await this.createServicePricingItem({
+          companyId,
+          category: "add_on",
+          name: `Lot Size up to ${tier.upToAcres} Acre`,
+          description: tier.surcharge === 0
+            ? `No additional charge for lots up to ${tier.upToAcres} acre`
+            : `Additional charge for lots up to ${tier.upToAcres} acre`,
+          basePrice: tier.surcharge.toFixed(2),
+          unit: "per_visit",
+          sortOrder: yardSort++,
+          metadata: { ruleGenerated: true },
+        });
       }
 
       const company = await this.getCompany(companyId);
       if (company) {
-        const existingConfig = (company.pricingConfig || {}) as Record<string, any>;
+        const existingConfig = (company.pricingConfig || {}) as Record<string, unknown>;
         await this.updateCompany(companyId, {
-          pricingConfig: { ...existingConfig, pricingRules: DEFAULT_PRICING_RULES },
-        } as any);
+          pricingConfig: { ...existingConfig, pricingRules: rules },
+        } as Partial<InsertCompany>);
       }
     }
 

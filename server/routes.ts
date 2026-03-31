@@ -6220,10 +6220,10 @@ Return ONLY valid JSON, no markdown.`,
 
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
-      const existingConfig = (company.pricingConfig || {}) as PricingConfig;
+      const existingConfig: PricingConfig = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
       await storage.updateCompany(companyId, {
         pricingConfig: { ...existingConfig, pricingRules: rules },
-      } as any);
+      });
 
       const existingPricing = await storage.getServicePricing(companyId, "recurring_service");
       const existingByName = new Map<string, typeof existingPricing[0]>();
@@ -6250,18 +6250,18 @@ Return ONLY valid JSON, no markdown.`,
 
           const existing = existingByName.get(name);
           if (existing) {
-            const isOverridden = (existing.metadata as any)?.manualOverride === true;
+            const isOverridden = (existing.metadata as Record<string, unknown>)?.manualOverride === true;
             if (!isOverridden) {
               await storage.updateServicePricingItem(existing.id, companyId, {
                 basePrice: price.toFixed(2),
                 sortOrder,
                 unit: freq.unit,
-                metadata: { ...(existing.metadata as any || {}), callForQuote: false, ruleGenerated: true },
-              } as any);
+                metadata: { ...((existing.metadata as Record<string, unknown>) || {}), callForQuote: false, ruleGenerated: true },
+              });
             } else {
               await storage.updateServicePricingItem(existing.id, companyId, {
                 sortOrder,
-              } as any);
+              });
             }
           } else {
             await storage.createServicePricingItem({
@@ -6284,8 +6284,8 @@ Return ONLY valid JSON, no markdown.`,
         if (existingCall) {
           await storage.updateServicePricingItem(existingCall.id, companyId, {
             sortOrder,
-            metadata: { ...(existingCall.metadata as any || {}), callForQuote: true, ruleGenerated: true },
-          } as any);
+            metadata: { ...((existingCall.metadata as Record<string, unknown>) || {}), callForQuote: true, ruleGenerated: true },
+          });
         } else {
           await storage.createServicePricingItem({
             companyId,
@@ -6302,7 +6302,8 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       for (const item of existingPricing) {
-        if (!generatedNames.has(item.name) && (item.metadata as any)?.ruleGenerated && !(item.metadata as any)?.manualOverride) {
+        const meta = (item.metadata as Record<string, unknown>) || {};
+        if (!generatedNames.has(item.name) && meta.ruleGenerated && !meta.manualOverride) {
           await storage.deleteServicePricingItem(item.id, companyId);
         }
       }
@@ -6319,13 +6320,13 @@ Return ONLY valid JSON, no markdown.`,
         generatedYardNames.add(tierName);
         const existingAddon = existingAddOnsByName.get(tierName);
         if (existingAddon) {
-          const isOverridden = (existingAddon.metadata as any)?.manualOverride === true;
+          const isOverridden = (existingAddon.metadata as Record<string, unknown>)?.manualOverride === true;
           if (!isOverridden) {
             await storage.updateServicePricingItem(existingAddon.id, companyId, {
               basePrice: tier.surcharge.toFixed(2),
               sortOrder: yardSort,
-              metadata: { ...(existingAddon.metadata as any || {}), ruleGenerated: true },
-            } as any);
+              metadata: { ...((existingAddon.metadata as Record<string, unknown>) || {}), ruleGenerated: true },
+            });
           }
         } else {
           await storage.createServicePricingItem({
@@ -6345,11 +6346,12 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       for (const addon of allAddOns) {
+        const addonMeta = (addon.metadata as Record<string, unknown>) || {};
         if (
           addon.name.startsWith("Lot Size up to") &&
           !generatedYardNames.has(addon.name) &&
-          (addon.metadata as any)?.ruleGenerated &&
-          !(addon.metadata as any)?.manualOverride
+          addonMeta.ruleGenerated &&
+          !addonMeta.manualOverride
         ) {
           await storage.deleteServicePricingItem(addon.id, companyId);
         }
@@ -6557,8 +6559,22 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const config = pricingConfigSchema.parse(req.body);
-      const merged = { ...DEFAULT_PRICING_CONFIG, ...config };
-      await storage.updateCompany(companyId, { pricingConfig: merged } as any);
+      const merged: PricingConfig = { ...DEFAULT_PRICING_CONFIG, ...config };
+      await storage.updateCompany(companyId, { pricingConfig: merged });
+      res.json(merged);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/pricing-config", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const existing: PricingConfig = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
+      const updates = pricingConfigSchema.parse(req.body);
+      const merged: PricingConfig = { ...existing, ...updates };
+      await storage.updateCompany(companyId, { pricingConfig: merged });
       res.json(merged);
     } catch (err) { handleError(res, err); }
   });
