@@ -7265,13 +7265,15 @@ Return ONLY valid JSON, no markdown.`,
       const channelFilter = req.query.channel as string | undefined;
       const contacts = await storage.getContacts(companyId);
       const contactMap = new Map(contacts.map(c => [c.id, c]));
+      const company = await storage.getCompany(companyId);
+      const retentionDays = company?.messageRetentionDays ?? 30;
 
       type ConvThread = { contactId: string; contactName: string; phone: string; email: string; lastMessage: Message; unreadCount: number; messageCount: number; channel: string; emailThreadId: string; subject: string };
 
       const threadMap = new Map<string, ConvThread>();
 
       if (!channelFilter || channelFilter === "sms") {
-        const allSms = await storage.getMessages(companyId, { channel: "sms" });
+        const allSms = await storage.getMessages(companyId, { channel: "sms", retentionDays });
         for (const msg of allSms) {
           const key = `sms:${msg.contactId || `unknown:${msg.direction === "inbound" ? msg.fromAddress : msg.toAddress}`}`;
           const existing = threadMap.get(key);
@@ -7303,7 +7305,7 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       if (!channelFilter || channelFilter === "email") {
-        const allEmail = await storage.getMessages(companyId, { channel: "email" });
+        const allEmail = await storage.getMessages(companyId, { channel: "email", retentionDays });
         for (const msg of allEmail) {
           const canonicalThreadId = msg.emailThreadId || msg.id;
           const key = `email:${canonicalThreadId}`;
@@ -14812,6 +14814,11 @@ Return ONLY valid JSON, no markdown.`,
   import("./jobs/nightly-rollup").then(({ runNightlyRollup }) => {
     setTimeout(() => runNightlyRollup().catch(console.error), 30000);
     setInterval(() => runNightlyRollup().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
+  import("./jobs/message-cleanup").then(({ runMessageCleanup }) => {
+    setTimeout(() => runMessageCleanup().catch(console.error), 120000);
+    setInterval(() => runMessageCleanup().catch(console.error), 24 * 60 * 60 * 1000);
   });
 
   import("./jobs/reminders").then(({ runReminders }) => {

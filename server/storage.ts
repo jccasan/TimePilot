@@ -250,7 +250,7 @@ export interface IStorage {
   deleteServicePackage(id: string, companyId: string): Promise<void>;
 
   // Messages
-  getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string; emailThreadId?: string }): Promise<Message[]>;
+  getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string; emailThreadId?: string; retentionDays?: number }): Promise<Message[]>;
   markMessageRead(id: string, companyId: string): Promise<Message>;
   markMessagesReadByContact(contactId: string, companyId: string): Promise<void>;
   markMessagesReadByPhone(phone: string, companyId: string): Promise<void>;
@@ -1508,8 +1508,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ================ Messages ================
-  async getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string; emailThreadId?: string }): Promise<Message[]> {
+  async getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string; emailThreadId?: string; retentionDays?: number }): Promise<Message[]> {
     const conditions = [eq(messages.companyId, companyId)];
+    if (filters?.retentionDays && filters.retentionDays > 0) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - filters.retentionDays);
+      conditions.push(gte(messages.createdAt, cutoff));
+    }
     if (filters?.contactId) conditions.push(eq(messages.contactId, filters.contactId));
     if (filters?.channel) conditions.push(eq(messages.channel, filters.channel as any));
     if (filters?.direction) conditions.push(eq(messages.direction, filters.direction as any));

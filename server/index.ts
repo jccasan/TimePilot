@@ -423,6 +423,7 @@ async function ensureMmsSchema() {
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_count INTEGER DEFAULT 0;
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS email_thread_id VARCHAR(255);
       CREATE INDEX IF NOT EXISTS idx_messages_email_thread ON messages(email_thread_id);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS message_retention_days INTEGER NOT NULL DEFAULT 30;
     `);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS message_attachments (

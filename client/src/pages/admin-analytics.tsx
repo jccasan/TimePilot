@@ -381,8 +381,8 @@ function ActivationTab() {
 
 function MessagingTab() {
   const { data, isLoading } = useQuery<any>({
-    queryKey: ["/api/admin/analytics/messaging"],
-    queryFn: adminFetchFn("/api/admin/analytics/messaging"),
+    queryKey: ["/api/admin/analytics/messaging-costs"],
+    queryFn: adminFetchFn("/api/admin/analytics/messaging-costs"),
   });
 
   if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;

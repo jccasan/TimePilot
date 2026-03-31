@@ -1,11 +1,11 @@
 import type { Express, Request, Response } from "express";
-import { eq, and, gte, lte, count, sql, desc, asc, lt, or } from "drizzle-orm";
+import { eq, and, gte, lte, count, sql, desc, asc, lt, or, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { storage } from "./storage";
 import {
   companies, companyUsers, contacts, servicePlans, invoices,
   visits, smsMessages, emailsSent, saasCostsMonthly,
-  TIER_CONFIG,
+  TIER_CONFIG, messages, messageAttachments, messageExceptions,
 } from "@shared/schema";
 
 const SMS_COST_PER_SEGMENT_CENTS = 75;
@@ -458,8 +458,8 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
     }
   });
 
-  // 6. Messaging
-  app.get("/api/admin/analytics/messaging", isAdmin as any, async (_req: Request, res: Response) => {
+  // 6. Messaging costs (legacy — used by admin overview)
+  app.get("/api/admin/analytics/messaging-costs", isAdmin as any, async (_req: Request, res: Response) => {
     try {
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -665,6 +665,132 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
     } catch (err) {
       console.error("Unit economics analytics error:", err);
       res.status(500).json({ error: "Failed to compute unit economics analytics" });
+    }
+  });
+
+  app.get("/api/admin/analytics/messaging", isAdmin as any, async (_req: Request, res: Response) => {
+    try {
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const allCompanies = await db.select({
+        id: companies.id,
+        name: companies.name,
+        messageRetentionDays: companies.messageRetentionDays,
+      }).from(companies);
+
+      const [msgStats] = await db.select({
+        total: count(),
+        smsCount: sql<number>`count(*) filter (where ${messages.channel} = 'sms')`,
+        emailCount: sql<number>`count(*) filter (where ${messages.channel} = 'email')`,
+        inboundCount: sql<number>`count(*) filter (where ${messages.direction} = 'inbound')`,
+        outboundCount: sql<number>`count(*) filter (where ${messages.direction} = 'outbound')`,
+        last30Days: sql<number>`count(*) filter (where ${messages.createdAt} >= ${thirtyDaysAgo})`,
+      }).from(messages);
+
+      const [attachStats] = await db.select({
+        total: count(),
+        totalOriginalBytes: sql<number>`coalesce(sum(${messageAttachments.originalSizeBytes}), 0)`,
+        totalCompressedBytes: sql<number>`coalesce(sum(${messageAttachments.compressedSizeBytes}), 0)`,
+      }).from(messageAttachments);
+
+      const [exceptionStats] = await db.select({
+        total: count(),
+        unresolved: sql<number>`count(*) filter (where ${messageExceptions.resolvedAt} is null)`,
+      }).from(messageExceptions);
+
+      const perTenant = [];
+      for (const co of allCompanies) {
+        const [stats] = await db.select({
+          total: count(),
+          sms: sql<number>`count(*) filter (where ${messages.channel} = 'sms')`,
+          email: sql<number>`count(*) filter (where ${messages.channel} = 'email')`,
+        }).from(messages).where(eq(messages.companyId, co.id));
+
+        const [attStats] = await db.select({
+          count: count(),
+          bytes: sql<number>`coalesce(sum(${messageAttachments.compressedSizeBytes}), 0)`,
+        }).from(messageAttachments).where(eq(messageAttachments.companyId, co.id));
+
+        perTenant.push({
+          companyId: co.id,
+          companyName: co.name,
+          retentionDays: co.messageRetentionDays,
+          totalMessages: stats?.total ?? 0,
+          smsMessages: stats?.sms ?? 0,
+          emailMessages: stats?.email ?? 0,
+          attachments: attStats?.count ?? 0,
+          storageBytes: attStats?.bytes ?? 0,
+        });
+      }
+
+      const compressionSavings = Number(attachStats?.totalOriginalBytes ?? 0) - Number(attachStats?.totalCompressedBytes ?? 0);
+
+      res.json({
+        overview: {
+          totalMessages: msgStats?.total ?? 0,
+          smsMessages: msgStats?.smsCount ?? 0,
+          emailMessages: msgStats?.emailCount ?? 0,
+          inbound: msgStats?.inboundCount ?? 0,
+          outbound: msgStats?.outboundCount ?? 0,
+          last30Days: msgStats?.last30Days ?? 0,
+        },
+        storage: {
+          totalAttachments: attachStats?.total ?? 0,
+          totalOriginalBytes: Number(attachStats?.totalOriginalBytes ?? 0),
+          totalCompressedBytes: Number(attachStats?.totalCompressedBytes ?? 0),
+          compressionSavingsBytes: compressionSavings,
+          compressionSavingsPct: attachStats?.totalOriginalBytes
+            ? Math.round((compressionSavings / Number(attachStats.totalOriginalBytes)) * 100)
+            : 0,
+        },
+        exceptions: {
+          total: exceptionStats?.total ?? 0,
+          unresolved: exceptionStats?.unresolved ?? 0,
+        },
+        perTenant: perTenant.sort((a, b) => b.totalMessages - a.totalMessages),
+      });
+    } catch (err) {
+      console.error("Messaging analytics error:", err);
+      res.status(500).json({ error: "Failed to compute messaging analytics" });
+    }
+  });
+
+  app.post("/api/admin/messaging/run-cleanup", isAdmin as any, async (_req: Request, res: Response) => {
+    try {
+      const { runMessageCleanup } = await import("./jobs/message-cleanup");
+      const result = await runMessageCleanup();
+      res.json({ success: true, ...result });
+    } catch (err) {
+      console.error("Manual cleanup error:", err);
+      res.status(500).json({ error: "Failed to run message cleanup" });
+    }
+  });
+
+  app.patch("/api/admin/companies/:companyId/messaging-config", isAdmin as any, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = req.params;
+      const { messageRetentionDays } = req.body;
+
+      const company = await storage.getCompany(companyId);
+      if (!company) {
+        return res.status(404).json({ error: "Company not found" });
+      }
+
+      if (messageRetentionDays !== undefined) {
+        const days = parseInt(messageRetentionDays, 10);
+        if (isNaN(days) || days < 1 || days > 365) {
+          return res.status(400).json({ error: "messageRetentionDays must be between 1 and 365" });
+        }
+        await db.update(companies).set({ messageRetentionDays: days }).where(eq(companies.id, companyId));
+      }
+
+      const updated = await storage.getCompany(companyId);
+      res.json({ success: true, messageRetentionDays: updated?.messageRetentionDays ?? 30 });
+    } catch (err) {
+      console.error("Update messaging config error:", err);
+      res.status(500).json({ error: "Failed to update messaging config" });
     }
   });
 }

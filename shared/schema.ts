@@ -214,6 +214,7 @@ export const companies = pgTable("companies", {
   retellAgentId: varchar("retell_agent_id", { length: 255 }),
   retellKnowledgeBaseId: varchar("retell_knowledge_base_id", { length: 255 }),
   venmoHandle: varchar("venmo_handle", { length: 100 }),
+  messageRetentionDays: integer("message_retention_days").notNull().default(30),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

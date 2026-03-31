@@ -11,7 +11,7 @@ import { useFeatureTour, FeatureTourOverlay } from "@/components/feature-tour";
 import { TutorialProvider } from "@/hooks/use-tutorials";
 import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard, Loader2 } from "lucide-react";
+import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard, Loader2, MessageSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Component, useEffect, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
@@ -51,6 +51,7 @@ import AdminLogin from "@/pages/admin-login";
 import AdminChangePassword from "@/pages/admin-change-password";
 import AdminSecurity from "@/pages/admin-security";
 import AdminSubscriptionPricing from "@/pages/admin-subscription-pricing";
+import AdminMessaging from "@/pages/admin-messaging";
 import Settings from "@/pages/settings";
 import PricingCalculator from "@/pages/pricing-calculator";
 import Profitability from "@/pages/profitability";
@@ -418,6 +419,7 @@ function AdminLayout() {
           <div>
             <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">System</p>
             <div className="space-y-1">
+              <AdminSidebarLink href="/admin/messaging" icon={MessageSquare} label="Messaging" location={location} />
               <AdminSidebarLink href="/admin/security" icon={Shield} label="Security" location={location} />
             </div>
           </div>
@@ -459,6 +461,7 @@ function AdminLayout() {
             <Route path="/admin/analytics" component={AdminAnalytics} />
             <Route path="/admin/security" component={AdminSecurity} />
             <Route path="/admin/pricing" component={AdminSubscriptionPricing} />
+            <Route path="/admin/messaging" component={AdminMessaging} />
             <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
             <Route path="/admin/login">{() => { window.location.href = "/admin"; return null; }}</Route>
             <Route component={NotFound} />
