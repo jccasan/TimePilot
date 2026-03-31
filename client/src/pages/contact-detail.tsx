@@ -2400,12 +2400,12 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Keep</AlertDialogCancel>
+                          <AlertDialogCancel>Keep Job</AlertDialogCancel>
                           <AlertDialogAction
                             onClick={() => deleteMutation.mutate(plan.id)}
                             data-testid={`button-confirm-delete-plan-${plan.id}`}
                           >
-                            Delete
+                            Delete Job
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
@@ -2440,8 +2440,8 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                               <AlertDialogDescription>This will permanently delete this job and all its data. This action cannot be undone.</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>Keep</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteMutation.mutate(plan.id)} data-testid={`button-confirm-delete-plan-${plan.id}`}>Delete</AlertDialogAction>
+                              <AlertDialogCancel>Keep Job</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteMutation.mutate(plan.id)} data-testid={`button-confirm-delete-plan-${plan.id}`}>Delete Job</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>

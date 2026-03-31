@@ -269,7 +269,7 @@ export default function Scheduling() {
   const quickAddMutation = useMutation({
     mutationFn: async ({ servicePlanId, scheduledDate, routeId }: { servicePlanId: string; scheduledDate: string; routeId?: string }) => {
       const plan = servicePlans?.find((sp) => sp.id === servicePlanId);
-      if (!plan) throw new Error("Service plan not found");
+      if (!plan) throw new Error("Job not found");
       const body: any = { servicePlanId, propertyId: plan.propertyId, scheduledDate, status: "scheduled" };
       if (routeId) body.routeId = routeId;
       await apiRequest("POST", "/api/visits", body);
