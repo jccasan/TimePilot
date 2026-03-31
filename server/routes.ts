@@ -7861,6 +7861,57 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
+      // Step 3: Fallback — check if 'to' matches the global TELNYX_PHONE_NUMBER env var
+      if (!matchedCompany) {
+        const envPhone = (process.env.TELNYX_PHONE_NUMBER || "").replace(/\D/g, "");
+        if (envPhone.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(envPhone.slice(-10))) {
+          console.log(`[Telnyx SMS] Matched via TELNYX_PHONE_NUMBER env var fallback`);
+          // Try contact phone lookup across all companies
+          const fromDigits = fromNumber.replace(/\D/g, "");
+          const matchingCompanies: typeof allCompanies = [];
+          for (const company of allCompanies) {
+            const contacts = await storage.getContacts(company.id);
+            const hasMatch = contacts.some(ct => {
+              const ctDigits = (ct.phone || "").replace(/\D/g, "");
+              return ctDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(ctDigits.slice(-10));
+            });
+            if (hasMatch) matchingCompanies.push(company);
+          }
+
+          if (matchingCompanies.length === 1) {
+            matchedCompany = matchingCompanies[0];
+            console.log(`[Telnyx SMS] Env var fallback routed to company: ${matchedCompany.name} (via contact phone match)`);
+          } else if (allCompanies.length === 1) {
+            matchedCompany = allCompanies[0];
+            console.log(`[Telnyx SMS] Env var fallback routed to sole company: ${matchedCompany.name}`);
+          } else if (matchingCompanies.length > 1) {
+            console.warn(`[Telnyx SMS] Env var fallback: ambiguous contact match (${matchingCompanies.length} companies). Sending to exception queue.`);
+            await storage.createMessageException({
+              providerMessageId: messageId,
+              fromAddress: fromNumber,
+              toAddress: toNumber,
+              body: textBody,
+              rawPayload: payload as Record<string, unknown>,
+              reason: `Env var fallback: ${matchingCompanies.length} tenants have a contact with phone ${fromNumber}`,
+              candidateCompanyIds: matchingCompanies.map(c => c.id),
+            });
+            return res.status(200).json({ ok: true });
+          } else {
+            console.warn(`[Telnyx SMS] Env var fallback: no contact match for from=${fromNumber}. Sending to exception queue.`);
+            await storage.createMessageException({
+              providerMessageId: messageId,
+              fromAddress: fromNumber,
+              toAddress: toNumber,
+              body: textBody,
+              rawPayload: payload as Record<string, unknown>,
+              reason: `No tenant match found for sender ${fromNumber} (env var fallback)`,
+              candidateCompanyIds: [],
+            });
+            return res.status(200).json({ ok: true });
+          }
+        }
+      }
+
       if (!matchedCompany) {
         const checkedNumbers = allCompanies.map(c => `${c.name}: telnyx=${c.telnyxPhoneNumber || "none"}, dedicated=${c.dedicatedPhoneNumber || "none"}`).join("; ");
         console.warn(`[Telnyx SMS] WARNING: No company matched for to number: ${toNumber} (digits: ${toDigits}). Checked: ${checkedNumbers}`);
