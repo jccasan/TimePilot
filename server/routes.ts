@@ -13,7 +13,7 @@ import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
-import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, extractThreadIdFromAddress } from "./services/email";
+import { sendEmail, sendAdminSignupNotification, generateEmailThreadId } from "./services/email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
 import { sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "./services/sms";
 import {
@@ -8117,9 +8117,15 @@ Return ONLY valid JSON, no markdown.`,
           const storedUrls: string[] = [];
 
           let attachCount = 0;
+          let totalBytes = 0;
+          const EMAIL_MAX_TOTAL_BYTES = parseInt(process.env.MMS_MAX_TOTAL_BYTES || String(10 * 1024 * 1024), 10);
           for (const file of files) {
             if (attachCount >= EMAIL_MAX_ATTACHMENTS) {
               console.log(`[Inbound Email] Attachment limit reached (${EMAIL_MAX_ATTACHMENTS}), skipping remaining`);
+              break;
+            }
+            if (totalBytes + file.size > EMAIL_MAX_TOTAL_BYTES) {
+              console.log(`[Inbound Email] Total payload limit reached (${EMAIL_MAX_TOTAL_BYTES}), skipping remaining`);
               break;
             }
             if (!ALLOWED_EMAIL_ATTACH_MIME.includes(file.mimetype)) {
@@ -8146,6 +8152,7 @@ Return ONLY valid JSON, no markdown.`,
 
             storedUrls.push(storagePath);
             attachCount++;
+            totalBytes += file.size;
             await storage.createMessageAttachment({
               messageId: savedMsg.id,
               companyId,
