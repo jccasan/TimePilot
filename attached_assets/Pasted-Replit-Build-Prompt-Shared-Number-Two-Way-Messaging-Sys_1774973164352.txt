@@ -1,0 +1,530 @@
+Replit Build Prompt: Shared Number Two-Way Messaging System for Scoopilot
+
+Build a Node.js messaging system for Scoopilot that supports two-way SMS/MMS and email communication for multiple tenants using a shared phone number, while controlling storage and media costs.
+
+Goal
+
+Create a system where multiple Scoopilot tenant accounts can use one shared messaging number without requiring a dedicated phone number per tenant. Incoming and outgoing conversations must remain correctly associated with the right tenant and customer.
+
+
+---
+
+Core Requirements
+
+1. Shared Number Multi-Tenant Routing
+
+Implement a shared-number two-way messaging system in Node.js.
+
+Requirements:
+
+Use a single SMS/MMS number for multiple Scoopilot tenant accounts.
+
+Route messages to the correct tenant using a unique identifier.
+
+Support both inbound and outbound messaging.
+
+Keep each tenant’s conversations isolated from other tenants.
+
+Maintain conversation history and thread continuity per tenant/customer.
+
+
+2. Conversation Identification
+
+Implement a reliable way to identify the correct tenant for incoming and outgoing messages.
+
+Use one or more of these approaches:
+
+Unique conversation/thread ID
+
+Customer ID mapped to tenant
+
+Unique keyword/prefix in message body when needed
+
+Database mapping of phone number + tenant + customer relationship
+
+
+Requirements:
+
+Every inbound message must resolve to the correct tenant.
+
+If the system cannot confidently identify the tenant, route the message to an exception queue for manual review.
+
+Outbound replies must preserve the same conversation mapping.
+
+
+3. Node.js Stack
+
+Assume Node.js with Express. Implement:
+
+Webhook endpoint for inbound SMS/MMS
+
+Webhook endpoint or service for outbound email tracking if needed
+
+Database models for tenants, conversations, messages, attachments, and routing identifiers
+
+Message processing service layer
+
+Background cleanup jobs
+
+
+
+---
+
+Data Model Requirements
+
+Create tables/models for at least:
+
+Tenants
+
+id
+
+name
+
+status
+
+
+Customers
+
+id
+
+tenant_id
+
+name
+
+phone
+
+email
+
+
+Conversations
+
+id
+
+tenant_id
+
+customer_id
+
+channel (sms, mms, email)
+
+shared_number
+
+routing_key / thread_key
+
+last_message_at
+
+status
+
+
+Messages
+
+id
+
+conversation_id
+
+tenant_id
+
+customer_id
+
+direction (inbound/outbound)
+
+channel
+
+body
+
+media_count
+
+created_at
+
+provider_message_id
+
+delivery_status
+
+
+Attachments
+
+id
+
+message_id
+
+mime_type
+
+original_filename
+
+original_size_bytes
+
+compressed_size_bytes
+
+storage_url
+
+created_at
+
+
+Exception Queue
+
+id
+
+provider_message_id
+
+raw_payload
+
+reason
+
+created_at
+
+resolved_at
+
+
+
+---
+
+SMS/MMS Features
+
+4. Two-Way SMS/MMS Handling
+
+For SMS/MMS:
+
+Receive inbound messages through webhook.
+
+Parse sender number, recipient number, message body, and media.
+
+Resolve the correct tenant/customer conversation.
+
+Store inbound message and any attachments.
+
+Allow users inside Scoopilot to reply from the app.
+
+Preserve message thread context.
+
+
+5. MMS Handling and Size Controls
+
+Implement strict MMS controls.
+
+Requirements:
+
+Enforce media size limits.
+
+Automatically compress supported image uploads.
+
+Store only compressed media when possible.
+
+Reject unsupported file types.
+
+Reject files that still exceed limits after compression.
+
+Provide clear user-facing validation errors.
+
+
+Recommended limits:
+
+Maximum total message payload: 10 MB
+
+Maximum per attachment after compression: configurable
+
+Supported types: jpg, jpeg, png, webp, pdf if desired
+
+Block dangerous or unsupported file types
+
+
+6. Front-End Compression for SMS/MMS
+
+On the front end, before sending media:
+
+Automatically compress images before upload/send.
+
+Resize overly large images.
+
+Reduce quality as needed.
+
+Ensure the total message payload does not exceed 10 MB.
+
+Show the user a clear error if compression still cannot get the payload under the limit.
+
+
+Compression goals:
+
+Keep file quality acceptable for business communication.
+
+Reduce bandwidth and storage costs.
+
+Prevent failed uploads and oversized MMS payloads.
+
+
+
+---
+
+Email Features
+
+7. Two-Way Email Support
+
+Implement similar conversation handling for email.
+
+Requirements:
+
+Store outbound emails tied to tenant/customer conversations.
+
+Support inbound email replies where possible.
+
+Associate replies with the correct tenant and customer.
+
+Preserve email thread IDs when available.
+
+
+8. Email Attachment Controls
+
+For email attachments:
+
+Apply front-end compression where practical before upload.
+
+Enforce total message payload limit of 10 MB.
+
+Store only optimized/compressed files when possible.
+
+Reject files that exceed limits after processing.
+
+
+
+---
+
+Retention and Storage Controls
+
+9. 30-Day Retention Policy
+
+Implement a strict 30-day retention policy for stored message content and attachments.
+
+Requirements:
+
+Store message text, metadata, and attachments for 30 days only.
+
+Delete messages older than 30 days automatically.
+
+Delete associated attachments from storage as part of cleanup.
+
+Run a scheduled cleanup job daily.
+
+Log cleanup activity.
+
+
+Important:
+
+Deleting old messages only affects Scoopilot’s storage.
+
+Recipients may still retain their own copies on their devices or email accounts.
+
+
+10. Retrieval Rules
+
+When loading conversation history:
+
+Only retrieve messages still within the retention window.
+
+Never attempt to load deleted message content.
+
+Gracefully handle partially expired threads.
+
+
+
+---
+
+Compression and Processing Requirements
+
+11. Compression Standards
+
+Implement media compression for both SMS/MMS and email workflows.
+
+Requirements:
+
+Front-end compression before upload/send
+
+Back-end validation of file type and final size
+
+Optional back-end recompression/sanitization for images
+
+Store both original size metadata and compressed size metadata
+
+Maintain acceptable readability and image quality
+
+
+For images:
+
+Resize large camera images
+
+Reduce quality intelligently
+
+Strip unnecessary metadata if helpful
+
+
+12. Error Handling
+
+Implement graceful error handling for:
+
+Unrecognized tenant mapping
+
+Oversized text/media payloads
+
+Unsupported attachment types
+
+Compression failures
+
+Storage failures
+
+Provider delivery failures
+
+
+Provide:
+
+User-friendly front-end errors
+
+Detailed server logs
+
+Retry-safe processing where appropriate
+
+
+
+---
+
+Admin and Operational Requirements
+
+13. Admin Controls
+
+Add admin settings for:
+
+Per-attachment max size
+
+Total payload max size
+
+Allowed MIME types
+
+Retention period (default 30 days)
+
+Compression quality settings
+
+Shared number routing rules
+
+
+14. Monitoring and Auditability
+
+Track:
+
+Message counts by tenant
+
+Attachment storage usage by tenant
+
+Compression savings (original vs compressed bytes)
+
+Retention cleanup totals
+
+Exception queue volume
+
+Routing failures
+
+
+
+---
+
+Suggested Implementation Details
+
+Back End
+
+Use Node.js + Express. Suggested services/modules:
+
+messageWebhookController
+
+conversationResolverService
+
+messageStorageService
+
+attachmentCompressionService
+
+attachmentValidationService
+
+retentionCleanupJob
+
+emailThreadResolverService
+
+
+Front End
+
+Implement upload pipeline that:
+
+detects file type
+
+compresses images client-side before upload
+
+enforces total message size cap of 10 MB
+
+shows user progress/errors
+
+sends optimized payload to API
+
+
+Scheduled Jobs
+
+Implement a daily scheduled job to:
+
+delete expired messages
+
+delete expired attachments from storage
+
+log counts and storage reclaimed
+
+
+
+---
+
+Business Rules
+
+One shared number can support multiple tenants.
+
+Tenant isolation is mandatory.
+
+If routing confidence is low, do not guess. Send to exception queue.
+
+Keep storage lean with 30-day retention.
+
+Optimize media aggressively enough to control costs, but not so aggressively that quality becomes unusable.
+
+Front-end compression should reduce unnecessary uploads before they hit the server.
+
+Apply the same size-control philosophy to both SMS/MMS and email attachments.
+
+
+
+---
+
+Deliverables
+
+Build:
+
+1. Database schema/migrations
+
+
+2. Inbound SMS/MMS webhook handling
+
+
+3. Outbound SMS/MMS send flow
+
+
+4. Email conversation handling
+
+
+5. Shared-number tenant routing logic
+
+
+6. Front-end media compression workflow
+
+
+7. Back-end media validation and storage
+
+
+8. 30-day retention cleanup job
+
+
+9. Admin configuration UI/settings
+
+
+10. Logging and exception queue handling
+
+
+
+Make the implementation production-minded, modular, and easy to extend later.
