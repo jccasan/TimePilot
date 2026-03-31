@@ -8,7 +8,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
-import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, Route, ActivityLog, Invoice } from "@shared/schema";
+import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, ActivityLog, Invoice } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1433,8 +1433,8 @@ const servicePlanFormSchema = z.object({
   frequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]),
   dayOfWeek: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
   pricePerVisit: z.string().min(1, "Price is required"),
+  discount: z.string().optional(),
   startDate: z.string().min(1, "Start date is required"),
-  routeId: z.string().optional(),
   isActive: z.boolean().optional(),
   jobType: z.enum(["one_off", "recurring"]).optional(),
   serviceName: z.string().optional(),
@@ -1666,10 +1666,6 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     queryKey: ["/api/pricing"],
   });
 
-  const { data: routes } = useQuery<Route[]>({
-    queryKey: ["/api/routes"],
-  });
-
   const { data: team } = useQuery<{ id: string; firstName: string; lastName: string; role: string }[]>({
     queryKey: ["/api/company/team"],
   });
@@ -1705,8 +1701,8 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       jobType: "recurring",
       anytime: true,
       pricePerVisit: "",
+      discount: "",
       startDate: toLocalDateString(new Date(), tz),
-      routeId: "",
     },
   });
 
@@ -1719,8 +1715,8 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       jobType: "recurring",
       anytime: true,
       pricePerVisit: "",
+      discount: "",
       startDate: toLocalDateString(new Date(), tz),
-      routeId: "",
       isActive: true,
     },
   });
@@ -1739,8 +1735,8 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
         frequency: (editingPlan.frequency || "weekly") as ServicePlanFormValues["frequency"],
         dayOfWeek: (editingPlan.dayOfWeek || "monday") as ServicePlanFormValues["dayOfWeek"],
         pricePerVisit: editingPlan.pricePerVisit,
+        discount: (editingPlan as any).discount || "",
         startDate: editingPlan.startDate,
-        routeId: editingPlan.routeId || "",
         isActive: editingPlan.isActive,
         jobType: (editingPlan.jobType || "recurring") as ServicePlanFormValues["jobType"],
         serviceName: editingPlan.serviceName || "",
@@ -1767,12 +1763,12 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
   };
 
   const normalizeJobPayload = (data: ServicePlanFormValues) => {
-    const { assignedUserId, routeId, ...rest } = data;
+    const { assignedUserId, ...rest } = data;
     const isOneOff = rest.jobType === "one_off";
     return {
       ...rest,
-      routeId: (routeId && routeId !== "none") ? routeId : null,
       frequency: isOneOff ? "onetime" as const : rest.frequency,
+      discount: rest.discount ? rest.discount : null,
       assignedUserId: (assignedUserId && assignedUserId !== "none") ? assignedUserId : null,
       startTime: rest.anytime ? null : (rest.startTime || null),
       endTime: rest.anytime ? null : (rest.endTime || null),
@@ -1798,7 +1794,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
-      toast({ title: "Job created" });
+      toast({ title: "Service created" });
       setCreateDialogOpen(false);
       createForm.reset();
       setCreateSelectedAddOns([]);
@@ -1823,7 +1819,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
-      toast({ title: "Job updated" });
+      toast({ title: "Service updated" });
       setEditingPlan(null);
       setEditSelectedAddOns([]);
     },
@@ -1843,7 +1839,25 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
-      toast({ title: "Job deleted" });
+      toast({ title: "Service deleted" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const togglePauseMutation = useMutation({
+    mutationFn: async ({ id, isPaused }: { id: string; isPaused: boolean }) => {
+      await apiRequest("PATCH", `/api/service-plans/${id}`, {
+        pausedAt: isPaused ? null : new Date().toISOString(),
+        isActive: isPaused ? true : false,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      toast({ title: "Service updated" });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1905,9 +1919,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
     const basePrice = form.watch("pricePerVisit");
     const jobType = form.watch("jobType");
     const anytimeVal = form.watch("anytime");
-    const selectedDayOfWeek = form.watch("dayOfWeek");
     const templates = basePricingForFreq(freq);
-    const filteredRoutes = (routes || []).filter(r => r.dayOfWeek === selectedDayOfWeek);
     const addOnsTotal = (selectedAddOns || []).reduce((sum, id) => {
       const item = addOnPricing.find(p => p.id === id);
       return sum + parseFloat(item?.basePrice || "0");
@@ -2089,21 +2101,13 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               <FormMessage />
             </FormItem>
           )} />
-          <FormField control={form.control} name="routeId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Route (optional)</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger data-testid="select-plan-route"><SelectValue placeholder={filteredRoutes.length > 0 ? "No route" : `No routes for ${selectedDayOfWeek || "this day"}`} /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="none">No route</SelectItem>
-                    {filteredRoutes.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
+          <FormField control={form.control} name="discount" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Discount % (optional)</FormLabel>
+              <FormControl><Input type="number" step="0.01" min="0" max="100" placeholder="e.g. 10" {...field} data-testid="input-plan-discount" /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
           <div className="space-y-3 rounded-md border p-3">
             <Label className="text-sm font-semibold">Time Window</Label>
             <div className="flex items-center gap-2">
@@ -2251,33 +2255,41 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-        <CardTitle className="text-lg">Jobs</CardTitle>
+        <CardTitle className="text-lg">Services</CardTitle>
         <Dialog open={createDialogOpen} onOpenChange={(open) => {
           setCreateDialogOpen(open);
           if (!open) createForm.reset();
         }}>
           <DialogTrigger asChild>
             <Button size="sm" data-testid="button-add-service-plan">
-              <Plus className="mr-1 h-4 w-4" /> Add Job
+              <Plus className="mr-1 h-4 w-4" /> Add Service
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add Job</DialogTitle>
+              <DialogTitle>Add Service</DialogTitle>
             </DialogHeader>
-            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Job", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns, createTemplateId, setCreateTemplateId)}
+            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Service", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns, createTemplateId, setCreateTemplateId)}
           </DialogContent>
         </Dialog>
       </CardHeader>
       <CardContent>
         {servicePlans && servicePlans.length > 0 ? (
           <div className="space-y-2">
-            {servicePlans.map((plan) => (
+            {servicePlans.map((plan) => {
+              const isPaused = !!plan.pausedAt;
+              const discountVal = (plan as any).discount;
+              return (
               <div key={plan.id} className="border rounded-md p-3" data-testid={`text-plan-${plan.id}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="font-medium capitalize">{plan.serviceName || `${frequencyLabelsMap[plan.frequency] || plan.frequency} job`}</p>
-                    <p className="text-sm text-muted-foreground">${plan.pricePerVisit}/visit</p>
+                    <p className="font-medium capitalize">{plan.serviceName || `${frequencyLabelsMap[plan.frequency] || plan.frequency} service`}</p>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>${plan.pricePerVisit}/visit</span>
+                      {discountVal && parseFloat(discountVal) > 0 && (
+                        <Badge variant="outline" className="text-xs">{discountVal}% off</Badge>
+                      )}
+                    </div>
                     {plan.addOns && plan.addOns.length > 0 && (
                       <div className="text-xs text-muted-foreground">
                         {plan.addOns.map(a => (
@@ -2297,9 +2309,18 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                     {plan.isStopOnly && (
                       <Badge variant="outline" className="text-xs" data-testid={`badge-stop-only-${plan.id}`}>Stop Only</Badge>
                     )}
-                    <Badge variant={plan.isActive ? "default" : "secondary"}>
-                      {plan.isActive ? "Active" : "Inactive"}
+                    <Badge variant={isPaused ? "secondary" : plan.isActive ? "default" : "secondary"}>
+                      {isPaused ? "Paused" : plan.isActive ? "Active" : "Inactive"}
                     </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => togglePauseMutation.mutate({ id: plan.id, isPaused })}
+                      disabled={togglePauseMutation.isPending}
+                      data-testid={`button-pause-plan-${plan.id}`}
+                    >
+                      {isPaused ? "Resume" : "Pause"}
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -2316,9 +2337,9 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Job</AlertDialogTitle>
+                          <AlertDialogTitle>Delete Service</AlertDialogTitle>
                           <AlertDialogDescription>
-                            This will permanently delete this job and all associated visits. This action cannot be undone.
+                            This will permanently delete this service. This action cannot be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -2335,22 +2356,23 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No jobs yet.</p>
+          <p className="text-sm text-muted-foreground">No services yet.</p>
         )}
 
         <Dialog open={!!editingPlan} onOpenChange={(open) => { if (!open) setEditingPlan(null); }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Job</DialogTitle>
+              <DialogTitle>Edit Service</DialogTitle>
             </DialogHeader>
             {editingPlan && renderPlanForm(
               editForm,
               (v) => updateMutation.mutate({ id: editingPlan.id, data: v }),
               updateMutation.isPending,
-              "Save Changes",
+              "Save Service",
               true,
               editCalcResult,
               editCalcLoading,
