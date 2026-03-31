@@ -257,7 +257,7 @@ export interface IStorage {
   markMessagesReadByEmail(emailThreadId: string, companyId: string): Promise<void>;
   getUnreadSmsCount(companyId: string): Promise<number>;
   getUnreadEmailCount(companyId: string): Promise<number>;
-  getMessagesByEmailThreadId(emailThreadId: string): Promise<Message[]>;
+  getMessagesByEmailThreadId(emailThreadId: string, companyId?: string): Promise<Message[]>;
   createMessage(data: InsertMessage): Promise<Message>;
   updateMessageStatus(id: string, status: string, errorMessage?: string): Promise<Message>;
 
@@ -1576,9 +1576,13 @@ export class DatabaseStorage implements IStorage {
     return result[0]?.count ?? 0;
   }
 
-  async getMessagesByEmailThreadId(emailThreadId: string): Promise<Message[]> {
+  async getMessagesByEmailThreadId(emailThreadId: string, companyId?: string): Promise<Message[]> {
+    const conditions = [eq(messages.emailThreadId, emailThreadId)];
+    if (companyId) {
+      conditions.push(eq(messages.companyId, companyId));
+    }
     return db.select().from(messages)
-      .where(eq(messages.emailThreadId, emailThreadId))
+      .where(and(...conditions))
       .orderBy(messages.createdAt);
   }
 

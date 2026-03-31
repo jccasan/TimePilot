@@ -7377,8 +7377,8 @@ Return ONLY valid JSON, no markdown.`,
 
       let emailThreadId = generateEmailThreadId();
       if (existingThreadId) {
-        const existingThread = await storage.getMessagesByEmailThreadId(existingThreadId);
-        if (existingThread.length > 0 && existingThread[0].companyId === companyId) {
+        const existingThread = await storage.getMessagesByEmailThreadId(existingThreadId, companyId);
+        if (existingThread.length > 0) {
           emailThreadId = existingThreadId;
         }
       }
