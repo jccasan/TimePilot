@@ -49,7 +49,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, CreditCard, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
@@ -548,8 +548,6 @@ export default function ContactDetail() {
       <BillingPreferences contact={contact} contactId={id!} />
 
       <PortalAccessCard contact={contact} contactId={id!} />
-
-      <PaymentMethodsCard contact={contact} contactId={id!} />
 
       <BillingHistoryCard contactId={id!} />
 
@@ -1067,115 +1065,6 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-function PaymentMethodsCard({ contact, contactId }: { contact: Contact; contactId: string }) {
-  const { toast } = useToast();
-
-  const { data: stripeConfig } = useQuery<{ configured: boolean }>({
-    queryKey: ["/api/stripe/config"],
-  });
-
-  const { data: paymentMethods, isLoading: pmLoading } = useQuery<any[]>({
-    queryKey: ["/api/contacts", contactId, "payment-methods"],
-    queryFn: () => {
-      const token = localStorage.getItem("sessionToken");
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      return fetch(`/api/contacts/${contactId}/payment-methods`, { credentials: "include", headers }).then(r => r.json());
-    },
-    enabled: !!contact.stripeCustomerId && !!stripeConfig?.configured,
-  });
-
-  const createCustomerMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/contacts/${contactId}/stripe-customer`);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
-      toast({ title: "Stripe customer created", description: "Contact linked to Stripe." });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const removeMethodMutation = useMutation({
-    mutationFn: async (pmId: string) => {
-      await apiRequest("DELETE", `/api/payment-methods/${pmId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId, "payment-methods"] });
-      toast({ title: "Removed", description: "Payment method removed." });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
-  if (!stripeConfig?.configured) return null;
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <CreditCard className="h-5 w-5" /> Payment Methods
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {!contact.stripeCustomerId ? (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">No Stripe customer record yet.</p>
-            <Button
-              size="sm"
-              onClick={() => createCustomerMutation.mutate()}
-              disabled={createCustomerMutation.isPending}
-              data-testid="button-create-stripe-customer"
-            >
-              <CreditCard className="mr-1 h-4 w-4" />
-              {createCustomerMutation.isPending ? "Creating..." : "Link to Stripe"}
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground" data-testid="text-stripe-id">
-              Stripe ID: {contact.stripeCustomerId}
-            </p>
-            {pmLoading ? (
-              <p className="text-sm text-muted-foreground">Loading payment methods...</p>
-            ) : paymentMethods && paymentMethods.length > 0 ? (
-              <div className="space-y-2">
-                {paymentMethods.map((pm: any) => (
-                  <div key={pm.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border rounded-md p-2">
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">{(pm.brand || "Card").toUpperCase()}</span>
-                      <span className="text-muted-foreground">****{pm.last4}</span>
-                      <span className="text-muted-foreground text-xs">{pm.expMonth}/{pm.expYear}</span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeMethodMutation.mutate(pm.id)}
-                      disabled={removeMethodMutation.isPending}
-                      data-testid={`button-remove-pm-${pm.id}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground" data-testid="text-no-payment-methods">
-                No payment methods on file. Cards will be added when customers pay via checkout.
-              </p>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
