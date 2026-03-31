@@ -3477,6 +3477,20 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
+      if (!contact.stripeCustomerId && contact.email) {
+        createStripeCustomer({
+          email: contact.email,
+          name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || contact.email,
+          metadata: { scoopilotContactId: contact.id, companyId },
+        })
+          .then((stripeCustomerId) =>
+            storage.updateContact(req.params.id, companyId, { stripeCustomerId })
+          )
+          .catch((err) =>
+            console.error("[auto-stripe] Failed to auto-create Stripe customer:", err)
+          );
+      }
+
       let planAddOns: any[] = [];
       if (addOns && Array.isArray(addOns)) {
         const validatedAddOns = await validateAndResolveAddOns(addOns, companyId);
@@ -4154,6 +4168,20 @@ Return ONLY valid JSON, no markdown.`,
             console.error("[auto-portal] Failed to provision portal access on service plan creation:", err)
           );
         }
+      }
+
+      if (contact && !contact.stripeCustomerId && contact.email) {
+        createStripeCustomer({
+          email: contact.email,
+          name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || contact.email,
+          metadata: { scoopilotContactId: contact.id, companyId },
+        })
+          .then((stripeCustomerId) =>
+            storage.updateContact(parsed.contactId, companyId, { stripeCustomerId })
+          )
+          .catch((err) =>
+            console.error("[auto-stripe] Failed to auto-create Stripe customer:", err)
+          );
       }
 
       let planAddOns: any[] = [];
