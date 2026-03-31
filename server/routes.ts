@@ -1749,7 +1749,7 @@ Return ONLY valid JSON, no markdown.`,
       const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
         "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "settingsLayout", "dashboardNotes", "timezone",
         "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug", "leadWebhookSmsTemplate",
-        "smsProvider", "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle"];
+        "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -1764,9 +1764,6 @@ Return ONLY valid JSON, no markdown.`,
         const existingSlug = await storage.getCompanyBySlug(cleanSlug);
         if (existingSlug && existingSlug.id !== companyId) return res.status(409).json({ error: "This slug is already taken" });
         updates.slug = cleanSlug;
-      }
-      if (updates.smsProvider !== undefined) {
-        updates.smsProvider = "telnyx";
       }
       if (updates.telnyxApiKey && typeof updates.telnyxApiKey === "string" && updates.telnyxApiKey.length > 0) {
         const { encrypt } = await import("./utils/encryption");

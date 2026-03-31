@@ -277,6 +277,7 @@ async function ensureCompanyColumns() {
       ALTER TABLE routes ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false;
     `);
     await pool.query(`UPDATE companies SET sms_provider = 'telnyx' WHERE sms_provider = 'twilio'`);
+    await pool.query(`ALTER TABLE companies ALTER COLUMN sms_provider SET DEFAULT 'telnyx'`);
     console.log("[Migration] SMS provider migrated to telnyx-only");
     await pool.query(`
       CREATE TABLE IF NOT EXISTS voice_calls (
