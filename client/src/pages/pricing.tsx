@@ -162,7 +162,7 @@ function PricingRulesPanel({
   }, [rules]);
 
   const updateBasePrice = (key: keyof PricingRulesConfig["basePrices"], value: string) => {
-    const num = parseFloat(value);
+    const num = value === "" ? 0 : parseFloat(value);
     if (!isNaN(num)) {
       setLocalRules((prev) => ({
         ...prev,
@@ -172,21 +172,21 @@ function PricingRulesPanel({
   };
 
   const updatePerDogRule = (key: keyof PricingRulesConfig["perDogRule"], value: string) => {
-    const num = key === "surchargeAmount" ? parseFloat(value) : parseInt(value);
+    const num = value === "" ? 0 : (key === "surchargeAmount" ? parseFloat(value) : parseInt(value));
     if (!isNaN(num)) {
       setLocalRules((prev) => ({
         ...prev,
-        perDogRule: { ...prev.perDogRule, [key]: num },
+        perDogRule: { ...prev.perDogRule, [key]: Math.max(key === "incrementDogs" || key === "maxDogs" ? 1 : 0, num) },
       }));
     }
   };
 
   const updateYardTier = (index: number, key: "upToAcres" | "surcharge", value: string) => {
-    const num = parseFloat(value);
+    const num = value === "" ? 0 : parseFloat(value);
     if (!isNaN(num)) {
       setLocalRules((prev) => {
         const tiers = [...prev.yardSizeTiers];
-        tiers[index] = { ...tiers[index], [key]: num };
+        tiers[index] = { ...tiers[index], [key]: Math.max(0, num) };
         return { ...prev, yardSizeTiers: tiers };
       });
     }
