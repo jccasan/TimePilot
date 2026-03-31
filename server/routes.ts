@@ -7395,27 +7395,14 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
-  // ─── Message Exception Queue (tenant-scoped: only shows exceptions matching tenant's contacts) ─
+  // ─── Message Exception Queue (tenant-scoped via candidateCompanyIds) ─
   app.get("/api/message-exceptions", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
       if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
       const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
-      const allExceptions = await storage.getMessageExceptions({ resolved });
-
-      const contacts = await storage.getContacts(companyId);
-      const contactDigitSet = new Set(
-        contacts.map(c => (c.phone || "").replace(/\D/g, "").slice(-10)).filter(d => d.length === 10)
-      );
-
-      const filtered = allExceptions.filter(ex => {
-        if (ex.resolvedCompanyId) return ex.resolvedCompanyId === companyId;
-        if (!ex.fromAddress) return false;
-        const fromDigits = ex.fromAddress.replace(/\D/g, "").slice(-10);
-        return fromDigits.length === 10 && contactDigitSet.has(fromDigits);
-      });
-
-      res.json(filtered);
+      const exceptions = await storage.getMessageExceptions({ resolved, companyId });
+      res.json(exceptions);
     } catch (err) { handleError(res, err); }
   });
 
@@ -7475,7 +7462,7 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, userId, role } = await getCompanyContext(req);
       if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
-      const exception = await storage.dismissMessageException(req.params.id, userId);
+      const exception = await storage.dismissMessageException(req.params.id, userId, companyId);
       if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
       res.json(exception);
     } catch (err) { handleError(res, err); }
@@ -7596,6 +7583,7 @@ Return ONLY valid JSON, no markdown.`,
             body: textBody,
             rawPayload: payload as Record<string, unknown>,
             reason: `Ambiguous routing: ${routingEntries.length} tenants matched for sender ${fromNumber}`,
+            candidateCompanyIds: routingEntries.map(r => r.companyId),
           });
           return res.status(200).json({ ok: true });
         } else {
@@ -7623,6 +7611,7 @@ Return ONLY valid JSON, no markdown.`,
               body: textBody,
               rawPayload: payload as Record<string, unknown>,
               reason: `Ambiguous contact match: ${matchingCompanies.length} tenants have a contact with phone ${fromNumber}`,
+              candidateCompanyIds: matchingCompanies.map(c => c.id),
             });
             return res.status(200).json({ ok: true });
           } else {
@@ -7634,6 +7623,7 @@ Return ONLY valid JSON, no markdown.`,
               body: textBody,
               rawPayload: payload as Record<string, unknown>,
               reason: `No tenant match found for sender ${fromNumber} on shared number`,
+              candidateCompanyIds: [],
             });
             return res.status(200).json({ ok: true });
           }

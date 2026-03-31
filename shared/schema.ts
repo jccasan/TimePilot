@@ -1737,6 +1737,7 @@ export const messageExceptions = pgTable("message_exceptions", {
   body: text("body"),
   rawPayload: jsonb("raw_payload").$type<Record<string, unknown>>(),
   reason: varchar("reason", { length: 255 }).notNull(),
+  candidateCompanyIds: text("candidate_company_ids").array().default(sql`'{}'`),
   resolvedAt: timestamp("resolved_at"),
   resolvedBy: varchar("resolved_by").references(() => users.id),
   resolvedCompanyId: varchar("resolved_company_id").references(() => companies.id, { onDelete: "set null" }),

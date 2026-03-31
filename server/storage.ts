@@ -436,7 +436,7 @@ export interface IStorage {
   getMessageExceptions(filters?: { resolved?: boolean; companyId?: string }): Promise<MessageException[]>;
   createMessageException(data: InsertMessageException): Promise<MessageException>;
   resolveMessageException(id: string, resolvedBy: string, companyId: string): Promise<MessageException | undefined>;
-  dismissMessageException(id: string, resolvedBy: string): Promise<MessageException | undefined>;
+  dismissMessageException(id: string, resolvedBy: string, companyId?: string): Promise<MessageException | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2581,7 +2581,9 @@ export class DatabaseStorage implements IStorage {
       conditions.push(sql`${messageExceptions.resolvedAt} IS NOT NULL`);
     }
     if (filters?.companyId) {
-      conditions.push(eq(messageExceptions.resolvedCompanyId, filters.companyId));
+      conditions.push(
+        sql`(${messageExceptions.candidateCompanyIds} @> ARRAY[${filters.companyId}]::text[] OR ${messageExceptions.resolvedCompanyId} = ${filters.companyId})`
+      );
     }
     const query = conditions.length > 0
       ? db.select().from(messageExceptions).where(and(...conditions)).orderBy(desc(messageExceptions.createdAt))
@@ -2597,15 +2599,26 @@ export class DatabaseStorage implements IStorage {
   async resolveMessageException(id: string, resolvedBy: string, companyId: string): Promise<MessageException | undefined> {
     const [row] = await db.update(messageExceptions)
       .set({ resolvedAt: new Date(), resolvedBy, resolvedCompanyId: companyId })
-      .where(and(eq(messageExceptions.id, id), sql`${messageExceptions.resolvedAt} IS NULL`))
+      .where(and(
+        eq(messageExceptions.id, id),
+        sql`${messageExceptions.resolvedAt} IS NULL`,
+        sql`${messageExceptions.candidateCompanyIds} @> ARRAY[${companyId}]::text[]`
+      ))
       .returning();
     return row;
   }
 
-  async dismissMessageException(id: string, resolvedBy: string): Promise<MessageException | undefined> {
+  async dismissMessageException(id: string, resolvedBy: string, companyId?: string): Promise<MessageException | undefined> {
+    const conditions = [
+      eq(messageExceptions.id, id),
+      sql`${messageExceptions.resolvedAt} IS NULL`,
+    ];
+    if (companyId) {
+      conditions.push(sql`${messageExceptions.candidateCompanyIds} @> ARRAY[${companyId}]::text[]`);
+    }
     const [row] = await db.update(messageExceptions)
       .set({ resolvedAt: new Date(), resolvedBy, reason: "dismissed" })
-      .where(and(eq(messageExceptions.id, id), sql`${messageExceptions.resolvedAt} IS NULL`))
+      .where(and(...conditions))
       .returning();
     return row;
   }
