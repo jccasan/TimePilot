@@ -18,7 +18,8 @@ export async function getCompanySmsConfig(companyId: string): Promise<CompanySms
   const company = await storage.getCompany(companyId);
   if (!company) return { provider: "telnyx", configured: false, phoneNumber: "" };
 
-  const apiKey = company.telnyxApiKey || process.env.TELNYX_API_KEY;
+  const storedKey = company.telnyxApiKey && company.telnyxApiKey !== "null" ? company.telnyxApiKey : null;
+  const apiKey = storedKey || process.env.TELNYX_API_KEY;
   const configured = !!(apiKey && company.telnyxPhoneNumber && company.telnyxMessagingProfileId);
   return { provider: "telnyx", configured, phoneNumber: company.telnyxPhoneNumber || "" };
 }
@@ -47,7 +48,8 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
     return { success: false, error: "Company not found" };
   }
 
-  const apiKey = company.telnyxApiKey || process.env.TELNYX_API_KEY;
+  const storedKey = company.telnyxApiKey && company.telnyxApiKey !== "null" ? company.telnyxApiKey : null;
+  const apiKey = storedKey || process.env.TELNYX_API_KEY;
   if (!apiKey || !company.telnyxPhoneNumber || !company.telnyxMessagingProfileId) {
     return { success: false, error: "Telnyx SMS is not configured. Set API key, phone number, and messaging profile ID in Settings." };
   }
@@ -55,11 +57,11 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
   const { sendTelnyxSms } = await import("./telnyx-sms");
   const { decrypt } = await import("../utils/encryption");
   let resolvedApiKey: string;
-  if (company.telnyxApiKey) {
+  if (storedKey) {
     try {
-      resolvedApiKey = decrypt(company.telnyxApiKey);
+      resolvedApiKey = decrypt(storedKey);
     } catch {
-      resolvedApiKey = company.telnyxApiKey;
+      resolvedApiKey = storedKey;
     }
   } else {
     resolvedApiKey = process.env.TELNYX_API_KEY!;
