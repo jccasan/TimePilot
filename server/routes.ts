@@ -6558,8 +6558,11 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const existing = (company.pricingConfig || {}) as Record<string, unknown>;
       const config = pricingConfigSchema.parse(req.body);
-      const merged: PricingConfig = { ...DEFAULT_PRICING_CONFIG, ...config };
+      const merged: PricingConfig = { ...DEFAULT_PRICING_CONFIG, ...existing, ...config };
       await storage.updateCompany(companyId, { pricingConfig: merged });
       res.json(merged);
     } catch (err) { handleError(res, err); }
