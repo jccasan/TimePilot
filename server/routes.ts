@@ -8101,6 +8101,13 @@ Return ONLY valid JSON, no markdown.`,
       const companyId = originalMsg.companyId;
       const contactId = originalMsg.contactId;
 
+      if (contactId) {
+        const contact = await storage.getContact(contactId, companyId);
+        if (contact?.email && contact.email.toLowerCase() !== senderEmail) {
+          console.warn(`[Inbound Email] Sender mismatch: expected=${contact.email}, got=${senderEmail}, thread=${threadId}`);
+        }
+      }
+
       const inboundBody = textBody || htmlBody || "";
       const dedupeWindowMs = 60_000;
       const now = Date.now();
