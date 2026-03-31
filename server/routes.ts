@@ -6309,16 +6309,24 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       const allAddOns = await storage.getServicePricing(companyId, "add_on");
+
+      const parseLotAcres = (name: string): number | null => {
+        const m = name.match(/Lot Size up to\s+([.\d]+)\s*Acre/i);
+        return m ? parseFloat(m[1]) : null;
+      };
+      const existingLotByAcres = new Map<number, typeof allAddOns[0]>();
       const existingAddOnsByName = new Map<string, typeof allAddOns[0]>();
       for (const a of allAddOns) {
         existingAddOnsByName.set(a.name, a);
+        const acres = parseLotAcres(a.name);
+        if (acres !== null) existingLotByAcres.set(acres, a);
       }
-      const generatedYardNames = new Set<string>();
+      const generatedYardAcres = new Set<number>();
       let yardSort = 100;
       for (const tier of rules.yardSizeTiers) {
         const tierName = `Lot Size up to ${tier.upToAcres} Acre`;
-        generatedYardNames.add(tierName);
-        const existingAddon = existingAddOnsByName.get(tierName);
+        generatedYardAcres.add(tier.upToAcres);
+        const existingAddon = existingLotByAcres.get(tier.upToAcres) || existingAddOnsByName.get(tierName);
         if (existingAddon) {
           const isOverridden = (existingAddon.metadata as Record<string, unknown>)?.manualOverride === true;
           if (!isOverridden) {
@@ -6347,9 +6355,10 @@ Return ONLY valid JSON, no markdown.`,
 
       for (const addon of allAddOns) {
         const addonMeta = (addon.metadata as Record<string, unknown>) || {};
+        const addonAcres = parseLotAcres(addon.name);
         if (
-          addon.name.startsWith("Lot Size up to") &&
-          !generatedYardNames.has(addon.name) &&
+          addonAcres !== null &&
+          !generatedYardAcres.has(addonAcres) &&
           addonMeta.ruleGenerated &&
           !addonMeta.manualOverride
         ) {
