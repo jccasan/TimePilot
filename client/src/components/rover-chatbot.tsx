@@ -141,7 +141,6 @@ export default function RoverChatbot() {
   );
   const draggingRef = useRef(false);
   const dragStartRef = useRef<{ mx: number; my: number; fx: number; fy: number } | null>(null);
-  const didDragRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -206,10 +205,8 @@ export default function RoverChatbot() {
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      e.preventDefault();
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      e.currentTarget.setPointerCapture(e.pointerId);
       dragStartRef.current = { mx: e.clientX, my: e.clientY, fx: fabPos.x, fy: fabPos.y };
-      didDragRef.current = false;
       draggingRef.current = false;
     },
     [fabPos]
@@ -222,7 +219,7 @@ export default function RoverChatbot() {
       const dy = e.clientY - dragStartRef.current.my;
       if (!draggingRef.current && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
       draggingRef.current = true;
-      didDragRef.current = true;
+      e.preventDefault();
       const newPos = clampPos(dragStartRef.current.fx + dx, dragStartRef.current.fy + dy, btnSize);
       setFabPos(newPos);
     },
@@ -231,23 +228,19 @@ export default function RoverChatbot() {
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent) => {
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      e.currentTarget.releasePointerCapture(e.pointerId);
       if (draggingRef.current) {
         const snapped = snapToEdge(fabPos.x, fabPos.y, btnSize);
         setFabPos(snapped);
         savePosition(snapped);
+      } else {
+        setOpen(true);
       }
       dragStartRef.current = null;
       draggingRef.current = false;
     },
     [fabPos, btnSize, savePosition]
   );
-
-  const handleFabClick = useCallback(() => {
-    if (!didDragRef.current) {
-      setOpen(true);
-    }
-  }, []);
 
   if (!user) return null;
 
@@ -584,7 +577,6 @@ export default function RoverChatbot() {
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onClick={handleFabClick}
           className="fixed z-[100] flex items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow select-none touch-none"
           style={{
             left: fabPos.x,
