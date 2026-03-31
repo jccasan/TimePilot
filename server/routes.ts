@@ -7782,9 +7782,22 @@ Return ONLY valid JSON, no markdown.`,
       const toDigits = toNumber.replace(/\D/g, "");
       const { isSharedNumber } = await import("./services/sms");
 
-      // Step 1: Try dedicated number match (existing behavior)
       const allCompanies = await storage.listCompanies();
-      let matchedCompany = allCompanies.find(c => {
+      let matchedCompany: (typeof allCompanies)[number] | undefined;
+
+      // Step 0: Check for companyId in query string (set via webhook_url on outbound)
+      const qsCompanyId = req.query.companyId as string | undefined;
+      if (qsCompanyId) {
+        matchedCompany = allCompanies.find(c => c.id === qsCompanyId);
+        if (matchedCompany) {
+          console.log(`[Telnyx SMS] Matched via companyId query param: ${matchedCompany.name} (${matchedCompany.id})`);
+        } else {
+          console.warn(`[Telnyx SMS] companyId query param "${qsCompanyId}" not found in companies table`);
+        }
+      }
+
+      // Step 1: Try dedicated number match (existing behavior)
+      if (!matchedCompany) matchedCompany = allCompanies.find(c => {
         const cDigits = (c.telnyxPhoneNumber || "").replace(/\D/g, "");
         return cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
       });
