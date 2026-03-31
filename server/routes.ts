@@ -12903,7 +12903,7 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/migrations/competitor/import", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
       const { csvText, platform, duplicateHandling } = req.body;
       if (!csvText || typeof csvText !== "string") return res.status(400).json({ error: "csvText is required" });
       if (platform && !VALID_PLATFORMS.includes(platform)) return res.status(400).json({ error: "Invalid platform" });
@@ -13073,7 +13073,7 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/migrations/sweepandgo/parse-invoices", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
       const { csvText } = req.body;
       if (!csvText || typeof csvText !== "string") return res.status(400).json({ error: "csvText is required" });
 
@@ -13100,7 +13100,7 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/migrations/sweepandgo/run-invoices", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
       const { csvText, allowDuplicates, includeInReminders } = req.body;
       if (!csvText) return res.status(400).json({ error: "csvText is required" });
 
@@ -13253,7 +13253,7 @@ Return ONLY valid JSON, no markdown.`,
 
   app.get("/api/migrations/:id/invoices-report", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
       const importRun = await storage.getImportRun(req.params.id, companyId);
       if (!importRun) return res.status(404).json({ error: "Import run not found" });
       res.json(importRun);
@@ -13262,7 +13262,7 @@ Return ONLY valid JSON, no markdown.`,
 
   app.get("/api/invoices/:id/payments", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
       const invoice = await storage.getInvoice(req.params.id, companyId);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       const payments = await storage.getInvoicePayments(req.params.id);
@@ -13272,7 +13272,7 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/imports/ai-map", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
       const { headers, sampleRows, targetSchema } = req.body;
 
       if (!headers || !Array.isArray(headers)) return res.status(400).json({ error: "headers array is required" });
@@ -13343,7 +13343,7 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/imports/apply", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
       const { targetSchema } = req.body;
       let headers: string[];
       let rows: string[][];
@@ -13456,7 +13456,7 @@ Return ONLY valid JSON, no markdown.`,
 
   app.get("/api/imports", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
       const runs = await storage.getImportRuns(companyId);
       res.json(runs);
     } catch (err) { handleError(res, err); }
@@ -13464,7 +13464,7 @@ Return ONLY valid JSON, no markdown.`,
 
   app.get("/api/imports/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = getCompanyContext(req);
+      const { companyId } = await getCompanyContext(req);
       const run = await storage.getImportRun(req.params.id, companyId);
       if (!run) return res.status(404).json({ error: "Import run not found" });
       res.json(run);
