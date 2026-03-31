@@ -1876,6 +1876,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
       toast({ title: "Service updated" });
     },
     onError: (error: Error) => {

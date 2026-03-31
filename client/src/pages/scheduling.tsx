@@ -496,7 +496,7 @@ export default function Scheduling() {
                   )} />
                   <FormField control={form.control} name="startDate" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Start Date</FormLabel>
+                      <FormLabel>{selectedFrequency === "onetime" ? "Service Date" : "Start Date"}</FormLabel>
                       <FormControl><Input type="date" {...field} data-testid="input-start-date" /></FormControl>
                       <FormMessage />
                     </FormItem>
