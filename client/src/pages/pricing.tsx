@@ -761,7 +761,7 @@ export default function Pricing() {
                       const dogCount = getDogCount(item.name);
                       const itemMeta = (item.metadata as Record<string, unknown>) || {};
                       const isCallForQuote = itemMeta.callForQuote === true;
-                      const is7Plus = item.name.includes("7+");
+                      const isCallForQuoteRow = item.name.includes("+");
                       const canToggleQuote = dogCount !== null && dogCount >= 4;
                       const isManualOverride = itemMeta.manualOverride === true;
 
@@ -777,7 +777,7 @@ export default function Pricing() {
                               <Badge variant="secondary" className="no-default-active-elevate">
                                 {UNIT_LABELS[item.unit] || item.unit}
                               </Badge>
-                              {is7Plus && (
+                              {isCallForQuoteRow && (
                                 <Badge variant="outline" className="no-default-active-elevate text-muted-foreground">
                                   <Phone className="h-3 w-3 mr-1" /> Custom Quote
                                 </Badge>
@@ -798,7 +798,7 @@ export default function Pricing() {
                             )}
                           </div>
                           <div className="flex items-center gap-3">
-                            {(canToggleQuote || is7Plus) && !is7Plus && (
+                            {canToggleQuote && !isCallForQuoteRow && (
                               <div className="flex items-center gap-1.5">
                                 <Switch
                                   checked={isCallForQuote}
