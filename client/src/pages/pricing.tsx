@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { ServicePricingItem, ServicePackage, PricingRulesConfig } from "@shared/schema";
+import type { ServicePricingItem, ServicePackage, PricingRulesConfig, PricingConfig } from "@shared/schema";
 import { DEFAULT_PRICING_RULES } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -419,7 +419,7 @@ export default function Pricing() {
     queryKey: ["/api/packages"],
   });
 
-  const { data: pricingConfig } = useQuery<Record<string, any>>({
+  const { data: pricingConfig } = useQuery<PricingConfig & { pricingRules?: PricingRulesConfig }>({
     queryKey: ["/api/pricing-config"],
   });
 
