@@ -46,9 +46,29 @@ function clampPos(x: number, y: number, btnSize: number) {
 
 function snapToEdge(x: number, y: number, btnSize: number) {
   const vw = window.innerWidth;
-  const centerX = x + btnSize / 2;
-  const snappedX = centerX < vw / 2 ? EDGE_MARGIN : vw - btnSize - EDGE_MARGIN;
-  return clampPos(snappedX, y, btnSize);
+  const vh = window.innerHeight;
+
+  const distLeft = x;
+  const distRight = vw - x - btnSize;
+  const distTop = y;
+  const distBottom = vh - y - btnSize;
+
+  const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+  let snappedX = x;
+  let snappedY = y;
+
+  if (minDist === distLeft) {
+    snappedX = EDGE_MARGIN;
+  } else if (minDist === distRight) {
+    snappedX = vw - btnSize - EDGE_MARGIN;
+  } else if (minDist === distTop) {
+    snappedY = EDGE_MARGIN;
+  } else {
+    snappedY = vh - btnSize - EDGE_MARGIN;
+  }
+
+  return clampPos(snappedX, snappedY, btnSize);
 }
 
 function loadPosition(userId: string, btnSize: number): { x: number; y: number } {
