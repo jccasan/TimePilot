@@ -7417,40 +7417,44 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       const exception = await storage.resolveMessageException(req.params.id, userId, targetCompanyId);
-      if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
+      if (!exception) return res.status(404).json({ error: "Exception not found, already resolved, or not assigned to your company" });
 
       if (exception.body && exception.fromAddress) {
-        const allContacts = await storage.getContacts(targetCompanyId);
-        const fromDigits = exception.fromAddress.replace(/\D/g, "");
-        const matchedContact = allContacts.find(c => {
-          const cDigits = (c.phone || "").replace(/\D/g, "");
-          return cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
-        });
+        try {
+          const allContacts = await storage.getContacts(targetCompanyId);
+          const fromDigits = exception.fromAddress.replace(/\D/g, "");
+          const matchedContact = allContacts.find(c => {
+            const cDigits = (c.phone || "").replace(/\D/g, "");
+            return cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
+          });
 
-        await storage.createMessage({
-          companyId: targetCompanyId,
-          contactId: matchedContact?.id || null,
-          channel: "sms",
-          direction: "inbound",
-          status: "received",
-          fromAddress: exception.fromAddress,
-          toAddress: exception.toAddress,
-          body: exception.body,
-          externalId: exception.providerMessageId || undefined,
-        });
+          await storage.createMessage({
+            companyId: targetCompanyId,
+            contactId: matchedContact?.id || null,
+            channel: "sms",
+            direction: "inbound",
+            status: "received",
+            fromAddress: exception.fromAddress,
+            toAddress: exception.toAddress,
+            body: exception.body,
+            externalId: exception.providerMessageId || undefined,
+          });
 
-        if (matchedContact) {
-          const { isSharedNumber } = await import("./services/sms");
-          if (isSharedNumber(exception.toAddress)) {
-            await storage.upsertMessageRouting({
-              sharedNumber: exception.toAddress,
-              customerPhone: exception.fromAddress,
-              companyId: targetCompanyId,
-              contactId: matchedContact.id,
-              channel: "sms",
-              lastUsedAt: new Date(),
-            });
+          if (matchedContact) {
+            const { isSharedNumber } = await import("./services/sms");
+            if (isSharedNumber(exception.toAddress)) {
+              await storage.upsertMessageRouting({
+                sharedNumber: exception.toAddress,
+                customerPhone: exception.fromAddress,
+                companyId: targetCompanyId,
+                contactId: matchedContact.id,
+                channel: "sms",
+                lastUsedAt: new Date(),
+              });
+            }
           }
+        } catch (msgErr) {
+          console.error(`[MessageException] Resolved exception ${req.params.id} but message delivery failed:`, msgErr);
         }
       }
 
@@ -7463,7 +7467,7 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, userId, role } = await getCompanyContext(req);
       if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
       const exception = await storage.dismissMessageException(req.params.id, userId, companyId);
-      if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
+      if (!exception) return res.status(404).json({ error: "Exception not found, already resolved, or not assigned to your company" });
       res.json(exception);
     } catch (err) { handleError(res, err); }
   });
@@ -11509,6 +11513,60 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const stats = await storage.getPlatformStats();
       res.json(stats);
+    } catch (err) { handleError(res, err); }
+  });
+
+  // Platform admin: view ALL message exceptions (including zero-candidate items)
+  app.get("/api/admin/message-exceptions", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
+      const exceptions = await storage.getMessageExceptions({ resolved });
+      res.json(exceptions);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/message-exceptions/:id/resolve", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = req.body;
+      if (!companyId) return res.status(400).json({ error: "companyId is required" });
+      const adminUserId = (req as any).adminUser.userId;
+      const exception = await storage.resolveMessageException(req.params.id, adminUserId, companyId, true);
+      if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
+
+      if (exception.body && exception.fromAddress) {
+        try {
+          const allContacts = await storage.getContacts(companyId);
+          const fromDigits = exception.fromAddress.replace(/\D/g, "");
+          const matchedContact = allContacts.find(c => {
+            const cDigits = (c.phone || "").replace(/\D/g, "");
+            return cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
+          });
+
+          await storage.createMessage({
+            companyId,
+            contactId: matchedContact?.id || null,
+            channel: "sms",
+            direction: "inbound",
+            status: "received",
+            fromAddress: exception.fromAddress,
+            toAddress: exception.toAddress,
+            body: exception.body,
+            externalId: exception.providerMessageId || undefined,
+          });
+        } catch (msgErr) {
+          console.error(`[Admin MessageException] Resolved exception ${req.params.id} but message delivery failed:`, msgErr);
+        }
+      }
+      res.json(exception);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/message-exceptions/:id/dismiss", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const adminUserId = (req as any).adminUser.userId;
+      const exception = await storage.dismissMessageException(req.params.id, adminUserId);
+      if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
+      res.json(exception);
     } catch (err) { handleError(res, err); }
   });
 
