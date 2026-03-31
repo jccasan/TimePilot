@@ -1735,7 +1735,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
         frequency: (editingPlan.frequency || "weekly") as ServicePlanFormValues["frequency"],
         dayOfWeek: (editingPlan.dayOfWeek || "monday") as ServicePlanFormValues["dayOfWeek"],
         pricePerVisit: editingPlan.pricePerVisit,
-        discount: (editingPlan as any).discount || "",
+        discount: editingPlan.discount || "",
         startDate: editingPlan.startDate,
         isActive: editingPlan.isActive,
         jobType: (editingPlan.jobType || "recurring") as ServicePlanFormValues["jobType"],
@@ -1981,25 +1981,27 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               <FormMessage />
             </FormItem>
           )} />
-          <FormField control={form.control} name="frequency" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Frequency</FormLabel>
-              <Select onValueChange={(v) => { field.onChange(v); setSelectedTemplateId?.(""); }} value={field.value}>
-                <FormControl><SelectTrigger data-testid="select-plan-frequency"><SelectValue /></SelectTrigger></FormControl>
-                <SelectContent>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="biweekly">Biweekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="onetime">One-time</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
+          {jobType !== "one_off" && (
+            <FormField control={form.control} name="frequency" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Frequency</FormLabel>
+                <Select onValueChange={(v) => { field.onChange(v); setSelectedTemplateId?.(""); }} value={field.value}>
+                  <FormControl><SelectTrigger data-testid="select-plan-frequency"><SelectValue /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="biweekly">Biweekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+          )}
+          {jobType !== "one_off" && (
+            <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
               <FormItem>
                 <FormLabel>Day of Week</FormLabel>
-                <Select onValueChange={(v) => { field.onChange(v); form.setValue("routeId", ""); }} value={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl><SelectTrigger data-testid="select-plan-day"><SelectValue /></SelectTrigger></FormControl>
                   <SelectContent>
                     {daysOfWeek.map((d) => (
@@ -2010,6 +2012,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
                 <FormMessage />
               </FormItem>
             )} />
+          )}
           {templates.length > 0 && (
             <div>
               <Label className="text-sm">Use Pricing Template</Label>
@@ -2278,7 +2281,7 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
           <div className="space-y-2">
             {servicePlans.map((plan) => {
               const isPaused = !!plan.pausedAt;
-              const discountVal = (plan as any).discount;
+              const discountVal = plan.discount;
               return (
               <div key={plan.id} className="border rounded-md p-3" data-testid={`text-plan-${plan.id}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
