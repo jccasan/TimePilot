@@ -20,8 +20,10 @@ export async function getCompanySmsConfig(companyId: string): Promise<CompanySms
 
   const storedKey = company.telnyxApiKey && company.telnyxApiKey !== "null" ? company.telnyxApiKey : null;
   const apiKey = storedKey || process.env.TELNYX_API_KEY;
-  const configured = !!(apiKey && company.telnyxPhoneNumber && company.telnyxMessagingProfileId);
-  return { provider: "telnyx", configured, phoneNumber: company.telnyxPhoneNumber || "" };
+  const phoneNumber = company.telnyxPhoneNumber || process.env.TELNYX_PHONE_NUMBER || "";
+  const profileId = company.telnyxMessagingProfileId || process.env.TELNYX_MESSAGING_PROFILE_ID || "";
+  const configured = !!(apiKey && phoneNumber && profileId);
+  return { provider: "telnyx", configured, phoneNumber };
 }
 
 export async function isSmsConfiguredForCompany(companyId: string): Promise<boolean> {
@@ -50,7 +52,9 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
 
   const storedKey = company.telnyxApiKey && company.telnyxApiKey !== "null" ? company.telnyxApiKey : null;
   const apiKey = storedKey || process.env.TELNYX_API_KEY;
-  if (!apiKey || !company.telnyxPhoneNumber || !company.telnyxMessagingProfileId) {
+  const phoneNumber = company.telnyxPhoneNumber || process.env.TELNYX_PHONE_NUMBER;
+  const profileId = company.telnyxMessagingProfileId || process.env.TELNYX_MESSAGING_PROFILE_ID;
+  if (!apiKey || !phoneNumber || !profileId) {
     return { success: false, error: "Telnyx SMS is not configured. Set API key, phone number, and messaging profile ID in Settings." };
   }
 
@@ -70,9 +74,9 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
   return sendTelnyxSms({
     to: options.to,
     body: options.body,
-    from: company.telnyxPhoneNumber,
+    from: phoneNumber,
     apiKey: resolvedApiKey,
-    messagingProfileId: company.telnyxMessagingProfileId,
+    messagingProfileId: profileId,
     companyId: options.companyId,
     mediaUrl: options.mediaUrl,
   });

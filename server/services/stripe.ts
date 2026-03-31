@@ -459,10 +459,16 @@ export function validateStripeConfig(): void {
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
   console.log("[Telnyx Config] Startup validation");
-  if (process.env.TELNYX_API_KEY) {
-    console.log("[Telnyx Config] ✓ TELNYX_API_KEY env var set (fallback for per-company config)");
+  const telnyxVars = ["TELNYX_API_KEY", "TELNYX_PHONE_NUMBER", "TELNYX_MESSAGING_PROFILE_ID"];
+  const presentTelnyx = telnyxVars.filter(v => !!process.env[v]);
+  const missingTelnyx = telnyxVars.filter(v => !process.env[v]);
+  if (presentTelnyx.length === telnyxVars.length) {
+    console.log(`[Telnyx Config] ✓ All ${telnyxVars.length} Telnyx env vars set (used as fallback for per-company config)`);
+  } else if (presentTelnyx.length > 0) {
+    console.log(`[Telnyx Config] ✓ ${presentTelnyx.length}/${telnyxVars.length} Telnyx env vars set`);
+    console.log(`[Telnyx Config] ℹ Missing: ${missingTelnyx.join(", ")} — per-company config required in Settings for these`);
   } else {
-    console.log("[Telnyx Config] ℹ TELNYX_API_KEY not set — per-company Telnyx config required in Settings");
+    console.log("[Telnyx Config] ℹ No Telnyx env vars set — per-company config required in Settings");
   }
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
