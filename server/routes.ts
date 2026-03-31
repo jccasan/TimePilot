@@ -3441,6 +3441,62 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/contacts/:id/services", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      const { frequency, dayOfWeek, startDate, pricePerVisit, discount, propertyId, serviceName, addOns } = req.body;
+      if (!frequency || !startDate || !pricePerVisit || !propertyId) {
+        return res.status(400).json({ error: "frequency, startDate, pricePerVisit, and propertyId are required" });
+      }
+
+      const parsed = insertServicePlanSchema.parse({
+        companyId,
+        contactId: req.params.id,
+        propertyId,
+        frequency,
+        dayOfWeek: dayOfWeek || null,
+        startDate,
+        pricePerVisit,
+        discount: discount || null,
+        serviceName: serviceName || null,
+        isActive: true,
+      });
+
+      const plan = await storage.createServicePlan(parsed);
+      auditLog(companyId, userId, "service_plan", plan.id, "create", { new: { contactId: req.params.id, frequency, dayOfWeek } }, req.ip || undefined);
+
+      if (contact.status === "lead" || contact.status === "estimate") {
+        await storage.updateContact(req.params.id, companyId, { status: "active" });
+        if (contact.email && !contact.hasPortalAccess) {
+          provisionPortalAccess(req.params.id, companyId, getBaseUrl(req)).catch((err) =>
+            console.error("[auto-portal] Failed to provision portal access:", err)
+          );
+        }
+      }
+
+      let planAddOns: any[] = [];
+      if (addOns && Array.isArray(addOns)) {
+        const validatedAddOns = await validateAndResolveAddOns(addOns, companyId);
+        planAddOns = await storage.setServicePlanAddOns(plan.id, validatedAddOns);
+      }
+
+      try {
+        const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+        const today = new Date();
+        const sixMonths = new Date(today);
+        sixMonths.setDate(sixMonths.getDate() + 182);
+        await generateVisitsForPlans(companyId, [plan.id], today.toISOString().split("T")[0], sixMonths.toISOString().split("T")[0]);
+      } catch (genErr) {
+        console.error("[contact-service] Failed to auto-generate visits:", genErr);
+      }
+
+      res.status(201).json({ ...plan, addOns: planAddOns });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Property Routes ================
 
   app.get("/api/properties", isAuthenticated, async (req: Request, res: Response) => {
@@ -4085,32 +4141,6 @@ Return ONLY valid JSON, no markdown.`,
       if (!body.routeId || body.routeId === "") body.routeId = null;
       const parsed = insertServicePlanSchema.parse(body);
 
-      if (!parsed.routeId && parsed.dayOfWeek) {
-        const dayRoutes = await storage.getRoutes(companyId, parsed.dayOfWeek);
-        if (dayRoutes.length > 0) {
-          const allPlans = await storage.getServicePlans(companyId, { isActive: true });
-          let bestRoute = dayRoutes[0];
-          let bestCount = Infinity;
-          for (const route of dayRoutes) {
-            const stopCount = allPlans.filter(sp => sp.routeId === route.id).length;
-            if (stopCount < bestCount) {
-              bestCount = stopCount;
-              bestRoute = route;
-            }
-          }
-          parsed.routeId = bestRoute.id;
-        }
-      }
-
-      if (parsed.routeId) {
-        const routeStops = await storage.getServicePlans(companyId, { routeId: parsed.routeId, isActive: true });
-        parsed.stopOrder = routeStops.length + 1;
-        if (!parsed.dayOfWeek) {
-          const targetRoute = await storage.getRoute(parsed.routeId, companyId);
-          if (targetRoute) parsed.dayOfWeek = targetRoute.dayOfWeek;
-        }
-      }
-
       const plan = await storage.createServicePlan(parsed);
 
       const { userId } = await getCompanyContext(req);
@@ -4129,9 +4159,17 @@ Return ONLY valid JSON, no markdown.`,
       if (req.body.addOns && Array.isArray(req.body.addOns)) {
         const validatedAddOns = await validateAndResolveAddOns(req.body.addOns, companyId);
         const addOns = await storage.setServicePlanAddOns(plan.id, validatedAddOns);
-        const linkedJob = await storage.getJobByServicePlanId(plan.id);
-        if (linkedJob) await storage.setJobAddOns(linkedJob.id, validatedAddOns);
         return res.status(201).json({ ...plan, addOns });
+      }
+
+      try {
+        const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+        const today = new Date();
+        const sixMonths = new Date(today);
+        sixMonths.setDate(sixMonths.getDate() + 182);
+        await generateVisitsForPlans(companyId, [plan.id], today.toISOString().split("T")[0], sixMonths.toISOString().split("T")[0]);
+      } catch (genErr) {
+        console.error("[service-plan] Failed to auto-generate visits:", genErr);
       }
 
       res.status(201).json({ ...plan, addOns: [] });

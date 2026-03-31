@@ -37,8 +37,8 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 ### Key Features
 - **Quick Create**: Sidebar dropdown button for rapidly creating contacts, quotes, invoices, and jobs from anywhere in the app. Contact and invoice creation open inline dialogs; quotes navigate with auto-open param.
 - **Data Management**: CRM for contacts and properties, CSV import with AI-assisted mapping, activity logs, and global search.
-- **Jobs System**: Management for one-off and recurring services, including "Stop Only" flags for non-revenue visits.
-- **Scheduling & Routing**: Recurring service plans, visit management, drag-and-drop route builder with map visualization, and visit completion tracking. Includes a route lock feature to preserve optimized stop orders.
+- **Jobs System**: Management for one-off and recurring services, including "Stop Only" flags for non-revenue visits. Service plans support a `discount` field (percentage).
+- **Scheduling & Routing**: Simplified scheduling — service plans are the single source of truth (no dual-write to agreements/jobs). Auto-visit generation creates visits for 6 months and auto-assigns them to date-based daily routes. Routes have both `dayOfWeek` (legacy) and `date` (daily) columns. `POST /api/contacts/:id/services` convenience endpoint. Drag-and-drop route builder with map visualization and visit completion tracking. Includes a route lock feature to preserve optimized stop orders.
 - **Financials**: Detailed invoicing with Stripe integration, payment ledger, profitability dashboard, and client tipping. Supports QuickBooks Online bidirectional sync for contacts and invoices.
 - **Communication**: Integrated email and two-way SMS with a threaded conversation inbox, client portal, and configurable notification preferences.
 - **Client Signup Widget**: Public-facing signup and quote page with instant pricing and lead creation.

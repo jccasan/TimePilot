@@ -307,7 +307,8 @@ export const routes = pgTable("routes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
-  dayOfWeek: dayOfWeekEnum("day_of_week").notNull(),
+  dayOfWeek: dayOfWeekEnum("day_of_week"),
+  date: date("date"),
   technicianId: varchar("technician_id").references(() => users.id),
   color: varchar("color", { length: 7 }).default("#3b82f6"),
   isLocked: boolean("is_locked").default(false).notNull(),
@@ -315,6 +316,7 @@ export const routes = pgTable("routes", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_routes_company").on(table.companyId),
+  index("idx_routes_date").on(table.companyId, table.date),
 ]);
 
 export const servicePlans = pgTable("service_plans", {
@@ -325,6 +327,7 @@ export const servicePlans = pgTable("service_plans", {
   frequency: serviceFrequencyEnum("frequency").notNull(),
   dayOfWeek: dayOfWeekEnum("day_of_week"),
   pricePerVisit: decimal("price_per_visit", { precision: 10, scale: 2 }).notNull(),
+  discount: decimal("discount", { precision: 5, scale: 2 }),
   isActive: boolean("is_active").notNull().default(true),
   pausedAt: timestamp("paused_at"),
   startDate: date("start_date").notNull(),

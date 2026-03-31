@@ -121,6 +121,8 @@ export interface IStorage {
   // Routes
   getRoute(id: string, companyId: string): Promise<Route | undefined>;
   getRoutes(companyId: string, dayOfWeek?: string): Promise<Route[]>;
+  getRouteByDate(companyId: string, date: string): Promise<Route | undefined>;
+  getOrCreateDailyRoute(companyId: string, date: string): Promise<Route>;
   createRoute(data: InsertRoute): Promise<Route>;
   updateRoute(id: string, companyId: string, data: Partial<InsertRoute>): Promise<Route>;
   deleteRoute(id: string, companyId: string): Promise<void>;
@@ -622,6 +624,28 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(routes).where(and(...conditions));
   }
 
+  async getRouteByDate(companyId: string, date: string): Promise<Route | undefined> {
+    const [route] = await db.select().from(routes).where(and(eq(routes.companyId, companyId), eq(routes.date, date)));
+    return route;
+  }
+
+  async getOrCreateDailyRoute(companyId: string, date: string): Promise<Route> {
+    const existing = await this.getRouteByDate(companyId, date);
+    if (existing) return existing;
+    const d = new Date(date + "T00:00:00Z");
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const dayName = dayNames[d.getUTCDay()];
+    const formatted = `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
+    const name = `${dayName} ${formatted}`;
+    const [route] = await db.insert(routes).values({
+      companyId,
+      name,
+      date,
+      dayOfWeek: dayName.toLowerCase() as any,
+    }).returning();
+    return route;
+  }
+
   async createRoute(data: InsertRoute): Promise<Route> {
     const [route] = await db.insert(routes).values(data).returning();
     return route;
@@ -791,97 +815,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createServicePlan(data: InsertServicePlan): Promise<ServicePlan> {
-    return db.transaction(async (tx) => {
-      const [sp] = await tx.insert(servicePlans).values(data).returning();
-
-      const [agreement] = await tx.insert(agreements).values({
-        companyId: data.companyId,
-        contactId: data.contactId,
-        frequency: data.frequency,
-        pricePerVisit: data.pricePerVisit,
-        isActive: data.isActive ?? true,
-        pausedAt: data.pausedAt ?? null,
-        startDate: data.startDate || new Date().toISOString().split("T")[0],
-        endDate: data.endDate ?? null,
-        endsAfterCount: data.endsAfterCount ?? null,
-        endsAfterUnit: data.endsAfterUnit ?? null,
-        estimateId: data.estimateId ?? null,
-        servicePlanId: sp.id,
-      }).returning();
-
-      await tx.insert(jobs).values({
-        companyId: data.companyId,
-        agreementId: agreement.id,
-        propertyId: data.propertyId,
-        routeId: data.routeId ?? null,
-        stopOrder: data.stopOrder ?? 0,
-        dayOfWeek: data.dayOfWeek ?? null,
-        serviceName: data.serviceName ?? null,
-        jobType: data.jobType ?? "recurring",
-        jobStatus: data.jobStatus ?? "active",
-        startTime: data.startTime ?? null,
-        endTime: data.endTime ?? null,
-        anytime: data.anytime ?? true,
-        visitInstructions: data.visitInstructions ?? null,
-        assignedUserId: data.assignedUserId ?? null,
-        isStopOnly: data.isStopOnly ?? false,
-        servicePlanId: sp.id,
-      });
-
-      return sp;
-    });
+    const [sp] = await db.insert(servicePlans).values(data).returning();
+    return sp;
   }
 
   async updateServicePlan(id: string, companyId: string, data: Partial<InsertServicePlan>): Promise<ServicePlan> {
-    const agreementFields: (keyof InsertAgreement)[] = ["frequency", "pricePerVisit", "isActive", "pausedAt", "startDate", "endDate", "endsAfterCount", "endsAfterUnit"];
-    const jobFields: (keyof InsertJob)[] = ["routeId", "stopOrder", "dayOfWeek", "serviceName", "jobType", "jobStatus", "startTime", "endTime", "anytime", "visitInstructions", "assignedUserId", "isStopOnly"];
-
-    const aUpd: Record<string, unknown> = {};
-    for (const k of agreementFields) {
-      if ((data as Record<string, unknown>)[k] !== undefined) aUpd[k] = (data as Record<string, unknown>)[k];
-    }
-    const jUpd: Record<string, unknown> = {};
-    for (const k of jobFields) {
-      if ((data as Record<string, unknown>)[k] !== undefined) jUpd[k] = (data as Record<string, unknown>)[k];
-    }
-
-    const hasSyncUpdates = Object.keys(aUpd).length > 0 || Object.keys(jUpd).length > 0;
-
-    if (!hasSyncUpdates) {
-      const [sp] = await db.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId))).returning();
-      return sp;
-    }
-
-    return db.transaction(async (tx) => {
-      const [sp] = await tx.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId))).returning();
-
-      if (Object.keys(aUpd).length > 0) {
-        const [existingAgreement] = await tx.select().from(agreements).where(and(eq(agreements.servicePlanId, id), eq(agreements.companyId, companyId)));
-        if (existingAgreement) {
-          await tx.update(agreements).set({ ...aUpd, updatedAt: new Date() }).where(eq(agreements.id, existingAgreement.id));
-        }
-      }
-      if (Object.keys(jUpd).length > 0) {
-        const [existingJob] = await tx.select().from(jobs).where(and(eq(jobs.servicePlanId, id), eq(jobs.companyId, companyId)));
-        if (existingJob) {
-          await tx.update(jobs).set({ ...jUpd, updatedAt: new Date() }).where(eq(jobs.id, existingJob.id));
-        }
-      }
-
-      return sp;
-    });
+    const [sp] = await db.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId))).returning();
+    return sp;
   }
 
   async deleteServicePlan(id: string, companyId: string): Promise<void> {
-    await db.transaction(async (tx) => {
-      const [existingJob] = await tx.select().from(jobs).where(and(eq(jobs.servicePlanId, id), eq(jobs.companyId, companyId)));
-      if (existingJob) {
-        await tx.delete(jobAddOns).where(eq(jobAddOns.jobId, existingJob.id));
-        await tx.delete(jobs).where(and(eq(jobs.id, existingJob.id), eq(jobs.companyId, companyId)));
-      }
-      await tx.delete(agreements).where(and(eq(agreements.servicePlanId, id), eq(agreements.companyId, companyId)));
-      await tx.delete(servicePlans).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
-    });
+    await db.delete(servicePlans).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
   }
 
   async getServicePlanAddOns(servicePlanId: string): Promise<ServicePlanAddOn[]> {

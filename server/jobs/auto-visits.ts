@@ -1,6 +1,6 @@
 import { storage } from "../storage";
 import { getCompanyToday } from "../utils/company-date";
-import type { VacationHold, JobWithAgreement } from "@shared/schema";
+import type { VacationHold, ServicePlan } from "@shared/schema";
 
 export async function runAutoVisits() {
   console.log("[auto-visits] Starting auto visit generation...");
@@ -48,20 +48,16 @@ export async function runAutoVisits() {
 }
 
 export async function generateVisitsForPlans(companyId: string, planIds: string[], startDate: string, endDate: string): Promise<number> {
-  const allJobs = await storage.getJobsWithAgreements(companyId, { isActive: true });
-  const matchingJobs = allJobs.filter(j =>
-    j.servicePlanId && planIds.includes(j.servicePlanId) &&
-    !j.agreementPausedAt &&
-    (!j.jobStatus || j.jobStatus === "active")
-  );
-  if (matchingJobs.length === 0) return 0;
-  return generateVisitsFromJobs(companyId, matchingJobs, startDate, endDate, true);
+  const plans = await storage.getServicePlans(companyId, { isActive: true });
+  const matching = plans.filter(p => planIds.includes(p.id) && !p.pausedAt);
+  if (matching.length === 0) return 0;
+  return generateVisitsFromPlans(companyId, matching, startDate, endDate, true);
 }
 
 export async function generateVisitsForCompany(companyId: string, startDate: string, endDate: string): Promise<number> {
-  const allJobs = await storage.getJobsWithAgreements(companyId, { isActive: true });
-  const activeJobs = allJobs.filter(j => !j.agreementPausedAt && (!j.jobStatus || j.jobStatus === "active"));
-  return generateVisitsFromJobs(companyId, activeJobs, startDate, endDate, false);
+  const plans = await storage.getServicePlans(companyId, { isActive: true });
+  const activePlans = plans.filter(p => !p.pausedAt);
+  return generateVisitsFromPlans(companyId, activePlans, startDate, endDate, false);
 }
 
 function isDateInVacationHold(dateStr: string, holdKey: string, holdsByKey: Map<string, VacationHold[]>): boolean {
@@ -73,7 +69,7 @@ function isDateInVacationHold(dateStr: string, holdKey: string, holdsByKey: Map<
   return false;
 }
 
-async function generateVisitsFromJobs(companyId: string, jobsWithAgreements: JobWithAgreement[], startDate: string, endDate: string, ignoreCancelled: boolean): Promise<number> {
+async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], startDate: string, endDate: string, ignoreCancelled: boolean): Promise<number> {
   const existingVisits = await storage.getVisitsForDateRange(companyId, startDate, endDate);
   const existingKeys = new Set(
     existingVisits
@@ -81,11 +77,9 @@ async function generateVisitsFromJobs(companyId: string, jobsWithAgreements: Job
       .map((v) => `${v.servicePlanId}_${v.scheduledDate}`)
   );
 
-  const servicePlanIds = jobsWithAgreements
-    .map(j => j.servicePlanId)
-    .filter((id): id is string => id !== null);
-  const allHolds = servicePlanIds.length > 0
-    ? await storage.getVacationHoldsForPlans(servicePlanIds)
+  const planIds = plans.map(p => p.id);
+  const allHolds = planIds.length > 0
+    ? await storage.getVacationHoldsForPlans(planIds)
     : [];
   const holdsByPlan = new Map<string, VacationHold[]>();
   for (const hold of allHolds) {
@@ -102,18 +96,25 @@ async function generateVisitsFromJobs(companyId: string, jobsWithAgreements: Job
   let created = 0;
   const start = new Date(startDate + "T00:00:00Z");
   const end = new Date(endDate + "T00:00:00Z");
+  const dailyRouteCache = new Map<string, string>();
 
-  for (const job of jobsWithAgreements) {
-    const spId = job.servicePlanId || job.id;
-    const planStart = job.startDate ? new Date(job.startDate + "T00:00:00Z") : start;
-    let computedEndDate: Date | null = job.endDate ? new Date(job.endDate + "T00:00:00Z") : null;
-    if (!computedEndDate && job.endsAfterCount && job.endsAfterUnit && job.startDate) {
-      const base = new Date(job.startDate + "T00:00:00Z");
-      switch (job.endsAfterUnit) {
-        case "days": base.setUTCDate(base.getUTCDate() + job.endsAfterCount); break;
-        case "weeks": base.setUTCDate(base.getUTCDate() + job.endsAfterCount * 7); break;
-        case "months": base.setUTCMonth(base.getUTCMonth() + job.endsAfterCount); break;
-        case "years": base.setUTCFullYear(base.getUTCFullYear() + job.endsAfterCount); break;
+  async function getRouteIdForDate(dateStr: string): Promise<string> {
+    if (dailyRouteCache.has(dateStr)) return dailyRouteCache.get(dateStr)!;
+    const route = await storage.getOrCreateDailyRoute(companyId, dateStr);
+    dailyRouteCache.set(dateStr, route.id);
+    return route.id;
+  }
+
+  for (const plan of plans) {
+    const planStart = plan.startDate ? new Date(plan.startDate + "T00:00:00Z") : start;
+    let computedEndDate: Date | null = plan.endDate ? new Date(plan.endDate + "T00:00:00Z") : null;
+    if (!computedEndDate && plan.endsAfterCount && plan.endsAfterUnit && plan.startDate) {
+      const base = new Date(plan.startDate + "T00:00:00Z");
+      switch (plan.endsAfterUnit) {
+        case "days": base.setUTCDate(base.getUTCDate() + plan.endsAfterCount); break;
+        case "weeks": base.setUTCDate(base.getUTCDate() + plan.endsAfterCount * 7); break;
+        case "months": base.setUTCMonth(base.getUTCMonth() + plan.endsAfterCount); break;
+        case "years": base.setUTCFullYear(base.getUTCFullYear() + plan.endsAfterCount); break;
       }
       computedEndDate = base;
     }
@@ -121,9 +122,9 @@ async function generateVisitsFromJobs(companyId: string, jobsWithAgreements: Job
     const effectiveStart = planStart > start ? planStart : start;
     const effectiveEnd = planEnd < end ? planEnd : end;
 
-    if (job.frequency === "monthly") {
-      if (!job.startDate) continue;
-      const anchorDate = new Date(job.startDate + "T00:00:00Z");
+    if (plan.frequency === "monthly") {
+      if (!plan.startDate) continue;
+      const anchorDate = new Date(plan.startDate + "T00:00:00Z");
       const anchorYear = anchorDate.getUTCFullYear();
       const anchorMonth = anchorDate.getUTCMonth();
       const anchorDay = anchorDate.getUTCDate();
@@ -137,18 +138,14 @@ async function generateVisitsFromJobs(companyId: string, jobsWithAgreements: Job
         if (candidate > effectiveEnd) break;
         if (candidate >= effectiveStart) {
           const dateStr = candidate.toISOString().split("T")[0];
-          const key = `${spId}_${dateStr}`;
-          if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, spId, holdsByPlan)) {
-            if (!job.servicePlanId) {
-              console.warn(`[auto-visits] Job ${job.id} missing servicePlanId, skipping visit for ${dateStr}`);
-              continue;
-            }
+          const key = `${plan.id}_${dateStr}`;
+          if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, plan.id, holdsByPlan)) {
+            const routeId = await getRouteIdForDate(dateStr);
             await storage.createVisit({
               companyId,
-              servicePlanId: job.servicePlanId,
-              jobId: job.id,
-              propertyId: job.propertyId,
-              routeId: job.routeId || null,
+              servicePlanId: plan.id,
+              propertyId: plan.propertyId,
+              routeId,
               scheduledDate: dateStr,
               status: "scheduled",
             });
@@ -162,42 +159,56 @@ async function generateVisitsFromJobs(companyId: string, jobsWithAgreements: Job
       continue;
     }
 
-    if (!job.dayOfWeek) continue;
-    const targetDay = dayMap[job.dayOfWeek];
+    if (plan.frequency === "onetime") {
+      if (!plan.startDate) continue;
+      const dateStr = plan.startDate;
+      if (dateStr >= startDate && dateStr <= endDate) {
+        const key = `${plan.id}_${dateStr}`;
+        if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, plan.id, holdsByPlan)) {
+          const routeId = await getRouteIdForDate(dateStr);
+          await storage.createVisit({
+            companyId,
+            servicePlanId: plan.id,
+            propertyId: plan.propertyId,
+            routeId,
+            scheduledDate: dateStr,
+            status: "scheduled",
+          });
+          created++;
+          existingKeys.add(key);
+        }
+      }
+      continue;
+    }
+
+    if (!plan.dayOfWeek) continue;
+    const targetDay = dayMap[plan.dayOfWeek];
     if (targetDay === undefined) continue;
 
     const current = new Date(effectiveStart);
     while (current <= effectiveEnd) {
       if (current.getUTCDay() === targetDay) {
         const dateStr = current.toISOString().split("T")[0];
-        const key = `${spId}_${dateStr}`;
+        const key = `${plan.id}_${dateStr}`;
 
-        if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, spId, holdsByPlan)) {
+        if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, plan.id, holdsByPlan)) {
           let shouldGenerate = true;
 
-          if (job.frequency === "biweekly") {
-            const planStartDate = new Date(job.startDate + "T00:00:00Z");
+          if (plan.frequency === "biweekly") {
+            const planStartDate = new Date(plan.startDate + "T00:00:00Z");
             const diffMs = current.getTime() - planStartDate.getTime();
             const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
             const diffWeeks = Math.floor(diffDays / 7);
             if (diffWeeks % 2 !== 0) shouldGenerate = false;
-          } else if (job.frequency === "onetime") {
-            if (dateStr !== job.startDate) {
-              shouldGenerate = false;
-            }
           }
 
           if (shouldGenerate) {
-            if (!job.servicePlanId) {
-              console.warn(`[auto-visits] Job ${job.id} missing servicePlanId, skipping visit for ${dateStr}`);
-              continue;
-            }
+            const routeId = await getRouteIdForDate(dateStr);
             await storage.createVisit({
               companyId,
-              servicePlanId: job.servicePlanId,
-              jobId: job.id,
-              propertyId: job.propertyId,
-              routeId: job.routeId || null,
+              servicePlanId: plan.id,
+              propertyId: plan.propertyId,
+              routeId,
               scheduledDate: dateStr,
               status: "scheduled",
             });
@@ -206,7 +217,7 @@ async function generateVisitsFromJobs(companyId: string, jobsWithAgreements: Job
           }
         }
 
-        if (job.frequency === "weekly" || job.frequency === "biweekly") {
+        if (plan.frequency === "weekly" || plan.frequency === "biweekly") {
           current.setUTCDate(current.getUTCDate() + 7);
           continue;
         }

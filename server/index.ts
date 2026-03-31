@@ -576,9 +576,25 @@ async function migrateServicePlansToAgreementsAndJobs() {
     console.log("[Migration] agreements/jobs/job_add_ons tables verified");
   } catch (err) {
     console.error("[Migration] Failed to migrate service_plans to agreements/jobs:", err);
-  } finally {
-    await pool.end();
   }
+
+  try {
+    await pool.query(`ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS discount DECIMAL(5,2)`);
+    console.log("[Migration] service_plans discount column verified");
+  } catch (err) {
+    console.error("[Migration] Failed to add discount column:", err);
+  }
+
+  try {
+    await pool.query(`ALTER TABLE routes ADD COLUMN IF NOT EXISTS date DATE`);
+    await pool.query(`ALTER TABLE routes ALTER COLUMN day_of_week DROP NOT NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_routes_date ON routes(company_id, date)`);
+    console.log("[Migration] routes date column and index verified");
+  } catch (err) {
+    console.error("[Migration] Failed to add date column to routes:", err);
+  }
+
+  await pool.end();
 }
 
 async function seedDemoCompany() {
