@@ -7395,14 +7395,27 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
-  // ─── Message Exception Queue (owner/admin only) ────────────────────────────
+  // ─── Message Exception Queue (tenant-scoped: only shows exceptions matching tenant's contacts) ─
   app.get("/api/message-exceptions", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
       if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
       const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
-      const exceptions = await storage.getMessageExceptions({ resolved });
-      res.json(exceptions);
+      const allExceptions = await storage.getMessageExceptions({ resolved });
+
+      const contacts = await storage.getContacts(companyId);
+      const contactDigitSet = new Set(
+        contacts.map(c => (c.phone || "").replace(/\D/g, "").slice(-10)).filter(d => d.length === 10)
+      );
+
+      const filtered = allExceptions.filter(ex => {
+        if (ex.resolvedCompanyId) return ex.resolvedCompanyId === companyId;
+        if (!ex.fromAddress) return false;
+        const fromDigits = ex.fromAddress.replace(/\D/g, "").slice(-10);
+        return fromDigits.length === 10 && contactDigitSet.has(fromDigits);
+      });
+
+      res.json(filtered);
     } catch (err) { handleError(res, err); }
   });
 
@@ -7411,11 +7424,16 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, userId, role } = await getCompanyContext(req);
       if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
 
-      const exception = await storage.resolveMessageException(req.params.id, userId, companyId);
-      if (!exception) return res.status(404).json({ error: "Exception not found" });
+      const targetCompanyId = req.body.companyId || companyId;
+      if (targetCompanyId !== companyId) {
+        return res.status(403).json({ error: "Cannot resolve exceptions for another company" });
+      }
+
+      const exception = await storage.resolveMessageException(req.params.id, userId, targetCompanyId);
+      if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
 
       if (exception.body && exception.fromAddress) {
-        const allContacts = await storage.getContacts(companyId);
+        const allContacts = await storage.getContacts(targetCompanyId);
         const fromDigits = exception.fromAddress.replace(/\D/g, "");
         const matchedContact = allContacts.find(c => {
           const cDigits = (c.phone || "").replace(/\D/g, "");
@@ -7423,7 +7441,7 @@ Return ONLY valid JSON, no markdown.`,
         });
 
         await storage.createMessage({
-          companyId,
+          companyId: targetCompanyId,
           contactId: matchedContact?.id || null,
           channel: "sms",
           direction: "inbound",
@@ -7437,14 +7455,14 @@ Return ONLY valid JSON, no markdown.`,
         if (matchedContact) {
           const { isSharedNumber } = await import("./services/sms");
           if (isSharedNumber(exception.toAddress)) {
-            storage.upsertMessageRouting({
+            await storage.upsertMessageRouting({
               sharedNumber: exception.toAddress,
               customerPhone: exception.fromAddress,
-              companyId,
+              companyId: targetCompanyId,
               contactId: matchedContact.id,
               channel: "sms",
               lastUsedAt: new Date(),
-            }).catch(() => {});
+            });
           }
         }
       }
@@ -7455,10 +7473,10 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/message-exceptions/:id/dismiss", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { userId, role } = await getCompanyContext(req);
+      const { companyId, userId, role } = await getCompanyContext(req);
       if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
       const exception = await storage.dismissMessageException(req.params.id, userId);
-      if (!exception) return res.status(404).json({ error: "Exception not found" });
+      if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
       res.json(exception);
     } catch (err) { handleError(res, err); }
   });
