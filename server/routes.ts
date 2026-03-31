@@ -8031,7 +8031,6 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       const from = req.body.from || "";
-      const to = req.body.to || req.body.envelope ? (() => { try { return JSON.parse(req.body.envelope)?.to?.[0] || ""; } catch { return ""; } })() : "";
       const subject = req.body.subject || "";
       const textBody = req.body.text || "";
       const htmlBody = req.body.html || "";
