@@ -2296,9 +2296,15 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
         </Dialog>
       </CardHeader>
       <CardContent>
-        {servicePlans && servicePlans.length > 0 ? (
-          <div className="space-y-2">
-            {servicePlans.map((plan) => {
+        {servicePlans && servicePlans.length > 0 ? (() => {
+          const activeServices = servicePlans.filter(p => p.jobStatus !== "cancelled" && p.isActive);
+          const pausedServices = servicePlans.filter(p => !!p.pausedAt && p.jobStatus !== "cancelled");
+          const cancelledServices = servicePlans.filter(p => p.jobStatus === "cancelled");
+          const currentServices = servicePlans.filter(p => p.jobStatus !== "cancelled");
+          return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+            {currentServices.map((plan) => {
               const isPaused = !!plan.pausedAt;
               const discountVal = plan.discount;
               return (
@@ -2408,8 +2414,45 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
               </div>
               );
             })}
+            </div>
+            {cancelledServices.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider pt-2 border-t">Cancelled</p>
+                {cancelledServices.map((plan) => (
+                  <div key={plan.id} className="border rounded-md p-3 opacity-60" data-testid={`text-plan-cancelled-${plan.id}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium capitalize line-through">{plan.serviceName || `${frequencyLabelsMap[plan.frequency] || plan.frequency} service`}</p>
+                        <p className="text-sm text-muted-foreground">${plan.pricePerVisit}/visit</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="destructive">Cancelled</Badge>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" data-testid={`button-delete-plan-${plan.id}`}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Service</AlertDialogTitle>
+                              <AlertDialogDescription>This will permanently delete this service and all its data. This action cannot be undone.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Keep</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteMutation.mutate(plan.id)} data-testid={`button-confirm-delete-plan-${plan.id}`}>Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        ) : (
+          );
+        })() : (
           <p className="text-sm text-muted-foreground">No services yet.</p>
         )}
 

@@ -135,7 +135,6 @@ const servicePlanSchema = z.object({
   dayOfWeek: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
   pricePerVisit: z.string().min(1, "Price is required"),
   startDate: z.string().min(1, "Start date is required"),
-  routeId: z.string().optional(),
 });
 
 type ServicePlanFormValues = z.infer<typeof servicePlanSchema>;
@@ -195,7 +194,7 @@ export default function Scheduling() {
     resolver: zodResolver(servicePlanSchema),
     defaultValues: {
       contactId: "", propertyId: "", frequency: "weekly", dayOfWeek: "monday",
-      pricePerVisit: "", startDate: formatDate(new Date(), tz), routeId: "",
+      pricePerVisit: "", startDate: formatDate(new Date(), tz),
     },
   });
 
@@ -467,16 +466,18 @@ export default function Scheduling() {
                       <FormMessage />
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Day of Week</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger data-testid="select-day"><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>{daysOfWeek.map((d) => (<SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>))}</SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
+                  {selectedFrequency !== "onetime" && (
+                    <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Day of Week</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger data-testid="select-day"><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>{daysOfWeek.map((d) => (<SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>))}</SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  )}
                   {templatePricing.length > 0 && (
                     <div>
                       <Label className="text-sm">Use Pricing Template</Label>
@@ -497,16 +498,6 @@ export default function Scheduling() {
                     <FormItem>
                       <FormLabel>Start Date</FormLabel>
                       <FormControl><Input type="date" {...field} data-testid="input-start-date" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="routeId" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Route (optional)</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger data-testid="select-route"><SelectValue placeholder="No route" /></SelectTrigger></FormControl>
-                        <SelectContent>{routes?.map((r) => (<SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>))}</SelectContent>
-                      </Select>
                       <FormMessage />
                     </FormItem>
                   )} />

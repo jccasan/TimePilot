@@ -4250,7 +4250,7 @@ Return ONLY valid JSON, no markdown.`,
         "frequency", "dayOfWeek", "pricePerVisit", "isActive", "startDate", "endDate",
         "routeId", "stopOrder", "serviceName", "jobType", "jobStatus", "startTime",
         "endTime", "anytime", "endsAfterCount", "endsAfterUnit", "visitInstructions",
-        "assignedUserId", "isStopOnly", "pausedAt",
+        "assignedUserId", "isStopOnly", "pausedAt", "discount",
       ];
       const body: Record<string, any> = {};
       for (const key of allowedFields) {
