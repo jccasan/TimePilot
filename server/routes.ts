@@ -7216,68 +7216,109 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/webhooks/telnyx/sms", async (req: Request, res: Response) => {
     try {
       const eventType = req.body?.data?.event_type;
+      console.log(`[Telnyx SMS] Webhook received, event_type: ${eventType}`);
+
       if (eventType !== "message.received") {
+        console.log(`[Telnyx SMS] Ignoring event type: ${eventType}`);
         return res.status(200).json({ ok: true });
       }
 
       const payload = req.body?.data?.payload;
-      if (!payload) return res.status(200).json({ ok: true });
+      if (!payload) {
+        console.log("[Telnyx SMS] No payload found in request body");
+        return res.status(200).json({ ok: true });
+      }
+
+      console.log(`[Telnyx SMS] Payload shape: id=${payload.id}, from=${JSON.stringify(payload.from)}, to=${JSON.stringify(payload.to)}, text length=${payload.text?.length ?? 0}`);
 
       const fromNumber = payload.from?.phone_number;
       const textBody = payload.text;
-      const toNumbers = payload.to || [];
-      const toNumber = toNumbers[0]?.phone_number || "";
       const messageId = payload.id;
 
+      // Handle both array and single-object forms of the "to" field
+      let toNumber = "";
+      if (Array.isArray(payload.to)) {
+        toNumber = payload.to[0]?.phone_number || "";
+      } else if (payload.to && typeof payload.to === "object") {
+        toNumber = payload.to.phone_number || "";
+      } else if (typeof payload.to === "string") {
+        toNumber = payload.to;
+      }
+
+      console.log(`[Telnyx SMS] Parsed: from=${fromNumber}, to=${toNumber}, messageId=${messageId}`);
+
       if (!fromNumber || !textBody) {
+        console.log(`[Telnyx SMS] Missing required fields: fromNumber=${fromNumber}, textBody=${textBody ? "present" : "missing"}`);
         return res.status(200).json({ ok: true });
       }
 
       const toDigits = toNumber.replace(/\D/g, "");
       const allCompanies = await storage.listCompanies();
+      console.log(`[Telnyx SMS] Checking ${allCompanies.length} companies for to number: ${toNumber} (digits: ${toDigits})`);
+
+      const companyPhoneList = allCompanies.map(c => ({
+        id: c.id,
+        name: c.name,
+        telnyxPhoneNumber: c.telnyxPhoneNumber,
+        dedicatedPhoneNumber: c.dedicatedPhoneNumber,
+      }));
+      console.log(`[Telnyx SMS] Company phone numbers: ${JSON.stringify(companyPhoneList)}`);
+
       let matchedCompany = allCompanies.find(c => {
         const cDigits = (c.telnyxPhoneNumber || "").replace(/\D/g, "");
-        return cDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
+        const match = cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
+        return match;
       });
       if (!matchedCompany) {
         matchedCompany = allCompanies.find(c => {
           const cDigits = (c.dedicatedPhoneNumber || "").replace(/\D/g, "");
-          return cDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
+          const match = cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
+          return match;
         });
       }
 
-      if (matchedCompany) {
-        const companyId = matchedCompany.id;
-        const allContacts = await storage.getContacts(companyId);
-        const fromDigits = fromNumber.replace(/\D/g, "");
-        const matchedContact = allContacts.find(c => {
-          const cDigits = (c.phone || "").replace(/\D/g, "");
-          return cDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
-        });
-
-        await storage.createMessage({
-          companyId,
-          contactId: matchedContact?.id || null,
-          channel: "sms",
-          direction: "inbound",
-          status: "received",
-          fromAddress: fromNumber,
-          toAddress: toNumber,
-          body: textBody,
-          externalId: messageId,
-        });
-
-        if (matchedContact) {
-          notify(companyId, "new_message", "New Text Message", `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`, `/communications?contactId=${matchedContact.id}`);
-        }
-
-        const { logSmsMessage } = await import("./services/sms");
-        logSmsMessage(companyId, toNumber, fromNumber, "inbound", messageId, 1).catch(() => {});
+      if (!matchedCompany) {
+        const checkedNumbers = allCompanies.map(c => `${c.name}: telnyx=${c.telnyxPhoneNumber || "none"}, dedicated=${c.dedicatedPhoneNumber || "none"}`).join("; ");
+        console.warn(`[Telnyx SMS] WARNING: No company matched for to number: ${toNumber} (digits: ${toDigits}). Checked: ${checkedNumbers}`);
+        return res.status(200).json({ ok: true });
       }
+
+      console.log(`[Telnyx SMS] Matched company: ${matchedCompany.name} (id: ${matchedCompany.id})`);
+
+      const companyId = matchedCompany.id;
+      const allContacts = await storage.getContacts(companyId);
+      const fromDigits = fromNumber.replace(/\D/g, "");
+      const matchedContact = allContacts.find(c => {
+        const cDigits = (c.phone || "").replace(/\D/g, "");
+        return cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
+      });
+
+      console.log(`[Telnyx SMS] Contact match: ${matchedContact ? `${matchedContact.firstName} ${matchedContact.lastName} (id: ${matchedContact.id})` : "no match found"} for from number: ${fromNumber}`);
+
+      await storage.createMessage({
+        companyId,
+        contactId: matchedContact?.id || null,
+        channel: "sms",
+        direction: "inbound",
+        status: "received",
+        fromAddress: fromNumber,
+        toAddress: toNumber,
+        body: textBody,
+        externalId: messageId,
+      });
+
+      console.log(`[Telnyx SMS] Message saved successfully for company ${matchedCompany.name}`);
+
+      if (matchedContact) {
+        notify(companyId, "new_message", "New Text Message", `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`, `/communications?contactId=${matchedContact.id}`);
+      }
+
+      const { logSmsMessage } = await import("./services/sms");
+      logSmsMessage(companyId, toNumber, fromNumber, "inbound", messageId, 1).catch(() => {});
 
       res.status(200).json({ ok: true });
     } catch (err) {
-      console.error("Telnyx webhook error:", err);
+      console.error("[Telnyx SMS] Webhook error:", err);
       res.status(200).json({ ok: true });
     }
   });
