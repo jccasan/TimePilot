@@ -213,7 +213,15 @@ function PricingRulesPanel({
   };
 
   return (
-    <div className="space-y-4" data-testid="pricing-rules-panel">
+    <Card data-testid="pricing-rules-panel">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Settings2 className="h-5 w-5" />
+          Pricing Rules
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">Set your base prices and rules, then generate individual pricing rows</p>
+      </CardHeader>
+      <CardContent className="space-y-4">
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -401,7 +409,8 @@ function PricingRulesPanel({
           {isGenerating ? "Generating..." : "Generate Prices from Rules"}
         </Button>
       </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
