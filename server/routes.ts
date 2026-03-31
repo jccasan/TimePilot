@@ -7887,18 +7887,26 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/webhooks/stripe", async (req: Request, res: Response) => {
     try {
       const sig = req.headers["stripe-signature"] as string;
-      const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      const secrets = [
+        process.env.STRIPE_WEBHOOK_SECRET,
+        process.env.STRIPE_WEBHOOK_SECRET_SCOOPILOT_SITE,
+      ].filter(Boolean) as string[];
 
-      if (!sig || !endpointSecret) {
+      if (!sig || secrets.length === 0) {
         return res.status(400).json({ error: "Missing signature or webhook secret" });
       }
 
       let event;
-      try {
-        const rawBody = (req as any).rawBody || JSON.stringify(req.body);
-        event = constructWebhookEvent(rawBody, sig, endpointSecret);
-      } catch (err: any) {
-        console.error("Stripe webhook signature verification failed:", err.message);
+      const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+      for (const secret of secrets) {
+        try {
+          event = constructWebhookEvent(rawBody, sig, secret);
+          break;
+        } catch {
+        }
+      }
+      if (!event) {
+        console.error("Stripe webhook signature verification failed against all configured secrets");
         return res.status(400).json({ error: "Webhook signature verification failed" });
       }
 
