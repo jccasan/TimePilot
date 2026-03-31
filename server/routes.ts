@@ -7393,7 +7393,23 @@ Return ONLY valid JSON, no markdown.`,
     limits: { fileSize: MMS_MAX_PER_FILE, files: MMS_MAX_ATTACHMENTS },
   });
 
-  app.post("/api/messages/mms", isAuthenticated, mmsUpload.array("media", MMS_MAX_ATTACHMENTS), async (req: Request, res: Response) => {
+  app.post("/api/messages/mms", isAuthenticated, (req: Request, res: Response, next: Function) => {
+    mmsUpload.array("media", MMS_MAX_ATTACHMENTS)(req, res, (err: any) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ error: `File too large. Maximum per file: ${Math.round(MMS_MAX_PER_FILE / 1024 / 1024)}MB` });
+        }
+        if (err.code === "LIMIT_FILE_COUNT") {
+          return res.status(400).json({ error: `Too many files. Maximum: ${MMS_MAX_ATTACHMENTS}` });
+        }
+        if (err.code === "LIMIT_UNEXPECTED_FILE") {
+          return res.status(400).json({ error: "Unexpected file field" });
+        }
+        return res.status(400).json({ error: err.message || "File upload error" });
+      }
+      next();
+    });
+  }, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
       const { contactId, to, body, originalSizes } = req.body;
