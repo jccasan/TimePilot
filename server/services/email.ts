@@ -1,11 +1,14 @@
 import sgMail from "@sendgrid/mail";
 import { db } from "../db";
 import { emailsSent } from "@shared/schema";
+import crypto from "crypto";
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 if (SENDGRID_API_KEY) {
   sgMail.setApiKey(SENDGRID_API_KEY);
 }
+
+const INBOUND_EMAIL_DOMAIN = process.env.INBOUND_EMAIL_DOMAIN || "inbound.scoopilot.com";
 
 interface SendEmailOptions {
   to: string;
@@ -15,6 +18,7 @@ interface SendEmailOptions {
   text: string;
   html?: string;
   replyTo?: string;
+  emailThreadId?: string;
 }
 
 interface SendEmailResult {
@@ -25,24 +29,54 @@ interface SendEmailResult {
 
 const VERIFIED_SENDER = "jeremy@scoopilot.com";
 
+export function generateEmailThreadId(): string {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+export function buildReplyToAddress(threadId: string): string {
+  return `reply+${threadId}@${INBOUND_EMAIL_DOMAIN}`;
+}
+
+export function extractThreadIdFromAddress(address: string): string | null {
+  const match = address.match(/^reply\+([a-f0-9]+)@/i);
+  return match ? match[1] : null;
+}
+
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
   if (!SENDGRID_API_KEY) {
     return { success: false, error: "SendGrid API key not configured" };
   }
 
   try {
-    const replyTo = options.replyTo
-      || (options.from && options.from !== VERIFIED_SENDER ? options.from : undefined);
+    let replyTo: string | { email: string; name?: string } | undefined;
 
-    const displayName = options.senderName && replyTo
-      ? `${options.senderName} (${replyTo})`
+    if (options.emailThreadId) {
+      const threadReplyTo = buildReplyToAddress(options.emailThreadId);
+      const displayName = options.senderName || options.from || undefined;
+      replyTo = displayName ? { email: threadReplyTo, name: displayName } : threadReplyTo;
+    } else {
+      replyTo = options.replyTo
+        || (options.from && options.from !== VERIFIED_SENDER ? options.from : undefined);
+    }
+
+    const displayName = options.senderName && (typeof replyTo === "string" ? replyTo : replyTo?.email)
+      ? `${options.senderName} (${typeof replyTo === "string" ? replyTo : replyTo?.email})`
       : options.senderName || undefined;
 
     const from = displayName
       ? { name: displayName, email: VERIFIED_SENDER }
       : VERIFIED_SENDER;
 
-    const msg = {
+    const headers: Record<string, string> = {};
+    if (options.emailThreadId) {
+      const messageIdDomain = INBOUND_EMAIL_DOMAIN;
+      const uniqueId = crypto.randomBytes(8).toString("hex");
+      headers["Message-ID"] = `<${uniqueId}.${options.emailThreadId}@${messageIdDomain}>`;
+      headers["In-Reply-To"] = `<${options.emailThreadId}@${messageIdDomain}>`;
+      headers["References"] = `<${options.emailThreadId}@${messageIdDomain}>`;
+    }
+
+    const msg: any = {
       to: options.to,
       from,
       subject: options.subject,
@@ -50,6 +84,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
       html: options.html || options.text,
       replyTo,
     };
+
+    if (Object.keys(headers).length > 0) {
+      msg.headers = headers;
+    }
 
     const [response] = await sgMail.send(msg);
     return {

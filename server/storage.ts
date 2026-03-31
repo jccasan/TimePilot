@@ -250,11 +250,14 @@ export interface IStorage {
   deleteServicePackage(id: string, companyId: string): Promise<void>;
 
   // Messages
-  getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string }): Promise<Message[]>;
+  getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string; emailThreadId?: string }): Promise<Message[]>;
   markMessageRead(id: string, companyId: string): Promise<Message>;
   markMessagesReadByContact(contactId: string, companyId: string): Promise<void>;
   markMessagesReadByPhone(phone: string, companyId: string): Promise<void>;
+  markMessagesReadByEmail(emailThreadId: string, companyId: string): Promise<void>;
   getUnreadSmsCount(companyId: string): Promise<number>;
+  getUnreadEmailCount(companyId: string): Promise<number>;
+  getMessagesByEmailThreadId(emailThreadId: string): Promise<Message[]>;
   createMessage(data: InsertMessage): Promise<Message>;
   updateMessageStatus(id: string, status: string, errorMessage?: string): Promise<Message>;
 
@@ -1505,7 +1508,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ================ Messages ================
-  async getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string }): Promise<Message[]> {
+  async getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string; emailThreadId?: string }): Promise<Message[]> {
     const conditions = [eq(messages.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(messages.contactId, filters.contactId));
     if (filters?.channel) conditions.push(eq(messages.channel, filters.channel as any));
@@ -1516,6 +1519,7 @@ export class DatabaseStorage implements IStorage {
         or(eq(messages.fromAddress, filters.phone), eq(messages.toAddress, filters.phone))!
       );
     }
+    if (filters?.emailThreadId) conditions.push(eq(messages.emailThreadId, filters.emailThreadId));
     return db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt));
   }
 
@@ -1558,6 +1562,36 @@ export class DatabaseStorage implements IStorage {
       )
     );
     return result[0]?.count ?? 0;
+  }
+
+  async getUnreadEmailCount(companyId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)::int` }).from(messages).where(
+      and(
+        eq(messages.companyId, companyId),
+        eq(messages.channel, "email"),
+        eq(messages.direction, "inbound"),
+        eq(messages.isRead, false),
+      )
+    );
+    return result[0]?.count ?? 0;
+  }
+
+  async getMessagesByEmailThreadId(emailThreadId: string): Promise<Message[]> {
+    return db.select().from(messages)
+      .where(eq(messages.emailThreadId, emailThreadId))
+      .orderBy(messages.createdAt);
+  }
+
+  async markMessagesReadByEmail(emailThreadId: string, companyId: string): Promise<void> {
+    await db.update(messages).set({ isRead: true }).where(
+      and(
+        eq(messages.companyId, companyId),
+        eq(messages.emailThreadId, emailThreadId),
+        eq(messages.channel, "email"),
+        eq(messages.direction, "inbound"),
+        eq(messages.isRead, false),
+      )
+    );
   }
 
   async createMessage(data: InsertMessage): Promise<Message> {

@@ -61,9 +61,13 @@ type Conversation = {
   contactId: string;
   contactName: string;
   phone: string;
+  email: string;
   lastMessage: Message;
   unreadCount: number;
   messageCount: number;
+  channel: string;
+  emailThreadId: string;
+  subject: string;
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -276,6 +280,7 @@ function ConversationThread({
         createdAt: new Date().toISOString(),
         mediaUrls: [],
         mediaCount: 0,
+        emailThreadId: null,
       };
       queryClient.setQueryData<Message[]>(cacheKey, (old) =>
         old ? [...old, optimisticMsg] : [optimisticMsg]
@@ -453,15 +458,244 @@ function ConversationThread({
   );
 }
 
+function EmailThread({
+  emailThreadId,
+  contactId,
+  contactName,
+  emailAddress,
+  subject,
+  onBack,
+}: {
+  emailThreadId: string;
+  contactId: string;
+  contactName: string;
+  emailAddress: string;
+  subject: string;
+  onBack: () => void;
+}) {
+  const { toast } = useToast();
+  const [replyText, setReplyText] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const { data: threadMessages, isLoading } = useQuery<Message[]>({
+    queryKey: ["/api/messages", "email", emailThreadId],
+    queryFn: async () => {
+      const params = new URLSearchParams({ channel: "email", emailThreadId });
+      const res = await fetch(`/api/messages?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+    enabled: !!emailThreadId,
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PATCH", `/api/messages/read-by-email-thread/${emailThreadId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/unread-email-count"] });
+    },
+  });
+
+  useEffect(() => {
+    if (!markReadMutation.isPending && threadMessages && threadMessages.some(m => m.direction === "inbound" && !m.isRead)) {
+      markReadMutation.mutate();
+    }
+  }, [emailThreadId, threadMessages]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [threadMessages]);
+
+  const sendReplyMutation = useMutation({
+    mutationFn: async (body: string) => {
+      await apiRequest("POST", "/api/messages/email", {
+        contactId: contactId || undefined,
+        to: emailAddress,
+        subject: subject.startsWith("Re: ") ? subject : `Re: ${subject}`,
+        body,
+        emailThreadId,
+      });
+    },
+    onMutate: async (body) => {
+      const cacheKey = ["/api/messages", "email", emailThreadId];
+      await queryClient.cancelQueries({ queryKey: cacheKey });
+      const previous = queryClient.getQueryData<Message[]>(cacheKey);
+      const optimisticMsg: Message = {
+        id: `optimistic-${Date.now()}`,
+        companyId: "",
+        contactId: contactId || null,
+        channel: "email",
+        direction: "outbound",
+        status: "queued",
+        fromAddress: "",
+        toAddress: emailAddress,
+        subject: subject.startsWith("Re: ") ? subject : `Re: ${subject}`,
+        body,
+        htmlBody: null,
+        externalId: null,
+        metadata: null,
+        sentBy: null,
+        errorMessage: null,
+        isRead: true,
+        createdAt: new Date().toISOString(),
+        mediaUrls: [],
+        mediaCount: 0,
+        emailThreadId,
+      };
+      queryClient.setQueryData<Message[]>(cacheKey, (old) =>
+        old ? [...old, optimisticMsg] : [optimisticMsg]
+      );
+      return { previous, cacheKey };
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(context.cacheKey, context.previous);
+      }
+      toast({ title: "Failed to send", description: error.message, variant: "destructive" });
+    },
+    onSuccess: () => {
+      setReplyText("");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
+    },
+  });
+
+  const handleSendReply = useCallback(() => {
+    const trimmed = replyText.trim();
+    if (!trimmed) return;
+    setReplyText("");
+    sendReplyMutation.mutate(trimmed);
+  }, [replyText, sendReplyMutation]);
+
+  const sortedMessages = threadMessages
+    ? [...threadMessages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    : [];
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-2 p-3 border-b shrink-0">
+        <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden" data-testid="button-email-thread-back">
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+            <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-medium truncate" data-testid="text-email-thread-contact">{contactName}</p>
+            <p className="text-xs text-muted-foreground truncate" data-testid="text-email-thread-subject">{subject}</p>
+          </div>
+        </div>
+      </div>
+
+      <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : sortedMessages.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-muted-foreground text-sm" data-testid="text-no-email-messages">
+            No messages in this thread.
+          </div>
+        ) : (
+          sortedMessages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`rounded-lg border p-3 ${
+                msg.direction === "outbound"
+                  ? "ml-8 bg-primary/5 border-primary/20"
+                  : "mr-8 bg-muted/50"
+              }`}
+              data-testid={`email-message-${msg.id}`}
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <DirectionIcon direction={msg.direction} />
+                  <span>{msg.direction === "outbound" ? `To: ${msg.toAddress}` : `From: ${msg.fromAddress}`}</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                  {new Date(msg.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                </span>
+              </div>
+              {msg.subject && msg.subject !== subject && (
+                <p className="text-xs font-medium text-muted-foreground mb-1">{msg.subject}</p>
+              )}
+              {msg.mediaUrls && msg.mediaUrls.length > 0 && (
+                <div className="mb-2 flex gap-2 flex-wrap">
+                  {msg.mediaUrls.map((url, idx) => (
+                    <a key={idx} href={url} target="_blank" rel="noopener noreferrer" data-testid={`email-media-link-${msg.id}-${idx}`}>
+                      <img
+                        src={url}
+                        alt="Attachment"
+                        className="rounded max-h-32 object-cover border"
+                        loading="lazy"
+                      />
+                    </a>
+                  ))}
+                </div>
+              )}
+              <div className="text-sm whitespace-pre-wrap break-words">{msg.body}</div>
+              {msg.status === "failed" && msg.errorMessage && (
+                <p className="text-xs text-destructive mt-1">{msg.errorMessage}</p>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="p-3 border-t shrink-0 space-y-2">
+        <div className="flex gap-2">
+          <Textarea
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            placeholder="Type your reply..."
+            rows={2}
+            className="resize-none"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                handleSendReply();
+              }
+            }}
+            disabled={sendReplyMutation.isPending}
+            data-testid="textarea-email-reply"
+          />
+          <Button
+            onClick={handleSendReply}
+            disabled={!replyText.trim() || sendReplyMutation.isPending}
+            size="icon"
+            className="shrink-0 self-end"
+            data-testid="button-send-email-reply"
+          >
+            {sendReplyMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+        <p className="text-[10px] text-muted-foreground">Press Ctrl+Enter to send</p>
+      </div>
+    </div>
+  );
+}
+
 function ConversationList({
   conversations,
   isLoading,
-  selectedContactId,
+  selectedKey,
   onSelect,
 }: {
   conversations: Conversation[];
   isLoading: boolean;
-  selectedContactId: string | null;
+  selectedKey: string | null;
   onSelect: (conv: Conversation) => void;
 }) {
   if (isLoading) {
@@ -475,53 +709,68 @@ function ConversationList({
   if (conversations.length === 0) {
     return (
       <div className="p-6 text-center text-muted-foreground text-sm" data-testid="text-no-conversations">
-        No SMS conversations yet
+        No conversations yet
       </div>
     );
   }
 
   return (
     <div className="overflow-auto h-full">
-      {conversations.map((conv) => (
-        <button
-          key={conv.contactId || conv.phone}
-          onClick={() => onSelect(conv)}
-          className={`w-full text-left p-3 border-b hover:bg-muted/50 transition-colors flex items-start gap-3 ${
-            selectedContactId === conv.contactId ? "bg-muted" : ""
-          }`}
-          data-testid={`conversation-item-${conv.contactId || "unknown"}`}
-        >
-          <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-            <User className="h-4 w-4 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className={`text-sm truncate ${conv.unreadCount > 0 ? "font-semibold" : "font-medium"}`}>
-                {conv.contactName}
-              </span>
-              <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">
-                {formatDistanceToNow(new Date(conv.lastMessage.createdAt), { addSuffix: true })}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2 mt-0.5">
-              <p className={`text-xs truncate ${conv.unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                {conv.lastMessage.direction === "outbound" ? "You: " : ""}
-                {conv.lastMessage.body}
-              </p>
-              {conv.unreadCount > 0 && (
-                <Badge variant="default" className="h-5 min-w-[20px] px-1.5 text-[10px] shrink-0" data-testid={`badge-unread-${conv.contactId}`}>
-                  {conv.unreadCount}
-                </Badge>
+      {conversations.map((conv) => {
+        const convKey = conv.channel === "email"
+          ? `email:${conv.emailThreadId}`
+          : `sms:${conv.contactId || conv.phone}`;
+
+        return (
+          <button
+            key={convKey}
+            onClick={() => onSelect(conv)}
+            className={`w-full text-left p-3 border-b hover:bg-muted/50 transition-colors flex items-start gap-3 ${
+              selectedKey === convKey ? "bg-muted" : ""
+            }`}
+            data-testid={`conversation-item-${conv.channel}-${conv.contactId || conv.emailThreadId || "unknown"}`}
+          >
+            <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+              conv.channel === "email" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-primary/10"
+            }`}>
+              {conv.channel === "email" ? (
+                <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              ) : (
+                <MessageSquare className="h-4 w-4 text-primary" />
               )}
             </div>
-          </div>
-        </button>
-      ))}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-sm truncate ${conv.unreadCount > 0 ? "font-semibold" : "font-medium"}`}>
+                  {conv.contactName}
+                </span>
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">
+                  {formatDistanceToNow(new Date(conv.lastMessage.createdAt), { addSuffix: true })}
+                </span>
+              </div>
+              {conv.channel === "email" && conv.subject && (
+                <p className="text-xs text-muted-foreground truncate">{conv.subject}</p>
+              )}
+              <div className="flex items-center justify-between gap-2 mt-0.5">
+                <p className={`text-xs truncate ${conv.unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                  {conv.lastMessage.direction === "outbound" ? "You: " : ""}
+                  {conv.lastMessage.body}
+                </p>
+                {conv.unreadCount > 0 && (
+                  <Badge variant="default" className="h-5 min-w-[20px] px-1.5 text-[10px] shrink-0" data-testid={`badge-unread-${convKey}`}>
+                    {conv.unreadCount}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function SmsInbox() {
+function UnifiedInbox({ channelFilter }: { channelFilter?: string }) {
   const [location] = useLocation();
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -535,7 +784,15 @@ function SmsInbox() {
   }, []);
 
   const { data: conversations = [], isLoading } = useQuery<Conversation[]>({
-    queryKey: ["/api/messages/conversations"],
+    queryKey: ["/api/messages/conversations", channelFilter],
+    queryFn: async () => {
+      const url = channelFilter
+        ? `/api/messages/conversations?channel=${channelFilter}`
+        : "/api/messages/conversations";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
   });
 
   const { data: contacts } = useQuery<Contact[]>({
@@ -543,11 +800,12 @@ function SmsInbox() {
   });
 
   useEffect(() => {
+    if (channelFilter === "email") return;
     const params = new URLSearchParams(window.location.search);
     const contactId = params.get("contactId");
     if (!contactId || contactId === handledContactId) return;
 
-    const conv = conversations.find(c => c.contactId === contactId);
+    const conv = conversations.find(c => c.contactId === contactId && c.channel === "sms");
     if (conv) {
       setSelectedConversation(conv);
       setHandledContactId(contactId);
@@ -561,14 +819,22 @@ function SmsInbox() {
           contactId: contact.id,
           contactName: `${contact.firstName} ${contact.lastName}`.trim(),
           phone: contact.phone,
+          email: "",
           lastMessage: { id: "", body: "", createdAt: new Date().toISOString() } as Message,
           unreadCount: 0,
           messageCount: 0,
+          channel: "sms",
+          emailThreadId: "",
+          subject: "",
         });
         setHandledContactId(contactId);
       }
     }
-  }, [conversations, contacts, location, handledContactId, isLoading]);
+  }, [conversations, contacts, location, handledContactId, isLoading, channelFilter]);
+
+  useEffect(() => {
+    setSelectedConversation(null);
+  }, [channelFilter]);
 
   const handleSelect = useCallback((conv: Conversation) => {
     setSelectedConversation(conv);
@@ -578,22 +844,56 @@ function SmsInbox() {
     setSelectedConversation(null);
   }, []);
 
+  const selectedKey = selectedConversation
+    ? selectedConversation.channel === "email"
+      ? `email:${selectedConversation.emailThreadId}`
+      : `sms:${selectedConversation.contactId || selectedConversation.phone}`
+    : null;
+
+  const renderThread = () => {
+    if (!selectedConversation) {
+      return (
+        <div className="flex-1 flex items-center justify-center text-muted-foreground" data-testid="text-select-conversation">
+          <div className="text-center">
+            <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-30" />
+            <p>Select a conversation to view messages</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (selectedConversation.channel === "email") {
+      return (
+        <EmailThread
+          emailThreadId={selectedConversation.emailThreadId}
+          contactId={selectedConversation.contactId}
+          contactName={selectedConversation.contactName}
+          emailAddress={selectedConversation.email}
+          subject={selectedConversation.subject}
+          onBack={handleBack}
+        />
+      );
+    }
+
+    return (
+      <ConversationThread
+        contactId={selectedConversation.contactId}
+        contactName={selectedConversation.contactName}
+        phone={selectedConversation.phone}
+        onBack={handleBack}
+      />
+    );
+  };
+
   if (isMobile) {
     return (
       <Card className="flex-1 overflow-hidden">
         <div className="h-[calc(100vh-220px)]">
-          {selectedConversation ? (
-            <ConversationThread
-              contactId={selectedConversation.contactId}
-              contactName={selectedConversation.contactName}
-              phone={selectedConversation.phone}
-              onBack={handleBack}
-            />
-          ) : (
+          {selectedConversation ? renderThread() : (
             <ConversationList
               conversations={conversations}
               isLoading={isLoading}
-              selectedContactId={null}
+              selectedKey={null}
               onSelect={handleSelect}
             />
           )}
@@ -612,26 +912,12 @@ function SmsInbox() {
           <ConversationList
             conversations={conversations}
             isLoading={isLoading}
-            selectedContactId={selectedConversation?.contactId || null}
+            selectedKey={selectedKey}
             onSelect={handleSelect}
           />
         </div>
         <div className="flex-1 flex flex-col">
-          {selectedConversation ? (
-            <ConversationThread
-              contactId={selectedConversation.contactId}
-              contactName={selectedConversation.contactName}
-              phone={selectedConversation.phone}
-              onBack={handleBack}
-            />
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground" data-testid="text-select-conversation">
-              <div className="text-center">
-                <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p>Select a conversation to view messages</p>
-              </div>
-            </div>
-          )}
+          {renderThread()}
         </div>
       </div>
     </Card>
@@ -640,7 +926,7 @@ function SmsInbox() {
 
 export default function Communications() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("sms");
+  const [activeTab, setActiveTab] = useState("all");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [smsDialogOpen, setSmsDialogOpen] = useState(false);
 
@@ -650,19 +936,6 @@ export default function Communications() {
       setActiveTab("sms");
     }
   }, []);
-
-  const channelFilter = activeTab === "all" ? undefined : activeTab === "sms" ? undefined : activeTab;
-
-  const { data: messages, isLoading } = useQuery<Message[]>({
-    queryKey: ["/api/messages", channelFilter],
-    queryFn: async () => {
-      const url = channelFilter ? `/api/messages?channel=${channelFilter}` : "/api/messages";
-      const res = await fetch(url, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}`);
-      return res.json();
-    },
-    enabled: activeTab !== "sms",
-  });
 
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
@@ -688,6 +961,7 @@ export default function Communications() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
       toast({ title: "Email sent" });
       setEmailDialogOpen(false);
       emailForm.reset();
@@ -726,11 +1000,7 @@ export default function Communications() {
     if (contact?.phone) smsForm.setValue("to", contact.phone);
   };
 
-  const getContactName = (contactId: string | null) => {
-    if (!contactId) return null;
-    const c = contacts?.find(ct => ct.id === contactId);
-    return c ? `${c.firstName} ${c.lastName}`.trim() : null;
-  };
+  const channelFilter = activeTab === "all" ? undefined : activeTab;
 
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
@@ -857,105 +1127,23 @@ export default function Communications() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="sms" data-testid="tab-sms-inbox">SMS Inbox</TabsTrigger>
-          <TabsTrigger value="all" data-testid="tab-all-messages">All Messages</TabsTrigger>
+          <TabsTrigger value="all" data-testid="tab-all-messages">All</TabsTrigger>
+          <TabsTrigger value="sms" data-testid="tab-sms-inbox">SMS</TabsTrigger>
           <TabsTrigger value="email" data-testid="tab-email-messages">Email</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="sms" className="mt-4">
-          <SmsInbox />
+        <TabsContent value="all" className="mt-4">
+          <UnifiedInbox />
         </TabsContent>
 
-        <TabsContent value="all" className="mt-4">
-          <MessageList
-            messages={messages}
-            isLoading={isLoading}
-            getContactName={getContactName}
-          />
+        <TabsContent value="sms" className="mt-4">
+          <UnifiedInbox channelFilter="sms" />
         </TabsContent>
 
         <TabsContent value="email" className="mt-4">
-          <MessageList
-            messages={messages}
-            isLoading={isLoading}
-            getContactName={getContactName}
-          />
+          <UnifiedInbox channelFilter="email" />
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-function MessageList({
-  messages,
-  isLoading,
-  getContactName,
-}: {
-  messages: Message[] | undefined;
-  isLoading: boolean;
-  getContactName: (id: string | null) => string | null;
-}) {
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}
-      </div>
-    );
-  }
-
-  if (!messages || messages.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-no-messages">
-          No messages yet. Send an email or SMS to get started.
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {messages.map((msg) => (
-        <Card key={msg.id} data-testid={`card-message-${msg.id}`}>
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="mt-0.5">
-                  <DirectionIcon direction={msg.direction} />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">
-                      {msg.channel === "email" ? <Mail className="h-3 w-3 mr-1" /> : <MessageSquare className="h-3 w-3 mr-1" />}
-                      {msg.channel}
-                    </Badge>
-                    <StatusBadge status={msg.status} />
-                    {msg.contactId && getContactName(msg.contactId) && (
-                      <ClientInfoPopover contactId={msg.contactId}>
-                        <span className="text-sm text-muted-foreground">{getContactName(msg.contactId)}</span>
-                      </ClientInfoPopover>
-                    )}
-                  </div>
-                  <div className="mt-1 text-sm">
-                    <span className="text-muted-foreground">{msg.direction === "outbound" ? "To" : "From"}: </span>
-                    <span>{msg.direction === "outbound" ? msg.toAddress : msg.fromAddress}</span>
-                  </div>
-                  {msg.subject && (
-                    <p className="font-medium mt-1 truncate" data-testid={`text-msg-subject-${msg.id}`}>{msg.subject}</p>
-                  )}
-                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{msg.body}</p>
-                  {msg.errorMessage && (
-                    <p className="text-sm text-destructive mt-1">{msg.errorMessage}</p>
-                  )}
-                </div>
-              </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {new Date(msg.createdAt).toLocaleString()}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
     </div>
   );
 }

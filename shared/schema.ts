@@ -681,11 +681,13 @@ export const messages = pgTable("messages", {
   isRead: boolean("is_read").notNull().default(false),
   mediaUrls: text("media_urls").array().default(sql`'{}'`),
   mediaCount: integer("media_count").default(0),
+  emailThreadId: varchar("email_thread_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_messages_company").on(table.companyId),
   index("idx_messages_contact").on(table.contactId),
   index("idx_messages_channel").on(table.channel),
+  index("idx_messages_email_thread").on(table.emailThreadId),
 ]);
 
 export const messageAttachments = pgTable("message_attachments", {

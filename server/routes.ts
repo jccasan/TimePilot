@@ -13,7 +13,7 @@ import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
-import { sendEmail, sendAdminSignupNotification } from "./services/email";
+import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, extractThreadIdFromAddress } from "./services/email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
 import { sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "./services/sms";
 import {
@@ -7197,12 +7197,13 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/messages", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const filters: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string } = {};
+      const filters: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string; emailThreadId?: string } = {};
       if (req.query.contactId) filters.contactId = req.query.contactId as string;
       if (req.query.channel) filters.channel = req.query.channel as string;
       if (req.query.direction) filters.direction = req.query.direction as string;
       if (req.query.unread === "true") filters.isRead = false;
       if (req.query.phone) filters.phone = req.query.phone as string;
+      if (req.query.emailThreadId) filters.emailThreadId = req.query.emailThreadId as string;
       const msgs = await storage.getMessages(companyId, filters);
 
       const contactCache = new Map<string, string>();
@@ -7261,33 +7262,76 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/messages/conversations", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const allSms = await storage.getMessages(companyId, { channel: "sms" });
+      const channelFilter = req.query.channel as string | undefined;
       const contacts = await storage.getContacts(companyId);
       const contactMap = new Map(contacts.map(c => [c.id, c]));
 
-      const threadMap = new Map<string, { contactId: string; contactName: string; phone: string; lastMessage: typeof allSms[0]; unreadCount: number; messageCount: number }>();
+      type ConvThread = { contactId: string; contactName: string; phone: string; email: string; lastMessage: Message; unreadCount: number; messageCount: number; channel: string; emailThreadId: string; subject: string };
 
-      for (const msg of allSms) {
-        const key = msg.contactId || `unknown:${msg.direction === "inbound" ? msg.fromAddress : msg.toAddress}`;
-        const existing = threadMap.get(key);
-        const contact = msg.contactId ? contactMap.get(msg.contactId) : null;
-        const phone = msg.direction === "inbound" ? msg.fromAddress : msg.toAddress;
-        const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : phone;
+      const threadMap = new Map<string, ConvThread>();
 
-        if (!existing) {
-          threadMap.set(key, {
-            contactId: msg.contactId || "",
-            contactName,
-            phone,
-            lastMessage: msg,
-            unreadCount: (msg.direction === "inbound" && !msg.isRead) ? 1 : 0,
-            messageCount: 1,
-          });
-        } else {
-          existing.messageCount++;
-          if (msg.direction === "inbound" && !msg.isRead) existing.unreadCount++;
-          if (new Date(msg.createdAt) > new Date(existing.lastMessage.createdAt)) {
-            existing.lastMessage = msg;
+      if (!channelFilter || channelFilter === "sms") {
+        const allSms = await storage.getMessages(companyId, { channel: "sms" });
+        for (const msg of allSms) {
+          const key = `sms:${msg.contactId || `unknown:${msg.direction === "inbound" ? msg.fromAddress : msg.toAddress}`}`;
+          const existing = threadMap.get(key);
+          const contact = msg.contactId ? contactMap.get(msg.contactId) : null;
+          const phone = msg.direction === "inbound" ? msg.fromAddress : msg.toAddress;
+          const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : phone;
+
+          if (!existing) {
+            threadMap.set(key, {
+              contactId: msg.contactId || "",
+              contactName,
+              phone,
+              email: "",
+              lastMessage: msg,
+              unreadCount: (msg.direction === "inbound" && !msg.isRead) ? 1 : 0,
+              messageCount: 1,
+              channel: "sms",
+              emailThreadId: "",
+              subject: "",
+            });
+          } else {
+            existing.messageCount++;
+            if (msg.direction === "inbound" && !msg.isRead) existing.unreadCount++;
+            if (new Date(msg.createdAt) > new Date(existing.lastMessage.createdAt)) {
+              existing.lastMessage = msg;
+            }
+          }
+        }
+      }
+
+      if (!channelFilter || channelFilter === "email") {
+        const allEmail = await storage.getMessages(companyId, { channel: "email" });
+        for (const msg of allEmail) {
+          const threadId = msg.emailThreadId || msg.id;
+          const key = `email:${threadId}`;
+          const existing = threadMap.get(key);
+          const contact = msg.contactId ? contactMap.get(msg.contactId) : null;
+          const emailAddr = msg.direction === "inbound" ? msg.fromAddress : msg.toAddress;
+          const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : emailAddr;
+
+          if (!existing) {
+            threadMap.set(key, {
+              contactId: msg.contactId || "",
+              contactName,
+              phone: "",
+              email: emailAddr,
+              lastMessage: msg,
+              unreadCount: (msg.direction === "inbound" && !msg.isRead) ? 1 : 0,
+              messageCount: 1,
+              channel: "email",
+              emailThreadId: msg.emailThreadId || "",
+              subject: msg.subject || "",
+            });
+          } else {
+            existing.messageCount++;
+            if (msg.direction === "inbound" && !msg.isRead) existing.unreadCount++;
+            if (new Date(msg.createdAt) > new Date(existing.lastMessage.createdAt)) {
+              existing.lastMessage = msg;
+              if (msg.subject) existing.subject = msg.subject;
+            }
           }
         }
       }
@@ -7299,10 +7343,26 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/messages/unread-email-count", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const count = await storage.getUnreadEmailCount(companyId);
+      res.json({ count });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/messages/read-by-email-thread/:threadId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      await storage.markMessagesReadByEmail(req.params.threadId, companyId);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/messages/email", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const { contactId, to, subject, body, htmlBody } = req.body;
+      const { contactId, to, subject, body, htmlBody, emailThreadId: existingThreadId } = req.body;
       if (!to || !subject || !body) {
         return res.status(400).json({ error: "to, subject, and body are required" });
       }
@@ -7314,6 +7374,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const company = await storage.getCompany(companyId);
       const fromAddress = company?.email || "jeremy@scoopilot.com";
+      const emailThreadId = existingThreadId || generateEmailThreadId();
 
       const msg = await storage.createMessage({
         companyId,
@@ -7327,9 +7388,18 @@ Return ONLY valid JSON, no markdown.`,
         body,
         htmlBody: htmlBody || null,
         sentBy: userId,
+        emailThreadId,
       });
 
-      const result = await sendEmail({ to, from: fromAddress, subject, text: body, html: htmlBody || body, senderName: company?.name || undefined, replyTo: company?.email || undefined });
+      const result = await sendEmail({
+        to,
+        from: fromAddress,
+        subject,
+        text: body,
+        html: htmlBody || body,
+        senderName: company?.name || undefined,
+        emailThreadId,
+      });
 
       if (result.success) {
         const updated = await storage.updateMessageStatus(msg.id, "sent");
@@ -7933,6 +8003,168 @@ Return ONLY valid JSON, no markdown.`,
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error("[Telnyx SMS] Webhook error:", err);
+      res.status(200).json({ ok: true });
+    }
+  });
+
+  const inboundEmailUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 10 },
+  });
+
+  app.post("/api/webhooks/sendgrid/inbound", inboundEmailUpload.any(), async (req: Request, res: Response) => {
+    try {
+      const webhookToken = process.env.SENDGRID_INBOUND_WEBHOOK_TOKEN;
+      if (webhookToken) {
+        const providedToken = req.query.token || req.headers["x-webhook-token"];
+        if (providedToken !== webhookToken) {
+          console.warn("[Inbound Email] Invalid or missing webhook token");
+          return res.status(403).json({ error: "Forbidden" });
+        }
+      }
+
+      const from = req.body.from || "";
+      const to = req.body.to || req.body.envelope ? (() => { try { return JSON.parse(req.body.envelope)?.to?.[0] || ""; } catch { return ""; } })() : "";
+      const subject = req.body.subject || "";
+      const textBody = req.body.text || "";
+      const htmlBody = req.body.html || "";
+
+      const fromMatch = from.match(/<([^>]+)>/) || [null, from.trim()];
+      const senderEmail = fromMatch[1]?.toLowerCase() || "";
+
+      const allTo = (req.body.to || "").toLowerCase();
+      let envelopeTo = "";
+      try {
+        const envelope = JSON.parse(req.body.envelope || "{}");
+        envelopeTo = (Array.isArray(envelope.to) ? envelope.to.join(" ") : envelope.to || "").toLowerCase();
+      } catch { /* ignore */ }
+
+      const combinedTo = `${allTo} ${envelopeTo}`;
+      let threadId: string | null = null;
+      const replyPattern = /reply\+([a-f0-9]+)@/gi;
+      let match;
+      while ((match = replyPattern.exec(combinedTo)) !== null) {
+        threadId = match[1];
+        break;
+      }
+
+      if (!threadId) {
+        console.log(`[Inbound Email] No thread ID found in to addresses: ${combinedTo.substring(0, 200)}`);
+        return res.status(200).json({ ok: true });
+      }
+
+      if (!senderEmail) {
+        console.log("[Inbound Email] No sender email found");
+        return res.status(200).json({ ok: true });
+      }
+
+      console.log(`[Inbound Email] Processing reply from ${senderEmail}, threadId=${threadId}`);
+
+      const threadMessages = await storage.getMessagesByEmailThreadId(threadId);
+      if (threadMessages.length === 0) {
+        console.warn(`[Inbound Email] No existing thread found for threadId=${threadId}`);
+        return res.status(200).json({ ok: true });
+      }
+
+      const originalMsg = threadMessages[0];
+      const companyId = originalMsg.companyId;
+      const contactId = originalMsg.contactId;
+
+      const inboundBody = textBody || htmlBody || "";
+      const dedupeWindowMs = 60_000;
+      const now = Date.now();
+      const isDuplicate = threadMessages.some(m => {
+        if (m.direction !== "inbound" || m.fromAddress !== senderEmail) return false;
+        const msgAge = now - new Date(m.createdAt).getTime();
+        return msgAge < dedupeWindowMs && m.body === inboundBody;
+      });
+      if (isDuplicate) {
+        console.log(`[Inbound Email] Duplicate inbound email skipped (within ${dedupeWindowMs}ms) for thread ${threadId}`);
+        return res.status(200).json({ ok: true });
+      }
+
+      const savedMsg = await storage.createMessage({
+        companyId,
+        contactId: contactId || null,
+        channel: "email",
+        direction: "inbound",
+        status: "received",
+        fromAddress: senderEmail,
+        toAddress: originalMsg.fromAddress,
+        subject: subject || originalMsg.subject || "",
+        body: textBody || htmlBody || "",
+        htmlBody: htmlBody || null,
+        emailThreadId: threadId,
+        isRead: false,
+      });
+
+      const files = req.files as Express.Multer.File[] | undefined;
+      if (files && files.length > 0) {
+        const ALLOWED_EMAIL_ATTACH_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"];
+        const EMAIL_MAX_ATTACH_BYTES = parseInt(process.env.EMAIL_INBOUND_MAX_FILE_BYTES || String(10 * 1024 * 1024), 10);
+
+        try {
+          const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+          const objStorage = new ObjectStorageService();
+          const storedUrls: string[] = [];
+
+          for (const file of files) {
+            if (!ALLOWED_EMAIL_ATTACH_MIME.includes(file.mimetype)) {
+              console.log(`[Inbound Email] Skipping attachment with unsupported MIME: ${file.mimetype}`);
+              continue;
+            }
+            if (file.size > EMAIL_MAX_ATTACH_BYTES) {
+              console.log(`[Inbound Email] Skipping oversized attachment: ${file.size} bytes`);
+              continue;
+            }
+
+            const uploadURL = await objStorage.getObjectEntityUploadURL();
+            const storagePath = objStorage.normalizeObjectEntityPath(uploadURL);
+
+            const putResp = await fetch(uploadURL, {
+              method: "PUT",
+              body: file.buffer,
+              headers: { "Content-Type": file.mimetype },
+            });
+            if (!putResp.ok) {
+              console.warn(`[Inbound Email] Failed to upload attachment: ${putResp.status}`);
+              continue;
+            }
+
+            storedUrls.push(storagePath);
+            await storage.createMessageAttachment({
+              messageId: savedMsg.id,
+              companyId,
+              mimeType: file.mimetype,
+              originalFilename: file.originalname || "attachment",
+              originalSizeBytes: file.size,
+              compressedSizeBytes: file.size,
+              storageUrl: storagePath,
+            });
+          }
+
+          if (storedUrls.length > 0) {
+            await db.update(messagesTable)
+              .set({ mediaUrls: storedUrls, mediaCount: storedUrls.length })
+              .where(eq(messagesTable.id, savedMsg.id));
+          }
+        } catch (attachErr) {
+          console.error("[Inbound Email] Attachment processing error:", attachErr);
+        }
+      }
+
+      console.log(`[Inbound Email] Saved inbound email in thread ${threadId} for company ${companyId}`);
+
+      if (contactId) {
+        const contact = await storage.getContact(contactId, companyId);
+        if (contact) {
+          notify(companyId, "new_message", "New Email Reply", `${contact.firstName} ${contact.lastName} replied to an email.`, `/communications`);
+        }
+      }
+
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error("[Inbound Email] Webhook error:", err);
       res.status(200).json({ ok: true });
     }
   });
