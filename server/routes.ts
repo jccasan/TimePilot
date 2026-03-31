@@ -7380,6 +7380,18 @@ Return ONLY valid JSON, no markdown.`,
         const existingThread = await storage.getMessagesByEmailThreadId(existingThreadId, companyId);
         if (existingThread.length > 0) {
           emailThreadId = existingThreadId;
+        } else {
+          const [legacyMsg] = await db.select().from(messagesTable)
+            .where(and(
+              eq(messagesTable.id, existingThreadId),
+              eq(messagesTable.companyId, companyId),
+              eq(messagesTable.channel, "email")
+            )).limit(1);
+          if (legacyMsg && !legacyMsg.emailThreadId) {
+            await db.update(messagesTable)
+              .set({ emailThreadId })
+              .where(and(eq(messagesTable.id, existingThreadId), eq(messagesTable.companyId, companyId)));
+          }
         }
       }
 
