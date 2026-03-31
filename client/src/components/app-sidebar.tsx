@@ -26,6 +26,7 @@ import {
   SlidersHorizontal,
   Briefcase,
   ClipboardList,
+  Columns,
   HelpCircle,
   Compass,
   Sparkles,
@@ -71,6 +72,7 @@ const menuSections = [
     label: "CRM",
     items: [
       { title: "Contacts", url: "/contacts", icon: ContactRound },
+      { title: "Pipeline", url: "/pipeline", icon: Columns },
       { title: "Service Plans", url: "/service-plans", icon: ClipboardList },
       { title: "Quotes & Proposals", url: "/quotes", icon: ClipboardCheck },
       { title: "Messages", url: "/communications", icon: MessageSquare },
