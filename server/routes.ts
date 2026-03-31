@@ -4797,7 +4797,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const etaMsg = `Hi ${contact.firstName}, ${companyName} is on the way! Estimated arrival in about ${roundedMinutes} minutes. Please ensure your yard is accessible and any dogs are inside. See you soon!`;
 
-      const smsResult = await sendSmsForCompany({ to: contact.phone, body: etaMsg, companyId });
+      const smsResult = await sendSmsForCompany({ to: contact.phone, body: etaMsg, companyId, contactId: contact.id });
       if (!smsResult.success) return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
 
       onMyWayCooldowns.set(cooldownKey, Date.now());
@@ -4862,7 +4862,7 @@ Return ONLY valid JSON, no markdown.`,
       const smsReady = await isSmsConfiguredForCompany(companyId);
       if (!smsReady) return res.status(503).json({ error: "SMS is not configured for your company" });
 
-      const smsResult = await sendSmsForCompany({ to: contact.phone, body: messageBody, companyId });
+      const smsResult = await sendSmsForCompany({ to: contact.phone, body: messageBody, companyId, contactId: contact.id });
       if (!smsResult.success) return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
 
       customSmsCooldowns.set(cooldownKey, Date.now());
@@ -4977,6 +4977,7 @@ Return ONLY valid JSON, no markdown.`,
           body: completionMsg,
           mediaUrl: gatePhotoFullUrl,
           companyId,
+          contactId: contact.id,
         });
 
         if (completionSmsResult.success) {
@@ -5053,6 +5054,7 @@ Return ONLY valid JSON, no markdown.`,
                   to: nextContact.phone,
                   body: etaMsg,
                   companyId,
+                  contactId: nextContact.id,
                 });
 
                 if (etaSmsResult.success) {
@@ -7363,7 +7365,7 @@ Return ONLY valid JSON, no markdown.`,
         sentBy: userId,
       });
 
-      const result = await sendSmsForCompany({ to, body, companyId });
+      const result = await sendSmsForCompany({ to, body, companyId, contactId: contactId || undefined });
 
       if (result.success) {
         const updated = await storage.updateMessageStatus(msg.id, "sent");
@@ -7379,10 +7381,85 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId } = await getCompanyContext(req);
       const smsConfig = await getCompanySmsConfig(companyId);
+      const { getSharedSmsNumber, isSharedNumber: isShared } = await import("./services/sms");
+      const sharedNumber = getSharedSmsNumber();
       res.json({
         email: { configured: !!process.env.SENDGRID_API_KEY },
-        sms: { configured: smsConfig.configured, phoneNumber: smsConfig.phoneNumber, provider: smsConfig.provider },
+        sms: {
+          configured: smsConfig.configured,
+          phoneNumber: smsConfig.phoneNumber,
+          provider: smsConfig.provider,
+          isSharedNumber: !!sharedNumber && isShared(smsConfig.phoneNumber),
+        },
       });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ─── Message Exception Queue (owner/admin only) ────────────────────────────
+  app.get("/api/message-exceptions", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
+      const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
+      const exceptions = await storage.getMessageExceptions({ resolved });
+      res.json(exceptions);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/message-exceptions/:id/resolve", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId, role } = await getCompanyContext(req);
+      if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
+
+      const exception = await storage.resolveMessageException(req.params.id, userId, companyId);
+      if (!exception) return res.status(404).json({ error: "Exception not found" });
+
+      if (exception.body && exception.fromAddress) {
+        const allContacts = await storage.getContacts(companyId);
+        const fromDigits = exception.fromAddress.replace(/\D/g, "");
+        const matchedContact = allContacts.find(c => {
+          const cDigits = (c.phone || "").replace(/\D/g, "");
+          return cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
+        });
+
+        await storage.createMessage({
+          companyId,
+          contactId: matchedContact?.id || null,
+          channel: "sms",
+          direction: "inbound",
+          status: "received",
+          fromAddress: exception.fromAddress,
+          toAddress: exception.toAddress,
+          body: exception.body,
+          externalId: exception.providerMessageId || undefined,
+        });
+
+        if (matchedContact) {
+          const { isSharedNumber } = await import("./services/sms");
+          if (isSharedNumber(exception.toAddress)) {
+            storage.upsertMessageRouting({
+              sharedNumber: exception.toAddress,
+              customerPhone: exception.fromAddress,
+              companyId,
+              contactId: matchedContact.id,
+              channel: "sms",
+              lastUsedAt: new Date(),
+            }).catch(() => {});
+          }
+        }
+      }
+
+      res.json(exception);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/message-exceptions/:id/dismiss", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { userId, role } = await getCompanyContext(req);
+      if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
+      const exception = await storage.dismissMessageException(req.params.id, userId);
+      if (!exception) return res.status(404).json({ error: "Exception not found" });
+      res.json(exception);
     } catch (err) { handleError(res, err); }
   });
 
@@ -7450,7 +7527,6 @@ Return ONLY valid JSON, no markdown.`,
       const textBody = payload.text;
       const messageId = payload.id;
 
-      // Handle both array and single-object forms of the "to" field
       let toNumber = "";
       if (Array.isArray(payload.to)) {
         toNumber = payload.to[0]?.phone_number || "";
@@ -7468,28 +7544,82 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       const toDigits = toNumber.replace(/\D/g, "");
+      const { isSharedNumber } = await import("./services/sms");
+
+      // Step 1: Try dedicated number match (existing behavior)
       const allCompanies = await storage.listCompanies();
-      console.log(`[Telnyx SMS] Checking ${allCompanies.length} companies for to number: ${toNumber} (digits: ${toDigits})`);
-
-      const companyPhoneList = allCompanies.map(c => ({
-        id: c.id,
-        name: c.name,
-        telnyxPhoneNumber: c.telnyxPhoneNumber,
-        dedicatedPhoneNumber: c.dedicatedPhoneNumber,
-      }));
-      console.log(`[Telnyx SMS] Company phone numbers: ${JSON.stringify(companyPhoneList)}`);
-
       let matchedCompany = allCompanies.find(c => {
         const cDigits = (c.telnyxPhoneNumber || "").replace(/\D/g, "");
-        const match = cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
-        return match;
+        return cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
       });
       if (!matchedCompany) {
         matchedCompany = allCompanies.find(c => {
           const cDigits = (c.dedicatedPhoneNumber || "").replace(/\D/g, "");
-          const match = cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
-          return match;
+          return cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
         });
+      }
+
+      // Step 2: If no dedicated match, check if this is a shared number
+      if (!matchedCompany && isSharedNumber(toNumber)) {
+        console.log(`[Telnyx SMS] Shared number detected, looking up routing table for from=${fromNumber}`);
+        const routingEntries = await storage.findMessageRouting(toNumber, fromNumber);
+
+        if (routingEntries.length === 1) {
+          matchedCompany = allCompanies.find(c => c.id === routingEntries[0].companyId);
+          if (matchedCompany) {
+            console.log(`[Telnyx SMS] Shared number routed to company: ${matchedCompany.name} (via routing table)`);
+          }
+        } else if (routingEntries.length > 1) {
+          console.warn(`[Telnyx SMS] Ambiguous routing: ${routingEntries.length} companies for from=${fromNumber} on shared number. Sending to exception queue.`);
+          await storage.createMessageException({
+            providerMessageId: messageId,
+            fromAddress: fromNumber,
+            toAddress: toNumber,
+            body: textBody,
+            rawPayload: payload as Record<string, unknown>,
+            reason: `Ambiguous routing: ${routingEntries.length} tenants matched for sender ${fromNumber}`,
+          });
+          return res.status(200).json({ ok: true });
+        } else {
+          // No routing entry - try contact phone match across all companies
+          const fromDigits = fromNumber.replace(/\D/g, "");
+          const matchingCompanies: typeof allCompanies = [];
+          for (const company of allCompanies) {
+            const contacts = await storage.getContacts(company.id);
+            const hasMatch = contacts.some(c => {
+              const cDigits = (c.phone || "").replace(/\D/g, "");
+              return cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
+            });
+            if (hasMatch) matchingCompanies.push(company);
+          }
+
+          if (matchingCompanies.length === 1) {
+            matchedCompany = matchingCompanies[0];
+            console.log(`[Telnyx SMS] Shared number routed to company: ${matchedCompany.name} (via contact phone match)`);
+          } else if (matchingCompanies.length > 1) {
+            console.warn(`[Telnyx SMS] Ambiguous contact match: ${matchingCompanies.length} companies have a contact with phone ${fromNumber}. Sending to exception queue.`);
+            await storage.createMessageException({
+              providerMessageId: messageId,
+              fromAddress: fromNumber,
+              toAddress: toNumber,
+              body: textBody,
+              rawPayload: payload as Record<string, unknown>,
+              reason: `Ambiguous contact match: ${matchingCompanies.length} tenants have a contact with phone ${fromNumber}`,
+            });
+            return res.status(200).json({ ok: true });
+          } else {
+            console.warn(`[Telnyx SMS] No routing or contact match for from=${fromNumber} on shared number. Sending to exception queue.`);
+            await storage.createMessageException({
+              providerMessageId: messageId,
+              fromAddress: fromNumber,
+              toAddress: toNumber,
+              body: textBody,
+              rawPayload: payload as Record<string, unknown>,
+              reason: `No tenant match found for sender ${fromNumber} on shared number`,
+            });
+            return res.status(200).json({ ok: true });
+          }
+        }
       }
 
       if (!matchedCompany) {
@@ -7501,6 +7631,15 @@ Return ONLY valid JSON, no markdown.`,
       console.log(`[Telnyx SMS] Matched company: ${matchedCompany.name} (id: ${matchedCompany.id})`);
 
       const companyId = matchedCompany.id;
+
+      if (messageId) {
+        const existing = await storage.getMessages(companyId, { phone: fromNumber });
+        if (existing.some(m => m.externalId === messageId)) {
+          console.log(`[Telnyx SMS] Duplicate message ${messageId}, skipping`);
+          return res.status(200).json({ ok: true });
+        }
+      }
+
       const allContacts = await storage.getContacts(companyId);
       const fromDigits = fromNumber.replace(/\D/g, "");
       const matchedContact = allContacts.find(c => {
@@ -7523,6 +7662,18 @@ Return ONLY valid JSON, no markdown.`,
       });
 
       console.log(`[Telnyx SMS] Message saved successfully for company ${matchedCompany.name}`);
+
+      // Update routing table for shared number (so future inbound messages route correctly)
+      if (isSharedNumber(toNumber) && matchedContact) {
+        storage.upsertMessageRouting({
+          sharedNumber: toNumber,
+          customerPhone: fromNumber,
+          companyId,
+          contactId: matchedContact.id,
+          channel: "sms",
+          lastUsedAt: new Date(),
+        }).catch((err) => console.error("[SMS Routing] Failed to upsert routing on inbound:", err));
+      }
 
       if (matchedContact) {
         notify(companyId, "new_message", "New Text Message", `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`, `/communications?contactId=${matchedContact.id}`);
@@ -9256,7 +9407,7 @@ Return ONLY valid JSON, no markdown.`,
           });
           const smsConfigured = await isSmsConfiguredForCompany(companyId);
           if (smsConfigured) {
-            await sendSmsForCompany({ to: quote.contactPhone, body: smsText, companyId });
+            await sendSmsForCompany({ to: quote.contactPhone, body: smsText, companyId, contactId: quote.contactId || undefined });
           }
           results.sent.push("sms");
         } catch (smsErr: any) {
@@ -13303,7 +13454,7 @@ Return ONLY valid JSON, no markdown.`,
       .replace(/\{frequency\}/g, frequency)
       .replace(/\{price\}/g, priceDollars);
 
-    const result = await sendSmsForCompany({ to: contact.phone, body, companyId: company.id });
+    const result = await sendSmsForCompany({ to: contact.phone, body, companyId: company.id, contactId: contact.id });
 
     if (result.success) {
       return true;

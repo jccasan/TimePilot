@@ -13,6 +13,18 @@ interface CompanySmsConfig {
   phoneNumber: string;
 }
 
+export function getSharedSmsNumber(): string {
+  return process.env.SHARED_SMS_NUMBER || "";
+}
+
+export function isSharedNumber(phoneNumber: string): boolean {
+  const shared = getSharedSmsNumber();
+  if (!shared) return false;
+  const sharedDigits = shared.replace(/\D/g, "").slice(-10);
+  const phoneDigits = phoneNumber.replace(/\D/g, "").slice(-10);
+  return sharedDigits.length >= 10 && phoneDigits.length >= 10 && sharedDigits === phoneDigits;
+}
+
 export async function getCompanySmsConfig(companyId: string): Promise<CompanySmsConfig> {
   const { storage } = await import("../storage");
   const company = await storage.getCompany(companyId);
@@ -20,7 +32,9 @@ export async function getCompanySmsConfig(companyId: string): Promise<CompanySms
 
   const storedKey = company.telnyxApiKey && company.telnyxApiKey !== "null" ? company.telnyxApiKey : null;
   const apiKey = storedKey || process.env.TELNYX_API_KEY;
-  const phoneNumber = company.telnyxPhoneNumber || process.env.TELNYX_PHONE_NUMBER || "";
+  const dedicatedNumber = company.telnyxPhoneNumber || company.dedicatedPhoneNumber || "";
+  const sharedNumber = getSharedSmsNumber();
+  const phoneNumber = dedicatedNumber || sharedNumber || process.env.TELNYX_PHONE_NUMBER || "";
   const profileId = company.telnyxMessagingProfileId || process.env.TELNYX_MESSAGING_PROFILE_ID || "";
   const configured = !!(apiKey && phoneNumber && profileId);
   return { provider: "telnyx", configured, phoneNumber };
@@ -41,6 +55,7 @@ interface SendSmsForCompanyOptions {
   body: string;
   companyId: string;
   mediaUrl?: string;
+  contactId?: string;
 }
 
 export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Promise<SendSmsResult> {
@@ -52,7 +67,9 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
 
   const storedKey = company.telnyxApiKey && company.telnyxApiKey !== "null" ? company.telnyxApiKey : null;
   const apiKey = storedKey || process.env.TELNYX_API_KEY;
-  const phoneNumber = company.telnyxPhoneNumber || process.env.TELNYX_PHONE_NUMBER;
+  const dedicatedNumber = company.telnyxPhoneNumber || company.dedicatedPhoneNumber || "";
+  const sharedNumber = getSharedSmsNumber();
+  const phoneNumber = dedicatedNumber || sharedNumber || process.env.TELNYX_PHONE_NUMBER;
   const profileId = company.telnyxMessagingProfileId || process.env.TELNYX_MESSAGING_PROFILE_ID;
   if (!apiKey || !phoneNumber || !profileId) {
     return { success: false, error: "Telnyx SMS is not configured. Set API key, phone number, and messaging profile ID in Settings." };
@@ -71,7 +88,7 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
     resolvedApiKey = process.env.TELNYX_API_KEY!;
   }
 
-  return sendTelnyxSms({
+  const result = await sendTelnyxSms({
     to: options.to,
     body: options.body,
     from: phoneNumber,
@@ -80,6 +97,19 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
     companyId: options.companyId,
     mediaUrl: options.mediaUrl,
   });
+
+  if (result.success && isSharedNumber(phoneNumber)) {
+    storage.upsertMessageRouting({
+      sharedNumber: phoneNumber,
+      customerPhone: options.to,
+      companyId: options.companyId,
+      contactId: options.contactId || null,
+      channel: "sms",
+      lastUsedAt: new Date(),
+    }).catch((err) => console.error("[SMS Routing] Failed to upsert routing entry:", err));
+  }
+
+  return result;
 }
 
 export async function logSmsMessage(companyId: string, to: string, from: string, direction: "inbound" | "outbound", externalId?: string, segments?: number): Promise<void> {

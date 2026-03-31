@@ -1708,3 +1708,44 @@ export const connectedAccounts = pgTable("connected_accounts", {
 export const insertConnectedAccountSchema = createInsertSchema(connectedAccounts).omit({ id: true, createdAt: true, updatedAt: true });
 export type ConnectedAccount = typeof connectedAccounts.$inferSelect;
 export type InsertConnectedAccount = z.infer<typeof insertConnectedAccountSchema>;
+
+// ─── Shared Number Message Routing ──────────────────────────────────────────
+export const messageRouting = pgTable("message_routing", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sharedNumber: varchar("shared_number", { length: 50 }).notNull(),
+  customerPhone: varchar("customer_phone", { length: 50 }).notNull(),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+  channel: varchar("channel", { length: 20 }).notNull().default("sms"),
+  lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_mr_shared_customer").on(table.sharedNumber, table.customerPhone),
+  index("idx_mr_company").on(table.companyId),
+  unique("uq_mr_shared_customer_company").on(table.sharedNumber, table.customerPhone, table.companyId),
+]);
+
+export const insertMessageRoutingSchema = createInsertSchema(messageRouting).omit({ id: true, createdAt: true });
+export type MessageRouting = typeof messageRouting.$inferSelect;
+export type InsertMessageRouting = z.infer<typeof insertMessageRoutingSchema>;
+
+export const messageExceptions = pgTable("message_exceptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  providerMessageId: varchar("provider_message_id", { length: 255 }),
+  fromAddress: varchar("from_address", { length: 255 }).notNull(),
+  toAddress: varchar("to_address", { length: 255 }).notNull(),
+  body: text("body"),
+  rawPayload: jsonb("raw_payload").$type<Record<string, unknown>>(),
+  reason: varchar("reason", { length: 255 }).notNull(),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  resolvedCompanyId: varchar("resolved_company_id").references(() => companies.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_me_created").on(table.createdAt),
+  index("idx_me_resolved").on(table.resolvedAt),
+]);
+
+export const insertMessageExceptionSchema = createInsertSchema(messageExceptions).omit({ id: true, createdAt: true });
+export type MessageException = typeof messageExceptions.$inferSelect;
+export type InsertMessageException = z.infer<typeof insertMessageExceptionSchema>;

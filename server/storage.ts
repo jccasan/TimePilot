@@ -72,6 +72,10 @@ import {
   quotes,
   type ConnectedAccount, type InsertConnectedAccount,
   connectedAccounts,
+  messageRouting,
+  messageExceptions,
+  type MessageRouting, type InsertMessageRouting,
+  type MessageException, type InsertMessageException,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -423,6 +427,16 @@ export interface IStorage {
   getConnectedAccountByStripeId(stripeAccountId: string): Promise<ConnectedAccount | undefined>;
   createConnectedAccount(data: InsertConnectedAccount): Promise<ConnectedAccount>;
   updateConnectedAccount(id: string, data: Partial<InsertConnectedAccount>): Promise<ConnectedAccount>;
+
+  // Message Routing (shared number)
+  findMessageRouting(sharedNumber: string, customerPhone: string): Promise<MessageRouting[]>;
+  upsertMessageRouting(data: InsertMessageRouting): Promise<MessageRouting>;
+
+  // Message Exceptions
+  getMessageExceptions(filters?: { resolved?: boolean }): Promise<MessageException[]>;
+  createMessageException(data: InsertMessageException): Promise<MessageException>;
+  resolveMessageException(id: string, resolvedBy: string, companyId: string): Promise<MessageException>;
+  dismissMessageException(id: string, resolvedBy: string): Promise<MessageException>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2510,6 +2524,85 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.update(connectedAccounts)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(connectedAccounts.id, id))
+      .returning();
+    return row;
+  }
+
+  // ================ Message Routing (shared number) ================
+
+  async findMessageRouting(sharedNumber: string, customerPhone: string): Promise<MessageRouting[]> {
+    const canonicalShared = this.canonicalizePhone(sharedNumber);
+    const canonicalCustomer = this.canonicalizePhone(customerPhone);
+    if (!canonicalShared || !canonicalCustomer) return [];
+    const rows = await db.select().from(messageRouting)
+      .where(
+        and(
+          eq(messageRouting.sharedNumber, canonicalShared),
+          eq(messageRouting.customerPhone, canonicalCustomer)
+        )
+      )
+      .orderBy(desc(messageRouting.lastUsedAt));
+    return rows;
+  }
+
+  private canonicalizePhone(phone: string): string {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length === 10) return `+1${digits}`;
+    if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+    return `+${digits}`;
+  }
+
+  async upsertMessageRouting(data: InsertMessageRouting): Promise<MessageRouting> {
+    const canonicalData = {
+      ...data,
+      sharedNumber: this.canonicalizePhone(data.sharedNumber),
+      customerPhone: this.canonicalizePhone(data.customerPhone),
+    };
+    const [row] = await db.insert(messageRouting)
+      .values(canonicalData)
+      .onConflictDoUpdate({
+        target: [messageRouting.sharedNumber, messageRouting.customerPhone, messageRouting.companyId],
+        set: {
+          contactId: canonicalData.contactId,
+          lastUsedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  // ================ Message Exceptions ================
+
+  async getMessageExceptions(filters?: { resolved?: boolean }): Promise<MessageException[]> {
+    const conditions = [];
+    if (filters?.resolved === false) {
+      conditions.push(sql`${messageExceptions.resolvedAt} IS NULL`);
+    } else if (filters?.resolved === true) {
+      conditions.push(sql`${messageExceptions.resolvedAt} IS NOT NULL`);
+    }
+    const query = conditions.length > 0
+      ? db.select().from(messageExceptions).where(and(...conditions)).orderBy(desc(messageExceptions.createdAt))
+      : db.select().from(messageExceptions).orderBy(desc(messageExceptions.createdAt));
+    return await query;
+  }
+
+  async createMessageException(data: InsertMessageException): Promise<MessageException> {
+    const [row] = await db.insert(messageExceptions).values(data).returning();
+    return row;
+  }
+
+  async resolveMessageException(id: string, resolvedBy: string, companyId: string): Promise<MessageException> {
+    const [row] = await db.update(messageExceptions)
+      .set({ resolvedAt: new Date(), resolvedBy, resolvedCompanyId: companyId })
+      .where(eq(messageExceptions.id, id))
+      .returning();
+    return row;
+  }
+
+  async dismissMessageException(id: string, resolvedBy: string): Promise<MessageException> {
+    const [row] = await db.update(messageExceptions)
+      .set({ resolvedAt: new Date(), resolvedBy, reason: "dismissed" })
+      .where(eq(messageExceptions.id, id))
       .returning();
     return row;
   }
