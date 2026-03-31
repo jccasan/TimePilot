@@ -18,11 +18,13 @@ export function getSharedSmsNumber(): string {
 }
 
 export function isSharedNumber(phoneNumber: string): boolean {
-  const shared = getSharedSmsNumber();
-  if (!shared) return false;
-  const sharedDigits = shared.replace(/\D/g, "").slice(-10);
   const phoneDigits = phoneNumber.replace(/\D/g, "").slice(-10);
-  return sharedDigits.length >= 10 && phoneDigits.length >= 10 && sharedDigits === phoneDigits;
+  if (phoneDigits.length < 10) return false;
+  const candidates = [getSharedSmsNumber(), process.env.TELNYX_PHONE_NUMBER || ""].filter(Boolean);
+  return candidates.some(s => {
+    const sDigits = s.replace(/\D/g, "").slice(-10);
+    return sDigits.length >= 10 && sDigits === phoneDigits;
+  });
 }
 
 export async function getCompanySmsConfig(companyId: string): Promise<CompanySmsConfig> {

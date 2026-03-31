@@ -42,7 +42,6 @@ export async function sendTelnyxSms(options: TelnyxSmsOptions): Promise<SendSmsR
         to,
         text: options.body,
         messaging_profile_id: options.messagingProfileId,
-        webhook_url: `${process.env.BASE_URL || "https://app.scoopilot.com"}/api/webhooks/telnyx/sms?companyId=${options.companyId}`,
         ...(options.mediaUrls && options.mediaUrls.length > 0
           ? { media_urls: options.mediaUrls }
           : options.mediaUrl
