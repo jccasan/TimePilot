@@ -17,19 +17,19 @@ const COLUMNS: { key: Contact["status"]; label: string; color: string; bgClass: 
   { key: "cancelled", label: "Cancelled", color: "bg-red-500", bgClass: "bg-red-50 dark:bg-red-950/30" },
 ];
 
-function daysAgo(dateStr: string | Date): string {
+function formatDuration(dateStr: string | Date): string {
   const then = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - then.getTime();
   const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   if (days === 0) return "Today";
-  if (days === 1) return "1 day ago";
-  if (days < 30) return `${days} days ago`;
+  if (days === 1) return "1 day";
+  if (days < 30) return `${days} days`;
   const months = Math.floor(days / 30);
-  if (months === 1) return "1 month ago";
-  if (months < 12) return `${months} months ago`;
+  if (months === 1) return "1 month";
+  if (months < 12) return `${months} months`;
   const years = Math.floor(months / 12);
-  return years === 1 ? "1 year ago" : `${years} years ago`;
+  return years === 1 ? "1 year" : `${years} years`;
 }
 
 function ContactCard({ contact, onDragStart }: { contact: Contact; onDragStart: (e: React.DragEvent, id: string) => void }) {
@@ -73,8 +73,8 @@ function ContactCard({ contact, onDragStart }: { contact: Contact; onDragStart: 
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-muted-foreground/70" data-testid={`pipeline-age-${contact.id}`}>
-              Added {daysAgo(contact.createdAt)}
+            <p className="text-[11px] text-muted-foreground/70" data-testid={`pipeline-stage-duration-${contact.id}`}>
+              In stage {formatDuration(contact.updatedAt)}
             </p>
           </CardContent>
         </Card>
