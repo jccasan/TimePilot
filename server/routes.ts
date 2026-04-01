@@ -5028,9 +5028,9 @@ Return ONLY valid JSON, no markdown.`,
       const allowedTransitions: Record<string, string[]> = {
         scheduled: ["in_progress", "completed", "skipped", "cancelled"],
         in_progress: ["completed", "skipped", "cancelled"],
-        completed: [],
-        skipped: [],
-        cancelled: [],
+        completed: ["scheduled"],
+        skipped: ["scheduled"],
+        cancelled: ["scheduled"],
       };
       if (req.body.status && req.body.status !== existing.status) {
         const allowed = allowedTransitions[existing.status] || [];
