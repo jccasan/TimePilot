@@ -3903,12 +3903,17 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
 
+      type DayOfWeekValue = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+      type PlanStop = { servicePlanId?: string; id?: string };
+      type PlanRoute = { routeLabel?: string; stops?: PlanStop[] };
+      type DayPlan = { day: DayOfWeekValue; routes: PlanRoute[] };
+
       const { acceptedDays, proposedDays } = req.body;
       if (!proposedDays || !Array.isArray(proposedDays)) {
         return res.status(400).json({ error: "proposedDays is required" });
       }
 
-      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+      const validDays: DayOfWeekValue[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
       for (const dp of proposedDays) {
         if (!dp.day || !validDays.includes(dp.day)) {
           return res.status(400).json({ error: `Invalid day: ${dp.day}` });
@@ -3917,23 +3922,26 @@ Return ONLY valid JSON, no markdown.`,
           return res.status(400).json({ error: "Each day must have a routes array" });
         }
       }
+      const typedDays = proposedDays as DayPlan[];
 
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
-      const daysToApply = acceptedDays && Array.isArray(acceptedDays)
-        ? proposedDays.filter((d: any) => acceptedDays.includes(d.day))
-        : proposedDays;
+      const daysToApply: DayPlan[] = acceptedDays && Array.isArray(acceptedDays)
+        ? typedDays.filter(d => acceptedDays.includes(d.day))
+        : typedDays;
 
       const companyPlans = await storage.getServicePlans(companyId, { isActive: true });
       const validPlanIds = new Set(companyPlans.map(p => p.id));
 
+      const getStopId = (s: PlanStop): string | undefined => s.servicePlanId || s.id;
+
       let totalRoutes = 0;
       let totalStopsValidated = 0;
       for (const dayPlan of daysToApply) {
-        for (const route of (dayPlan.routes || [])) {
-          const routeStops = (route.stops || []).filter((s: any) => {
-            const spId = s.servicePlanId || s.id;
+        for (const route of dayPlan.routes) {
+          const routeStops = (route.stops || []).filter(s => {
+            const spId = getStopId(s);
             return spId && validPlanIds.has(spId);
           });
           if (routeStops.length > 0) {
@@ -3964,10 +3972,10 @@ Return ONLY valid JSON, no markdown.`,
       for (const dayPlan of daysToApply) {
         const day = dayPlan.day;
         let dayRouteIdx = 0;
-        for (let rIdx = 0; rIdx < (dayPlan.routes || []).length; rIdx++) {
+        for (let rIdx = 0; rIdx < dayPlan.routes.length; rIdx++) {
           const proposedRoute = dayPlan.routes[rIdx];
-          const validStops = (proposedRoute.stops || []).filter((s: any) => {
-            const spId = s.servicePlanId || s.id;
+          const validStops = (proposedRoute.stops || []).filter(s => {
+            const spId = getStopId(s);
             return spId && validPlanIds.has(spId);
           });
           if (validStops.length === 0) continue;
@@ -3981,7 +3989,7 @@ Return ONLY valid JSON, no markdown.`,
             const newRoute = await storage.createRoute({
               companyId,
               name: routeLabel,
-              dayOfWeek: day as any,
+              dayOfWeek: day,
               color: ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6"][routesCreated % 5],
             });
             existingRoute = newRoute;
@@ -3992,10 +4000,10 @@ Return ONLY valid JSON, no markdown.`,
 
           for (let sIdx = 0; sIdx < validStops.length; sIdx++) {
             const stop = validStops[sIdx];
-            const spId = stop.servicePlanId || stop.id;
+            const spId = getStopId(stop)!;
             await storage.updateServicePlan(spId, companyId, {
               routeId: existingRoute.id,
-              dayOfWeek: day as any,
+              dayOfWeek: day,
               stopOrder: sIdx + 1,
             });
             stopsUpdated++;
@@ -4003,7 +4011,7 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      const appliedDaySet = new Set(daysToApply.map((d: any) => d.day));
+      const appliedDaySet = new Set(daysToApply.map(d => d.day));
       let routesRemoved = 0;
       const refreshedRoutes = await storage.getRoutes(companyId);
       const allPlans = await storage.getServicePlans(companyId, { isActive: true });
@@ -4019,7 +4027,7 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      await storage.updateCompany(companyId, { routeCredits: currentCredits - totalRoutes } as any);
+      await storage.updateCompany(companyId, { routeCredits: currentCredits - totalRoutes });
 
       res.json({
         applied: true,

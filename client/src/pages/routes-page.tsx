@@ -1842,7 +1842,7 @@ function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" data-testid="dialog-weekly-optimizer">
+      <DialogContent className="w-screen h-screen max-w-none max-h-none m-0 p-6 rounded-none overflow-hidden flex flex-col" data-testid="dialog-weekly-optimizer">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
@@ -2004,7 +2004,7 @@ function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits }: {
               </TabsContent>
 
               <TabsContent value="day-by-day" className="mt-3">
-                <ScrollArea className="h-[40vh]">
+                <ScrollArea className="flex-1 min-h-0">
                   <div className="space-y-4">
                     {result.proposed.days.filter(d => d.totalStops > 0).map(day => (
                       <Card key={day.day} data-testid={`detail-day-${day.day}`}>
@@ -2056,7 +2056,7 @@ function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits }: {
               </TabsContent>
 
               <TabsContent value="moves" className="mt-3">
-                <ScrollArea className="h-[40vh]">
+                <ScrollArea className="flex-1 min-h-0">
                   {result.movedStops.length === 0 ? (
                     <p className="text-center text-sm text-muted-foreground py-8">
                       No stops need to be moved. The current schedule is already well-organized.
