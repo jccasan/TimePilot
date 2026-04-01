@@ -632,6 +632,292 @@ async function migrateServicePlansToAgreementsAndJobs() {
   await pool.end();
 }
 
+async function seedExtraDemoContacts(pool: any, companyId: string) {
+  try {
+    const routeRes = await pool.query("SELECT id FROM routes WHERE company_id = $1 ORDER BY name", [companyId]);
+    if (routeRes.rows.length === 0) {
+      console.log("[Migration] No routes found for demo company, skipping extra contacts");
+      return;
+    }
+    const routeIds = routeRes.rows.map((r: any) => r.id);
+
+    const extraContacts: [string, string, string, string, string][] = [
+      ['Anthony', 'Rivera', 'anthony.r@example.com', '(540) 555-2001', 'active'],
+      ['Samantha', 'Cole', 'samantha.c@example.com', '(540) 555-2002', 'active'],
+      ['Douglas', 'Fleming', 'douglas.f@example.com', '(540) 555-2003', 'active'],
+      ['Whitney', 'Pearson', 'whitney.p@example.com', '(540) 555-2004', 'active'],
+      ['Victor', 'Garrett', 'victor.g@example.com', '(540) 555-2005', 'active'],
+      ['Natalie', 'Burton', 'natalie.b@example.com', '(540) 555-2006', 'active'],
+      ['Sean', 'Morales', 'sean.m@example.com', '(540) 555-2007', 'active'],
+      ['Erica', 'Hampton', 'erica.h@example.com', '(540) 555-2008', 'active'],
+      ['Philip', 'Doyle', 'philip.d@example.com', '(540) 555-2009', 'active'],
+      ['Cassandra', 'Weaver', 'cassandra.w@example.com', '(540) 555-2010', 'active'],
+      ['Troy', 'McIntyre', 'troy.m@example.com', '(540) 555-2011', 'active'],
+      ['Gloria', 'Sutton', 'gloria.s@example.com', '(540) 555-2012', 'active'],
+      ['Russell', 'Cobb', 'russell.c@example.com', '(540) 555-2013', 'active'],
+      ['Veronica', 'Holt', 'veronica.h@example.com', '(540) 555-2014', 'active'],
+      ['Craig', 'Lindsey', 'craig.l@example.com', '(540) 555-2015', 'active'],
+      ['Monica', 'Vaughn', 'monica.v@example.com', '(540) 555-2016', 'active'],
+      ['Keith', 'Barber', 'keith.b@example.com', '(540) 555-2017', 'active'],
+      ['Stephanie', 'Lowe', 'stephanie.l@example.com', '(540) 555-2018', 'active'],
+      ['Dennis', 'Walters', 'dennis.w@example.com', '(540) 555-2019', 'active'],
+      ['Amber', 'Dalton', 'amber.d@example.com', '(540) 555-2020', 'active'],
+      ['Randy', 'Espinoza', 'randy.e@example.com', '(540) 555-2021', 'active'],
+      ['Crystal', 'Phelps', 'crystal.p@example.com', '(540) 555-2022', 'active'],
+      ['Joel', 'Compton', 'joel.c@example.com', '(540) 555-2023', 'active'],
+      ['Leslie', 'Gaines', 'leslie.g@example.com', '(540) 555-2024', 'active'],
+      ['Travis', 'Woodard', 'travis.w@example.com', '(540) 555-2025', 'active'],
+      ['Courtney', 'Buckley', 'courtney.b@example.com', '(540) 555-2026', 'active'],
+      ['Gerald', 'Maxwell', 'gerald.m@example.com', '(540) 555-2027', 'active'],
+      ['Vanessa', 'Pratt', 'vanessa.p@example.com', '(540) 555-2028', 'active'],
+      ['Darren', 'Cannon', 'darren.c@example.com', '(540) 555-2029', 'active'],
+      ['Alicia', 'Rowe', 'alicia.r@example.com', '(540) 555-2030', 'active'],
+      ['Curtis', 'Pollard', 'curtis.p@example.com', '(540) 555-2031', 'active'],
+      ['Brianna', 'Farrell', 'brianna.f@example.com', '(540) 555-2032', 'active'],
+      ['Lance', 'Ingram', 'lance.i@example.com', '(540) 555-2033', 'active'],
+      ['Jasmine', 'Huff', 'jasmine.h@example.com', '(540) 555-2034', 'active'],
+      ['Wayne', 'Strickland', 'wayne.s@example.com', '(540) 555-2035', 'active'],
+      ['Sharon', 'Callahan', 'sharon.c@example.com', '(540) 555-2036', 'active'],
+      ['Terrence', 'Knox', 'terrence.k@example.com', '(540) 555-2037', 'active'],
+      ['Kathryn', 'Malone', 'kathryn.m@example.com', '(540) 555-2038', 'active'],
+      ['Mitchell', 'Brock', 'mitchell.b@example.com', '(540) 555-2039', 'active'],
+      ['Carmen', 'Wyatt', 'carmen.w@example.com', '(540) 555-2040', 'active'],
+      ['Evan', 'Shaffer', 'evan.s@example.com', '(540) 555-2041', 'active'],
+      ['Lorraine', 'Juarez', 'lorraine.j@example.com', '(540) 555-2042', 'active'],
+      ['Blake', 'Finley', 'blake.f@example.com', '(540) 555-2043', 'active'],
+      ['Pamela', 'Norris', 'pamela.n@example.com', '(540) 555-2044', 'active'],
+      ['Albert', 'Rocha', 'albert.r@example.com', '(540) 555-2045', 'active'],
+      ['Renee', 'Pace', 'renee.p@example.com', '(540) 555-2046', 'active'],
+      ['Martin', 'Hendricks', 'martin.h@example.com', '(540) 555-2047', 'active'],
+      ['Allison', 'Spence', 'allison.s@example.com', '(540) 555-2048', 'active'],
+      ['Scott', 'Gilmore', 'scott.g@example.com', '(540) 555-2049', 'active'],
+      ['Bethany', 'Estes', 'bethany.e@example.com', '(540) 555-2050', 'active'],
+      ['Jordan', 'Melton', 'jordan.m@example.com', '(540) 555-2051', 'active'],
+      ['Theresa', 'Ochoa', 'theresa.o@example.com', '(540) 555-2052', 'active'],
+      ['Marcus', 'Penn', 'marcus.penn@example.com', '(540) 555-2053', 'active'],
+      ['Bridget', 'Swanson', 'bridget.s@example.com', '(540) 555-2054', 'active'],
+      ['Franklin', 'Mejia', 'franklin.m@example.com', '(540) 555-2055', 'active'],
+      ['Rosa', 'Odom', 'rosa.o@example.com', '(540) 555-2056', 'active'],
+      ['Neil', 'Greer', 'neil.g@example.com', '(540) 555-2057', 'active'],
+      ['Dianne', 'Bates', 'dianne.b@example.com', '(540) 555-2058', 'active'],
+      ['Cody', 'Waller', 'cody.w@example.com', '(540) 555-2059', 'active'],
+      ['Teresa', 'Duffy', 'teresa.d@example.com', '(540) 555-2060', 'active'],
+      ['Allan', 'Richmond', 'allan.r@example.com', '(540) 555-2061', 'active'],
+      ['Faith', 'Merritt', 'faith.m@example.com', '(540) 555-2062', 'active'],
+      ['Warren', 'Beard', 'warren.b@example.com', '(540) 555-2063', 'active'],
+      ['Elaine', 'Levine', 'elaine.l@example.com', '(540) 555-2064', 'active'],
+      ['Dominic', 'Olson', 'dominic.o@example.com', '(540) 555-2065', 'lead'],
+      ['Kimberly', 'Sampson', 'kimberly.s@example.com', '(540) 555-2066', 'lead'],
+      ['Stuart', 'Woodward', 'stuart.w@example.com', '(540) 555-2067', 'lead'],
+      ['Gina', 'Hartley', 'gina.h@example.com', '(540) 555-2068', 'lead'],
+      ['Leo', 'Blanchard', 'leo.b@example.com', '(540) 555-2069', 'lead'],
+      ['Christine', 'Fulton', 'christine.f@example.com', '(540) 555-2070', 'active'],
+    ];
+
+    const extraAddresses: [string, number, number, number, string][] = [
+      ['101 Hanover St', 38.3041, -77.4578, 2, 'medium'],
+      ['215 Amelia St', 38.3025, -77.4592, 1, 'small'],
+      ['330 Fauquier St', 38.3058, -77.4601, 3, 'large'],
+      ['445 Prince Edward St', 38.3033, -77.4615, 1, 'medium'],
+      ['560 Charlotte St', 38.3019, -77.4545, 2, 'large'],
+      ['125 Canal St', 38.3008, -77.4562, 1, 'small'],
+      ['240 Lewis St', 38.3072, -77.4588, 2, 'medium'],
+      ['355 Hawke St', 38.3049, -77.4535, 4, 'large'],
+      ['470 Frederick St', 38.3063, -77.4572, 1, 'small'],
+      ['585 Barton St', 38.2995, -77.4609, 2, 'medium'],
+      ['1412 Dandridge St', 38.2968, -77.4652, 1, 'medium'],
+      ['1527 Herndon St', 38.2953, -77.4688, 3, 'large'],
+      ['1643 Sylvania Ave', 38.2938, -77.4724, 2, 'small'],
+      ['1758 Idlewild Blvd', 38.2922, -77.4760, 1, 'medium'],
+      ['1874 Gordon Rd', 38.2907, -77.4796, 2, 'large'],
+      ['1015 Executive Ave', 38.2965, -77.4543, 1, 'small'],
+      ['1130 Deacon Rd', 38.2950, -77.4511, 2, 'medium'],
+      ['1245 Jackson St', 38.2935, -77.4479, 3, 'large'],
+      ['1360 Millwood Dr', 38.2920, -77.4447, 1, 'medium'],
+      ['1475 Jefferson Davis Hwy', 38.2905, -77.4415, 2, 'small'],
+      ['2510 Mine Rd', 38.2845, -77.4925, 1, 'medium'],
+      ['2625 Lansdowne Rd', 38.2831, -77.4961, 2, 'large'],
+      ['2740 Belman Rd', 38.2816, -77.4997, 1, 'small'],
+      ['2855 Hood Dr', 38.2801, -77.5033, 3, 'large'],
+      ['2970 Wicklow Dr', 38.2786, -77.5069, 2, 'medium'],
+      ['3085 Leavells Rd', 38.2771, -77.5105, 1, 'small'],
+      ['3200 Harrison Rd', 38.2756, -77.5141, 2, 'large'],
+      ['3315 Lee Hill Dr', 38.2741, -77.5177, 1, 'medium'],
+      ['3430 Benchmark Rd', 38.2726, -77.5213, 4, 'large'],
+      ['3545 Smith Station Rd', 38.2711, -77.5249, 2, 'medium'],
+      ['4001 Cambridge St', 38.2696, -77.4383, 1, 'small'],
+      ['4116 River Rd', 38.2681, -77.4351, 2, 'medium'],
+      ['4231 Hillcrest Dr', 38.2666, -77.4319, 3, 'large'],
+      ['4346 Courthouse Rd', 38.2651, -77.4287, 1, 'medium'],
+      ['4461 Garrisonville Rd', 38.2636, -77.4255, 2, 'small'],
+      ['4576 Plantation Dr', 38.2735, -77.4623, 1, 'large'],
+      ['4691 Warrenton Rd', 38.2750, -77.4659, 2, 'medium'],
+      ['4806 Chatham Heights Rd', 38.2765, -77.4695, 1, 'small'],
+      ['4921 Butler Rd', 38.2780, -77.4731, 3, 'large'],
+      ['5036 Tidewater Trail', 38.2795, -77.4767, 2, 'medium'],
+      ['1901 College Ave', 38.2810, -77.4803, 1, 'small'],
+      ['2016 Hospital Dr', 38.2825, -77.4839, 2, 'medium'],
+      ['2131 William St Extended', 38.2840, -77.4875, 1, 'large'],
+      ['2246 Normandy Ave', 38.2855, -77.4911, 4, 'large'],
+      ['2361 Sunken Rd Extended', 38.2870, -77.4947, 2, 'medium'],
+      ['620 Bunker Hill St', 38.3085, -77.4625, 1, 'small'],
+      ['735 Marye St', 38.3098, -77.4659, 2, 'medium'],
+      ['850 Kirkland Dr', 38.3112, -77.4693, 3, 'large'],
+      ['965 Lee Dr', 38.3126, -77.4727, 1, 'medium'],
+      ['1080 Mayfield Dr', 38.3140, -77.4761, 2, 'small'],
+      ['1195 Breckenridge Dr', 38.3154, -77.4795, 1, 'medium'],
+      ['1310 College Heights', 38.3168, -77.4829, 2, 'large'],
+      ['1425 Battlefield Blvd', 38.3182, -77.4863, 1, 'small'],
+      ['1540 Telegraph Rd', 38.3196, -77.4897, 3, 'large'],
+      ['1655 Altoona Dr', 38.3210, -77.4931, 2, 'medium'],
+      ['720 Pitt St', 38.3005, -77.4530, 1, 'medium'],
+      ['835 Commerce St', 38.2990, -77.4498, 2, 'large'],
+      ['950 Water St', 38.2975, -77.4466, 1, 'small'],
+      ['1065 Ford St', 38.2960, -77.4434, 3, 'large'],
+      ['1180 Bridgewater St', 38.2945, -77.4402, 2, 'medium'],
+      ['1295 Riverside Dr', 38.2930, -77.4370, 1, 'small'],
+      ['1410 Ferry Farm Ln', 38.2915, -77.4338, 2, 'large'],
+      ['1525 Kings Hwy', 38.2900, -77.4306, 1, 'medium'],
+      ['1640 Embrey Mill Rd', 38.2885, -77.4274, 4, 'large'],
+      ['1755 Celebrate Virginia Dr', 38.2870, -77.4242, 2, 'medium'],
+      ['1870 Central Park Blvd', 38.3015, -77.4680, 1, 'small'],
+      ['1985 Greenview Dr', 38.3030, -77.4716, 2, 'medium'],
+      ['2100 Oak Hill Ln', 38.3045, -77.4752, 3, 'large'],
+      ['2215 Pine Grove Ct', 38.3060, -77.4788, 1, 'small'],
+      ['2330 Maple Ridge Rd', 38.3075, -77.4824, 2, 'medium'],
+    ];
+
+    const extraPlanConfigs: { idx: number; freq: string; price: string; ri: number }[] = [
+      { idx: 0, freq: 'weekly', price: '22.00', ri: 0 },
+      { idx: 1, freq: 'weekly', price: '18.00', ri: 1 },
+      { idx: 2, freq: 'weekly', price: '35.00', ri: 2 },
+      { idx: 3, freq: 'biweekly', price: '28.00', ri: 3 },
+      { idx: 4, freq: 'weekly', price: '30.00', ri: 4 },
+      { idx: 5, freq: 'weekly', price: '20.00', ri: 0 },
+      { idx: 6, freq: 'weekly', price: '26.00', ri: 1 },
+      { idx: 7, freq: 'weekly', price: '42.00', ri: 2 },
+      { idx: 8, freq: 'biweekly', price: '24.00', ri: 3 },
+      { idx: 9, freq: 'weekly', price: '32.00', ri: 4 },
+      { idx: 10, freq: 'weekly', price: '19.00', ri: 0 },
+      { idx: 11, freq: 'weekly', price: '38.00', ri: 1 },
+      { idx: 12, freq: 'monthly', price: '45.00', ri: 2 },
+      { idx: 13, freq: 'weekly', price: '23.00', ri: 3 },
+      { idx: 14, freq: 'weekly', price: '34.00', ri: 4 },
+      { idx: 15, freq: 'biweekly', price: '27.00', ri: 0 },
+      { idx: 16, freq: 'weekly', price: '21.00', ri: 1 },
+      { idx: 17, freq: 'weekly', price: '36.00', ri: 2 },
+      { idx: 18, freq: 'weekly', price: '29.00', ri: 3 },
+      { idx: 19, freq: 'weekly', price: '16.00', ri: 4 },
+      { idx: 20, freq: 'weekly', price: '25.00', ri: 0 },
+      { idx: 21, freq: 'biweekly', price: '33.00', ri: 1 },
+      { idx: 22, freq: 'weekly', price: '20.00', ri: 2 },
+      { idx: 23, freq: 'weekly', price: '40.00', ri: 3 },
+      { idx: 24, freq: 'weekly', price: '28.00', ri: 4 },
+      { idx: 25, freq: 'weekly', price: '17.00', ri: 0 },
+      { idx: 26, freq: 'weekly', price: '31.00', ri: 1 },
+      { idx: 27, freq: 'biweekly', price: '26.00', ri: 2 },
+      { idx: 28, freq: 'weekly', price: '44.00', ri: 3 },
+      { idx: 29, freq: 'weekly', price: '22.00', ri: 4 },
+      { idx: 30, freq: 'weekly', price: '19.00', ri: 0 },
+      { idx: 31, freq: 'weekly', price: '24.00', ri: 1 },
+      { idx: 32, freq: 'weekly', price: '37.00', ri: 2 },
+      { idx: 33, freq: 'biweekly', price: '30.00', ri: 3 },
+      { idx: 34, freq: 'weekly', price: '15.00', ri: 4 },
+      { idx: 35, freq: 'weekly', price: '29.00', ri: 0 },
+      { idx: 36, freq: 'weekly', price: '23.00', ri: 1 },
+      { idx: 37, freq: 'monthly', price: '40.00', ri: 2 },
+      { idx: 38, freq: 'weekly', price: '35.00', ri: 3 },
+      { idx: 39, freq: 'weekly', price: '27.00', ri: 4 },
+      { idx: 40, freq: 'biweekly', price: '21.00', ri: 0 },
+      { idx: 41, freq: 'weekly', price: '26.00', ri: 1 },
+      { idx: 42, freq: 'weekly', price: '18.00', ri: 2 },
+      { idx: 43, freq: 'weekly', price: '43.00', ri: 3 },
+      { idx: 44, freq: 'weekly', price: '32.00', ri: 4 },
+      { idx: 45, freq: 'weekly', price: '20.00', ri: 0 },
+      { idx: 46, freq: 'weekly', price: '28.00', ri: 1 },
+      { idx: 47, freq: 'biweekly', price: '36.00', ri: 2 },
+      { idx: 48, freq: 'weekly', price: '25.00', ri: 3 },
+      { idx: 49, freq: 'weekly', price: '16.00', ri: 4 },
+      { idx: 50, freq: 'weekly', price: '22.00', ri: 0 },
+      { idx: 51, freq: 'weekly', price: '34.00', ri: 1 },
+      { idx: 52, freq: 'weekly', price: '19.00', ri: 2 },
+      { idx: 53, freq: 'biweekly', price: '38.00', ri: 3 },
+      { idx: 54, freq: 'weekly', price: '30.00', ri: 4 },
+      { idx: 55, freq: 'weekly', price: '24.00', ri: 0 },
+      { idx: 56, freq: 'weekly', price: '31.00', ri: 1 },
+      { idx: 57, freq: 'monthly', price: '42.00', ri: 2 },
+      { idx: 58, freq: 'weekly', price: '39.00', ri: 3 },
+      { idx: 59, freq: 'weekly', price: '17.00', ri: 4 },
+      { idx: 60, freq: 'weekly', price: '33.00', ri: 0 },
+      { idx: 61, freq: 'biweekly', price: '25.00', ri: 1 },
+      { idx: 62, freq: 'weekly', price: '41.00', ri: 2 },
+      { idx: 63, freq: 'weekly', price: '23.00', ri: 3 },
+    ];
+
+    const contactIds: string[] = [];
+    for (const [fn, ln, em, ph, st] of extraContacts) {
+      const r = await pool.query(
+        `INSERT INTO contacts (company_id, first_name, last_name, email, phone, status, has_portal_access, auto_pay_enabled, auto_invoice_enabled) VALUES ($1,$2,$3,$4,$5,$6,false,false,true) RETURNING id`,
+        [companyId, fn, ln, em, ph, st]
+      );
+      contactIds.push(r.rows[0].id);
+    }
+
+    const propIds: string[] = [];
+    for (let i = 0; i < extraAddresses.length; i++) {
+      const [addr, lat, lng, dogs, yard] = extraAddresses[i];
+      const r = await pool.query(
+        `INSERT INTO properties (company_id, contact_id, street_address, city, state, zip_code, latitude, longitude, number_of_dogs, yard_size) VALUES ($1,$2,$3,'Fredericksburg','VA','22401',$4,$5,$6,$7) RETURNING id`,
+        [companyId, contactIds[i], addr, lat, lng, dogs, yard]
+      );
+      propIds.push(r.rows[0].id);
+    }
+
+    const planIds: string[] = [];
+    for (const pc of extraPlanConfigs) {
+      const ri = pc.ri % routeIds.length;
+      const r = await pool.query(
+        `INSERT INTO service_plans (company_id, contact_id, property_id, frequency, price_per_visit, is_active, start_date, stop_order, is_stop_only, route_id) VALUES ($1,$2,$3,$4,$5,true,'2026-02-01',0,false,$6) RETURNING id`,
+        [companyId, contactIds[pc.idx], propIds[pc.idx], pc.freq, pc.price, routeIds[ri]]
+      );
+      planIds.push(r.rows[0].id);
+    }
+
+    const dayOfWeekMap = [1, 3, 5, 2, 4];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let pIdx = 0; pIdx < extraPlanConfigs.length; pIdx++) {
+      const pc = extraPlanConfigs[pIdx];
+      const ri = pc.ri % routeIds.length;
+      const day = dayOfWeekMap[ri];
+      for (let wk = 6; wk >= -1; wk--) {
+        if (pc.freq === 'biweekly' && wk % 2 !== 0) continue;
+        if (pc.freq === 'monthly' && wk !== 0 && wk !== 4) continue;
+
+        const d = new Date(today);
+        d.setDate(d.getDate() - (wk * 7) + (day - d.getDay()));
+        const dateStr = d.toISOString().split('T')[0];
+
+        let status: string;
+        if (d > today) status = 'scheduled';
+        else if (dateStr === today.toISOString().split('T')[0]) status = 'scheduled';
+        else status = Math.random() > 0.1 ? 'completed' : 'skipped';
+
+        const completedAt = status === 'completed' ? d.toISOString() : null;
+        await pool.query(
+          `INSERT INTO visits (company_id, service_plan_id, property_id, scheduled_date, status, completed_at) VALUES ($1,$2,$3,$4,$5,$6)`,
+          [companyId, planIds[pIdx], propIds[pc.idx], dateStr, status, completedAt]
+        );
+      }
+    }
+
+    console.log(`[Migration] Seeded 70 extra demo contacts with ${extraPlanConfigs.length} service plans`);
+  } catch (err) {
+    console.error("[Migration] Failed to seed extra demo contacts:", err);
+  }
+}
+
 async function seedDemoCompany() {
   try {
     const { Pool } = await import("pg");
@@ -647,6 +933,10 @@ async function seedDemoCompany() {
           const { storage } = await import("./storage");
           await storage.seedDefaultPricing(demoCoId);
           console.log("[Migration] Demo company service pricing seeded");
+        }
+        const contactCount = await pool.query("SELECT COUNT(*) FROM contacts WHERE company_id = $1", [demoCoId]);
+        if (parseInt(contactCount.rows[0].count) < 90) {
+          await seedExtraDemoContacts(pool, demoCoId);
         }
       }
       console.log("[Migration] Demo company already exists");
