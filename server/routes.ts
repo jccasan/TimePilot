@@ -4003,11 +4003,28 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
+      const appliedDaySet = new Set(daysToApply.map((d: any) => d.day));
+      let routesRemoved = 0;
+      const refreshedRoutes = await storage.getRoutes(companyId);
+      const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+      for (const route of refreshedRoutes) {
+        if (!route.dayOfWeek || route.date || route.isLocked) continue;
+        if (!appliedDaySet.has(route.dayOfWeek)) continue;
+        const assignedStops = allPlans.filter(p => p.routeId === route.id);
+        if (assignedStops.length === 0) {
+          try {
+            await storage.deleteRoute(route.id, companyId);
+            routesRemoved++;
+          } catch (_e) {}
+        }
+      }
+
       await storage.updateCompany(companyId, { routeCredits: currentCredits - totalRoutes } as any);
 
       res.json({
         applied: true,
         routesCreated,
+        routesRemoved,
         stopsUpdated,
         creditsUsed: totalRoutes,
         creditsRemaining: currentCredits - totalRoutes,

@@ -1665,6 +1665,80 @@ export default function RoutesPage() {
   );
 }
 
+const ROUTE_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6"];
+
+function StopMiniMap({ routes }: { routes: WeeklyProposedRoute[] }) {
+  const allStops = routes.flatMap((r, rIdx) =>
+    r.stops.map(s => ({ ...s, routeIdx: rIdx }))
+  );
+  if (allStops.length === 0) return null;
+
+  const lats = allStops.map(s => s.latitude);
+  const lngs = allStops.map(s => s.longitude);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+
+  const padding = 16;
+  const svgW = 240;
+  const svgH = 140;
+  const innerW = svgW - padding * 2;
+  const innerH = svgH - padding * 2;
+  const rangeX = maxLng - minLng || 0.01;
+  const rangeY = maxLat - minLat || 0.01;
+
+  const toX = (lng: number) => padding + ((lng - minLng) / rangeX) * innerW;
+  const toY = (lat: number) => padding + ((maxLat - lat) / rangeY) * innerH;
+
+  return (
+    <svg
+      viewBox={`0 0 ${svgW} ${svgH}`}
+      className="w-full h-[120px] rounded border bg-muted/30"
+      data-testid="stop-mini-map"
+    >
+      {routes.map((route, rIdx) => {
+        if (route.stops.length < 2) return null;
+        const pts = route.stops.map(s => `${toX(s.longitude)},${toY(s.latitude)}`).join(" ");
+        return (
+          <polyline
+            key={`line-${rIdx}`}
+            points={pts}
+            fill="none"
+            stroke={ROUTE_COLORS[rIdx % ROUTE_COLORS.length]}
+            strokeWidth="2"
+            strokeOpacity="0.5"
+            strokeLinejoin="round"
+          />
+        );
+      })}
+      {allStops.map((stop, idx) => (
+        <g key={idx}>
+          <circle
+            cx={toX(stop.longitude)}
+            cy={toY(stop.latitude)}
+            r="5"
+            fill={ROUTE_COLORS[stop.routeIdx % ROUTE_COLORS.length]}
+            stroke="white"
+            strokeWidth="1.5"
+          />
+          <text
+            x={toX(stop.longitude)}
+            y={toY(stop.latitude) + 1}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize="6"
+            fill="white"
+            fontWeight="bold"
+          >
+            {idx + 1}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 type WeeklyProposedRoute = {
   routeLabel: string;
   day: string;
@@ -1949,9 +2023,16 @@ function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits }: {
                           </div>
                         </CardHeader>
                         <CardContent className="p-3 pt-0 space-y-3">
+                          <StopMiniMap routes={day.routes} />
                           {day.routes.map((route, rIdx) => (
                             <div key={rIdx} className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground">{route.routeLabel}</p>
+                              <p className="text-xs font-medium flex items-center gap-1.5">
+                                <span
+                                  className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: ROUTE_COLORS[rIdx % ROUTE_COLORS.length] }}
+                                />
+                                {route.routeLabel}
+                              </p>
                               <div className="space-y-0.5">
                                 {route.stops.map((stop, sIdx) => (
                                   <div key={stop.servicePlanId} className="flex items-center gap-2 text-xs py-0.5">
