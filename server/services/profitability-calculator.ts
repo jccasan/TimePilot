@@ -206,14 +206,124 @@ export async function calculateAllCustomerProfitability(
   companyId: string,
   config?: ProfitabilityConfig
 ): Promise<CustomerProfitability[]> {
-  const contacts = await storage.getContacts(companyId, { status: "active" });
-  const results: CustomerProfitability[] = [];
+  const effectiveConfig = { ...DEFAULT_PROFITABILITY_CONFIG, ...config };
 
+  const [company, contacts, allPlans, allProperties] = await Promise.all([
+    storage.getCompany(companyId),
+    storage.getContacts(companyId, { status: "active" }),
+    storage.getServicePlans(companyId, { isActive: true }),
+    storage.getProperties(companyId),
+  ]);
+  if (!company || contacts.length === 0) return [];
+
+  const pricingConfig = company.pricingConfig as Partial<PricingConfig> | null;
+  const overheadTotal = await storage.getTotalMonthlyOverheadCents(companyId);
+  const overrideOverhead = overheadTotal > 0 ? overheadTotal : undefined;
+
+  const activePlans = allPlans.filter(p => !p.isStopOnly);
+  const allAddOnsMap = await storage.getAllServicePlanAddOnsForCompany(activePlans.map(p => p.id));
+
+  const plansByContact = new Map<string, typeof activePlans>();
+  for (const plan of activePlans) {
+    if (!plansByContact.has(plan.contactId)) plansByContact.set(plan.contactId, []);
+    plansByContact.get(plan.contactId)!.push(plan);
+  }
+  const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+
+  const results: CustomerProfitability[] = [];
   for (const contact of contacts) {
-    const result = await calculateCustomerProfitability(companyId, contact.id, config);
-    if (result) {
-      results.push(result);
+    const plans = plansByContact.get(contact.id);
+    if (!plans || plans.length === 0) continue;
+
+    const propertyResults: CustomerPropertyProfitability[] = [];
+    for (const plan of plans) {
+      const property = propertyMap.get(plan.propertyId);
+      if (!property) continue;
+
+      let yardSizeAcres: number;
+      if (property.measuredYardSqft) {
+        yardSizeAcres = sqftToAcres(property.measuredYardSqft);
+      } else {
+        yardSizeAcres = yardSizeLabelToAcres(property.yardSize);
+      }
+      const dogCount = property.numberOfDogs ?? 1;
+
+      const planAddOns = allAddOnsMap.get(plan.id) || [];
+      const addOnsCents = planAddOns.filter(a => a.isActive).reduce((s, a) => s + Math.round((parseFloat(a.price) || 0) * 100), 0);
+      const totalPerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100) + addOnsCents;
+
+      const inputs: PriceCalculatorInputs = {
+        yardSizeAcres,
+        dogCount,
+        serviceFrequency: plan.frequency as "weekly" | "biweekly" | "monthly" | "onetime",
+        yardDifficulty: (property.yardDifficulty ?? "flat") as "flat" | "moderate" | "difficult",
+        distanceFromNearestStopMiles: effectiveConfig.distanceFromNearestStopMiles ?? 1.0,
+        routeStopsPerMile: effectiveConfig.routeStopsPerMile,
+        currentPriceCents: totalPerVisitCents,
+      };
+
+      const result = calculatePrice(inputs, pricingConfig, overrideOverhead);
+      const revenuePerVisitCents = totalPerVisitCents;
+      const costPerVisitCents = result.minimumPriceCents;
+      const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;
+      const profitMarginPct = revenuePerVisitCents > 0 ? (profitPerVisitCents / revenuePerVisitCents) * 100 : 0;
+      const jobMinutes = result.derived.jobMinutes;
+      const profitPerHourCents = jobMinutes > 0 ? (profitPerVisitCents / jobMinutes) * 60 : 0;
+
+      propertyResults.push({
+        propertyId: property.id,
+        propertyAddress: [property.streetAddress, property.city, property.state, property.zipCode].filter(Boolean).join(", "),
+        servicePlanId: plan.id,
+        frequency: plan.frequency,
+        dogCount,
+        yardSizeAcres,
+        yardDifficulty: property.yardDifficulty ?? "flat",
+        revenuePerVisitCents,
+        costPerVisitCents,
+        profitPerVisitCents,
+        profitMarginPct: Math.round(profitMarginPct * 100) / 100,
+        profitPerHourCents: Math.round(profitPerHourCents),
+        recommendedPriceCents: result.recommendedPriceCents,
+        costBreakdown: {
+          laborCostCents: result.breakdown.laborCostCents,
+          travelCostCents: result.breakdown.adjustedTravelCostCents,
+          equipmentCostCents: result.breakdown.equipmentCostCents,
+          overheadCostCents: result.breakdown.overheadPerVisitCents,
+        },
+        calculatorResult: result,
+      });
     }
+
+    if (propertyResults.length === 0) continue;
+
+    const totalRevenuePerVisitCents = propertyResults.reduce((sum, p) => sum + p.revenuePerVisitCents, 0);
+    const totalCostPerVisitCents = propertyResults.reduce((sum, p) => sum + p.costPerVisitCents, 0);
+    const totalProfitPerVisitCents = totalRevenuePerVisitCents - totalCostPerVisitCents;
+    const overallMarginPct = totalRevenuePerVisitCents > 0 ? (totalProfitPerVisitCents / totalRevenuePerVisitCents) * 100 : 0;
+
+    let monthlyRevenueCents = 0;
+    let monthlyCostCents = 0;
+    for (const p of propertyResults) {
+      const plan = plans.find(pl => pl.id === p.servicePlanId);
+      const visitsPerMonth = getFrequencyVisitsPerMonth(plan?.frequency ?? "weekly");
+      monthlyRevenueCents += Math.round(p.revenuePerVisitCents * visitsPerMonth);
+      monthlyCostCents += Math.round(p.costPerVisitCents * visitsPerMonth);
+    }
+
+    results.push({
+      contactId: contact.id,
+      contactName: `${contact.firstName} ${contact.lastName}`,
+      propertyCount: propertyResults.length,
+      totalRevenuePerVisitCents,
+      totalCostPerVisitCents,
+      totalProfitPerVisitCents,
+      profitMarginPct: Math.round(overallMarginPct * 100) / 100,
+      status: determineProfitabilityStatus(overallMarginPct),
+      properties: propertyResults,
+      monthlyRevenueCents,
+      monthlyCostCents,
+      monthlyProfitCents: monthlyRevenueCents - monthlyCostCents,
+    });
   }
 
   return results;

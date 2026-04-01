@@ -1976,9 +1976,9 @@ Return ONLY valid JSON, no markdown.`,
       const monthStart = getCompanyMonthStart(tz);
       const monthEnd = getCompanyMonthEnd(tz);
 
-      const [todaysVisitsList, allVisits, failedPayments, activeUsers, overdueInvoices, monthRevenue, smsCountThisMonth, emailCountThisMonth] = await Promise.all([
+      const [todaysVisitsList, overdueVisits, failedPayments, activeUsers, overdueInvoices, monthRevenue, smsCountThisMonth, emailCountThisMonth] = await Promise.all([
         storage.getTodaysVisits(companyId, today),
-        storage.getVisits(companyId, {}),
+        storage.getOverdueVisits(companyId, today),
         storage.getFailedPaymentsCount(companyId),
         storage.countActiveCompanyUsers(companyId),
         storage.getOverdueInvoicesCount(companyId, today),
@@ -1987,10 +1987,6 @@ Return ONLY valid JSON, no markdown.`,
         storage.getEmailCountForPeriod(companyId, monthStart, monthEnd),
       ]);
 
-      const overdueVisits = allVisits.filter(v =>
-        v.scheduledDate < today &&
-        (v.status === "scheduled" || v.status === "in_progress")
-      );
       const todaysWorkload = [...overdueVisits, ...todaysVisitsList];
       const todaysVisits = todaysWorkload.length;
 
@@ -2005,10 +2001,12 @@ Return ONLY valid JSON, no markdown.`,
       const allActiveStatusContacts = await storage.getContacts(companyId, { status: "active" });
       const activeContacts = allActiveStatusContacts.filter(c => !stopOnlyOnlyContactIds.has(c.id)).length;
       const activeServicePlans = activePlans.length;
+
+      const allAddOnsMap = await storage.getAllServicePlanAddOnsForCompany(activePlans.map(p => p.id));
       let mrr = 0;
       for (const plan of activePlans) {
         const basePrice = parseFloat(plan.pricePerVisit) || 0;
-        const addOns = await storage.getServicePlanAddOns(plan.id);
+        const addOns = allAddOnsMap.get(plan.id) || [];
         const addOnsTotal = addOns.filter(a => a.isActive).reduce((sum, a) => sum + (parseFloat(a.price) || 0), 0);
         const perVisit = basePrice + addOnsTotal;
 
@@ -2295,19 +2293,14 @@ Return ONLY valid JSON, no markdown.`,
         uninvoicedSummary,
         todaysVisitsList,
         monthRevenue,
-        allVisitsForOverdue,
+        overdueVisits,
       ] = await Promise.all([
         storage.getServicePlans(companyId, { isActive: true }),
         storage.getUninvoicedSummary(companyId),
         storage.getTodaysVisits(companyId, today),
         storage.getRevenueForPeriod(companyId, monthStart, monthEnd, tz),
-        storage.getVisits(companyId, {}),
+        storage.getOverdueVisits(companyId, today),
       ]);
-
-      const overdueVisits = allVisitsForOverdue.filter(v =>
-        v.scheduledDate < today &&
-        (v.status === "scheduled" || v.status === "in_progress")
-      );
 
       const dashboardVisits = [...overdueVisits, ...todaysVisitsList];
 
@@ -2324,9 +2317,9 @@ Return ONLY valid JSON, no markdown.`,
         activePlansMonthlyValue += basePrice * visitsPerMonth;
       }
 
-      const scheduledThisWeek = allVisitsForOverdue.filter(v =>
-        v.scheduledDate >= weekStartStr && v.scheduledDate <= weekEndStr &&
-        (v.status === "scheduled" || v.status === "in_progress")
+      const weekVisits = await storage.getVisitsForDateRange(companyId, weekStartStr, weekEndStr);
+      const scheduledThisWeek = weekVisits.filter(v =>
+        v.status === "scheduled" || v.status === "in_progress"
       ).length;
 
       const allInvoices = await storage.getInvoices(companyId);
@@ -2344,16 +2337,15 @@ Return ONLY valid JSON, no markdown.`,
         existing.total += parseFloat(inv.total) || 0;
         receivablesByContact.set(inv.contactId, existing);
       }
-      const topReceivables: { contactId: string; contactName: string; total: number }[] = [];
       const sortedReceivables = Array.from(receivablesByContact.values()).sort((a, b) => b.total - a.total).slice(0, 5);
-      for (const r of sortedReceivables) {
+      const topReceivables = await Promise.all(sortedReceivables.map(async (r) => {
         const contact = await storage.getContact(r.contactId, companyId);
-        topReceivables.push({
+        return {
           contactId: r.contactId,
           contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
           total: Math.round(r.total * 100) / 100,
-        });
-      }
+        };
+      }));
 
       const allPlans = activePlans.length > 0 ? activePlans : await storage.getServicePlans(companyId, {});
       const planMap = new Map(allPlans.map(p => [p.id, p]));
@@ -2366,17 +2358,24 @@ Return ONLY valid JSON, no markdown.`,
         propertyIds.add(v.propertyId);
       }
 
-      const contactCache = new Map<string, { firstName: string; lastName: string }>();
-      for (const cId of contactIds) {
-        const c = await storage.getContact(cId, companyId);
-        if (c) contactCache.set(cId, { firstName: c.firstName, lastName: c.lastName });
-      }
-
-      const propertyCache = new Map<string, string>();
-      for (const pId of propertyIds) {
-        const p = await storage.getProperty(pId, companyId);
-        if (p) propertyCache.set(pId, p.streetAddress);
-      }
+      const [contactCache, propertyCache] = await Promise.all([
+        (async () => {
+          const cache = new Map<string, { firstName: string; lastName: string }>();
+          const results = await Promise.all(Array.from(contactIds).map(cId => storage.getContact(cId, companyId)));
+          Array.from(contactIds).forEach((cId, i) => {
+            if (results[i]) cache.set(cId, { firstName: results[i]!.firstName, lastName: results[i]!.lastName });
+          });
+          return cache;
+        })(),
+        (async () => {
+          const cache = new Map<string, string>();
+          const results = await Promise.all(Array.from(propertyIds).map(pId => storage.getProperty(pId, companyId)));
+          Array.from(propertyIds).forEach((pId, i) => {
+            if (results[i]) cache.set(pId, results[i]!.streetAddress);
+          });
+          return cache;
+        })(),
+      ]);
 
       const dashboardVisitsDetailed: {
         id: string;

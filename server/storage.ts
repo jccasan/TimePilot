@@ -163,6 +163,7 @@ export interface IStorage {
   updateServicePlan(id: string, companyId: string, data: Partial<InsertServicePlan>): Promise<ServicePlan>;
   deleteServicePlan(id: string, companyId: string): Promise<void>;
   getServicePlanAddOns(servicePlanId: string): Promise<ServicePlanAddOn[]>;
+  getAllServicePlanAddOnsForCompany(planIds: string[]): Promise<Map<string, ServicePlanAddOn[]>>;
   setServicePlanAddOns(servicePlanId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<ServicePlanAddOn[]>;
 
   cancelFutureVisitsForPlans(planIds: string[], fromDate: string): Promise<number>;
@@ -181,6 +182,7 @@ export interface IStorage {
   getVisit(id: string, companyId: string): Promise<Visit | undefined>;
   getVisits(companyId: string, filters?: { date?: string; routeId?: string; status?: string }): Promise<Visit[]>;
   getVisitsForDateRange(companyId: string, startDate: string, endDate: string): Promise<Visit[]>;
+  getOverdueVisits(companyId: string, beforeDate: string): Promise<Visit[]>;
   createVisit(data: InsertVisit): Promise<Visit>;
   updateVisit(id: string, companyId: string, data: Partial<InsertVisit>): Promise<Visit>;
   getTodaysVisitsCount(companyId: string, today: string): Promise<number>;
@@ -867,6 +869,17 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(servicePlanAddOns).where(eq(servicePlanAddOns.servicePlanId, servicePlanId));
   }
 
+  async getAllServicePlanAddOnsForCompany(planIds: string[]): Promise<Map<string, ServicePlanAddOn[]>> {
+    const result = new Map<string, ServicePlanAddOn[]>();
+    if (planIds.length === 0) return result;
+    const allAddOns = await db.select().from(servicePlanAddOns).where(inArray(servicePlanAddOns.servicePlanId, planIds));
+    for (const addOn of allAddOns) {
+      if (!result.has(addOn.servicePlanId)) result.set(addOn.servicePlanId, []);
+      result.get(addOn.servicePlanId)!.push(addOn);
+    }
+    return result;
+  }
+
   async setServicePlanAddOns(servicePlanId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<ServicePlanAddOn[]> {
     await db.delete(servicePlanAddOns).where(eq(servicePlanAddOns.servicePlanId, servicePlanId));
     if (addOns.length === 0) return [];
@@ -943,6 +956,14 @@ export class DatabaseStorage implements IStorage {
       eq(visits.companyId, companyId),
       gte(visits.scheduledDate, startDate),
       lte(visits.scheduledDate, endDate),
+    )).orderBy(asc(visits.scheduledDate));
+  }
+
+  async getOverdueVisits(companyId: string, beforeDate: string): Promise<Visit[]> {
+    return db.select().from(visits).where(and(
+      eq(visits.companyId, companyId),
+      lt(visits.scheduledDate, beforeDate),
+      inArray(visits.status, ["scheduled", "in_progress"]),
     )).orderBy(asc(visits.scheduledDate));
   }
 
