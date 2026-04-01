@@ -1054,14 +1054,33 @@ export default function RoutesPage() {
     return { start: monday, end: sunday };
   }, []);
 
-  const isOnetimeInCurrentWeek = useCallback((sp: ServicePlan) => {
-    if (sp.frequency !== "onetime") return true;
-    if (!sp.startDate) return false;
-    const d = new Date(sp.startDate + "T12:00:00");
-    return d >= currentWeekRange.start && d <= currentWeekRange.end;
-  }, [currentWeekRange]);
+  const weekStartStr = useMemo(() => toLocalDateString(currentWeekRange.start, tz), [currentWeekRange, tz]);
+  const weekEndStr = useMemo(() => toLocalDateString(currentWeekRange.end, tz), [currentWeekRange, tz]);
 
-  const visiblePlans = useMemo(() => servicePlans.filter(isOnetimeInCurrentWeek), [servicePlans, isOnetimeInCurrentWeek]);
+  const { data: weekVisits = [] } = useQuery<Visit[]>({
+    queryKey: ["/api/visits/range", weekStartStr, weekEndStr],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/visits/range?start=${weekStartStr}&end=${weekEndStr}`);
+      return res.json();
+    },
+  });
+
+  const weekPlanIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const v of weekVisits) {
+      if (v.servicePlanId) ids.add(v.servicePlanId);
+    }
+    return ids;
+  }, [weekVisits]);
+
+  const visiblePlans = useMemo(() => servicePlans.filter(sp => {
+    if (sp.frequency === "onetime") {
+      if (!sp.startDate) return false;
+      const d = new Date(sp.startDate + "T12:00:00");
+      return d >= currentWeekRange.start && d <= currentWeekRange.end;
+    }
+    return weekPlanIds.has(sp.id) || sp.routeId != null;
+  }), [servicePlans, weekPlanIds, currentWeekRange]);
 
   const stopsByRoute = useMemo(() => {
     const map: Record<string, ServicePlan[]> = {};
