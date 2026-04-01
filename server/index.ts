@@ -852,6 +852,12 @@ async function seedExtraDemoContacts(pool: any, companyId: string) {
       { idx: 61, freq: 'biweekly', price: '25.00', ri: 1 },
       { idx: 62, freq: 'weekly', price: '41.00', ri: 2 },
       { idx: 63, freq: 'weekly', price: '23.00', ri: 3 },
+      { idx: 64, freq: 'weekly', price: '29.00', ri: 4 },
+      { idx: 65, freq: 'biweekly', price: '26.00', ri: 0 },
+      { idx: 66, freq: 'weekly', price: '37.00', ri: 1 },
+      { idx: 67, freq: 'weekly', price: '21.00', ri: 2 },
+      { idx: 68, freq: 'weekly', price: '34.00', ri: 3 },
+      { idx: 69, freq: 'weekly', price: '27.00', ri: 4 },
     ];
 
     const contactIds: string[] = [];
@@ -1146,6 +1152,8 @@ async function seedDemoCompany() {
       await storage.seedDefaultPricing(companyId);
       console.log("[Migration] Demo company service pricing seeded");
     }
+
+    await seedExtraDemoContacts(pool, companyId);
 
     await pool.end();
     console.log("[Migration] Demo company 'Clean Paws Fredericksburg' seeded successfully");
