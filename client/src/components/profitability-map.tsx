@@ -41,6 +41,7 @@ type ProfitabilityMapProps = {
   viewMode: "stops" | "zones";
   focusRouteId?: string | null;
   onStopClick?: (stop: MapStop) => void;
+  useRouteColors?: boolean;
 };
 
 const STATUS_COLORS = {
@@ -61,6 +62,7 @@ export default function ProfitabilityMap({
   viewMode,
   focusRouteId,
   onStopClick,
+  useRouteColors = false,
 }: ProfitabilityMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -269,7 +271,7 @@ export default function ProfitabilityMap({
         if (validStops.length >= 2) {
           const coordinates = validStops.map((s) => [s.longitude, s.latitude]);
           const lineId = `route-line-${route.routeId}`;
-          const lineColor = STATUS_COLORS[route.status];
+          const lineColor = route.color || STATUS_COLORS[route.status];
 
           map.addSource(lineId, {
             type: "geojson",
@@ -295,7 +297,7 @@ export default function ProfitabilityMap({
         }
 
         validStops.forEach((stop) => {
-          const color = STATUS_COLORS[stop.status];
+          const color = useRouteColors ? (route.color || "#3b82f6") : STATUS_COLORS[stop.status];
           const el = document.createElement("div");
           el.setAttribute("data-testid", `marker-stop-${stop.propertyId}`);
           el.style.width = "24px";
@@ -347,7 +349,7 @@ export default function ProfitabilityMap({
       allVisibleStops.forEach((s) => bounds.extend([s.longitude, s.latitude]));
       map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
     }
-  }, [routes, visibleRouteIds, viewMode, mapLoaded]);
+  }, [routes, visibleRouteIds, viewMode, mapLoaded, useRouteColors]);
 
   useEffect(() => {
     if (!focusRouteId || !mapRef.current || !mapboxglRef.current || !mapLoaded) return;

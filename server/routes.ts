@@ -3894,7 +3894,46 @@ Return ONLY valid JSON, no markdown.`,
         includeSaturday,
       });
 
-      res.json(result);
+      const { getEffectivePricingConfig } = await import("./services/pricing-calculator");
+      const pricingConfig = getEffectivePricingConfig(company.pricingConfig);
+
+      let fuelCostCentsPerMile: number;
+      let fuelCostSource: string;
+      if (pricingConfig.vehicleCostPerMileCents > 0) {
+        fuelCostCentsPerMile = pricingConfig.vehicleCostPerMileCents;
+        fuelCostSource = "cost_per_mile";
+      } else if (pricingConfig.vehicleMPG && pricingConfig.vehicleMPG > 0) {
+        fuelCostCentsPerMile = pricingConfig.averageGasPriceCentsPerGallon / pricingConfig.vehicleMPG;
+        fuelCostSource = "gas_mpg";
+      } else {
+        fuelCostCentsPerMile = 65;
+        fuelCostSource = "default";
+      }
+
+      const currentFuelCostCents = Math.round(result.current.totalMiles * fuelCostCentsPerMile);
+      const proposedFuelCostCents = Math.round(result.proposed.totalMiles * fuelCostCentsPerMile);
+      const fuelCostSavedCents = currentFuelCostCents - proposedFuelCostCents;
+
+      res.json({
+        ...result,
+        fuelCost: {
+          centsPerMile: Math.round(fuelCostCentsPerMile * 10) / 10,
+          source: fuelCostSource,
+          gasPriceCentsPerGallon: pricingConfig.averageGasPriceCentsPerGallon,
+          vehicleMPG: pricingConfig.vehicleMPG,
+          currentTotalCents: currentFuelCostCents,
+          proposedTotalCents: proposedFuelCostCents,
+          savedCents: fuelCostSavedCents,
+          currentPerDay: result.current.days.map(d => ({
+            day: d.day,
+            fuelCostCents: Math.round(d.totalMiles * fuelCostCentsPerMile),
+          })),
+          proposedPerDay: result.proposed.days.map(d => ({
+            day: d.day,
+            fuelCostCents: Math.round(d.totalMiles * fuelCostCentsPerMile),
+          })),
+        },
+      });
     } catch (err) { handleError(res, err); }
   });
 
