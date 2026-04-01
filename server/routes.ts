@@ -1976,9 +1976,9 @@ Return ONLY valid JSON, no markdown.`,
       const monthStart = getCompanyMonthStart(tz);
       const monthEnd = getCompanyMonthEnd(tz);
 
-      const [todaysVisits, todaysVisitsList, failedPayments, activeUsers, overdueInvoices, monthRevenue, smsCountThisMonth, emailCountThisMonth] = await Promise.all([
-        storage.getTodaysVisitsCount(companyId, today),
+      const [todaysVisitsList, allVisits, failedPayments, activeUsers, overdueInvoices, monthRevenue, smsCountThisMonth, emailCountThisMonth] = await Promise.all([
         storage.getTodaysVisits(companyId, today),
+        storage.getVisits(companyId, {}),
         storage.getFailedPaymentsCount(companyId),
         storage.countActiveCompanyUsers(companyId),
         storage.getOverdueInvoicesCount(companyId, today),
@@ -1987,9 +1987,16 @@ Return ONLY valid JSON, no markdown.`,
         storage.getEmailCountForPeriod(companyId, monthStart, monthEnd),
       ]);
 
+      const overdueVisits = allVisits.filter(v =>
+        v.scheduledDate < today &&
+        (v.status === "scheduled" || v.status === "in_progress")
+      );
+      const todaysWorkload = [...overdueVisits, ...todaysVisitsList];
+      const todaysVisits = todaysWorkload.length;
+
       const completedToday = todaysVisitsList.filter(v => v.status === "completed").length;
-      const scheduledToday = todaysVisitsList.filter(v => v.status === "scheduled").length;
-      const inProgressToday = todaysVisitsList.filter(v => v.status === "in_progress").length;
+      const scheduledToday = todaysWorkload.filter(v => v.status === "scheduled").length;
+      const inProgressToday = todaysWorkload.filter(v => v.status === "in_progress").length;
 
       const allActivePlans = await storage.getServicePlans(companyId, { isActive: true });
       const activePlans = allActivePlans.filter(p => !p.isStopOnly);
