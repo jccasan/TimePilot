@@ -106,6 +106,7 @@ function JobForm({
   contacts,
   properties,
   team,
+  services,
   initial,
   submitLabel,
 }: {
@@ -114,6 +115,7 @@ function JobForm({
   contacts: Contact[];
   properties: Property[];
   team: TeamMember[];
+  services: ServicePricingItem[];
   initial?: Partial<ServicePlan>;
   submitLabel: string;
 }) {
@@ -121,6 +123,7 @@ function JobForm({
   const [jobType, setJobType] = useState<string>(initial?.jobType || "one_off");
   const [contactId, setContactId] = useState(initial?.contactId || "");
   const [propertyId, setPropertyId] = useState(initial?.propertyId || "");
+  const [selectedServiceId, setSelectedServiceId] = useState("");
   const [serviceName, setServiceName] = useState(initial?.serviceName || "");
   const [frequency, setFrequency] = useState(initial?.frequency || "weekly");
   const [dayOfWeek, setDayOfWeek] = useState(initial?.dayOfWeek || "");
@@ -137,6 +140,8 @@ function JobForm({
   const [endDate, setEndDate] = useState(initial?.endDate || "");
   const [visitInstructions, setVisitInstructions] = useState(initial?.visitInstructions || "");
   const [assignedUserId, setAssignedUserId] = useState(initial?.assignedUserId || "");
+
+  const activeServices = useMemo(() => services.filter(s => s.isActive), [services]);
 
   const filteredProperties = useMemo(() => {
     if (!contactId) return [];
@@ -252,14 +257,38 @@ function JobForm({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="job-service-name">Service Name</Label>
-          <Input
-            id="job-service-name"
-            value={serviceName}
-            onChange={e => setServiceName(e.target.value)}
-            placeholder="e.g. Yard Cleanup"
-            data-testid="input-job-service-name"
-          />
+          <Label>Service</Label>
+          {activeServices.length > 0 ? (
+            <Select
+              value={selectedServiceId}
+              onValueChange={(v) => {
+                setSelectedServiceId(v);
+                const svc = activeServices.find(s => s.id === v);
+                if (svc) {
+                  setServiceName(svc.name);
+                  setPricePerVisit(svc.basePrice);
+                }
+              }}
+            >
+              <SelectTrigger data-testid="select-job-service">
+                <SelectValue placeholder="Select a service" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeServices.map(s => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name} — ${parseFloat(s.basePrice).toFixed(2)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              value={serviceName}
+              onChange={e => setServiceName(e.target.value)}
+              placeholder="e.g. Yard Cleanup"
+              data-testid="input-job-service-name"
+            />
+          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="job-price">Price per Visit</Label>
@@ -501,6 +530,10 @@ export default function Jobs() {
 
   const { data: team } = useQuery<TeamMember[]>({
     queryKey: ["/api/company/team"],
+  });
+
+  const { data: services } = useQuery<ServicePricingItem[]>({
+    queryKey: ["/api/pricing"],
   });
 
   const createMutation = useMutation({
@@ -884,6 +917,7 @@ export default function Jobs() {
               contacts={contacts}
               properties={properties}
               team={team}
+              services={services || []}
               submitLabel="Create Job"
             />
           )}
@@ -902,6 +936,7 @@ export default function Jobs() {
               contacts={contacts}
               properties={properties}
               team={team}
+              services={services || []}
               initial={editJob}
               submitLabel="Save Changes"
             />

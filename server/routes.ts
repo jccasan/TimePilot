@@ -4392,9 +4392,36 @@ Return ONLY valid JSON, no markdown.`,
       const body = { ...req.body, companyId };
       if (!body.routeId || body.routeId === "") body.routeId = null;
       if (!body.jobType) body.jobType = body.frequency === "onetime" ? "one_off" : "recurring";
-      if (!body.jobStatus) body.jobStatus = "draft";
+      if (!body.jobStatus) body.jobStatus = "active";
       if (body.anytime === undefined) body.anytime = true;
       const isActive = body.jobStatus === "active";
+
+      let effectiveDay = body.dayOfWeek;
+      if (!effectiveDay && body.startDate) {
+        const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+        const d = new Date(body.startDate + "T12:00:00");
+        effectiveDay = dayNames[d.getDay()];
+        body.dayOfWeek = effectiveDay;
+      }
+
+      if (!body.routeId && effectiveDay && isActive) {
+        const allRoutes = await storage.getRoutes(companyId);
+        const dayRoute = allRoutes.find(r => r.dayOfWeek === effectiveDay && !r.date);
+        if (dayRoute) {
+          body.routeId = dayRoute.id;
+        } else {
+          const dayLabel = effectiveDay.charAt(0).toUpperCase() + effectiveDay.slice(1);
+          const newRoute = await storage.createRoute({
+            companyId,
+            name: dayLabel,
+            dayOfWeek: effectiveDay,
+            date: null,
+            technicianId: body.assignedUserId || null,
+            color: "#3b82f6",
+          });
+          body.routeId = newRoute.id;
+        }
+      }
 
       const sp = await storage.createServicePlan({
         companyId,
