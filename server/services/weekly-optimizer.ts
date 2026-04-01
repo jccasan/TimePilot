@@ -1,4 +1,4 @@
-import { haversineDistance, optimizeRoute, calculateTotalDistance } from "./route-optimizer";
+import { haversineDistance, optimizeRoute } from "./route-optimizer";
 
 export interface WeeklyStop {
   id: string;
