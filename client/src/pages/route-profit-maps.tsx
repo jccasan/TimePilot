@@ -20,9 +20,9 @@ type RouteFuel = {
   routeLabel: string;
   fuelCostCents: number;
   miles: number;
-  revenuePerVisitCents: number;
-  costPerVisitCents: number;
-  profitPerVisitCents: number;
+  totalRevenueCents: number;
+  totalCostCents: number;
+  totalProfitCents: number;
 };
 
 type FuelDayData = {
@@ -107,6 +107,7 @@ function buildOptimizedMapRoutes(optResult: OptResult, view: "current" | "propos
       if (route.stops.length === 0) continue;
 
       const routeFuelCents = dayFuelData?.routes?.[rIdx]?.fuelCostCents || 0;
+      const routeUniqueId = `opt-${dayPlan.day}-${rIdx}-${route.routeLabel}`;
 
       const stops: MapStop[] = route.stops.map((s, idx) => ({
         propertyId: s.servicePlanId,
@@ -127,7 +128,7 @@ function buildOptimizedMapRoutes(optResult: OptResult, view: "current" | "propos
       }));
 
       mapRoutes.push({
-        routeId: `opt-${dayPlan.day}-${route.routeLabel}`,
+        routeId: routeUniqueId,
         routeName: route.routeLabel,
         dayOfWeek: dayPlan.day,
         color: ROUTE_COLORS[colorIdx % ROUTE_COLORS.length],
@@ -636,14 +637,14 @@ export default function RouteProfitMaps() {
         )}
 
         {sidebarOpen && isComparing && optResult && (
-          <ComparisonSidebar optResult={optResult} compareView={compareView} />
+          <ComparisonSidebar optResult={optResult} />
         )}
       </div>
     </div>
   );
 }
 
-function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; compareView: CompareView }) {
+function ComparisonSidebar({ optResult }: { optResult: OptResult }) {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const currentSchedule = optResult.current;
@@ -825,11 +826,11 @@ function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; c
                                 <div><span className="text-muted-foreground">{curRoute.estimatedMiles} mi</span></div>
                                 <div><span className="text-muted-foreground">{formatDollars(curRouteFuel?.fuelCostCents || 0)} fuel</span></div>
                               </div>
-                              {curRouteFuel && curRouteFuel.revenuePerVisitCents > 0 && (
+                              {curRouteFuel && curRouteFuel.totalRevenueCents > 0 && (
                                 <div className="grid grid-cols-3 gap-1 text-[11px] mt-0.5">
-                                  <div><span className="text-muted-foreground">{formatDollars(curRouteFuel.revenuePerVisitCents)} rev</span></div>
-                                  <div><span className="text-muted-foreground">{formatDollars(curRouteFuel.costPerVisitCents)} cost</span></div>
-                                  <div><span className={curRouteFuel.profitPerVisitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>{formatDollars(curRouteFuel.profitPerVisitCents)} profit</span></div>
+                                  <div><span className="text-muted-foreground">{formatDollars(curRouteFuel.totalRevenueCents)} rev</span></div>
+                                  <div><span className="text-muted-foreground">{formatDollars(curRouteFuel.totalCostCents)} cost</span></div>
+                                  <div><span className={curRouteFuel.totalProfitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>{formatDollars(curRouteFuel.totalProfitCents)} profit</span></div>
                                 </div>
                               )}
                             </div>
@@ -855,11 +856,11 @@ function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; c
                                   <div><span className="text-muted-foreground">{propRoute.estimatedMiles} mi</span></div>
                                   <div><span className="text-muted-foreground">{formatDollars(propRouteFuel?.fuelCostCents || 0)} fuel</span></div>
                                 </div>
-                                {propRouteFuel && propRouteFuel.revenuePerVisitCents > 0 && (
+                                {propRouteFuel && propRouteFuel.totalRevenueCents > 0 && (
                                   <div className="grid grid-cols-3 gap-1 text-[11px] mt-0.5">
-                                    <div><span className="text-muted-foreground">{formatDollars(propRouteFuel.revenuePerVisitCents)} rev</span></div>
-                                    <div><span className="text-muted-foreground">{formatDollars(propRouteFuel.costPerVisitCents)} cost</span></div>
-                                    <div><span className={propRouteFuel.profitPerVisitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>{formatDollars(propRouteFuel.profitPerVisitCents)} profit</span></div>
+                                    <div><span className="text-muted-foreground">{formatDollars(propRouteFuel.totalRevenueCents)} rev</span></div>
+                                    <div><span className="text-muted-foreground">{formatDollars(propRouteFuel.totalCostCents)} cost</span></div>
+                                    <div><span className={propRouteFuel.totalProfitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>{formatDollars(propRouteFuel.totalProfitCents)} profit</span></div>
                                   </div>
                                 )}
                                 <div className="mt-1.5 space-y-0.5">
@@ -884,8 +885,8 @@ function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; c
                           const curFuelTotal = (curFuelDay?.routes || []).reduce((s, r) => s + r.fuelCostCents, 0);
                           const propFuelTotal = (propFuelDay?.routes || []).reduce((s, r) => s + r.fuelCostCents, 0);
                           const fuelDeltaRoutes = curFuelTotal - propFuelTotal;
-                          const curProfitTotal = (curFuelDay?.routes || []).reduce((s, r) => s + r.profitPerVisitCents, 0);
-                          const propProfitTotal = (propFuelDay?.routes || []).reduce((s, r) => s + r.profitPerVisitCents, 0);
+                          const curProfitTotal = (curFuelDay?.routes || []).reduce((s, r) => s + r.totalProfitCents, 0);
+                          const propProfitTotal = (propFuelDay?.routes || []).reduce((s, r) => s + r.totalProfitCents, 0);
                           const profitDelta = propProfitTotal - curProfitTotal;
                           if (milesDeltaRoutes === 0 && fuelDeltaRoutes === 0) return null;
                           return (

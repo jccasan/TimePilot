@@ -3909,12 +3909,6 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      type EnrichedRoute = typeof result.current.days[0]["routes"][0] & {
-        revenuePerVisitCents: number;
-        costPerVisitCents: number;
-        profitPerVisitCents: number;
-      };
-
       function enrichRoutes(days: typeof result.current.days) {
         return days.map(d => ({
           ...d,
@@ -3928,7 +3922,7 @@ Return ONLY valid JSON, no markdown.`,
                 totalProfit += sp.profitPerVisitCents;
               }
             }
-            return { ...r, revenuePerVisitCents: totalRev, costPerVisitCents: totalCost, profitPerVisitCents: totalProfit };
+            return { ...r, totalRevenueCents: totalRev, totalCostCents: totalCost, totalProfitCents: totalProfit };
           }),
         }));
       }
@@ -3952,14 +3946,14 @@ Return ONLY valid JSON, no markdown.`,
         fuelCostSource = "default";
       }
 
-      function computeRouteFuel(routes: { estimatedMiles: number; routeLabel: string; revenuePerVisitCents: number; costPerVisitCents: number; profitPerVisitCents: number }[]) {
+      function computeRouteFuel(routes: { estimatedMiles: number; routeLabel: string; totalRevenueCents?: number; totalCostCents?: number; totalProfitCents?: number }[]) {
         return routes.map(r => ({
           routeLabel: r.routeLabel,
           fuelCostCents: Math.round(r.estimatedMiles * fuelCostCentsPerMile),
           miles: r.estimatedMiles,
-          revenuePerVisitCents: r.revenuePerVisitCents,
-          costPerVisitCents: r.costPerVisitCents,
-          profitPerVisitCents: r.profitPerVisitCents,
+          totalRevenueCents: r.totalRevenueCents ?? 0,
+          totalCostCents: r.totalCostCents ?? 0,
+          totalProfitCents: r.totalProfitCents ?? 0,
         }));
       }
 
