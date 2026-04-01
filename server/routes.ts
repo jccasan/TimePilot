@@ -3810,6 +3810,211 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/routes/optimize-weekly", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { respectZones = false, includeSaturday = false } = req.body || {};
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const plans = await storage.getServicePlans(companyId, { isActive: true });
+      const activePlans = plans.filter(sp => sp.frequency !== "onetime" && sp.jobStatus === "active");
+
+      if (activePlans.length < 3) {
+        return res.status(400).json({ error: "Need at least 3 active recurring stops to optimize weekly schedule" });
+      }
+
+      const allProperties = await storage.getProperties(companyId);
+      let propertyMap = new Map(allProperties.map(p => [p.id, p]));
+
+      const needsGeocode = activePlans.filter(sp => {
+        const prop = propertyMap.get(sp.propertyId);
+        return prop && prop.streetAddress && (!prop.latitude || !prop.longitude);
+      });
+      for (const sp of needsGeocode) {
+        const prop = propertyMap.get(sp.propertyId)!;
+        const coords = await geocodeAddress(prop.streetAddress!, prop.city, prop.state, prop.zipCode);
+        if (coords) {
+          const updated = await storage.updateProperty(prop.id, companyId, { latitude: coords.latitude, longitude: coords.longitude });
+          propertyMap.set(prop.id, updated);
+        }
+      }
+
+      const allContacts = await storage.getContacts(companyId);
+      const contactMap = new Map(allContacts.map(c => [c.id, c]));
+
+      const { analyzeWeeklySchedule } = await import("./services/weekly-optimizer");
+
+      const weeklyStops = activePlans
+        .map(sp => {
+          const prop = propertyMap.get(sp.propertyId);
+          const contact = contactMap.get(sp.contactId);
+          if (!prop || !prop.latitude || !prop.longitude) return null;
+          return {
+            id: sp.id,
+            servicePlanId: sp.id,
+            contactId: sp.contactId,
+            contactName: contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown",
+            propertyId: sp.propertyId,
+            address: `${prop.streetAddress || ""}${prop.city ? `, ${prop.city}` : ""}`,
+            latitude: parseFloat(String(prop.latitude)),
+            longitude: parseFloat(String(prop.longitude)),
+            currentDay: sp.dayOfWeek || "monday",
+            currentRouteId: sp.routeId,
+            currentStopOrder: sp.stopOrder,
+            zipCode: prop.zipCode || null,
+          };
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null);
+
+      if (weeklyStops.length < 3) {
+        return res.status(400).json({ error: "Not enough geocoded stops to optimize. Ensure property addresses are complete." });
+      }
+
+      let startPoint: { latitude: number; longitude: number } | undefined;
+      if (company.startLatitude && company.startLongitude) {
+        startPoint = {
+          latitude: parseFloat(String(company.startLatitude)),
+          longitude: parseFloat(String(company.startLongitude)),
+        };
+      }
+
+      let zones: { zipCode: string; dayOfWeek: string }[] = [];
+      if (respectZones) {
+        const serviceZoneRows = await storage.getServiceZones(companyId);
+        zones = serviceZoneRows
+          .filter(z => z.isActive)
+          .map(z => ({ zipCode: z.zipCode, dayOfWeek: z.dayOfWeek }));
+      }
+
+      const result = analyzeWeeklySchedule(weeklyStops, startPoint, {
+        respectZones,
+        zones,
+        includeSaturday,
+      });
+
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/routes/apply-weekly-plan", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+
+      const { acceptedDays, proposedDays } = req.body;
+      if (!proposedDays || !Array.isArray(proposedDays)) {
+        return res.status(400).json({ error: "proposedDays is required" });
+      }
+
+      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+      for (const dp of proposedDays) {
+        if (!dp.day || !validDays.includes(dp.day)) {
+          return res.status(400).json({ error: `Invalid day: ${dp.day}` });
+        }
+        if (!Array.isArray(dp.routes)) {
+          return res.status(400).json({ error: "Each day must have a routes array" });
+        }
+      }
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const daysToApply = acceptedDays && Array.isArray(acceptedDays)
+        ? proposedDays.filter((d: any) => acceptedDays.includes(d.day))
+        : proposedDays;
+
+      const companyPlans = await storage.getServicePlans(companyId, { isActive: true });
+      const validPlanIds = new Set(companyPlans.map(p => p.id));
+
+      let totalRoutes = 0;
+      let totalStopsValidated = 0;
+      for (const dayPlan of daysToApply) {
+        for (const route of (dayPlan.routes || [])) {
+          const routeStops = (route.stops || []).filter((s: any) => {
+            const spId = s.servicePlanId || s.id;
+            return spId && validPlanIds.has(spId);
+          });
+          if (routeStops.length > 0) {
+            totalRoutes++;
+            totalStopsValidated += routeStops.length;
+          }
+        }
+      }
+
+      if (totalRoutes === 0) {
+        return res.status(400).json({ error: "No valid stops to apply" });
+      }
+
+      const currentCredits = company.routeCredits ?? 0;
+      if (currentCredits < totalRoutes) {
+        return res.status(402).json({
+          error: "Insufficient route credits",
+          creditsRequired: totalRoutes,
+          creditsAvailable: currentCredits,
+        });
+      }
+
+      const existingRoutes = await storage.getRoutes(companyId);
+
+      let routesCreated = 0;
+      let stopsUpdated = 0;
+
+      for (const dayPlan of daysToApply) {
+        const day = dayPlan.day;
+        let dayRouteIdx = 0;
+        for (let rIdx = 0; rIdx < (dayPlan.routes || []).length; rIdx++) {
+          const proposedRoute = dayPlan.routes[rIdx];
+          const validStops = (proposedRoute.stops || []).filter((s: any) => {
+            const spId = s.servicePlanId || s.id;
+            return spId && validPlanIds.has(spId);
+          });
+          if (validStops.length === 0) continue;
+
+          const routeLabel = proposedRoute.routeLabel || `${day.charAt(0).toUpperCase() + day.slice(1)} Route`;
+
+          let existingRoute = dayRouteIdx === 0
+            ? existingRoutes.find(r => r.dayOfWeek === day && !r.date && !r.isLocked)
+            : null;
+          if (!existingRoute) {
+            const newRoute = await storage.createRoute({
+              companyId,
+              name: routeLabel,
+              dayOfWeek: day as any,
+              color: ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6"][routesCreated % 5],
+            });
+            existingRoute = newRoute;
+            existingRoutes.push(newRoute);
+            routesCreated++;
+          }
+          dayRouteIdx++;
+
+          for (let sIdx = 0; sIdx < validStops.length; sIdx++) {
+            const stop = validStops[sIdx];
+            const spId = stop.servicePlanId || stop.id;
+            await storage.updateServicePlan(spId, companyId, {
+              routeId: existingRoute.id,
+              dayOfWeek: day as any,
+              stopOrder: sIdx + 1,
+            });
+            stopsUpdated++;
+          }
+        }
+      }
+
+      await storage.updateCompany(companyId, { routeCredits: currentCredits - totalRoutes } as any);
+
+      res.json({
+        applied: true,
+        routesCreated,
+        stopsUpdated,
+        creditsUsed: totalRoutes,
+        creditsRemaining: currentCredits - totalRoutes,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/routes/:id/reverse", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);

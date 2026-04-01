@@ -34,8 +34,11 @@ import {
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
   Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
-  CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert, Lock, Unlock
+  CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert, Lock, Unlock,
+  Sparkles, ArrowRight, Check, X, ToggleLeft, ToggleRight, Calendar
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { LearnHowButton } from "@/components/interactive-tutorial";
@@ -906,6 +909,7 @@ export default function RoutesPage() {
   const [confirmUnassignAll, setConfirmUnassignAll] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [showZones, setShowZones] = useState(false);
+  const [showWeeklyOptimizer, setShowWeeklyOptimizer] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -1419,6 +1423,14 @@ export default function RoutesPage() {
             >
               <MapPin className="h-4 w-4 mr-1" /> {showZones ? "Hide Zones" : "Manage Zones"}
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowWeeklyOptimizer(true)}
+              data-testid="button-weekly-optimizer"
+            >
+              <Sparkles className="h-4 w-4 mr-1" /> Optimize Week
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setShowPurchase(true)} data-testid="button-buy-credits">
               <ShoppingCart className="h-4 w-4 mr-1" /> Buy Credits
             </Button>
@@ -1640,7 +1652,414 @@ export default function RoutesPage() {
         routes={allRoutes}
         selectedDayDate={selectedDayDate}
       />
+
+      {showWeeklyOptimizer && (
+        <WeeklyOptimizerPanel
+          open={showWeeklyOptimizer}
+          onOpenChange={setShowWeeklyOptimizer}
+          credits={credits}
+          onNeedCredits={() => setShowPurchase(true)}
+        />
+      )}
     </div>
+  );
+}
+
+type WeeklyProposedRoute = {
+  routeLabel: string;
+  day: string;
+  stops: { servicePlanId: string; contactName: string; address: string; latitude: number; longitude: number }[];
+  estimatedMiles: number;
+  estimatedMinutes: number;
+  stopCount: number;
+};
+
+type WeeklyDayProposal = {
+  day: string;
+  routes: WeeklyProposedRoute[];
+  totalStops: number;
+  totalMiles: number;
+  totalMinutes: number;
+};
+
+type WeeklyOptResult = {
+  current: { days: WeeklyDayProposal[]; totalMiles: number; totalMinutes: number; totalStops: number };
+  proposed: { days: WeeklyDayProposal[]; totalMiles: number; totalMinutes: number; totalStops: number };
+  improvementPct: number;
+  milesSaved: number;
+  minutesSaved: number;
+  movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[];
+  creditsRequired: number;
+};
+
+function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  credits: number;
+  onNeedCredits: () => void;
+}) {
+  const { toast } = useToast();
+  const [respectZones, setRespectZones] = useState(false);
+  const [includeSaturday, setIncludeSaturday] = useState(false);
+  const [result, setResult] = useState<WeeklyOptResult | null>(null);
+  const [acceptedDays, setAcceptedDays] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState("summary");
+  const [confirmApply, setConfirmApply] = useState(false);
+
+  const analyzeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/routes/optimize-weekly", {
+        respectZones,
+        includeSaturday,
+      });
+      return res.json() as Promise<WeeklyOptResult>;
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      setAcceptedDays(new Set(data.proposed.days.filter(d => d.totalStops > 0).map(d => d.day)));
+      setActiveTab("summary");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Optimization failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: async () => {
+      if (!result) throw new Error("No result to apply");
+      const daysToApply = result.proposed.days.filter(d => acceptedDays.has(d.day));
+      const res = await apiRequest("POST", "/api/routes/apply-weekly-plan", {
+        acceptedDays: Array.from(acceptedDays),
+        proposedDays: daysToApply,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
+      toast({
+        title: "Weekly plan applied",
+        description: `${data.stopsUpdated} stops updated, ${data.routesCreated} routes created. ${data.creditsUsed} credits used.`,
+      });
+      onOpenChange(false);
+    },
+    onError: (err: Error) => {
+      if (err.message.includes("Insufficient")) {
+        onNeedCredits();
+      } else {
+        toast({ title: "Failed to apply plan", description: err.message, variant: "destructive" });
+      }
+    },
+  });
+
+  const toggleDay = (day: string) => {
+    setAcceptedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(day)) next.delete(day);
+      else next.add(day);
+      return next;
+    });
+  };
+
+  const acceptedCredits = result
+    ? result.proposed.days
+        .filter(d => acceptedDays.has(d.day))
+        .reduce((sum, d) => sum + d.routes.length, 0)
+    : 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" data-testid="dialog-weekly-optimizer">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            Weekly Schedule Optimizer
+          </DialogTitle>
+          <DialogDescription>
+            Analyze all active recurring stops and optimize their day assignments to minimize total weekly driving distance.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!result ? (
+          <div className="space-y-6 py-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <p className="text-sm font-medium">Respect Service Zones</p>
+                  <p className="text-xs text-muted-foreground">Keep stops on their zone-assigned day</p>
+                </div>
+                <Switch
+                  checked={respectZones}
+                  onCheckedChange={setRespectZones}
+                  data-testid="switch-respect-zones"
+                />
+              </div>
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <p className="text-sm font-medium">Include Saturday</p>
+                  <p className="text-xs text-muted-foreground">Allow stops to be scheduled on Saturday</p>
+                </div>
+                <Switch
+                  checked={includeSaturday}
+                  onCheckedChange={setIncludeSaturday}
+                  data-testid="switch-include-saturday"
+                />
+              </div>
+            </div>
+
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() => analyzeMutation.mutate()}
+              disabled={analyzeMutation.isPending}
+              data-testid="button-run-analysis"
+            >
+              {analyzeMutation.isPending ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  Analyzing routes...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-5 w-5 mr-2" />
+                  Analyze Weekly Schedule
+                </>
+              )}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <p className="text-2xl font-bold text-primary" data-testid="text-weekly-improvement">
+                    {result.improvementPct}%
+                  </p>
+                  <p className="text-xs text-muted-foreground">Improvement</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <p className="text-2xl font-bold text-primary" data-testid="text-weekly-miles-saved">
+                    {result.milesSaved}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Miles Saved / Week</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <p className="text-2xl font-bold text-primary" data-testid="text-weekly-minutes-saved">
+                    {result.minutesSaved}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Minutes Saved / Week</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <p className="text-2xl font-bold" data-testid="text-weekly-moves">
+                    {result.movedStops.length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Stops Moved</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="p-3 border rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">Current Schedule</p>
+                <p className="font-semibold">{result.current.totalMiles} mi / {result.current.totalMinutes} min</p>
+                <p className="text-xs text-muted-foreground">{result.current.totalStops} stops</p>
+              </div>
+              <div className="p-3 border rounded-lg border-primary/30 bg-primary/5">
+                <p className="text-xs text-muted-foreground mb-1">Proposed Schedule</p>
+                <p className="font-semibold text-primary">{result.proposed.totalMiles} mi / {result.proposed.totalMinutes} min</p>
+                <p className="text-xs text-muted-foreground">{result.proposed.totalStops} stops</p>
+              </div>
+            </div>
+
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="w-full">
+                <TabsTrigger value="summary" className="flex-1" data-testid="tab-summary">Summary</TabsTrigger>
+                <TabsTrigger value="day-by-day" className="flex-1" data-testid="tab-day-by-day">Day by Day</TabsTrigger>
+                <TabsTrigger value="moves" className="flex-1" data-testid="tab-moves">
+                  Moves ({result.movedStops.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="summary" className="mt-3">
+                <div className="space-y-2">
+                  {result.proposed.days.map(day => {
+                    const currentDay = result.current.days.find(d => d.day === day.day);
+                    const hasStops = day.totalStops > 0;
+                    const isAccepted = acceptedDays.has(day.day);
+                    return (
+                      <div
+                        key={day.day}
+                        className={`flex items-center gap-3 p-3 border rounded-lg transition-colors ${
+                          isAccepted ? "border-primary/30 bg-primary/5" : "opacity-60"
+                        } ${!hasStops ? "opacity-40" : ""}`}
+                        data-testid={`summary-day-${day.day}`}
+                      >
+                        <button
+                          className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
+                            isAccepted ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
+                          }`}
+                          onClick={() => hasStops && toggleDay(day.day)}
+                          disabled={!hasStops}
+                          data-testid={`checkbox-day-${day.day}`}
+                        >
+                          {isAccepted && <Check className="h-3.5 w-3.5" />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium capitalize">{day.day}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {day.routes.length} {day.routes.length === 1 ? "route" : "routes"} &middot; {day.totalStops} stops
+                          </p>
+                        </div>
+                        <div className="text-right text-xs">
+                          <p className="font-medium">{day.totalMiles} mi</p>
+                          {currentDay && currentDay.totalMiles > day.totalMiles && (
+                            <p className="text-primary">
+                              -{Math.round((currentDay.totalMiles - day.totalMiles) * 10) / 10} mi
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="day-by-day" className="mt-3">
+                <ScrollArea className="h-[40vh]">
+                  <div className="space-y-4">
+                    {result.proposed.days.filter(d => d.totalStops > 0).map(day => (
+                      <Card key={day.day} data-testid={`detail-day-${day.day}`}>
+                        <CardHeader className="p-3 pb-2">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm capitalize flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              {day.day}
+                              <Badge variant="outline" className="text-[10px]">{day.totalStops} stops</Badge>
+                            </CardTitle>
+                            <span className="text-xs text-muted-foreground">
+                              {day.totalMiles} mi &middot; {day.totalMinutes} min
+                            </span>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-3 pt-0 space-y-3">
+                          {day.routes.map((route, rIdx) => (
+                            <div key={rIdx} className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground">{route.routeLabel}</p>
+                              <div className="space-y-0.5">
+                                {route.stops.map((stop, sIdx) => (
+                                  <div key={stop.servicePlanId} className="flex items-center gap-2 text-xs py-0.5">
+                                    <Badge variant="outline" className="text-[9px] px-1 py-0 w-5 h-5 flex items-center justify-center shrink-0">
+                                      {sIdx + 1}
+                                    </Badge>
+                                    <span className="truncate font-medium">{stop.contactName}</span>
+                                    <span className="truncate text-muted-foreground ml-auto">{stop.address}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground pt-1">
+                                <Car className="h-3 w-3" />
+                                <span>{route.estimatedMiles} mi &middot; {route.estimatedMinutes} min &middot; {route.stopCount} stops</span>
+                              </div>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="moves" className="mt-3">
+                <ScrollArea className="h-[40vh]">
+                  {result.movedStops.length === 0 ? (
+                    <p className="text-center text-sm text-muted-foreground py-8">
+                      No stops need to be moved. The current schedule is already well-organized.
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {result.movedStops.map((move, idx) => (
+                        <div key={idx} className="flex items-center gap-2 p-2 text-sm border rounded" data-testid={`move-${idx}`}>
+                          <span className="font-medium truncate flex-1">{move.contactName}</span>
+                          <Badge variant="secondary" className="text-[10px] capitalize shrink-0">{move.fromDay}</Badge>
+                          <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                          <Badge variant="default" className="text-[10px] capitalize shrink-0">{move.toDay}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
+
+            <Separator />
+
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm">
+                <span className="text-muted-foreground">Credits required: </span>
+                <span className="font-semibold" data-testid="text-credits-required">{acceptedCredits}</span>
+                <span className="text-muted-foreground"> / {credits} available</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => { setResult(null); }} data-testid="button-reanalyze">
+                  <RotateCcw className="h-4 w-4 mr-1" /> Re-analyze
+                </Button>
+                <Button
+                  onClick={() => setConfirmApply(true)}
+                  disabled={acceptedDays.size === 0 || acceptedCredits > credits}
+                  data-testid="button-apply-plan"
+                >
+                  {acceptedCredits > credits ? (
+                    <>Not Enough Credits</>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-1" />
+                      Apply {acceptedDays.size} {acceptedDays.size === 1 ? "Day" : "Days"}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <AlertDialog open={confirmApply} onOpenChange={setConfirmApply}>
+          <AlertDialogContent data-testid="dialog-confirm-apply-weekly">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Apply Weekly Schedule Changes</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will update {acceptedDays.size} {acceptedDays.size === 1 ? "day" : "days"} of routes,
+                reassigning stops and creating new routes as needed.
+                {acceptedCredits} route {acceptedCredits === 1 ? "credit" : "credits"} will be used.
+                This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-apply">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setConfirmApply(false);
+                  applyMutation.mutate();
+                }}
+                disabled={applyMutation.isPending}
+                data-testid="button-confirm-apply"
+              >
+                {applyMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : null}
+                Apply Changes ({acceptedCredits} Credits)
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </DialogContent>
+    </Dialog>
   );
 }
 
