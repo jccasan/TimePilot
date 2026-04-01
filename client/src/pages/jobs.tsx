@@ -123,8 +123,13 @@ function JobForm({
   const [jobType, setJobType] = useState<string>(initial?.jobType || "one_off");
   const [contactId, setContactId] = useState(initial?.contactId || "");
   const [propertyId, setPropertyId] = useState(initial?.propertyId || "");
-  const [selectedServiceId, setSelectedServiceId] = useState("");
-  const [serviceName, setServiceName] = useState(initial?.serviceName || "");
+  const [selectedServices, setSelectedServices] = useState<Array<{ id: string; name: string; price: string }>>(() => {
+    if (initial?.serviceName) {
+      return initial.serviceName.split(" + ").map((name, i) => ({ id: `initial-${i}`, name: name.trim(), price: "" }));
+    }
+    return [];
+  });
+  const [addServiceId, setAddServiceId] = useState("");
   const [frequency, setFrequency] = useState(initial?.frequency || "weekly");
   const [dayOfWeek, setDayOfWeek] = useState(initial?.dayOfWeek || "");
   const [pricePerVisit, setPricePerVisit] = useState(initial?.pricePerVisit || "");
@@ -148,16 +153,27 @@ function JobForm({
     return properties.filter(p => p.contactId === contactId);
   }, [contactId, properties]);
 
+  const totalPrice = useMemo(() => {
+    if (selectedServices.length === 0) return pricePerVisit;
+    const sum = selectedServices.reduce((acc, s) => acc + parseFloat(s.price || "0"), 0);
+    return sum > 0 ? sum.toFixed(2) : pricePerVisit;
+  }, [selectedServices, pricePerVisit]);
+
+  const combinedServiceName = useMemo(() => {
+    if (selectedServices.length === 0) return null;
+    return selectedServices.map(s => s.name).join(" + ");
+  }, [selectedServices]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const payload: JobFormPayload = {
       contactId,
       propertyId,
-      serviceName: serviceName || null,
+      serviceName: combinedServiceName,
       jobType,
       frequency: jobType === "one_off" ? "onetime" : frequency,
       dayOfWeek: dayOfWeek || null,
-      pricePerVisit: pricePerVisit || "0",
+      pricePerVisit: totalPrice || "0",
       startDate,
       startTime: anytime ? null : (startTime || null),
       endTime: anytime ? null : (endTime || null),
@@ -255,23 +271,35 @@ function JobForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Service</Label>
-          {activeServices.length > 0 ? (
-            <Select
-              value={selectedServiceId}
-              onValueChange={(v) => {
-                setSelectedServiceId(v);
-                const svc = activeServices.find(s => s.id === v);
-                if (svc) {
-                  setServiceName(svc.name);
-                  setPricePerVisit(svc.basePrice);
-                }
-              }}
-            >
-              <SelectTrigger data-testid="select-job-service">
-                <SelectValue placeholder="Select a service" />
+      <div className="space-y-3">
+        <Label>Services</Label>
+        {selectedServices.length > 0 && (
+          <div className="space-y-2">
+            {selectedServices.map((svc, idx) => (
+              <div key={svc.id + idx} className="flex items-center justify-between bg-muted/50 rounded-md px-3 py-2" data-testid={`service-row-${idx}`}>
+                <span className="text-sm font-medium">{svc.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">${parseFloat(svc.price || "0").toFixed(2)}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => setSelectedServices(prev => prev.filter((_, i) => i !== idx))}
+                    data-testid={`button-remove-service-${idx}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {activeServices.length > 0 ? (
+          <div className="flex gap-2">
+            <Select value={addServiceId} onValueChange={setAddServiceId}>
+              <SelectTrigger className="flex-1" data-testid="select-job-service">
+                <SelectValue placeholder="Add a service..." />
               </SelectTrigger>
               <SelectContent>
                 {activeServices.map(s => (
@@ -281,27 +309,34 @@ function JobForm({
                 ))}
               </SelectContent>
             </Select>
-          ) : (
-            <Input
-              value={serviceName}
-              onChange={e => setServiceName(e.target.value)}
-              placeholder="e.g. Yard Cleanup"
-              data-testid="input-job-service-name"
-            />
-          )}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="job-price">Price per Visit</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!addServiceId}
+              onClick={() => {
+                const svc = activeServices.find(s => s.id === addServiceId);
+                if (svc) {
+                  setSelectedServices(prev => [...prev, { id: svc.id, name: svc.name, price: svc.basePrice }]);
+                  setAddServiceId("");
+                }
+              }}
+              data-testid="button-add-service"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
           <Input
-            id="job-price"
-            type="number"
-            step="0.01"
-            min="0"
             value={pricePerVisit}
             onChange={e => setPricePerVisit(e.target.value)}
-            placeholder="0.00"
-            data-testid="input-job-price"
+            placeholder="Service name"
+            data-testid="input-job-service-name"
           />
+        )}
+        <div className="flex items-center justify-between pt-1">
+          <Label htmlFor="job-price" className="text-sm">Total per Visit</Label>
+          <span className="text-sm font-semibold" data-testid="text-total-price">${parseFloat(totalPrice || "0").toFixed(2)}</span>
         </div>
       </div>
 
@@ -498,7 +533,7 @@ function JobForm({
       </div>
 
       <DialogFooter>
-        <Button type="submit" disabled={isPending || !contactId || !propertyId} data-testid="button-submit-job">
+        <Button type="submit" disabled={isPending || !contactId || !propertyId || (activeServices.length > 0 && selectedServices.length === 0)} data-testid="button-submit-job">
           {isPending ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Saving...</> : submitLabel}
         </Button>
       </DialogFooter>
