@@ -924,6 +924,186 @@ async function seedExtraDemoContacts(pool: any, companyId: string) {
   }
 }
 
+async function seedScatteredDemoContacts(pool: any, companyId: string) {
+  try {
+    const routeRes = await pool.query("SELECT id FROM routes WHERE company_id = $1 ORDER BY name", [companyId]);
+    if (routeRes.rows.length < 3) return;
+    const routeIds = routeRes.rows.map((r: any) => r.id);
+
+    const scatteredContacts: [string, string, string, string][] = [
+      ['Harold', 'Beaumont', 'harold.beaumont@example.com', '(540) 555-3001'],
+      ['Margot', 'Ellsworth', 'margot.ellsworth@example.com', '(540) 555-3002'],
+      ['Chester', 'Langford', 'chester.langford@example.com', '(540) 555-3003'],
+      ['Donna', 'Ashford', 'donna.ashford@example.com', '(540) 555-3004'],
+      ['Stuart', 'Chatham', 'stuart.chatham@example.com', '(540) 555-3005'],
+      ['Beverly', 'Wakefield', 'beverly.wakefield@example.com', '(540) 555-3006'],
+      ['Clifton', 'Randolph', 'clifton.randolph@example.com', '(540) 555-3007'],
+      ['Lorraine', 'Prescott', 'lorraine.prescott@example.com', '(540) 555-3008'],
+      ['Irving', 'Thornton', 'irving.thornton@example.com', '(540) 555-3009'],
+      ['Dorothy', 'Breckenridge', 'dorothy.breck@example.com', '(540) 555-3010'],
+
+      ['Franklin', 'Whitmore', 'franklin.whitmore@example.com', '(540) 555-3011'],
+      ['Geraldine', 'Oakley', 'geraldine.oakley@example.com', '(540) 555-3012'],
+      ['Nelson', 'Fairbanks', 'nelson.fairbanks@example.com', '(540) 555-3013'],
+      ['Constance', 'Dunbar', 'constance.dunbar@example.com', '(540) 555-3014'],
+      ['Milton', 'Hartwell', 'milton.hartwell@example.com', '(540) 555-3015'],
+      ['Harriet', 'Ainsworth', 'harriet.ainsworth@example.com', '(540) 555-3016'],
+      ['Bernard', 'Kensington', 'bernard.kens@example.com', '(540) 555-3017'],
+      ['Mildred', 'Pemberton', 'mildred.pemb@example.com', '(540) 555-3018'],
+      ['Vernon', 'Blackwood', 'vernon.blackwood@example.com', '(540) 555-3019'],
+      ['Eleanor', 'Stratford', 'eleanor.stratford@example.com', '(540) 555-3020'],
+
+      ['Wallace', 'Pendleton', 'wallace.pendleton@example.com', '(540) 555-3021'],
+      ['Beatrice', 'Ashmore', 'beatrice.ashmore@example.com', '(540) 555-3022'],
+      ['Reginald', 'Forsythe', 'reginald.forsythe@example.com', '(540) 555-3023'],
+      ['Vivian', 'Chesterfield', 'vivian.chester@example.com', '(540) 555-3024'],
+      ['Horace', 'Waverly', 'horace.waverly@example.com', '(540) 555-3025'],
+      ['Gladys', 'Redmond', 'gladys.redmond@example.com', '(540) 555-3026'],
+      ['Norbert', 'Claybourne', 'norbert.clay@example.com', '(540) 555-3027'],
+      ['Edith', 'Marlborough', 'edith.marl@example.com', '(540) 555-3028'],
+      ['Lester', 'Worthington', 'lester.worth@example.com', '(540) 555-3029'],
+      ['Lucille', 'Devereaux', 'lucille.dev@example.com', '(540) 555-3030'],
+    ];
+
+    const scatteredAddresses: [string, number, number, number, string][] = [
+      ['100 Harvard St, Fredericksburg, VA', 38.2745, -77.4985, 2, 'medium'],
+      ['205 Chatham Ct, Fredericksburg, VA', 38.2738, -77.5010, 1, 'small'],
+      ['312 Mulligan Ct, Fredericksburg, VA', 38.2755, -77.4920, 3, 'large'],
+      ['400 Old Dominion Pkwy, Fredericksburg, VA', 38.2710, -77.4895, 2, 'medium'],
+      ['508 Colechester St, Fredericksburg, VA', 38.2698, -77.4945, 1, 'small'],
+      ['615 Crossgate Dr, Fredericksburg, VA', 38.2665, -77.4920, 2, 'large'],
+      ['720 Corbin Hall Ln, Fredericksburg, VA', 38.2760, -77.4860, 4, 'large'],
+      ['825 Blandfield Ln, Fredericksburg, VA', 38.2738, -77.4835, 1, 'small'],
+      ['130 Cannonball Ct, Fredericksburg, VA', 38.2685, -77.5055, 2, 'medium'],
+      ['235 Battery Hill Ln, Fredericksburg, VA', 38.2678, -77.5035, 3, 'large'],
+
+      ['102 Hickory Hill Dr, Fredericksburg, VA', 38.2345, -77.4680, 2, 'medium'],
+      ['207 Andover Ln, Fredericksburg, VA', 38.2378, -77.4645, 1, 'small'],
+      ['310 Timberlake Rd, Fredericksburg, VA', 38.2395, -77.4580, 3, 'large'],
+      ['415 Layton St, Fredericksburg, VA', 38.2385, -77.4555, 2, 'medium'],
+      ['520 Andrews Mill Ln, Fredericksburg, VA', 38.2360, -77.4530, 1, 'small'],
+      ['625 Massaponax Church Rd, Fredericksburg, VA', 38.2335, -77.4495, 2, 'large'],
+      ['730 Alberta Dr, Fredericksburg, VA', 38.2310, -77.4600, 3, 'medium'],
+      ['835 Townsley St, Fredericksburg, VA', 38.2355, -77.4710, 1, 'small'],
+      ['140 Swanson Ct, Fredericksburg, VA', 38.2290, -77.4695, 2, 'medium'],
+      ['245 Cameo St, Fredericksburg, VA', 38.2405, -77.4660, 2, 'large'],
+
+      ['104 Passapatanzy Rd, King George, VA', 38.3380, -77.4280, 2, 'medium'],
+      ['209 Newton Ln, King George, VA', 38.3365, -77.4210, 1, 'small'],
+      ['314 Forest Ridge Dr, King George, VA', 38.3340, -77.4175, 3, 'large'],
+      ['419 Fletchers Chapel Rd, King George, VA', 38.3355, -77.4130, 2, 'medium'],
+      ['524 Oakland Dr, King George, VA', 38.3310, -77.4250, 1, 'small'],
+      ['629 Mullen Rd, King George, VA', 38.3335, -77.4195, 2, 'large'],
+      ['734 Bush St, King George, VA', 38.3360, -77.4320, 4, 'large'],
+      ['839 Covington St, King George, VA', 38.3290, -77.4295, 1, 'small'],
+      ['144 Charleston St, King George, VA', 38.3395, -77.4200, 2, 'medium'],
+      ['249 Martin Ln, King George, VA', 38.3375, -77.4160, 3, 'large'],
+    ];
+
+    const scatteredPlanConfigs: { idx: number; freq: string; price: string; ri: number }[] = [
+      { idx: 0, freq: 'weekly', price: '32.00', ri: 0 },
+      { idx: 1, freq: 'weekly', price: '25.00', ri: 3 },
+      { idx: 2, freq: 'biweekly', price: '38.00', ri: 1 },
+      { idx: 3, freq: 'weekly', price: '28.00', ri: 4 },
+      { idx: 4, freq: 'weekly', price: '22.00', ri: 2 },
+      { idx: 5, freq: 'weekly', price: '35.00', ri: 0 },
+      { idx: 6, freq: 'biweekly', price: '42.00', ri: 3 },
+      { idx: 7, freq: 'weekly', price: '19.00', ri: 1 },
+      { idx: 8, freq: 'weekly', price: '30.00', ri: 4 },
+      { idx: 9, freq: 'weekly', price: '27.00', ri: 2 },
+
+      { idx: 10, freq: 'weekly', price: '29.00', ri: 1 },
+      { idx: 11, freq: 'weekly', price: '24.00', ri: 4 },
+      { idx: 12, freq: 'biweekly', price: '36.00', ri: 0 },
+      { idx: 13, freq: 'weekly', price: '31.00', ri: 3 },
+      { idx: 14, freq: 'weekly', price: '20.00', ri: 2 },
+      { idx: 15, freq: 'weekly', price: '33.00', ri: 1 },
+      { idx: 16, freq: 'weekly', price: '40.00', ri: 4 },
+      { idx: 17, freq: 'biweekly', price: '18.00', ri: 0 },
+      { idx: 18, freq: 'weekly', price: '26.00', ri: 3 },
+      { idx: 19, freq: 'weekly', price: '34.00', ri: 2 },
+
+      { idx: 20, freq: 'weekly', price: '28.00', ri: 2 },
+      { idx: 21, freq: 'weekly', price: '23.00', ri: 0 },
+      { idx: 22, freq: 'biweekly', price: '39.00', ri: 3 },
+      { idx: 23, freq: 'weekly', price: '30.00', ri: 1 },
+      { idx: 24, freq: 'weekly', price: '21.00', ri: 4 },
+      { idx: 25, freq: 'weekly', price: '37.00', ri: 2 },
+      { idx: 26, freq: 'weekly', price: '44.00', ri: 0 },
+      { idx: 27, freq: 'biweekly', price: '17.00', ri: 3 },
+      { idx: 28, freq: 'weekly', price: '29.00', ri: 1 },
+      { idx: 29, freq: 'weekly', price: '35.00', ri: 4 },
+    ];
+
+    const contactIds: string[] = [];
+    for (const [fn, ln, em, ph] of scatteredContacts) {
+      const r = await pool.query(
+        `INSERT INTO contacts (company_id, first_name, last_name, email, phone, status, has_portal_access, auto_pay_enabled, auto_invoice_enabled) VALUES ($1,$2,$3,$4,$5,'active',false,false,true) RETURNING id`,
+        [companyId, fn, ln, em, ph]
+      );
+      contactIds.push(r.rows[0].id);
+    }
+
+    const propIds: string[] = [];
+    for (let i = 0; i < scatteredAddresses.length; i++) {
+      const [addr, lat, lng, dogs, yard] = scatteredAddresses[i];
+      const parts = addr.split(', ');
+      const street = parts[0];
+      const city = parts[1] || 'Fredericksburg';
+      const state = 'VA';
+      const zip = city === 'King George' ? '22485' : '22407';
+      const r = await pool.query(
+        `INSERT INTO properties (company_id, contact_id, street_address, city, state, zip_code, latitude, longitude, number_of_dogs, yard_size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [companyId, contactIds[i], street, city, state, zip, lat, lng, dogs, yard]
+      );
+      propIds.push(r.rows[0].id);
+    }
+
+    const planIds: string[] = [];
+    for (const pc of scatteredPlanConfigs) {
+      const ri = pc.ri % routeIds.length;
+      const r = await pool.query(
+        `INSERT INTO service_plans (company_id, contact_id, property_id, frequency, price_per_visit, is_active, start_date, stop_order, is_stop_only, route_id) VALUES ($1,$2,$3,$4,$5,true,'2026-02-01',0,false,$6) RETURNING id`,
+        [companyId, contactIds[pc.idx], propIds[pc.idx], pc.freq, pc.price, routeIds[ri]]
+      );
+      planIds.push(r.rows[0].id);
+    }
+
+    const dayOfWeekMap = [1, 3, 5, 2, 4];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let pIdx = 0; pIdx < scatteredPlanConfigs.length; pIdx++) {
+      const pc = scatteredPlanConfigs[pIdx];
+      const ri = pc.ri % routeIds.length;
+      const day = dayOfWeekMap[ri];
+      for (let wk = 6; wk >= -1; wk--) {
+        if (pc.freq === 'biweekly' && wk % 2 !== 0) continue;
+        if (pc.freq === 'monthly' && wk !== 0 && wk !== 4) continue;
+
+        const d = new Date(today);
+        d.setDate(d.getDate() - (wk * 7) + (day - d.getDay()));
+        const dateStr = d.toISOString().split('T')[0];
+
+        let status: string;
+        if (d > today) status = 'scheduled';
+        else if (dateStr === today.toISOString().split('T')[0]) status = 'scheduled';
+        else status = Math.random() > 0.1 ? 'completed' : 'skipped';
+
+        const completedAt = status === 'completed' ? d.toISOString() : null;
+        await pool.query(
+          `INSERT INTO visits (company_id, service_plan_id, property_id, scheduled_date, status, completed_at) VALUES ($1,$2,$3,$4,$5,$6)`,
+          [companyId, planIds[pIdx], propIds[pc.idx], dateStr, status, completedAt]
+        );
+      }
+    }
+
+    console.log(`[Migration] Seeded 30 scattered demo contacts across Lee Hill, Massaponax & Oakland Park`);
+  } catch (err) {
+    console.error("[Migration] Failed to seed scattered demo contacts:", err);
+  }
+}
+
 async function seedDemoCompany() {
   try {
     const { Pool } = await import("pg");
@@ -941,8 +1121,12 @@ async function seedDemoCompany() {
           console.log("[Migration] Demo company service pricing seeded");
         }
         const contactCount = await pool.query("SELECT COUNT(*) FROM contacts WHERE company_id = $1", [demoCoId]);
-        if (parseInt(contactCount.rows[0].count) < 90) {
+        const cc = parseInt(contactCount.rows[0].count);
+        if (cc < 90) {
           await seedExtraDemoContacts(pool, demoCoId);
+        }
+        if (cc < 125) {
+          await seedScatteredDemoContacts(pool, demoCoId);
         }
       }
       console.log("[Migration] Demo company already exists");
@@ -1154,6 +1338,7 @@ async function seedDemoCompany() {
     }
 
     await seedExtraDemoContacts(pool, companyId);
+    await seedScatteredDemoContacts(pool, companyId);
 
     await pool.end();
     console.log("[Migration] Demo company 'Clean Paws Fredericksburg' seeded successfully");
