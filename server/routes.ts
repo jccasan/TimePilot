@@ -3930,6 +3930,7 @@ Return ONLY valid JSON, no markdown.`,
       const enrichedCurrent = enrichRoutes(result.current.days);
       const enrichedProposed = enrichRoutes(result.proposed.days);
 
+
       const { getEffectivePricingConfig } = await import("./services/pricing-calculator");
       const pricingConfig = getEffectivePricingConfig(company.pricingConfig);
 
@@ -7541,6 +7542,75 @@ Return ONLY valid JSON, no markdown.`,
 
       const items = await storage.getOverheadCosts(companyId);
       res.json({ seeded: true, count: items.length, items });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/overhead-costs/monthly-fuel", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+      const allRoutes = await storage.getRoutes(companyId);
+      const monthRoutes = allRoutes.filter(r => r.date && r.date >= monthStart && r.date <= monthEnd);
+
+      if (monthRoutes.length === 0) {
+        return res.json({ totalMiles: 0, fuelCostCents: 0, routeCount: 0 });
+      }
+
+      const company = await storage.getCompany(companyId);
+      const config = (company?.pricingConfig as any) || {};
+      const gasPriceCents = config.averageGasPriceCentsPerGallon ?? 350;
+      const mpg = config.vehicleMPG ?? null;
+      const costPerMileCents = config.vehicleCostPerMileCents ?? 65;
+
+      const effectiveCostPerMileCents = (mpg && mpg > 0)
+        ? Math.round((gasPriceCents / mpg))
+        : costPerMileCents;
+
+      const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+      const allProperties = await storage.getProperties(companyId);
+      const propMap = new Map(allProperties.map(p => [p.id, p]));
+      const startPoint = company?.startLatitude && company?.startLongitude
+        ? { latitude: Number(company.startLatitude), longitude: Number(company.startLongitude) }
+        : undefined;
+
+      let totalMiles = 0;
+
+      for (const route of monthRoutes) {
+        const routePlans = allPlans
+          .filter(sp => sp.routeId === route.id)
+          .sort((a, b) => a.stopOrder - b.stopOrder);
+
+        if (routePlans.length < 2) continue;
+
+        const stops: { id: string; latitude: number; longitude: number }[] = [];
+        for (const sp of routePlans) {
+          const prop = propMap.get(sp.propertyId);
+          if (prop?.latitude && prop?.longitude) {
+            stops.push({ id: sp.id, latitude: Number(prop.latitude), longitude: Number(prop.longitude) });
+          }
+        }
+
+        if (stops.length < 2) continue;
+
+        const metrics = await getRouteMetricsWithLegs(stops, startPoint);
+        if (metrics) {
+          totalMiles += metrics.totalDistance;
+        } else {
+          totalMiles += calculateTotalDistance(stops, startPoint);
+        }
+      }
+
+      totalMiles = Math.round(totalMiles * 10) / 10;
+      const fuelCostCents = Math.round(totalMiles * effectiveCostPerMileCents);
+
+      res.json({ totalMiles, fuelCostCents, routeCount: monthRoutes.length });
     } catch (err) { handleError(res, err); }
   });
 

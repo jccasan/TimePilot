@@ -70,6 +70,7 @@ function CategorySection({
   onDelete,
   onAdd,
   isPending,
+  autoFuelMiles,
 }: {
   category: string;
   items: OverheadCostItem[];
@@ -77,6 +78,7 @@ function CategorySection({
   onDelete: (id: string) => void;
   onAdd: (category: string) => void;
   isPending: boolean;
+  autoFuelMiles?: number;
 }) {
   const [isOpen, setIsOpen] = useState(true);
   const categoryTotal = items.reduce((s, i) => s + i.monthlyCostCents, 0);
@@ -126,15 +128,20 @@ function CategorySection({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="divide-y">
-            {items.map((item) => (
-              <CostItemRow
-                key={item.id}
-                item={item}
-                onUpdateCost={onUpdateCost}
-                onDelete={onDelete}
-                isPending={isPending}
-              />
-            ))}
+            {items.map((item) => {
+              const isAutoFuel = item.name === "Fuel" && item.category === "Vehicles + Transportation" && item.isDefault;
+              return (
+                <CostItemRow
+                  key={item.id}
+                  item={item}
+                  onUpdateCost={onUpdateCost}
+                  onDelete={onDelete}
+                  isPending={isPending}
+                  isAutoCalculated={isAutoFuel}
+                  autoFuelMiles={isAutoFuel ? autoFuelMiles : undefined}
+                />
+              );
+            })}
           </div>
           <div className="p-2 border-t bg-muted/20">
             <Button
@@ -159,11 +166,15 @@ function CostItemRow({
   onUpdateCost,
   onDelete,
   isPending,
+  isAutoCalculated,
+  autoFuelMiles,
 }: {
   item: OverheadCostItem;
   onUpdateCost: (id: string, cents: number) => void;
   onDelete: (id: string) => void;
   isPending: boolean;
+  isAutoCalculated?: boolean;
+  autoFuelMiles?: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const lastSavedCents = useRef(item.monthlyCostCents);
@@ -210,10 +221,13 @@ function CostItemRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="text-sm truncate" data-testid={`text-item-name-${item.id}`}>
-            {item.name}
+            {isAutoCalculated ? "Fuel (from routes)" : item.name}
           </span>
           {isScoopilotSub && (
             <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
+          )}
+          {isAutoCalculated && (
+            <Route className="h-3 w-3 text-primary shrink-0" />
           )}
           <Badge
             variant="outline"
@@ -226,6 +240,13 @@ function CostItemRow({
             {item.type}
           </Badge>
         </div>
+        {isAutoCalculated && (
+          <p className="text-[10px] text-muted-foreground mt-0.5" data-testid={`text-fuel-miles-note-${item.id}`}>
+            {autoFuelMiles != null && autoFuelMiles > 0
+              ? `${autoFuelMiles.toFixed(1)} mi this month · auto-calculated`
+              : "No routes this month · auto-calculated"}
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
         <span className="text-xs text-muted-foreground">$</span>
@@ -237,8 +258,9 @@ function CostItemRow({
           defaultValue={(item.monthlyCostCents / 100).toFixed(2)}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
-          disabled={isPending}
-          className="w-24 h-7 text-sm text-right tabular-nums rounded-md border border-input bg-background px-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          disabled={isPending || isAutoCalculated}
+          readOnly={isAutoCalculated}
+          className={`w-24 h-7 text-sm text-right tabular-nums rounded-md border border-input px-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${isAutoCalculated ? "bg-muted/50 text-muted-foreground cursor-default" : "bg-background"}`}
           data-testid={`input-cost-${item.id}`}
         />
         <span className="text-xs text-muted-foreground">/mo</span>
@@ -256,6 +278,12 @@ function CostItemRow({
     </div>
   );
 }
+
+type MonthlyFuelData = {
+  totalMiles: number;
+  fuelCostCents: number;
+  routeCount: number;
+};
 
 function FuelVehicleCard({ companyData, onSave }: {
   companyData: any;
@@ -275,6 +303,10 @@ function FuelVehicleCard({ companyData, onSave }: {
     setVehicleMpg(mpg ? String(mpg) : "");
     setDirty(false);
   }, [gasPriceCents, mpg]);
+
+  const { data: fuelData, isLoading: fuelLoading } = useQuery<MonthlyFuelData>({
+    queryKey: ["/api/overhead-costs/monthly-fuel"],
+  });
 
   const gasParsed = parseFloat(gasPrice);
   const mpgParsed = parseFloat(vehicleMpg);
@@ -299,6 +331,10 @@ function FuelVehicleCard({ companyData, onSave }: {
     onSave(updates);
     setDirty(false);
   };
+
+  const totalMiles = fuelData?.totalMiles ?? 0;
+  const fuelCostCents = fuelData?.fuelCostCents ?? 0;
+  const routeCount = fuelData?.routeCount ?? 0;
 
   return (
     <Card className="border-primary/20 bg-primary/[0.02]" data-testid="card-fuel-vehicle">
@@ -366,6 +402,33 @@ function FuelVehicleCard({ companyData, onSave }: {
               </Button>
             )}
           </div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-primary/10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Route className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Estimated Monthly Fuel (from routes)</span>
+            </div>
+            {fuelLoading ? (
+              <span className="text-xs text-muted-foreground">Calculating...</span>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground tabular-nums" data-testid="text-fuel-total-miles">
+                  {totalMiles.toFixed(1)} mi
+                  {routeCount > 0 && ` · ${routeCount} route${routeCount !== 1 ? "s" : ""}`}
+                </span>
+                <span className="text-sm font-semibold tabular-nums" data-testid="text-fuel-monthly-cost">
+                  {formatDollars(fuelCostCents)}/mo
+                </span>
+              </div>
+            )}
+          </div>
+          {!fuelLoading && routeCount === 0 && (
+            <p className="text-[10px] text-muted-foreground mt-1">
+              No routes found for this month — add routes with dates to auto-calculate fuel costs.
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -447,6 +510,7 @@ export default function OverheadCosts() {
       apiRequest("PATCH", "/api/pricing-config", updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs/monthly-fuel"] });
       toast({ title: "Fuel & vehicle settings saved" });
     },
     onError: () => {
@@ -454,7 +518,25 @@ export default function OverheadCosts() {
     },
   });
 
+  const { data: monthlyFuelData, isSuccess: fuelQuerySuccess } = useQuery<MonthlyFuelData>({
+    queryKey: ["/api/overhead-costs/monthly-fuel"],
+  });
+
   const items = data?.items ?? [];
+
+  const autoFuelCostCents = monthlyFuelData?.fuelCostCents ?? 0;
+
+  useEffect(() => {
+    if (!fuelQuerySuccess) return;
+    if (!data || data.items.length === 0) return;
+    const fuelItem = data.items.find(
+      (i) => i.name === "Fuel" && i.category === "Vehicles + Transportation" && i.isDefault
+    );
+    if (!fuelItem) return;
+    if (fuelItem.monthlyCostCents !== autoFuelCostCents) {
+      updateMutation.mutate({ id: fuelItem.id, monthlyCostCents: autoFuelCostCents });
+    }
+  }, [autoFuelCostCents, fuelQuerySuccess, data?.items?.length]);
 
   const categorizedItems = useMemo(() => {
     const map = new Map<string, OverheadCostItem[]>();
@@ -605,6 +687,7 @@ export default function OverheadCosts() {
               onDelete={handleDelete}
               onAdd={handleAdd}
               isPending={updateMutation.isPending || deleteMutation.isPending}
+              autoFuelMiles={category === "Vehicles + Transportation" ? (monthlyFuelData?.totalMiles ?? 0) : undefined}
             />
           );
         })}
