@@ -1034,14 +1034,6 @@ export default function RoutesPage() {
 
   const isLoading = routesLoading || plansLoading;
 
-  const routesForDay = useMemo(() => allRoutes.filter(r => r.dayOfWeek === selectedDay), [allRoutes, selectedDay]);
-
-  const routeCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const d of DAYS) counts[d] = allRoutes.filter(r => r.dayOfWeek === d).length;
-    return counts;
-  }, [allRoutes]);
-
   const currentWeekRange = useMemo(() => {
     const now = new Date();
     const dayIdx = (now.getDay() + 6) % 7;
@@ -1053,6 +1045,28 @@ export default function RoutesPage() {
     sunday.setHours(23, 59, 59, 999);
     return { start: monday, end: sunday };
   }, []);
+
+  const routesForDay = useMemo(() => allRoutes.filter(r => {
+    if (r.dayOfWeek !== selectedDay) return false;
+    if (r.date) {
+      const rd = new Date(r.date + "T12:00:00");
+      return rd >= currentWeekRange.start && rd <= currentWeekRange.end;
+    }
+    return true;
+  }), [allRoutes, selectedDay, currentWeekRange]);
+
+  const routeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const d of DAYS) counts[d] = allRoutes.filter(r => {
+      if (r.dayOfWeek !== d) return false;
+      if (r.date) {
+        const rd = new Date(r.date + "T12:00:00");
+        return rd >= currentWeekRange.start && rd <= currentWeekRange.end;
+      }
+      return true;
+    }).length;
+    return counts;
+  }, [allRoutes, currentWeekRange]);
 
   const weekStartStr = useMemo(() => toLocalDateString(currentWeekRange.start, tz), [currentWeekRange, tz]);
   const weekEndStr = useMemo(() => toLocalDateString(currentWeekRange.end, tz), [currentWeekRange, tz]);
@@ -1156,11 +1170,18 @@ export default function RoutesPage() {
   const dayStopCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const d of DAYS) {
-      const dayRouteIds = new Set(allRoutes.filter(r => r.dayOfWeek === d).map(r => r.id));
+      const dayRouteIds = new Set(allRoutes.filter(r => {
+        if (r.dayOfWeek !== d) return false;
+        if (r.date) {
+          const rd = new Date(r.date + "T12:00:00");
+          return rd >= currentWeekRange.start && rd <= currentWeekRange.end;
+        }
+        return true;
+      }).map(r => r.id));
       counts[d] = visiblePlans.filter(sp => sp.routeId && dayRouteIds.has(sp.routeId)).length;
     }
     return counts;
-  }, [allRoutes, visiblePlans]);
+  }, [allRoutes, visiblePlans, currentWeekRange]);
 
   const createRouteMutation = useMutation({
     mutationFn: async (data: { name: string; dayOfWeek: string; technicianId: string | null; color: string }) => {
@@ -1408,17 +1429,23 @@ export default function RoutesPage() {
         </div>
 
         <div className="flex gap-1 overflow-x-auto pb-1">
-          {DAYS.map(day => (
-            <Button key={day} variant={selectedDay === day ? "default" : "secondary"}
-              onClick={() => setSelectedDay(day)}
-              className="flex flex-col items-center px-3 py-2 h-auto whitespace-nowrap"
-              data-testid={`button-day-${day}`}
-            >
-              <span className="text-xs">{DAY_SHORT[day]}</span>
-              <span className="text-lg font-bold leading-tight">{routeCounts[day] || 0}</span>
-              <span className="text-[10px] opacity-70">{dayStopCounts[day] || 0} stops</span>
-            </Button>
-          ))}
+          {DAYS.map((day, idx) => {
+            const mondayDate = new Date(currentWeekRange.start);
+            const dayDate = new Date(mondayDate);
+            dayDate.setDate(mondayDate.getDate() + idx);
+            const dateNum = dayDate.getDate();
+            return (
+              <Button key={day} variant={selectedDay === day ? "default" : "secondary"}
+                onClick={() => setSelectedDay(day)}
+                className="flex flex-col items-center px-3 py-2 h-auto whitespace-nowrap"
+                data-testid={`button-day-${day}`}
+              >
+                <span className="text-xs">{DAY_SHORT[day]}</span>
+                <span className="text-lg font-bold leading-tight">{dateNum}</span>
+                <span className="text-[10px] opacity-70">{dayStopCounts[day] || 0} stops</span>
+              </Button>
+            );
+          })}
         </div>
 
         {showZones && <ServiceZonesPanel />}
