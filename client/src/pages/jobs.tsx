@@ -5,6 +5,15 @@ import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { ServicePlan, Contact, Property } from "@shared/schema";
+
+type ServicePricingItem = {
+  id: string;
+  name: string;
+  category: string;
+  basePrice: string;
+  unit: string;
+  isActive: boolean;
+};
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
