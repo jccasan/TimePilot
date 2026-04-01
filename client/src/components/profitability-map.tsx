@@ -271,7 +271,7 @@ export default function ProfitabilityMap({
         if (validStops.length >= 2) {
           const coordinates = validStops.map((s) => [s.longitude, s.latitude]);
           const lineId = `route-line-${route.routeId}`;
-          const lineColor = route.color || STATUS_COLORS[route.status];
+          const lineColor = useRouteColors ? (route.color || "#3b82f6") : STATUS_COLORS[route.status];
 
           map.addSource(lineId, {
             type: "geojson",

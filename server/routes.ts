@@ -3899,15 +3899,23 @@ Return ONLY valid JSON, no markdown.`,
 
       let fuelCostCentsPerMile: number;
       let fuelCostSource: string;
-      if (pricingConfig.vehicleCostPerMileCents > 0) {
-        fuelCostCentsPerMile = pricingConfig.vehicleCostPerMileCents;
-        fuelCostSource = "cost_per_mile";
-      } else if (pricingConfig.vehicleMPG && pricingConfig.vehicleMPG > 0) {
+      if (pricingConfig.vehicleMPG && pricingConfig.vehicleMPG > 0) {
         fuelCostCentsPerMile = pricingConfig.averageGasPriceCentsPerGallon / pricingConfig.vehicleMPG;
         fuelCostSource = "gas_mpg";
+      } else if (pricingConfig.vehicleCostPerMileCents > 0) {
+        fuelCostCentsPerMile = pricingConfig.vehicleCostPerMileCents;
+        fuelCostSource = "cost_per_mile";
       } else {
         fuelCostCentsPerMile = 65;
         fuelCostSource = "default";
+      }
+
+      function computeRouteFuel(routes: { estimatedMiles: number; routeLabel: string }[]) {
+        return routes.map(r => ({
+          routeLabel: r.routeLabel,
+          fuelCostCents: Math.round(r.estimatedMiles * fuelCostCentsPerMile),
+          miles: r.estimatedMiles,
+        }));
       }
 
       const currentFuelCostCents = Math.round(result.current.totalMiles * fuelCostCentsPerMile);
@@ -3927,10 +3935,12 @@ Return ONLY valid JSON, no markdown.`,
           currentPerDay: result.current.days.map(d => ({
             day: d.day,
             fuelCostCents: Math.round(d.totalMiles * fuelCostCentsPerMile),
+            routes: computeRouteFuel(d.routes),
           })),
           proposedPerDay: result.proposed.days.map(d => ({
             day: d.day,
             fuelCostCents: Math.round(d.totalMiles * fuelCostCentsPerMile),
+            routes: computeRouteFuel(d.routes),
           })),
         },
       });

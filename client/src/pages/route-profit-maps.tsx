@@ -16,6 +16,18 @@ type ViewMode = "stops" | "zones";
 type DayFilter = "all" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 type CompareView = "current" | "optimized";
 
+type RouteFuel = {
+  routeLabel: string;
+  fuelCostCents: number;
+  miles: number;
+};
+
+type FuelDayData = {
+  day: string;
+  fuelCostCents: number;
+  routes: RouteFuel[];
+};
+
 type FuelCostData = {
   centsPerMile: number;
   source: string;
@@ -24,8 +36,8 @@ type FuelCostData = {
   currentTotalCents: number;
   proposedTotalCents: number;
   savedCents: number;
-  currentPerDay: { day: string; fuelCostCents: number }[];
-  proposedPerDay: { day: string; fuelCostCents: number }[];
+  currentPerDay: FuelDayData[];
+  proposedPerDay: FuelDayData[];
 };
 
 type OptProposedRoute = {
@@ -80,18 +92,18 @@ function statusBadge(status: "profitable" | "marginal" | "unprofitable") {
 function buildOptimizedMapRoutes(optResult: OptResult, view: "current" | "proposed"): MapRoute[] {
   const schedule = view === "current" ? optResult.current : optResult.proposed;
   const fuelPerDay = view === "current" ? optResult.fuelCost.currentPerDay : optResult.fuelCost.proposedPerDay;
-  const fuelMap = new Map(fuelPerDay.map(d => [d.day, d.fuelCostCents]));
+  const fuelByDay = new Map(fuelPerDay.map(d => [d.day, d]));
 
   const mapRoutes: MapRoute[] = [];
   let colorIdx = 0;
 
   for (const dayPlan of schedule.days) {
-    for (const route of dayPlan.routes) {
+    const dayFuelData = fuelByDay.get(dayPlan.day);
+    for (let rIdx = 0; rIdx < dayPlan.routes.length; rIdx++) {
+      const route = dayPlan.routes[rIdx];
       if (route.stops.length === 0) continue;
-      const dayFuel = fuelMap.get(dayPlan.day) || 0;
-      const routeFuelShare = dayPlan.routes.length > 0
-        ? Math.round(dayFuel / dayPlan.routes.length)
-        : 0;
+
+      const routeFuelCents = dayFuelData?.routes?.[rIdx]?.fuelCostCents || 0;
 
       const stops: MapStop[] = route.stops.map((s, idx) => ({
         propertyId: s.servicePlanId,
@@ -118,7 +130,7 @@ function buildOptimizedMapRoutes(optResult: OptResult, view: "current" | "propos
         color: ROUTE_COLORS[colorIdx % ROUTE_COLORS.length],
         totalStops: route.stopCount,
         totalRevenueCents: 0,
-        totalCostCents: routeFuelShare,
+        totalCostCents: routeFuelCents,
         totalProfitCents: 0,
         avgMarginPct: 0,
         status: "profitable",
@@ -635,8 +647,8 @@ function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; c
   const proposedSchedule = optResult.proposed;
   const fuel = optResult.fuelCost;
 
-  const currentFuelByDay = new Map(fuel.currentPerDay.map(d => [d.day, d.fuelCostCents]));
-  const proposedFuelByDay = new Map(fuel.proposedPerDay.map(d => [d.day, d.fuelCostCents]));
+  const currentFuelByDay = new Map(fuel.currentPerDay.map(d => [d.day, d]));
+  const proposedFuelByDay = new Map(fuel.proposedPerDay.map(d => [d.day, d]));
 
   return (
     <div className="w-80 border-l bg-background overflow-y-auto shrink-0" data-testid="comparison-sidebar-panel">
@@ -678,7 +690,9 @@ function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; c
 
         <div className="mt-2 bg-green-50 dark:bg-green-900/20 rounded p-2 text-center" data-testid="savings-summary-box">
           <p className="text-[10px] text-muted-foreground mb-0.5">Weekly Savings</p>
-          <p className="text-lg font-bold text-green-600 dark:text-green-400">{formatDollars(fuel.savedCents)}</p>
+          <p className={`text-lg font-bold ${fuel.savedCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+            {fuel.savedCents >= 0 ? formatDollars(fuel.savedCents) : `-${formatDollars(Math.abs(fuel.savedCents))}`}
+          </p>
           <p className="text-[10px] text-muted-foreground">
             {optResult.milesSaved} mi, {optResult.minutesSaved} min saved
           </p>
@@ -695,8 +709,10 @@ function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; c
           .map(currentDay => {
             const proposedDay = proposedSchedule.days.find(d => d.day === currentDay.day);
             const isExpanded = expandedDay === currentDay.day;
-            const curFuel = currentFuelByDay.get(currentDay.day) || 0;
-            const propFuel = proposedFuelByDay.get(currentDay.day) || 0;
+            const curFuelDay = currentFuelByDay.get(currentDay.day);
+            const propFuelDay = proposedFuelByDay.get(currentDay.day);
+            const curFuel = curFuelDay?.fuelCostCents || 0;
+            const propFuel = propFuelDay?.fuelCostCents || 0;
             const fuelDelta = curFuel - propFuel;
             const milesDelta = currentDay.totalMiles - (proposedDay?.totalMiles || 0);
 
@@ -736,7 +752,7 @@ function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; c
                 </button>
 
                 {isExpanded && (
-                  <div className="bg-muted/30 border-t p-3 space-y-2">
+                  <div className="bg-muted/30 border-t p-3 space-y-3">
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <p className="text-[10px] font-medium text-muted-foreground mb-1">Current</p>
@@ -788,21 +804,67 @@ function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; c
                       </div>
                     )}
 
-                    {(compareView === "optimized" && proposedDay) && (
-                      <div className="pt-1">
-                        <p className="text-[10px] font-medium text-muted-foreground mb-1">Proposed Stops</p>
-                        <div className="space-y-0.5">
-                          {proposedDay.routes.flatMap(r => r.stops).map((stop, idx) => (
-                            <div key={stop.servicePlanId} className="flex items-center gap-1.5 text-xs py-0.5">
-                              <Badge variant="outline" className="text-[9px] px-1 py-0 w-4 h-4 flex items-center justify-center shrink-0">
-                                {idx + 1}
-                              </Badge>
-                              <span className="truncate">{stop.contactName}</span>
+                    <Separator />
+
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Per-Route Breakdown</p>
+                      <div className="space-y-2">
+                        {currentDay.routes.map((curRoute, rIdx) => {
+                          const curRouteFuel = curFuelDay?.routes?.[rIdx];
+                          return (
+                            <div key={`cur-${rIdx}`} className="border rounded p-2 text-xs" data-testid={`route-compare-current-${currentDay.day}-${rIdx}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium">{curRoute.routeLabel}</span>
+                                <Badge variant="secondary" className="text-[9px]">Current</Badge>
+                              </div>
+                              <div className="grid grid-cols-3 gap-1 text-[11px]">
+                                <div>
+                                  <span className="text-muted-foreground">{curRoute.stopCount} stops</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">{curRoute.estimatedMiles} mi</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">{formatDollars(curRouteFuel?.fuelCostCents || 0)} fuel</span>
+                                </div>
+                              </div>
                             </div>
-                          ))}
-                        </div>
+                          );
+                        })}
+                        {proposedDay?.routes.map((propRoute, rIdx) => {
+                          const propRouteFuel = propFuelDay?.routes?.[rIdx];
+                          return (
+                            <div key={`prop-${rIdx}`} className="border border-primary/30 rounded p-2 text-xs bg-primary/5" data-testid={`route-compare-proposed-${currentDay.day}-${rIdx}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium text-primary">{propRoute.routeLabel}</span>
+                                <Badge variant="default" className="text-[9px]">Optimized</Badge>
+                              </div>
+                              <div className="grid grid-cols-3 gap-1 text-[11px]">
+                                <div>
+                                  <span className="text-muted-foreground">{propRoute.stopCount} stops</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">{propRoute.estimatedMiles} mi</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">{formatDollars(propRouteFuel?.fuelCostCents || 0)} fuel</span>
+                                </div>
+                              </div>
+                              <div className="mt-1.5 space-y-0.5">
+                                {propRoute.stops.map((stop, sIdx) => (
+                                  <div key={stop.servicePlanId} className="flex items-center gap-1.5 text-[11px] py-0.5">
+                                    <Badge variant="outline" className="text-[9px] px-1 py-0 w-4 h-4 flex items-center justify-center shrink-0">
+                                      {sIdx + 1}
+                                    </Badge>
+                                    <span className="truncate">{stop.contactName}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
               </div>
