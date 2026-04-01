@@ -3894,6 +3894,48 @@ Return ONLY valid JSON, no markdown.`,
         includeSaturday,
       });
 
+      const { calculateAllCustomerProfitability } = await import("./services/profitability-calculator");
+      const allProfitability = await calculateAllCustomerProfitability(companyId);
+      const profByPlan = new Map<string, { revenuePerVisitCents: number; costPerVisitCents: number; profitPerVisitCents: number }>();
+      for (const cp of allProfitability) {
+        for (const prop of cp.properties) {
+          if (prop.servicePlanId) {
+            profByPlan.set(prop.servicePlanId, {
+              revenuePerVisitCents: prop.revenuePerVisitCents,
+              costPerVisitCents: prop.costPerVisitCents,
+              profitPerVisitCents: prop.profitPerVisitCents,
+            });
+          }
+        }
+      }
+
+      type EnrichedRoute = typeof result.current.days[0]["routes"][0] & {
+        revenuePerVisitCents: number;
+        costPerVisitCents: number;
+        profitPerVisitCents: number;
+      };
+
+      function enrichRoutes(days: typeof result.current.days) {
+        return days.map(d => ({
+          ...d,
+          routes: d.routes.map(r => {
+            let totalRev = 0, totalCost = 0, totalProfit = 0;
+            for (const stop of r.stops) {
+              const sp = profByPlan.get(stop.servicePlanId);
+              if (sp) {
+                totalRev += sp.revenuePerVisitCents;
+                totalCost += sp.costPerVisitCents;
+                totalProfit += sp.profitPerVisitCents;
+              }
+            }
+            return { ...r, revenuePerVisitCents: totalRev, costPerVisitCents: totalCost, profitPerVisitCents: totalProfit };
+          }),
+        }));
+      }
+
+      const enrichedCurrent = enrichRoutes(result.current.days);
+      const enrichedProposed = enrichRoutes(result.proposed.days);
+
       const { getEffectivePricingConfig } = await import("./services/pricing-calculator");
       const pricingConfig = getEffectivePricingConfig(company.pricingConfig);
 
@@ -3910,11 +3952,14 @@ Return ONLY valid JSON, no markdown.`,
         fuelCostSource = "default";
       }
 
-      function computeRouteFuel(routes: { estimatedMiles: number; routeLabel: string }[]) {
+      function computeRouteFuel(routes: { estimatedMiles: number; routeLabel: string; revenuePerVisitCents: number; costPerVisitCents: number; profitPerVisitCents: number }[]) {
         return routes.map(r => ({
           routeLabel: r.routeLabel,
           fuelCostCents: Math.round(r.estimatedMiles * fuelCostCentsPerMile),
           miles: r.estimatedMiles,
+          revenuePerVisitCents: r.revenuePerVisitCents,
+          costPerVisitCents: r.costPerVisitCents,
+          profitPerVisitCents: r.profitPerVisitCents,
         }));
       }
 
@@ -3932,12 +3977,12 @@ Return ONLY valid JSON, no markdown.`,
           currentTotalCents: currentFuelCostCents,
           proposedTotalCents: proposedFuelCostCents,
           savedCents: fuelCostSavedCents,
-          currentPerDay: result.current.days.map(d => ({
+          currentPerDay: enrichedCurrent.map(d => ({
             day: d.day,
             fuelCostCents: Math.round(d.totalMiles * fuelCostCentsPerMile),
             routes: computeRouteFuel(d.routes),
           })),
-          proposedPerDay: result.proposed.days.map(d => ({
+          proposedPerDay: enrichedProposed.map(d => ({
             day: d.day,
             fuelCostCents: Math.round(d.totalMiles * fuelCostCentsPerMile),
             routes: computeRouteFuel(d.routes),

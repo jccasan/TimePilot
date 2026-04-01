@@ -20,6 +20,9 @@ type RouteFuel = {
   routeLabel: string;
   fuelCostCents: number;
   miles: number;
+  revenuePerVisitCents: number;
+  costPerVisitCents: number;
+  profitPerVisitCents: number;
 };
 
 type FuelDayData = {
@@ -807,8 +810,8 @@ function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; c
                     <Separator />
 
                     <div>
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Per-Route Breakdown</p>
-                      <div className="space-y-2">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Current Routes</p>
+                      <div className="space-y-1.5">
                         {currentDay.routes.map((curRoute, rIdx) => {
                           const curRouteFuel = curFuelDay?.routes?.[rIdx];
                           return (
@@ -818,53 +821,99 @@ function ComparisonSidebar({ optResult, compareView }: { optResult: OptResult; c
                                 <Badge variant="secondary" className="text-[9px]">Current</Badge>
                               </div>
                               <div className="grid grid-cols-3 gap-1 text-[11px]">
-                                <div>
-                                  <span className="text-muted-foreground">{curRoute.stopCount} stops</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">{curRoute.estimatedMiles} mi</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">{formatDollars(curRouteFuel?.fuelCostCents || 0)} fuel</span>
-                                </div>
+                                <div><span className="text-muted-foreground">{curRoute.stopCount} stops</span></div>
+                                <div><span className="text-muted-foreground">{curRoute.estimatedMiles} mi</span></div>
+                                <div><span className="text-muted-foreground">{formatDollars(curRouteFuel?.fuelCostCents || 0)} fuel</span></div>
                               </div>
-                            </div>
-                          );
-                        })}
-                        {proposedDay?.routes.map((propRoute, rIdx) => {
-                          const propRouteFuel = propFuelDay?.routes?.[rIdx];
-                          return (
-                            <div key={`prop-${rIdx}`} className="border border-primary/30 rounded p-2 text-xs bg-primary/5" data-testid={`route-compare-proposed-${currentDay.day}-${rIdx}`}>
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="font-medium text-primary">{propRoute.routeLabel}</span>
-                                <Badge variant="default" className="text-[9px]">Optimized</Badge>
-                              </div>
-                              <div className="grid grid-cols-3 gap-1 text-[11px]">
-                                <div>
-                                  <span className="text-muted-foreground">{propRoute.stopCount} stops</span>
+                              {curRouteFuel && curRouteFuel.revenuePerVisitCents > 0 && (
+                                <div className="grid grid-cols-3 gap-1 text-[11px] mt-0.5">
+                                  <div><span className="text-muted-foreground">{formatDollars(curRouteFuel.revenuePerVisitCents)} rev</span></div>
+                                  <div><span className="text-muted-foreground">{formatDollars(curRouteFuel.costPerVisitCents)} cost</span></div>
+                                  <div><span className={curRouteFuel.profitPerVisitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>{formatDollars(curRouteFuel.profitPerVisitCents)} profit</span></div>
                                 </div>
-                                <div>
-                                  <span className="text-muted-foreground">{propRoute.estimatedMiles} mi</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">{formatDollars(propRouteFuel?.fuelCostCents || 0)} fuel</span>
-                                </div>
-                              </div>
-                              <div className="mt-1.5 space-y-0.5">
-                                {propRoute.stops.map((stop, sIdx) => (
-                                  <div key={stop.servicePlanId} className="flex items-center gap-1.5 text-[11px] py-0.5">
-                                    <Badge variant="outline" className="text-[9px] px-1 py-0 w-4 h-4 flex items-center justify-center shrink-0">
-                                      {sIdx + 1}
-                                    </Badge>
-                                    <span className="truncate">{stop.contactName}</span>
-                                  </div>
-                                ))}
-                              </div>
+                              )}
                             </div>
                           );
                         })}
                       </div>
                     </div>
+
+                    {proposedDay && proposedDay.routes.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Optimized Routes</p>
+                        <div className="space-y-1.5">
+                          {proposedDay.routes.map((propRoute, rIdx) => {
+                            const propRouteFuel = propFuelDay?.routes?.[rIdx];
+                            return (
+                              <div key={`prop-${rIdx}`} className="border border-primary/30 rounded p-2 text-xs bg-primary/5" data-testid={`route-compare-proposed-${currentDay.day}-${rIdx}`}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-medium text-primary">{propRoute.routeLabel}</span>
+                                  <Badge variant="default" className="text-[9px]">Optimized</Badge>
+                                </div>
+                                <div className="grid grid-cols-3 gap-1 text-[11px]">
+                                  <div><span className="text-muted-foreground">{propRoute.stopCount} stops</span></div>
+                                  <div><span className="text-muted-foreground">{propRoute.estimatedMiles} mi</span></div>
+                                  <div><span className="text-muted-foreground">{formatDollars(propRouteFuel?.fuelCostCents || 0)} fuel</span></div>
+                                </div>
+                                {propRouteFuel && propRouteFuel.revenuePerVisitCents > 0 && (
+                                  <div className="grid grid-cols-3 gap-1 text-[11px] mt-0.5">
+                                    <div><span className="text-muted-foreground">{formatDollars(propRouteFuel.revenuePerVisitCents)} rev</span></div>
+                                    <div><span className="text-muted-foreground">{formatDollars(propRouteFuel.costPerVisitCents)} cost</span></div>
+                                    <div><span className={propRouteFuel.profitPerVisitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>{formatDollars(propRouteFuel.profitPerVisitCents)} profit</span></div>
+                                  </div>
+                                )}
+                                <div className="mt-1.5 space-y-0.5">
+                                  {propRoute.stops.map((stop, sIdx) => (
+                                    <div key={stop.servicePlanId} className="flex items-center gap-1.5 text-[11px] py-0.5">
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 w-4 h-4 flex items-center justify-center shrink-0">
+                                        {sIdx + 1}
+                                      </Badge>
+                                      <span className="truncate">{stop.contactName}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {(() => {
+                          const curTotalMiles = currentDay.routes.reduce((s, r) => s + r.estimatedMiles, 0);
+                          const propTotalMiles = proposedDay.routes.reduce((s, r) => s + r.estimatedMiles, 0);
+                          const milesDeltaRoutes = curTotalMiles - propTotalMiles;
+                          const curFuelTotal = (curFuelDay?.routes || []).reduce((s, r) => s + r.fuelCostCents, 0);
+                          const propFuelTotal = (propFuelDay?.routes || []).reduce((s, r) => s + r.fuelCostCents, 0);
+                          const fuelDeltaRoutes = curFuelTotal - propFuelTotal;
+                          const curProfitTotal = (curFuelDay?.routes || []).reduce((s, r) => s + r.profitPerVisitCents, 0);
+                          const propProfitTotal = (propFuelDay?.routes || []).reduce((s, r) => s + r.profitPerVisitCents, 0);
+                          const profitDelta = propProfitTotal - curProfitTotal;
+                          if (milesDeltaRoutes === 0 && fuelDeltaRoutes === 0) return null;
+                          return (
+                            <div className={`mt-1.5 rounded p-1.5 text-center text-[11px] ${fuelDeltaRoutes >= 0 ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"}`} data-testid={`route-delta-${currentDay.day}`}>
+                              <div>
+                                {milesDeltaRoutes >= 0
+                                  ? `${Math.round(milesDeltaRoutes * 10) / 10} mi fewer`
+                                  : `${Math.round(Math.abs(milesDeltaRoutes) * 10) / 10} mi more`}
+                                {" | "}
+                                {fuelDeltaRoutes >= 0
+                                  ? `${formatDollars(fuelDeltaRoutes)} fuel saved`
+                                  : `${formatDollars(Math.abs(fuelDeltaRoutes))} fuel added`}
+                              </div>
+                              {(curProfitTotal > 0 || propProfitTotal > 0) && (
+                                <div className="mt-0.5">
+                                  Profit: {formatDollars(curProfitTotal)} {" -> "} {formatDollars(propProfitTotal)}
+                                  {profitDelta !== 0 && (
+                                    <span className={profitDelta > 0 ? " text-green-700 dark:text-green-400" : " text-red-700 dark:text-red-400"}>
+                                      {" "}({profitDelta > 0 ? "+" : ""}{formatDollars(profitDelta)})
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
