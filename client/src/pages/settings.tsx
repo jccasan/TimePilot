@@ -94,7 +94,6 @@ const SETTINGS_BLOCK_DEFS: { id: string; label: string; defaultW: number; defaul
   { id: "change_password", label: "Change Password", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "data_import_export", label: "Data Import / Export", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "subscription", label: "Subscription", defaultW: 6, defaultH: 3, minW: 4, minH: 2 },
-  { id: "sms_provider", label: "SMS Provider", defaultW: 6, defaultH: 5, minW: 4, minH: 4 },
   { id: "stripe_connect", label: "Stripe Connect", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "venmo", label: "Venmo", defaultW: 6, defaultH: 3, minW: 4, minH: 2 },
   { id: "quickbooks", label: "QuickBooks", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
@@ -109,14 +108,14 @@ const SETTINGS_BLOCK_DEFS: { id: string; label: string; defaultW: number; defaul
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
   "company_logo", "subscription",
-  "company_info", "sms_provider",
-  "reminder_settings", "stripe_connect",
-  "team_members", "venmo",
-  "change_password", "quickbooks",
-  "data_import_export", "voice_api_docs",
-  "signup_widget", "webhook_lead",
-  "sms_quote_template", "auto_visit_generation",
-  "lead_sources", "audit_log",
+  "company_info", "stripe_connect",
+  "reminder_settings", "venmo",
+  "team_members", "quickbooks",
+  "change_password", "voice_api_docs",
+  "data_import_export", "signup_widget",
+  "webhook_lead", "sms_quote_template",
+  "auto_visit_generation", "lead_sources",
+  "audit_log",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -223,136 +222,6 @@ const ENTITY_TYPES = [
   { value: "service_plan", label: "Job" },
   { value: "company", label: "Company" },
 ];
-
-function SmsProviderSection({ company }: { company: Company | null | undefined }) {
-  const { toast } = useToast();
-  const [telnyxApiKey, setTelnyxApiKey] = useState("");
-  const [telnyxPhoneNumber, setTelnyxPhoneNumber] = useState(company?.telnyxPhoneNumber || "");
-  const [telnyxMessagingProfileId, setTelnyxMessagingProfileId] = useState(company?.telnyxMessagingProfileId || "");
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (company) {
-      setTelnyxPhoneNumber(company.telnyxPhoneNumber || "");
-      setTelnyxMessagingProfileId(company.telnyxMessagingProfileId || "");
-      setTelnyxApiKey("");
-    }
-  }, [company]);
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const payload: Record<string, string> = {};
-      if (telnyxApiKey) payload.telnyxApiKey = telnyxApiKey;
-      if (telnyxPhoneNumber) payload.telnyxPhoneNumber = telnyxPhoneNumber;
-      if (telnyxMessagingProfileId) payload.telnyxMessagingProfileId = telnyxMessagingProfileId;
-      const res = await apiRequest("PATCH", "/api/company", payload);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/messages/config"] });
-      toast({ title: "SMS settings saved" });
-      setTelnyxApiKey("");
-    },
-    onError: (err: any) => {
-      toast({ title: "Error", description: err.message || "Failed to save SMS settings.", variant: "destructive" });
-    },
-  });
-
-  const webhookUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/api/webhooks/telnyx/sms`
-    : "";
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(webhookUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <Card data-testid="card-sms-provider">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Phone className="h-5 w-5" />
-          SMS Configuration
-        </CardTitle>
-        <CardDescription>Configure your Telnyx account for sending and receiving text messages</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="telnyx-api-key">Telnyx API Key</Label>
-          <Input
-            id="telnyx-api-key"
-            type="password"
-            placeholder={company?.telnyxApiKey && company.telnyxApiKey !== "null" ? "••••••••••••••••" : "KEY..."}
-            value={telnyxApiKey}
-            onChange={(e) => setTelnyxApiKey(e.target.value)}
-            data-testid="input-telnyx-api-key"
-          />
-          <p className="text-xs text-muted-foreground">Your Telnyx v2 API key. Found in the Telnyx portal under Auth &gt; API Keys.</p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="telnyx-phone">Telnyx Phone Number</Label>
-          <Input
-            id="telnyx-phone"
-            placeholder="+15551234567"
-            value={telnyxPhoneNumber}
-            onChange={(e) => setTelnyxPhoneNumber(e.target.value)}
-            data-testid="input-telnyx-phone"
-          />
-          <p className="text-xs text-muted-foreground">The phone number purchased in your Telnyx account for sending SMS.</p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="telnyx-profile">Messaging Profile ID</Label>
-          <Input
-            id="telnyx-profile"
-            placeholder="4001..."
-            value={telnyxMessagingProfileId}
-            onChange={(e) => setTelnyxMessagingProfileId(e.target.value)}
-            data-testid="input-telnyx-profile"
-          />
-          <p className="text-xs text-muted-foreground">Your Telnyx messaging profile ID. Found under Messaging &gt; Profiles in the Telnyx portal.</p>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Inbound Webhook URL</Label>
-          <div className="flex gap-2">
-            <Input
-              readOnly
-              value={webhookUrl}
-              className="font-mono text-xs"
-              data-testid="input-telnyx-webhook-url"
-            />
-            <Button variant="outline" size="sm" onClick={handleCopy} data-testid="button-copy-telnyx-webhook">
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">Paste this URL in your Telnyx Messaging Profile's webhook settings to receive inbound SMS.</p>
-        </div>
-
-        <Button
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending}
-          data-testid="button-save-sms-provider"
-        >
-          {saveMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Save SMS Settings
-            </>
-          )}
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
 
 function StripeConnectSection() {
   const { toast } = useToast();
@@ -3085,8 +2954,6 @@ export default function Settings() {
             </CardContent>
           </Card>
         );
-      case "sms_provider":
-        return <div className="h-full overflow-auto"><SmsProviderSection company={company} /></div>;
       case "stripe_connect":
         return <div className="h-full overflow-auto"><StripeConnectSection /></div>;
       case "venmo":
