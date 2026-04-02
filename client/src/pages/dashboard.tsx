@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 
@@ -8,6 +8,55 @@ function fmt(n: number, decimals = 2): string {
 function fmtInt(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
+function ResizableCardBody({ storageKey, defaultHeight = 320, minHeight = 120, children }: { storageKey: string; defaultHeight?: number; minHeight?: number; children: ReactNode }) {
+  const [height, setHeight] = useState(() => {
+    const saved = localStorage.getItem(`dash-h-${storageKey}`);
+    return saved ? Math.max(minHeight, parseInt(saved, 10)) : defaultHeight;
+  });
+  const dragging = useRef(false);
+  const startY = useRef(0);
+  const startH = useRef(0);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    startY.current = e.clientY;
+    startH.current = height;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [height]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging.current) return;
+    const newH = Math.max(minHeight, startH.current + (e.clientY - startY.current));
+    setHeight(newH);
+  }, [minHeight]);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    const finalH = Math.max(minHeight, startH.current + (e.clientY - startY.current));
+    setHeight(finalH);
+    localStorage.setItem(`dash-h-${storageKey}`, String(finalH));
+  }, [storageKey, minHeight]);
+
+  return (
+    <div className="flex flex-col">
+      <div className="overflow-y-auto" style={{ height }} data-testid={`scrollable-${storageKey}`}>
+        {children}
+      </div>
+      <div
+        className="flex items-center justify-center h-5 cursor-row-resize hover:bg-muted/50 transition-colors border-t select-none rounded-b-lg"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        data-testid={`resize-handle-${storageKey}`}
+      >
+        <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground/60" />
+      </div>
+    </div>
+  );
+}
+
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ResponsiveGridLayout } from "react-grid-layout";
@@ -36,7 +85,7 @@ import {
   StickyNote, Route, GripVertical, X, LayoutGrid,
   Inbox, ArrowRight, RotateCcw, Cloud, MapPinned,
   Sun, CloudRain, CloudSnow, CloudLightning, CloudDrizzle,
-  Cloudy, Snowflake, Wind,
+  Cloudy, Snowflake, Wind, GripHorizontal,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -717,18 +766,20 @@ function RecentCommunications() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="pt-0">
-          {smsList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 text-muted-foreground" data-testid="empty-recent-sms">
-              <MessageSquare className="h-8 w-8 mb-2 opacity-30" />
-              <p className="text-sm">No recent text messages</p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {smsList.map(msg => <CommMessageRow key={msg.id} msg={msg} />)}
-            </div>
-          )}
-        </CardContent>
+        <ResizableCardBody storageKey="recent-sms" defaultHeight={280} minHeight={100}>
+          <div className="px-6">
+            {smsList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 text-muted-foreground" data-testid="empty-recent-sms">
+                <MessageSquare className="h-8 w-8 mb-2 opacity-30" />
+                <p className="text-sm">No recent text messages</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {smsList.map(msg => <CommMessageRow key={msg.id} msg={msg} />)}
+              </div>
+            )}
+          </div>
+        </ResizableCardBody>
       </Card>
 
       <Card data-testid="card-recent-emails">
@@ -743,18 +794,20 @@ function RecentCommunications() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="pt-0">
-          {emailList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 text-muted-foreground" data-testid="empty-recent-emails">
-              <Mail className="h-8 w-8 mb-2 opacity-30" />
-              <p className="text-sm">No recent emails</p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {emailList.map(msg => <CommMessageRow key={msg.id} msg={msg} />)}
-            </div>
-          )}
-        </CardContent>
+        <ResizableCardBody storageKey="recent-emails" defaultHeight={280} minHeight={100}>
+          <div className="px-6">
+            {emailList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 text-muted-foreground" data-testid="empty-recent-emails">
+                <Mail className="h-8 w-8 mb-2 opacity-30" />
+                <p className="text-sm">No recent emails</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {emailList.map(msg => <CommMessageRow key={msg.id} msg={msg} />)}
+              </div>
+            )}
+          </div>
+        </ResizableCardBody>
       </Card>
     </div>
   );
@@ -961,77 +1014,79 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
         </div>
         <Progress value={progress} className="h-2 mt-2" />
       </CardHeader>
-      <CardContent className="space-y-3">
-        {Array.from(grouped.entries()).map(([group, groupVisits]) => (
-          <div key={group} data-testid={`group-${group}`}>
-            <div className="flex items-center gap-2 mb-1.5">
-              <Badge variant="secondary" className={`text-[10px] ${groupColors[group]}`}>
-                {groupLabels[group]}
-              </Badge>
-              <span className="text-xs text-muted-foreground">({groupVisits.length})</span>
-            </div>
-            <div className="space-y-1">
-              {groupVisits.map((visit) => (
-                <div
-                  key={visit.id}
-                  className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-                  data-testid={`visit-row-${visit.id}`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <Link href={`/contacts/${visit.contactId}`}>
-                        <span className="text-sm font-medium hover:underline cursor-pointer" data-testid={`text-visit-contact-${visit.id}`}>
-                          {visit.contactName}
+      <ResizableCardBody storageKey="todays-appts" defaultHeight={360} minHeight={140}>
+        <div className="px-6 pb-4 space-y-3">
+          {Array.from(grouped.entries()).map(([group, groupVisits]) => (
+            <div key={group} data-testid={`group-${group}`}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Badge variant="secondary" className={`text-[10px] ${groupColors[group]}`}>
+                  {groupLabels[group]}
+                </Badge>
+                <span className="text-xs text-muted-foreground">({groupVisits.length})</span>
+              </div>
+              <div className="space-y-1">
+                {groupVisits.map((visit) => (
+                  <div
+                    key={visit.id}
+                    className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                    data-testid={`visit-row-${visit.id}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <Link href={`/contacts/${visit.contactId}`}>
+                          <span className="text-sm font-medium hover:underline cursor-pointer" data-testid={`text-visit-contact-${visit.id}`}>
+                            {visit.contactName}
+                          </span>
+                        </Link>
+                        <span className="text-xs text-muted-foreground" data-testid={`text-visit-time-${visit.id}`}>
+                          {formatVisitTime(visit)}
                         </span>
-                      </Link>
-                      <span className="text-xs text-muted-foreground" data-testid={`text-visit-time-${visit.id}`}>
-                        {formatVisitTime(visit)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{visit.propertyAddress}</span>
-                      <span className="shrink-0">&middot;</span>
-                      <span className="shrink-0">{visit.serviceType}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-medium tabular-nums" data-testid={`text-visit-amount-${visit.id}`}>
-                      ${fmt(visit.amount)}
-                    </span>
-                    {(visit.status === "scheduled" || visit.status === "in_progress") && (
-                      <div className="flex items-center gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30"
-                          onClick={() => markVisitMutation.mutate({ visitId: visit.id, status: "completed" })}
-                          disabled={markVisitMutation.isPending}
-                          title="Mark complete"
-                          data-testid={`button-complete-visit-${visit.id}`}
-                        >
-                          <CheckCircle className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                          onClick={() => markVisitMutation.mutate({ visitId: visit.id, status: "skipped" })}
-                          disabled={markVisitMutation.isPending}
-                          title="Skip"
-                          data-testid={`button-skip-visit-${visit.id}`}
-                        >
-                          <XCircle className="h-4 w-4" />
-                        </Button>
                       </div>
-                    )}
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{visit.propertyAddress}</span>
+                        <span className="shrink-0">&middot;</span>
+                        <span className="shrink-0">{visit.serviceType}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-medium tabular-nums" data-testid={`text-visit-amount-${visit.id}`}>
+                        ${fmt(visit.amount)}
+                      </span>
+                      {(visit.status === "scheduled" || visit.status === "in_progress") && (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30"
+                            onClick={() => markVisitMutation.mutate({ visitId: visit.id, status: "completed" })}
+                            disabled={markVisitMutation.isPending}
+                            title="Mark complete"
+                            data-testid={`button-complete-visit-${visit.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                            onClick={() => markVisitMutation.mutate({ visitId: visit.id, status: "skipped" })}
+                            disabled={markVisitMutation.isPending}
+                            title="Skip"
+                            data-testid={`button-skip-visit-${visit.id}`}
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </CardContent>
+          ))}
+        </div>
+      </ResizableCardBody>
     </Card>
   );
 }
