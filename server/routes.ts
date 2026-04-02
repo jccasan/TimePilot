@@ -2424,7 +2424,7 @@ Return ONLY valid JSON, no markdown.`,
         });
       }
 
-      const upcomingThisWeek = allVisitsForOverdue.filter(v =>
+      const upcomingThisWeek = weekVisits.filter(v =>
         v.scheduledDate >= today && v.scheduledDate <= weekEndStr &&
         (v.status === "scheduled" || v.status === "in_progress")
       );
