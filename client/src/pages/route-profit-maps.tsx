@@ -7,9 +7,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Eye, Layers, ChevronRight, ChevronDown, DollarSign, TrendingUp, AlertTriangle, Map as MapIcon, Sparkles, X, ArrowRight, Fuel, Clock, Route, Loader2, ArrowLeftRight } from "lucide-react";
+import { MapPin, Eye, Layers, ChevronRight, ChevronDown, DollarSign, TrendingUp, AlertTriangle, Map as MapIcon, Sparkles, X, ArrowRight, Fuel, Clock, Route, Loader2, ArrowLeftRight, CheckCircle } from "lucide-react";
 import ProfitabilityMap, { type MapRoute, type MapStop } from "@/components/profitability-map";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 type ViewMode = "stops" | "zones";
@@ -193,6 +193,34 @@ export default function RouteProfitMaps() {
     },
     onError: (err: Error) => {
       toast({ title: "Optimization failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const commitMutation = useMutation({
+    mutationFn: async () => {
+      if (!optResult) throw new Error("No optimization to commit");
+      const res = await apiRequest("POST", "/api/routes/apply-weekly-plan", {
+        proposedDays: optResult.proposed.days.map(d => ({
+          day: d.day,
+          routes: d.routes.map(r => ({
+            routeLabel: r.routeLabel,
+            stops: r.stops.map(s => ({ servicePlanId: s.servicePlanId })),
+          })),
+        })),
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setOptResult(null);
+      setCompareView("current");
+      queryClient.invalidateQueries({ queryKey: ["/api/profitability/route-map"] });
+      toast({
+        title: "Routes updated",
+        description: `${data.stopsUpdated} stops reassigned across ${data.routesCreated + (data.stopsUpdated > 0 ? 1 : 0)} routes.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to apply routes", description: err.message, variant: "destructive" });
     },
   });
 
@@ -455,11 +483,26 @@ export default function RouteProfitMaps() {
               </div>
             );
           })()}
-          <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-            <ArrowLeftRight className="h-3.5 w-3.5" />
-            <span>
-              Viewing: <span className="font-medium text-foreground">{compareView === "current" ? "Current" : "Optimized"}</span>
-            </span>
+          <div className="ml-auto flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ArrowLeftRight className="h-3.5 w-3.5" />
+              <span>
+                Viewing: <span className="font-medium text-foreground">{compareView === "current" ? "Current" : "Optimized"}</span>
+              </span>
+            </div>
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => commitMutation.mutate()}
+              disabled={commitMutation.isPending}
+              data-testid="button-commit-optimization"
+            >
+              {commitMutation.isPending ? (
+                <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Applying...</>
+              ) : (
+                <><CheckCircle className="h-3 w-3 mr-1" /> Commit Changes</>
+              )}
+            </Button>
           </div>
         </div>
       )}
@@ -742,6 +785,19 @@ function ComparisonSidebar({ optResult }: { optResult: OptResult }) {
               <p className="text-[10px] text-muted-foreground">
                 {optResult.milesSaved} mi, {optResult.minutesSaved} min saved
               </p>
+              <Button
+                size="sm"
+                className="mt-2 w-full h-8 text-xs"
+                onClick={() => commitMutation.mutate()}
+                disabled={commitMutation.isPending}
+                data-testid="button-commit-optimization-sidebar"
+              >
+                {commitMutation.isPending ? (
+                  <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Applying...</>
+                ) : (
+                  <><CheckCircle className="h-3 w-3 mr-1" /> Commit Changes</>
+                )}
+              </Button>
             </div>
           );
         })()}
