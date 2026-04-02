@@ -31,6 +31,8 @@ import {
   Fuel,
   Car,
   Route,
+  HardHat,
+  Clock,
 } from "lucide-react";
 
 type OverheadCostItem = {
@@ -293,16 +295,22 @@ function FuelVehicleCard({ companyData, onSave }: {
   const gasPriceCents = config.averageGasPriceCentsPerGallon ?? 350;
   const mpg = config.vehicleMPG ?? null;
   const costPerMileCents = config.vehicleCostPerMileCents ?? 65;
+  const wageCents = config.techHourlyWageCents ?? 1500;
+  const burden = config.burdenMultiplier ?? 1.4;
 
   const [gasPrice, setGasPrice] = useState((gasPriceCents / 100).toFixed(2));
   const [vehicleMpg, setVehicleMpg] = useState(mpg ? String(mpg) : "");
+  const [hourlyWage, setHourlyWage] = useState((wageCents / 100).toFixed(2));
+  const [burdenMult, setBurdenMult] = useState(burden.toFixed(1));
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     setGasPrice((gasPriceCents / 100).toFixed(2));
     setVehicleMpg(mpg ? String(mpg) : "");
+    setHourlyWage((wageCents / 100).toFixed(2));
+    setBurdenMult(burden.toFixed(1));
     setDirty(false);
-  }, [gasPriceCents, mpg]);
+  }, [gasPriceCents, mpg, wageCents, burden]);
 
   const { data: fuelData, isLoading: fuelLoading } = useQuery<MonthlyFuelData>({
     queryKey: ["/api/overhead-costs/monthly-fuel"],
@@ -317,6 +325,13 @@ function FuelVehicleCard({ companyData, onSave }: {
     ? (gasParsed / mpgParsed)
     : costPerMileCents / 100;
 
+  const wageParsed = parseFloat(hourlyWage);
+  const burdenParsed = parseFloat(burdenMult);
+  const validWage = !isNaN(wageParsed) && wageParsed > 0;
+  const validBurden = !isNaN(burdenParsed) && burdenParsed >= 1;
+  const burdenedRate = validWage && validBurden ? wageParsed * burdenParsed : (wageCents / 100) * burden;
+  const costPerMinute = burdenedRate / 60;
+
   const handleSave = () => {
     const updates: Record<string, unknown> = {};
     if (validGas) updates.averageGasPriceCentsPerGallon = Math.round(gasParsed * 100);
@@ -328,6 +343,8 @@ function FuelVehicleCard({ companyData, onSave }: {
     } else {
       updates.vehicleMPG = null;
     }
+    if (validWage) updates.techHourlyWageCents = Math.round(wageParsed * 100);
+    if (validBurden) updates.burdenMultiplier = burdenParsed;
     onSave(updates);
     setDirty(false);
   };
@@ -401,6 +418,72 @@ function FuelVehicleCard({ companyData, onSave }: {
                 Save
               </Button>
             )}
+          </div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-primary/10">
+          <div className="flex items-center gap-2 mb-3">
+            <HardHat className="h-4 w-4 text-primary" />
+            <span className="font-medium text-sm">Scooper Hourly Wage</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Base Hourly Rate</label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  step="0.50"
+                  min="0"
+                  className="h-9 pl-6 text-sm tabular-nums"
+                  value={hourlyWage}
+                  onChange={(e) => { setHourlyWage(e.target.value); setDirty(true); }}
+                  data-testid="input-hourly-wage"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Burden Multiplier</label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">&times;</span>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="1"
+                  max="5"
+                  className="h-9 pl-7 text-sm tabular-nums"
+                  value={burdenMult}
+                  onChange={(e) => { setBurdenMult(e.target.value); setDirty(true); }}
+                  data-testid="input-burden-multiplier"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Taxes, insurance, etc.
+              </p>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Burdened Rate</label>
+              <div className="flex items-center gap-1.5">
+                <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-lg font-bold tabular-nums" data-testid="text-burdened-rate">
+                  ${burdenedRate.toFixed(2)}
+                </span>
+                <span className="text-xs text-muted-foreground">/hr</span>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Cost Per Minute</label>
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-lg font-bold tabular-nums" data-testid="text-cost-per-minute">
+                  ${costPerMinute.toFixed(2)}
+                </span>
+                <span className="text-xs text-muted-foreground">/min</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Used in route optimizer savings
+              </p>
+            </div>
           </div>
         </div>
 
