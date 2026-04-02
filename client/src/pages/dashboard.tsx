@@ -662,6 +662,24 @@ function SystemMessagesCard() {
     queryKey: ["/api/system-messages"],
   });
 
+  const markedIds = useRef<Set<string>>(new Set());
+
+  const markReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PATCH", `/api/system-messages/${id}/read`);
+    },
+  });
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      const unread = messages.filter(m => !m.readAt && !markedIds.current.has(m.id));
+      unread.forEach(m => {
+        markedIds.current.add(m.id);
+        markReadMutation.mutate(m.id);
+      });
+    }
+  }, [messages]);
+
   const dismissMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("PATCH", `/api/system-messages/${id}/dismiss`);

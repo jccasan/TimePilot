@@ -769,10 +769,12 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
     },
   });
 
-  const handleClose = () => {
-    setResults(null);
-    setShowPreview(false);
-    onOpenChange(false);
+  const handleClose = (isOpen: boolean) => {
+    if (!isOpen) {
+      setResults(null);
+      setShowPreview(false);
+    }
+    onOpenChange(isOpen);
   };
 
   return (
