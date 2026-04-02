@@ -1,6 +1,13 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
+
+function fmt(n: number, decimals = 2): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+function fmtInt(n: number): string {
+  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ResponsiveGridLayout } from "react-grid-layout";
@@ -758,7 +765,7 @@ function PipelineBar({ data }: { data: PipelineData }) {
     {
       label: "Active Plans",
       count: data.activePlans.count,
-      value: `$${data.activePlans.monthlyValue.toFixed(0)}/mo`,
+      value: `$${fmtInt(data.activePlans.monthlyValue)}/mo`,
       href: "/contacts",
       color: "bg-green-600 dark:bg-green-700",
       textColor: "text-green-700 dark:text-green-400",
@@ -776,7 +783,7 @@ function PipelineBar({ data }: { data: PipelineData }) {
     {
       label: "Requires Invoicing",
       count: data.requiresInvoicing.count,
-      value: data.requiresInvoicing.count > 0 ? `$${data.requiresInvoicing.totalDollars.toFixed(2)}` : "All clear",
+      value: data.requiresInvoicing.count > 0 ? `$${fmt(data.requiresInvoicing.totalDollars)}` : "All clear",
       href: "/invoices?tab=uninvoiced",
       color: data.requiresInvoicing.count > 0 ? "bg-orange-500 dark:bg-orange-600" : "bg-green-600 dark:bg-green-700",
       textColor: data.requiresInvoicing.count > 0 ? "text-orange-700 dark:text-orange-400" : "text-green-700 dark:text-green-400",
@@ -787,7 +794,7 @@ function PipelineBar({ data }: { data: PipelineData }) {
     {
       label: "Awaiting Payment",
       count: data.awaitingPayment.count,
-      value: data.awaitingPayment.count > 0 ? `$${data.awaitingPayment.totalDollars.toFixed(2)}` : "None",
+      value: data.awaitingPayment.count > 0 ? `$${fmt(data.awaitingPayment.totalDollars)}` : "None",
       href: "/invoices?tab=awaiting",
       color: data.awaitingPayment.count > 0 ? "bg-amber-500 dark:bg-amber-600" : "bg-green-600 dark:bg-green-700",
       textColor: data.awaitingPayment.count > 0 ? "text-amber-700 dark:text-amber-400" : "text-green-700 dark:text-green-400",
@@ -990,7 +997,7 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-sm font-medium tabular-nums" data-testid={`text-visit-amount-${visit.id}`}>
-                      ${visit.amount.toFixed(2)}
+                      ${fmt(visit.amount)}
                     </span>
                     {(visit.status === "scheduled" || visit.status === "in_progress") && (
                       <div className="flex items-center gap-1">
@@ -1042,11 +1049,11 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
         <CardContent className="space-y-2">
           <div>
             <div className="text-2xl font-bold" data-testid="text-total-receivables">
-              ${data.receivables.total.toFixed(2)}
+              ${fmt(data.receivables.total)}
             </div>
             {data.receivables.overdueCount > 0 && (
               <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5" data-testid="text-overdue-receivables">
-                ${data.receivables.overdueTotal.toFixed(2)} overdue ({data.receivables.overdueCount} invoice{data.receivables.overdueCount !== 1 ? "s" : ""})
+                ${fmt(data.receivables.overdueTotal)} overdue ({data.receivables.overdueCount} invoice{data.receivables.overdueCount !== 1 ? "s" : ""})
               </p>
             )}
           </div>
@@ -1060,7 +1067,7 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
                     data-testid={`receivable-client-${client.contactId}`}
                   >
                     <span className="truncate">{client.contactName}</span>
-                    <span className="font-medium tabular-nums shrink-0">${client.total.toFixed(2)}</span>
+                    <span className="font-medium tabular-nums shrink-0">${fmt(client.total)}</span>
                   </div>
                 </Link>
               ))}
@@ -1078,7 +1085,7 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold" data-testid="text-month-revenue-sidebar">
-            ${data.monthRevenue.toFixed(2)}
+            ${fmt(data.monthRevenue)}
           </div>
         </CardContent>
       </Card>
@@ -1095,7 +1102,7 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
             {data.upcomingThisWeek.count}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            ${data.upcomingThisWeek.totalDollars.toFixed(2)} in scheduled work
+            ${fmt(data.upcomingThisWeek.totalDollars)} in scheduled work
           </p>
         </CardContent>
       </Card>
@@ -1126,12 +1133,12 @@ function RevenueChartWidget() {
           return (
             <div key={idx} className="flex-1 flex flex-col items-center gap-1 min-w-0">
               <span className="text-[10px] tabular-nums text-muted-foreground truncate w-full text-center">
-                ${item.revenue >= 1000 ? `${(item.revenue / 1000).toFixed(1)}k` : item.revenue.toFixed(0)}
+                ${item.revenue >= 1000 ? `${(item.revenue / 1000).toFixed(1)}k` : fmtInt(item.revenue)}
               </span>
               <div
                 className="w-full rounded-t bg-primary/80 hover:bg-primary transition-colors min-h-[4px]"
                 style={{ height: `${height}%` }}
-                title={`${item.month}: $${item.revenue.toFixed(2)}`}
+                title={`${item.month}: $${fmt(item.revenue)}`}
                 data-testid={`bar-revenue-${idx}`}
               />
               <span className="text-[10px] text-muted-foreground">{item.month}</span>
@@ -1922,7 +1929,7 @@ export default function Dashboard() {
                 <Skeleton className="h-8 w-24" />
               ) : (
                 <div className="text-2xl font-bold" data-testid="text-mrr">
-                  ${stats?.mrr?.toFixed(2) ?? "0.00"}
+                  ${fmt(stats?.mrr ?? 0)}
                 </div>
               )}
             </CardContent>
@@ -1940,7 +1947,7 @@ export default function Dashboard() {
                 <Skeleton className="h-8 w-24" />
               ) : (
                 <div className="text-2xl font-bold" data-testid="text-month-revenue">
-                  ${(stats?.monthRevenue ?? 0).toFixed(2)}
+                  ${fmt(stats?.monthRevenue ?? 0)}
                 </div>
               )}
             </CardContent>
@@ -1970,7 +1977,7 @@ export default function Dashboard() {
                       {pipeline.requiresInvoicing.count}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      ${pipeline.requiresInvoicing.totalDollars.toFixed(2)} uninvoiced
+                      ${fmt(pipeline.requiresInvoicing.totalDollars)} uninvoiced
                     </p>
                   </div>
                 )}
@@ -2240,7 +2247,7 @@ export default function Dashboard() {
                     <Badge variant="secondary" className="text-[10px]">Active</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    ${tierInfo?.price?.toFixed(2) ?? "0.00"}/mo -- Up to {tierInfo?.maxUsers ?? 1} user{(tierInfo?.maxUsers ?? 1) > 1 ? "s" : ""}
+                    ${fmt(tierInfo?.price ?? 0)}/mo -- Up to {tierInfo?.maxUsers ?? 1} user{(tierInfo?.maxUsers ?? 1) > 1 ? "s" : ""}
                   </p>
                 </div>
               )}

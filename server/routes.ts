@@ -1976,7 +1976,7 @@ Return ONLY valid JSON, no markdown.`,
       const monthStart = getCompanyMonthStart(tz);
       const monthEnd = getCompanyMonthEnd(tz);
 
-      const [todaysVisitsList, overdueVisits, failedPayments, activeUsers, overdueInvoices, monthRevenue, smsCountThisMonth, emailCountThisMonth] = await Promise.all([
+      const [todaysVisitsList, overdueVisits, failedPayments, activeUsers, overdueInvoices, invoiceMonthRevenue, smsCountThisMonth, emailCountThisMonth, monthVisitsForRevenue] = await Promise.all([
         storage.getTodaysVisits(companyId, today),
         storage.getOverdueVisits(companyId, today),
         storage.getFailedPaymentsCount(companyId),
@@ -1985,6 +1985,7 @@ Return ONLY valid JSON, no markdown.`,
         storage.getRevenueForPeriod(companyId, monthStart, monthEnd, tz),
         storage.getSmsCountForPeriod(companyId, monthStart, monthEnd),
         storage.getEmailCountForPeriod(companyId, monthStart, monthEnd),
+        storage.getVisitsForDateRange(companyId, monthStart, monthEnd),
       ]);
 
       const todaysWorkload = [...overdueVisits, ...todaysVisitsList];
@@ -2021,6 +2022,16 @@ Return ONLY valid JSON, no markdown.`,
         mrr += perVisit * visitsPerMonth;
       }
       mrr = Math.round(mrr * 100) / 100;
+
+      let monthRevenue = invoiceMonthRevenue;
+      if (monthRevenue === 0) {
+        const planPriceMap = new Map(allActivePlans.map(p => [p.id, parseFloat(p.pricePerVisit) || 0]));
+        let earned = 0;
+        for (const v of monthVisitsForRevenue) {
+          if (v.status === "completed") earned += planPriceMap.get(v.servicePlanId) || 0;
+        }
+        monthRevenue = Math.round(earned * 100) / 100;
+      }
 
       res.json({
         mrr,
@@ -2300,15 +2311,29 @@ Return ONLY valid JSON, no markdown.`,
         activePlans,
         uninvoicedSummary,
         todaysVisitsList,
-        monthRevenue,
+        invoiceRevenue,
         overdueVisits,
+        monthCompletedVisits,
       ] = await Promise.all([
         storage.getServicePlans(companyId, { isActive: true }),
         storage.getUninvoicedSummary(companyId),
         storage.getTodaysVisits(companyId, today),
         storage.getRevenueForPeriod(companyId, monthStart, monthEnd, tz),
         storage.getOverdueVisits(companyId, today),
+        storage.getVisitsForDateRange(companyId, monthStart, monthEnd),
       ]);
+
+      let earnedRevenue = 0;
+      if (invoiceRevenue === 0) {
+        const allPlansForRevenue = activePlans.length > 0 ? activePlans : await storage.getServicePlans(companyId, {});
+        const planPriceMap = new Map(allPlansForRevenue.map(p => [p.id, parseFloat(p.pricePerVisit) || 0]));
+        for (const v of monthCompletedVisits) {
+          if (v.status === "completed") {
+            earnedRevenue += planPriceMap.get(v.servicePlanId) || 0;
+          }
+        }
+      }
+      const monthRevenue = invoiceRevenue > 0 ? invoiceRevenue : Math.round(earnedRevenue * 100) / 100;
 
       const dashboardVisits = [...overdueVisits, ...todaysVisitsList];
 
@@ -2541,7 +2566,18 @@ Return ONLY valid JSON, no markdown.`,
             projected: true,
           });
         } else {
-          const revenue = await storage.getRevenueForPeriod(companyId, start, end, tz);
+          let revenue = await storage.getRevenueForPeriod(companyId, start, end, tz);
+          if (revenue === 0) {
+            const periodVisits = await storage.getVisitsForDateRange(companyId, start, end);
+            const allPlansForChart = await storage.getServicePlans(companyId, {});
+            const chartPlanMap = new Map(allPlansForChart.map(p => [p.id, parseFloat(p.pricePerVisit) || 0]));
+            for (const v of periodVisits) {
+              if (v.status === "completed") {
+                revenue += chartPlanMap.get(v.servicePlanId) || 0;
+              }
+            }
+            revenue = Math.round(revenue * 100) / 100;
+          }
           revenueValues.push(revenue);
           monthlyRevenue.push({
             month: d.toLocaleString("default", { month: "short", year: "numeric" }) + (isCurrent ? " (current)" : ""),
@@ -2666,13 +2702,22 @@ Return ONLY valid JSON, no markdown.`,
       const stopOnlyContactIds = getStopOnlyOnlyContactIds(allActivePlansForAnalytics);
       const allContacts = allContactsRaw.filter(c => !stopOnlyContactIds.has(c.id));
 
-      // --- Monthly Revenue (last 12 months) ---
+      const allPlansForAnalyticsRevenue = await storage.getServicePlans(companyId, {});
+      const analyticsPlanPriceMap = new Map(allPlansForAnalyticsRevenue.map(p => [p.id, parseFloat(p.pricePerVisit) || 0]));
+
       const monthlyRevenue: { month: string; revenue: number }[] = [];
       for (let i = 11; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const start = d.toISOString().split("T")[0];
         const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0];
-        const revenue = await storage.getRevenueForPeriod(companyId, start, end, tz);
+        let revenue = await storage.getRevenueForPeriod(companyId, start, end, tz);
+        if (revenue === 0) {
+          const periodVisits = await storage.getVisitsForDateRange(companyId, start, end);
+          for (const v of periodVisits) {
+            if (v.status === "completed") revenue += analyticsPlanPriceMap.get(v.servicePlanId) || 0;
+          }
+          revenue = Math.round(revenue * 100) / 100;
+        }
         monthlyRevenue.push({
           month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
           revenue,
