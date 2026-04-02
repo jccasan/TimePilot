@@ -60,6 +60,16 @@ type OptDayProposal = {
   totalMinutes: number;
 };
 
+type LaborCostData = {
+  centsPerMinute: number;
+  hourlyRateCents: number;
+  burdenMultiplier: number;
+  burdenedHourlyRateCents: number;
+  currentTotalCents: number;
+  proposedTotalCents: number;
+  savedCents: number;
+};
+
 type OptResult = {
   current: { days: OptDayProposal[]; totalMiles: number; totalMinutes: number; totalStops: number };
   proposed: { days: OptDayProposal[]; totalMiles: number; totalMinutes: number; totalStops: number };
@@ -69,6 +79,7 @@ type OptResult = {
   movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[];
   creditsRequired: number;
   fuelCost: FuelCostData;
+  laborCost?: LaborCostData;
 };
 
 const ROUTE_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
@@ -407,31 +418,43 @@ export default function RouteProfitMaps() {
             </span>
           </div>
           <Separator orientation="vertical" className="h-5" />
-          <div className="flex items-center gap-4 text-xs">
-            <div className="flex items-center gap-1.5" data-testid="text-miles-saved">
-              <Route className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="font-medium">{optResult.milesSaved} mi saved</span>
-            </div>
-            <div className="flex items-center gap-1.5" data-testid="text-fuel-saved">
-              <Fuel className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className={`font-medium ${optResult.fuelCost.savedCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                {optResult.fuelCost.savedCents >= 0
-                  ? `${formatDollars(optResult.fuelCost.savedCents)} fuel saved`
-                  : `${formatDollars(Math.abs(optResult.fuelCost.savedCents))} fuel increase`}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5" data-testid="text-time-saved">
-              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="font-medium">{optResult.minutesSaved} min saved</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-muted-foreground" data-testid="text-fuel-rate">
-              <span>
-                {optResult.fuelCost.source === "gas_mpg"
-                  ? `$${(optResult.fuelCost.gasPriceCentsPerGallon / 100).toFixed(2)}/gal, ${optResult.fuelCost.vehicleMPG} MPG`
-                  : `${formatDollars(optResult.fuelCost.centsPerMile)}/mi`}
-              </span>
-            </div>
-          </div>
+          {(() => {
+            const totalSavedCents = optResult.fuelCost.savedCents + (optResult.laborCost?.savedCents ?? 0);
+            return (
+              <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-1.5" data-testid="text-total-saved">
+                  <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className={`font-semibold ${totalSavedCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                    {totalSavedCents >= 0
+                      ? `${formatDollars(totalSavedCents)}/wk saved`
+                      : `${formatDollars(Math.abs(totalSavedCents))}/wk increase`}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5" data-testid="text-miles-saved">
+                  <Route className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-medium">{optResult.milesSaved} mi</span>
+                </div>
+                <div className="flex items-center gap-1.5" data-testid="text-fuel-saved">
+                  <Fuel className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-medium">{formatDollars(Math.abs(optResult.fuelCost.savedCents))} fuel</span>
+                </div>
+                {optResult.laborCost && (
+                  <div className="flex items-center gap-1.5" data-testid="text-labor-saved">
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-medium">{optResult.minutesSaved} min ({formatDollars(Math.abs(optResult.laborCost.savedCents))} labor)</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 text-muted-foreground" data-testid="text-fuel-rate">
+                  <span>
+                    {optResult.fuelCost.source === "gas_mpg"
+                      ? `$${(optResult.fuelCost.gasPriceCentsPerGallon / 100).toFixed(2)}/gal, ${optResult.fuelCost.vehicleMPG} MPG`
+                      : `${formatDollars(optResult.fuelCost.centsPerMile)}/mi`}
+                    {optResult.laborCost ? ` | $${(optResult.laborCost.burdenedHourlyRateCents / 100).toFixed(2)}/hr` : ""}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
           <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
             <ArrowLeftRight className="h-3.5 w-3.5" />
             <span>
@@ -692,14 +715,36 @@ function ComparisonSidebar({ optResult }: { optResult: OptResult }) {
           </div>
         </div>
 
-        <div className="mt-2 bg-green-50 dark:bg-green-900/20 rounded p-2 text-center" data-testid="savings-summary-box">
-          <p className="text-[10px] text-muted-foreground mb-0.5">Weekly Savings</p>
-          <p className={`text-lg font-bold ${fuel.savedCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-            {fuel.savedCents >= 0 ? formatDollars(fuel.savedCents) : `-${formatDollars(Math.abs(fuel.savedCents))}`}
-          </p>
-          <p className="text-[10px] text-muted-foreground">
-            {optResult.milesSaved} mi, {optResult.minutesSaved} min saved
-          </p>
+        {optResult.laborCost && (
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="bg-muted/50 rounded p-2">
+              <p className="text-[10px] text-muted-foreground mb-0.5">Current Labor</p>
+              <p className="text-sm font-semibold" data-testid="text-compare-current-labor">{formatDollars(optResult.laborCost.currentTotalCents)}</p>
+            </div>
+            <div className="bg-primary/10 rounded p-2">
+              <p className="text-[10px] text-muted-foreground mb-0.5">Optimized Labor</p>
+              <p className="text-sm font-semibold text-primary" data-testid="text-compare-proposed-labor">{formatDollars(optResult.laborCost.proposedTotalCents)}</p>
+            </div>
+          </div>
+        )}
+
+        {(() => {
+          const totalSaved = fuel.savedCents + (optResult.laborCost?.savedCents ?? 0);
+          return (
+            <div className="mt-2 bg-green-50 dark:bg-green-900/20 rounded p-2 text-center" data-testid="savings-summary-box">
+              <p className="text-[10px] text-muted-foreground mb-0.5">Weekly Savings (Total)</p>
+              <p className={`text-lg font-bold ${totalSaved >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                {totalSaved >= 0 ? formatDollars(totalSaved) : `-${formatDollars(Math.abs(totalSaved))}`}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {formatDollars(Math.abs(fuel.savedCents))} fuel + {formatDollars(Math.abs(optResult.laborCost?.savedCents ?? 0))} labor
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {optResult.milesSaved} mi, {optResult.minutesSaved} min saved
+              </p>
+            </div>
+          );
+        })()}
         </div>
       </div>
 

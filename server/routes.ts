@@ -4014,8 +4014,22 @@ Return ONLY valid JSON, no markdown.`,
       const proposedFuelCostCents = Math.round(result.proposed.totalMiles * fuelCostCentsPerMile);
       const fuelCostSavedCents = currentFuelCostCents - proposedFuelCostCents;
 
+      const laborCentsPerMinute = (pricingConfig.techHourlyWageCents * pricingConfig.burdenMultiplier) / 60;
+      const currentLaborCents = Math.round(result.current.totalMinutes * laborCentsPerMinute);
+      const proposedLaborCents = Math.round(result.proposed.totalMinutes * laborCentsPerMinute);
+      const laborSavedCents = currentLaborCents - proposedLaborCents;
+
       res.json({
         ...result,
+        laborCost: {
+          centsPerMinute: Math.round(laborCentsPerMinute * 10) / 10,
+          hourlyRateCents: pricingConfig.techHourlyWageCents,
+          burdenMultiplier: pricingConfig.burdenMultiplier,
+          burdenedHourlyRateCents: Math.round(pricingConfig.techHourlyWageCents * pricingConfig.burdenMultiplier),
+          currentTotalCents: currentLaborCents,
+          proposedTotalCents: proposedLaborCents,
+          savedCents: laborSavedCents,
+        },
         fuelCost: {
           centsPerMile: Math.round(fuelCostCentsPerMile * 10) / 10,
           source: fuelCostSource,
