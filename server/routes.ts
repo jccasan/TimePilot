@@ -15271,6 +15271,11 @@ Return ONLY valid JSON, no markdown.`,
     startWebhookRetryJob();
   });
 
+  import("./jobs/demo-auto-complete").then(({ runDemoAutoComplete }) => {
+    setTimeout(() => runDemoAutoComplete().catch(console.error), 45000);
+    setInterval(() => runDemoAutoComplete().catch(console.error), 60 * 60 * 1000);
+  });
+
   import("./jobs/trial-expiration").then(({ runTrialExpirationCheck }) => {
     setTimeout(() => runTrialExpirationCheck().catch(console.error), 90000);
     setInterval(() => runTrialExpirationCheck().catch(console.error), 60 * 60 * 1000);
