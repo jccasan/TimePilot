@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Eye, Layers, ChevronRight, ChevronDown, DollarSign, TrendingUp, AlertTriangle, Map as MapIcon, Sparkles, X, ArrowRight, Fuel, Clock, Route, Loader2, ArrowLeftRight, CheckCircle } from "lucide-react";
+import { MapPin, Eye, Layers, ChevronRight, ChevronDown, DollarSign, TrendingUp, AlertTriangle, Map as MapIcon, Sparkles, X, ArrowRight, Fuel, Clock, Route, Loader2, ArrowLeftRight, CheckCircle, Download } from "lucide-react";
 import ProfitabilityMap, { type MapRoute, type MapStop } from "@/components/profitability-map";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -710,6 +710,58 @@ export default function RouteProfitMaps() {
   );
 }
 
+function MovedStopsSection({ movedStops }: { movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const PREVIEW_COUNT = 10;
+  const displayedStops = showAll ? movedStops : movedStops.slice(0, PREVIEW_COUNT);
+  const hasMore = movedStops.length > PREVIEW_COUNT;
+
+  const exportCSV = () => {
+    const header = "Customer Name,Previous Day,New Day\n";
+    const rows = movedStops.map(m =>
+      `"${m.contactName.replace(/"/g, '""')}",${m.fromDay},${m.toDay}`
+    ).join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `moved-stops-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <>
+      <div className="p-3 border-b flex items-center justify-between">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Moved Stops ({movedStops.length})
+        </p>
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={exportCSV} data-testid="btn-export-moved-stops">
+          <Download className="h-3 w-3" />
+          Export
+        </Button>
+      </div>
+      {displayedStops.map((move, idx) => (
+        <div key={idx} className="flex items-center gap-2 px-3 py-2 text-xs" data-testid={`compare-move-${idx}`}>
+          <span className="truncate flex-1 font-medium">{move.contactName}</span>
+          <Badge variant="secondary" className="text-[10px] capitalize shrink-0">{move.fromDay}</Badge>
+          <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+          <Badge variant="default" className="text-[10px] capitalize shrink-0">{move.toDay}</Badge>
+        </div>
+      ))}
+      {hasMore && (
+        <button
+          onClick={() => setShowAll(!showAll)}
+          className="w-full px-3 py-2 text-xs text-primary hover:bg-accent transition-colors text-center font-medium"
+          data-testid="btn-toggle-moved-stops"
+        >
+          {showAll ? "Show less" : `Show all ${movedStops.length} moved stops`}
+        </button>
+      )}
+    </>
+  );
+}
+
 function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: OptResult; onCommit: () => void; isCommitting: boolean }) {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
@@ -1022,26 +1074,7 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
           })}
 
         {optResult.movedStops.length > 0 && (
-          <>
-            <div className="p-3 border-b">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Moved Stops ({optResult.movedStops.length})
-              </p>
-            </div>
-            {optResult.movedStops.slice(0, 20).map((move, idx) => (
-              <div key={idx} className="flex items-center gap-2 px-3 py-2 text-xs" data-testid={`compare-move-${idx}`}>
-                <span className="truncate flex-1 font-medium">{move.contactName}</span>
-                <Badge variant="secondary" className="text-[10px] capitalize shrink-0">{move.fromDay}</Badge>
-                <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                <Badge variant="default" className="text-[10px] capitalize shrink-0">{move.toDay}</Badge>
-              </div>
-            ))}
-            {optResult.movedStops.length > 20 && (
-              <div className="px-3 py-2 text-xs text-muted-foreground text-center">
-                +{optResult.movedStops.length - 20} more
-              </div>
-            )}
-          </>
+          <MovedStopsSection movedStops={optResult.movedStops} />
         )}
       </div>
     </div>
