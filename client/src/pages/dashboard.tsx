@@ -3,7 +3,7 @@ import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
+import { ResponsiveGridLayout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import { useAuth } from "@/hooks/use-auth";
@@ -224,7 +224,7 @@ const WIDGET_DEFS: {
   { id: "team_size", label: "Team Size", icon: UserCheck, description: "Active team members", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
   { id: "texts_sent", label: "SMS Sent", icon: MessageSquare, description: "Text messages sent this month", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
   { id: "emails_sent", label: "Emails Sent", icon: Mail, description: "Emails sent this month", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "quick_actions", label: "Quick Actions", icon: LayoutGrid, description: "Shortcut buttons to common tasks", defaultW: 6, defaultH: 3, minW: 4, minH: 2, category: "tools" },
+  { id: "quick_actions", label: "Quick Actions", icon: LayoutGrid, description: "Shortcut buttons to common tasks", defaultW: 4, defaultH: 3, minW: 3, minH: 2, category: "tools" },
   { id: "recent_activity", label: "Recent Activity", icon: Activity, description: "Latest notifications and events", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
   { id: "upcoming_visits", label: "Upcoming Visits", icon: CalendarCheck, description: "Visits scheduled for this week", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
   { id: "revenue_chart", label: "Revenue Chart", icon: BarChart3, description: "6-month revenue trend", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
@@ -236,9 +236,10 @@ const WIDGET_DEFS: {
 ];
 
 const DEFAULT_WIDGET_IDS = [
-  "mrr", "month_revenue", "requires_invoicing", "overdue_invoices",
-  "todays_visits", "active_clients", "service_plans", "team_size",
-  "texts_sent", "emails_sent", "quick_actions", "current_plan",
+  "mrr", "month_revenue", "requires_invoicing",
+  "overdue_invoices", "todays_visits", "active_clients",
+  "service_plans", "team_size", "texts_sent",
+  "quick_actions", "emails_sent", "current_plan",
 ];
 
 function generateDefaultLayout(widgetIds: string[]): LayoutItem[] {
@@ -1590,7 +1591,16 @@ function GridWidgetsSection({
   currentLayout: any[];
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
-  const { width } = useContainerWidth(gridRef);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const measure = () => setWidth(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   return (
     <div data-testid="widgets-grid" ref={gridRef}>
