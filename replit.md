@@ -9,6 +9,13 @@ Scoopilot is a production-ready vertical SaaS application designed for pet waste
 - No emojis in UI
 - Clean, professional interface
 
+## Change Impact Review Process
+Before making any code changes, the agent must:
+1. Identify all existing functionality outside the direct scope of the request that could be affected (shared components, state variables used elsewhere, API endpoints other features depend on, styling that touches other pages, etc.).
+2. Present those potential side effects to the user clearly before writing any code.
+3. Wait for the user's approval before proceeding with changes that touch anything outside the explicitly requested scope.
+4. Never make unrequested changes — even if something looks like a bug or improvement opportunity, flag it and ask first.
+
 ## System Architecture
 
 ### Core Design Principles
