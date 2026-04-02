@@ -568,8 +568,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   );
   const [generatingImage, setGeneratingImage] = useState(false);
   const [addressCoords, setAddressCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [measurePolygon, setMeasurePolygon] = useState<number[][] | null>(null);
-  const [measureSqft, setMeasureSqft] = useState<number | null>(null);
+  const [measurements, setMeasurements] = useState<{ polygon: number[][]; sqft: number }[]>([]);
   const [showMeasureTool, setShowMeasureTool] = useState(false);
 
   useEffect(() => {
@@ -632,8 +631,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       setManualOverride(false);
       setLivePricing(null);
       setQuoteImages([]);
-      setMeasurePolygon(null);
-      setMeasureSqft(null);
+      setMeasurements([]);
       setShowMeasureTool(false);
       setAddressCoords(null);
       setCustomEssentialFeatures([]);
@@ -723,8 +721,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     } else {
       setAddressCoords(null);
     }
-    setMeasurePolygon(null);
-    setMeasureSqft(null);
+    setMeasurements([]);
     setShowMeasureTool(false);
   }, []);
 
@@ -751,10 +748,9 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   }, [generatingImage, toast]);
 
   const handleMeasurementSave = useCallback((polygon: number[][], areaSqft: number) => {
-    setMeasurePolygon(polygon);
-    setMeasureSqft(areaSqft);
+    setMeasurements(prev => [...prev, { polygon, sqft: areaSqft }]);
     if (quoteType === "commercial") {
-      setSiteSqft(Math.round(areaSqft));
+      setSiteSqft(prev => (prev || 0) + Math.round(areaSqft));
     }
     setShowMeasureTool(false);
     if (addressCoords) {
@@ -1295,7 +1291,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <Label className="text-sm font-medium">Yard Measurement</Label>
+              <Label className="text-sm font-medium">Yard Measurements</Label>
               {addressCoords && !showMeasureTool && (
                 <Button
                   data-testid="button-open-measure-tool"
@@ -1305,10 +1301,34 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
                   onClick={() => setShowMeasureTool(true)}
                 >
                   <Ruler className="h-3 w-3 mr-1" />
-                  {measurePolygon ? "Re-measure" : "Measure Yard"}
+                  {measurements.length > 0 ? "Add Measurement" : "Measure Yard"}
                 </Button>
               )}
             </div>
+            {measurements.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {measurements.map((m, idx) => (
+                  <div key={idx} className="flex items-center gap-1.5 bg-muted/50 rounded-md px-2.5 py-1 text-xs" data-testid={`measurement-${idx}`}>
+                    <Ruler className="h-3 w-3 text-muted-foreground" />
+                    <span className="font-medium">{m.sqft.toLocaleString()} sq ft</span>
+                    <button
+                      type="button"
+                      className="ml-0.5 text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        setMeasurements(prev => prev.filter((_, i) => i !== idx));
+                        setQuoteImages(prev => prev.filter((_, i) => i !== idx));
+                      }}
+                      data-testid={`button-remove-measurement-${idx}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+                <span className="text-xs text-muted-foreground self-center">
+                  Total: {measurements.reduce((sum, m) => sum + m.sqft, 0).toLocaleString()} sq ft
+                </span>
+              </div>
+            )}
             {!propertyAddress && (
               <p className="text-xs text-muted-foreground">Enter a property address above to enable yard measurement.</p>
             )}
@@ -1320,8 +1340,8 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
                 <YardMeasureTool
                   lat={addressCoords.lat}
                   lng={addressCoords.lng}
-                  existingPolygon={measurePolygon}
-                  existingArea={measureSqft}
+                  existingPolygon={null}
+                  existingArea={null}
                   onSave={handleMeasurementSave}
                   onCancel={() => setShowMeasureTool(false)}
                 />
