@@ -733,7 +733,7 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
   const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
   const previewMessages = useMemo(() => {
-    return movedStops.slice(0, 5).map(stop => ({
+    return movedStops.map(stop => ({
       contactName: stop.contactName,
       fromDay: capitalize(stop.fromDay),
       toDay: capitalize(stop.toDay),
@@ -860,10 +860,10 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
                 data-testid="button-toggle-preview"
               >
                 {showPreview ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                Preview Messages ({Math.min(5, movedStops.length)} of {movedStops.length})
+                Preview All Messages ({movedStops.length} recipients)
               </button>
               {showPreview && (
-                <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
                   {previewMessages.map((pm, i) => (
                     <div key={i} className="bg-muted/50 rounded p-2.5 text-xs space-y-1">
                       <div className="flex items-center gap-1.5">
@@ -875,9 +875,6 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
                       <p className="text-muted-foreground italic">{pm.message}</p>
                     </div>
                   ))}
-                  {movedStops.length > 5 && (
-                    <p className="text-[10px] text-muted-foreground text-center">+{movedStops.length - 5} more</p>
-                  )}
                 </div>
               )}
             </div>
