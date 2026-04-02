@@ -2244,8 +2244,16 @@ Return ONLY valid JSON, no markdown.`,
       const company = await storage.getCompany(companyId);
       const tz = company?.timezone || "America/New_York";
       const routes = await storage.getRoutes(companyId);
-      const todayDow = new Date().toLocaleDateString("en-US", { weekday: "long", timeZone: tz }).toLowerCase();
-      const todayRoutes = routes.filter(r => (r.dayOfWeek || "").toLowerCase() === todayDow);
+      const now = new Date();
+      const todayDow = now.toLocaleDateString("en-US", { weekday: "long", timeZone: tz }).toLowerCase();
+      const todayDateStr = now.toLocaleDateString("en-CA", { timeZone: tz });
+      const todayRoutes = routes.filter(r => {
+        if (r.date) {
+          const routeDateStr = typeof r.date === 'string' ? r.date : new Date(r.date).toISOString().split('T')[0];
+          return routeDateStr === todayDateStr;
+        }
+        return (r.dayOfWeek || "").toLowerCase() === todayDow;
+      });
       const allProperties = await storage.getProperties(companyId);
       const propMap = new Map(allProperties.map(p => [p.id, p]));
       const routeData = await Promise.all(todayRoutes.map(async (route) => {
