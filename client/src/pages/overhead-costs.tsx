@@ -283,6 +283,7 @@ function CostItemRow({
 
 type MonthlyFuelData = {
   totalMiles: number;
+  weeklyMiles: number;
   fuelCostCents: number;
   routeCount: number;
 };
@@ -350,6 +351,7 @@ function FuelVehicleCard({ companyData, onSave }: {
   };
 
   const totalMiles = fuelData?.totalMiles ?? 0;
+  const weeklyMiles = fuelData?.weeklyMiles ?? 0;
   const fuelCostCents = fuelData?.fuelCostCents ?? 0;
   const routeCount = fuelData?.routeCount ?? 0;
 
@@ -498,7 +500,7 @@ function FuelVehicleCard({ companyData, onSave }: {
             ) : (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground tabular-nums" data-testid="text-fuel-total-miles">
-                  {totalMiles.toFixed(1)} mi
+                  {weeklyMiles.toFixed(1)} mi/wk × 4.33 = {totalMiles.toFixed(1)} mi/mo
                   {routeCount > 0 && ` · ${routeCount} route${routeCount !== 1 ? "s" : ""}`}
                 </span>
                 <span className="text-sm font-semibold tabular-nums" data-testid="text-fuel-monthly-cost">
@@ -509,7 +511,7 @@ function FuelVehicleCard({ companyData, onSave }: {
           </div>
           {!fuelLoading && routeCount === 0 && (
             <p className="text-[10px] text-muted-foreground mt-1">
-              No routes found for this month — add routes with dates to auto-calculate fuel costs.
+              No routes found — add routes to auto-calculate fuel costs.
             </p>
           )}
         </div>

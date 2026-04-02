@@ -7615,18 +7615,10 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId } = await getCompanyContext(req);
 
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1;
-      const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
-      const lastDay = new Date(year, month, 0).getDate();
-      const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-
       const allRoutes = await storage.getRoutes(companyId);
-      const monthRoutes = allRoutes.filter(r => r.date && r.date >= monthStart && r.date <= monthEnd);
 
-      if (monthRoutes.length === 0) {
-        return res.json({ totalMiles: 0, fuelCostCents: 0, routeCount: 0 });
+      if (allRoutes.length === 0) {
+        return res.json({ totalMiles: 0, weeklyMiles: 0, fuelCostCents: 0, routeCount: 0 });
       }
 
       const company = await storage.getCompany(companyId);
@@ -7646,9 +7638,10 @@ Return ONLY valid JSON, no markdown.`,
         ? { latitude: Number(company.startLatitude), longitude: Number(company.startLongitude) }
         : undefined;
 
-      let totalMiles = 0;
+      let weeklyMiles = 0;
+      let routeCount = 0;
 
-      for (const route of monthRoutes) {
+      for (const route of allRoutes) {
         const routePlans = allPlans
           .filter(sp => sp.routeId === route.id)
           .sort((a, b) => a.stopOrder - b.stopOrder);
@@ -7665,18 +7658,21 @@ Return ONLY valid JSON, no markdown.`,
 
         if (stops.length < 2) continue;
 
+        routeCount++;
         const metrics = await getRouteMetricsWithLegs(stops, startPoint);
         if (metrics) {
-          totalMiles += metrics.totalDistance;
+          weeklyMiles += metrics.totalDistance;
         } else {
-          totalMiles += calculateTotalDistance(stops, startPoint);
+          weeklyMiles += calculateTotalDistance(stops, startPoint);
         }
       }
 
-      totalMiles = Math.round(totalMiles * 10) / 10;
+      weeklyMiles = Math.round(weeklyMiles * 10) / 10;
+      const WEEKS_PER_MONTH = 4.33;
+      const totalMiles = Math.round(weeklyMiles * WEEKS_PER_MONTH * 10) / 10;
       const fuelCostCents = Math.round(totalMiles * effectiveCostPerMileCents);
 
-      res.json({ totalMiles, fuelCostCents, routeCount: monthRoutes.length });
+      res.json({ totalMiles, weeklyMiles, fuelCostCents, routeCount });
     } catch (err) { handleError(res, err); }
   });
 
