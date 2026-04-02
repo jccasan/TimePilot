@@ -1774,3 +1774,25 @@ export const messageExceptions = pgTable("message_exceptions", {
 export const insertMessageExceptionSchema = createInsertSchema(messageExceptions).omit({ id: true, createdAt: true });
 export type MessageException = typeof messageExceptions.$inferSelect;
 export type InsertMessageException = z.infer<typeof insertMessageExceptionSchema>;
+
+export const systemMessageSeverityEnum = pgEnum("system_message_severity", ["info", "warning", "error"]);
+
+export const systemMessages = pgTable("system_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 100 }).notNull(),
+  severity: systemMessageSeverityEnum("severity").notNull().default("info"),
+  title: varchar("title", { length: 255 }).notNull(),
+  body: text("body"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  readAt: timestamp("read_at"),
+  dismissedAt: timestamp("dismissed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sm_company").on(table.companyId),
+  index("idx_sm_dismissed").on(table.companyId, table.dismissedAt),
+]);
+
+export const insertSystemMessageSchema = createInsertSchema(systemMessages).omit({ id: true, createdAt: true });
+export type SystemMessage = typeof systemMessages.$inferSelect;
+export type InsertSystemMessage = z.infer<typeof insertSystemMessageSchema>;

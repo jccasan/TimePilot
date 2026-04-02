@@ -7,7 +7,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Eye, Layers, ChevronRight, ChevronDown, DollarSign, TrendingUp, AlertTriangle, Map as MapIcon, Sparkles, X, ArrowRight, Fuel, Clock, Route, Loader2, ArrowLeftRight, CheckCircle, Download } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
+import { MapPin, Eye, Layers, ChevronRight, ChevronDown, DollarSign, TrendingUp, AlertTriangle, Map as MapIcon, Sparkles, X, ArrowRight, Fuel, Clock, Route, Loader2, ArrowLeftRight, CheckCircle, Download, Send, Bell, MessageSquare, Mail, XCircle } from "lucide-react";
 import ProfitabilityMap, { type MapRoute, type MapStop } from "@/components/profitability-map";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -710,8 +715,198 @@ export default function RouteProfitMaps() {
   );
 }
 
+const DEFAULT_NOTIFY_TEMPLATE = `Hey [Name]! To keep our routes efficient and our prices low, we've moved your service day from [OldDay] to [NewDay]. See you then!`;
+
+type NotifyResult = { contactName: string; channel: string; success: boolean; error?: string };
+
+function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
+  movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const [template, setTemplate] = useState(DEFAULT_NOTIFY_TEMPLATE);
+  const [channel, setChannel] = useState<"sms" | "email" | "both">("both");
+  const [showPreview, setShowPreview] = useState(false);
+  const [results, setResults] = useState<NotifyResult[] | null>(null);
+
+  const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  const previewMessages = useMemo(() => {
+    return movedStops.slice(0, 5).map(stop => ({
+      contactName: stop.contactName,
+      fromDay: capitalize(stop.fromDay),
+      toDay: capitalize(stop.toDay),
+      message: template
+        .replace(/\[Name\]/gi, stop.contactName.split(" ")[0])
+        .replace(/\[OldDay\]/gi, capitalize(stop.fromDay))
+        .replace(/\[NewDay\]/gi, capitalize(stop.toDay)),
+    }));
+  }, [movedStops, template]);
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/notifications/bulk-schedule-change", {
+        template,
+        channel,
+        movedStops,
+      });
+      return res.json();
+    },
+    onSuccess: (data: { results: NotifyResult[]; summary: { sent: number; failed: number; total: number } }) => {
+      setResults(data.results);
+      queryClient.invalidateQueries({ queryKey: ["/api/system-messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/system-messages/unread-count"] });
+      const { sent, failed } = data.summary;
+      toast({
+        title: "Notifications sent",
+        description: `${sent} sent successfully${failed > 0 ? `, ${failed} failed` : ""}`,
+        variant: failed > 0 ? "destructive" : "default",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to send", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleClose = () => {
+    setResults(null);
+    setShowPreview(false);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Bell className="h-5 w-5 text-primary" />
+            Notify Customers ({movedStops.length})
+          </DialogTitle>
+          <DialogDescription>
+            Send a message to customers whose service day changed.
+          </DialogDescription>
+        </DialogHeader>
+
+        {results ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold text-green-600" data-testid="text-notify-success-count">{results.filter(r => r.success).length}</p>
+                <p className="text-xs text-muted-foreground">Sent</p>
+              </div>
+              <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold text-red-600" data-testid="text-notify-fail-count">{results.filter(r => !r.success).length}</p>
+                <p className="text-xs text-muted-foreground">Failed</p>
+              </div>
+            </div>
+            {results.filter(r => !r.success).length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground">Failures:</p>
+                {results.filter(r => !r.success).map((r, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs p-2 bg-destructive/10 rounded">
+                    <XCircle className="h-3 w-3 text-destructive shrink-0" />
+                    <span className="font-medium">{r.contactName}</span>
+                    <span className="text-muted-foreground">({r.channel})</span>
+                    <span className="text-destructive truncate">{r.error}</span>
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground">Check System Messages on your dashboard for details.</p>
+              </div>
+            )}
+            <DialogFooter>
+              <Button onClick={handleClose} data-testid="button-notify-done">Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">Message Template</Label>
+              <p className="text-xs text-muted-foreground mb-1.5">Use [Name], [OldDay], [NewDay] as placeholders</p>
+              <Textarea
+                value={template}
+                onChange={e => setTemplate(e.target.value)}
+                rows={4}
+                className="text-sm"
+                data-testid="textarea-notify-template"
+              />
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium">Send via</Label>
+              <div className="flex gap-2 mt-1.5">
+                {(["sms", "email", "both"] as const).map(ch => (
+                  <Button
+                    key={ch}
+                    variant={channel === ch ? "default" : "outline"}
+                    size="sm"
+                    className="flex-1 gap-1.5"
+                    onClick={() => setChannel(ch)}
+                    data-testid={`button-channel-${ch}`}
+                  >
+                    {ch === "sms" && <MessageSquare className="h-3.5 w-3.5" />}
+                    {ch === "email" && <Mail className="h-3.5 w-3.5" />}
+                    {ch === "both" && <><MessageSquare className="h-3.5 w-3.5" /><Mail className="h-3.5 w-3.5" /></>}
+                    {ch === "both" ? "Both" : ch.toUpperCase()}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <button
+                onClick={() => setShowPreview(!showPreview)}
+                className="text-xs font-medium text-primary flex items-center gap-1"
+                data-testid="button-toggle-preview"
+              >
+                {showPreview ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                Preview Messages ({Math.min(5, movedStops.length)} of {movedStops.length})
+              </button>
+              {showPreview && (
+                <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                  {previewMessages.map((pm, i) => (
+                    <div key={i} className="bg-muted/50 rounded p-2.5 text-xs space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold">{pm.contactName}</span>
+                        <Badge variant="secondary" className="text-[10px]">{pm.fromDay}</Badge>
+                        <ArrowRight className="h-2.5 w-2.5 text-muted-foreground" />
+                        <Badge variant="default" className="text-[10px]">{pm.toDay}</Badge>
+                      </div>
+                      <p className="text-muted-foreground italic">{pm.message}</p>
+                    </div>
+                  ))}
+                  {movedStops.length > 5 && (
+                    <p className="text-[10px] text-muted-foreground text-center">+{movedStops.length - 5} more</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={handleClose} data-testid="button-notify-cancel">Cancel</Button>
+              <Button
+                onClick={() => sendMutation.mutate()}
+                disabled={sendMutation.isPending || !template.trim()}
+                className="gap-1.5"
+                data-testid="button-notify-send"
+              >
+                {sendMutation.isPending ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending...</>
+                ) : (
+                  <><Send className="h-3.5 w-3.5" /> Send to {movedStops.length} Customers</>
+                )}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function MovedStopsSection({ movedStops }: { movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[] }) {
   const [showAll, setShowAll] = useState(false);
+  const [notifyOpen, setNotifyOpen] = useState(false);
   const PREVIEW_COUNT = 10;
   const displayedStops = showAll ? movedStops : movedStops.slice(0, PREVIEW_COUNT);
   const hasMore = movedStops.length > PREVIEW_COUNT;
@@ -736,9 +931,23 @@ function MovedStopsSection({ movedStops }: { movedStops: { stopId: string; fromD
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Moved Stops ({movedStops.length})
         </p>
-        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={exportCSV} data-testid="btn-export-moved-stops">
-          <Download className="h-3 w-3" />
-          Export
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={exportCSV} data-testid="btn-export-moved-stops">
+            <Download className="h-3 w-3" />
+            Export
+          </Button>
+        </div>
+      </div>
+      <div className="px-3 py-2 border-b">
+        <Button
+          size="sm"
+          variant="default"
+          className="w-full h-8 text-xs gap-1.5"
+          onClick={() => setNotifyOpen(true)}
+          data-testid="button-notify-customers"
+        >
+          <Bell className="h-3.5 w-3.5" />
+          Notify Customers
         </Button>
       </div>
       {displayedStops.map((move, idx) => (
@@ -758,6 +967,7 @@ function MovedStopsSection({ movedStops }: { movedStops: { stopId: string; fromD
           {showAll ? "Show less" : `Show all ${movedStops.length} moved stops`}
         </button>
       )}
+      <BulkNotifyDialog movedStops={movedStops} open={notifyOpen} onOpenChange={setNotifyOpen} />
     </>
   );
 }

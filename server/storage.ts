@@ -78,6 +78,8 @@ import {
   type MessageRouting, type InsertMessageRouting,
   type MessageException, type InsertMessageException,
   type MessageAttachment, type InsertMessageAttachment,
+  systemMessages,
+  type SystemMessage, type InsertSystemMessage,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -448,6 +450,14 @@ export interface IStorage {
   createMessageException(data: InsertMessageException): Promise<MessageException>;
   resolveMessageException(id: string, resolvedBy: string, companyId: string, skipCandidateCheck?: boolean): Promise<MessageException | undefined>;
   dismissMessageException(id: string, resolvedBy: string, companyId?: string): Promise<MessageException | undefined>;
+
+  // System Messages
+  createSystemMessage(data: InsertSystemMessage): Promise<SystemMessage>;
+  getSystemMessages(companyId: string, filters?: { includeDismissed?: boolean }): Promise<SystemMessage[]>;
+  getUnreadSystemMessageCount(companyId: string): Promise<number>;
+  markSystemMessageRead(id: string, companyId: string): Promise<SystemMessage | undefined>;
+  dismissSystemMessage(id: string, companyId: string): Promise<SystemMessage | undefined>;
+  dismissAllSystemMessages(companyId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2714,6 +2724,47 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .returning();
     return row;
+  }
+
+  async createSystemMessage(data: InsertSystemMessage): Promise<SystemMessage> {
+    const [msg] = await db.insert(systemMessages).values(data).returning();
+    return msg;
+  }
+
+  async getSystemMessages(companyId: string, filters?: { includeDismissed?: boolean }): Promise<SystemMessage[]> {
+    const conditions = [eq(systemMessages.companyId, companyId)];
+    if (!filters?.includeDismissed) {
+      conditions.push(isNull(systemMessages.dismissedAt));
+    }
+    return db.select().from(systemMessages).where(and(...conditions)).orderBy(desc(systemMessages.createdAt)).limit(50);
+  }
+
+  async getUnreadSystemMessageCount(companyId: string): Promise<number> {
+    const [result] = await db.select({ count: count() }).from(systemMessages)
+      .where(and(eq(systemMessages.companyId, companyId), isNull(systemMessages.dismissedAt), isNull(systemMessages.readAt)));
+    return result?.count ?? 0;
+  }
+
+  async markSystemMessageRead(id: string, companyId: string): Promise<SystemMessage | undefined> {
+    const [row] = await db.update(systemMessages)
+      .set({ readAt: new Date() })
+      .where(and(eq(systemMessages.id, id), eq(systemMessages.companyId, companyId)))
+      .returning();
+    return row;
+  }
+
+  async dismissSystemMessage(id: string, companyId: string): Promise<SystemMessage | undefined> {
+    const [row] = await db.update(systemMessages)
+      .set({ dismissedAt: new Date() })
+      .where(and(eq(systemMessages.id, id), eq(systemMessages.companyId, companyId)))
+      .returning();
+    return row;
+  }
+
+  async dismissAllSystemMessages(companyId: string): Promise<void> {
+    await db.update(systemMessages)
+      .set({ dismissedAt: new Date() })
+      .where(and(eq(systemMessages.companyId, companyId), isNull(systemMessages.dismissedAt)));
   }
 }
 

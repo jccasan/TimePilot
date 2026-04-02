@@ -85,7 +85,7 @@ import {
   StickyNote, Route, GripVertical, X, LayoutGrid,
   Inbox, ArrowRight, RotateCcw, Cloud, MapPinned,
   Sun, CloudRain, CloudSnow, CloudLightning, CloudDrizzle,
-  Cloudy, Snowflake, Wind, GripHorizontal,
+  Cloudy, Snowflake, Wind, GripHorizontal, Bell, Info, AlertOctagon,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -637,6 +637,138 @@ function ClientRequestsCard() {
               </div>
             );
           })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type SystemMsg = {
+  id: string;
+  companyId: string;
+  type: string;
+  severity: "info" | "warning" | "error";
+  title: string;
+  body: string | null;
+  metadata: Record<string, unknown> | null;
+  readAt: string | null;
+  dismissedAt: string | null;
+  createdAt: string;
+};
+
+function SystemMessagesCard() {
+  const { toast } = useToast();
+  const { data: messages = [], isLoading, isError } = useQuery<SystemMsg[]>({
+    queryKey: ["/api/system-messages"],
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PATCH", `/api/system-messages/${id}/dismiss`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/system-messages"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to dismiss message.", variant: "destructive" });
+    },
+  });
+
+  const dismissAllMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/system-messages/dismiss-all");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/system-messages"] });
+      toast({ title: "All cleared", description: "System messages dismissed." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to dismiss messages.", variant: "destructive" });
+    },
+  });
+
+  if (isLoading) return null;
+  if (isError) return null;
+  if (messages.length === 0) return null;
+
+  const severityIcon = (severity: string) => {
+    switch (severity) {
+      case "error": return <AlertOctagon className="h-4 w-4 text-destructive shrink-0" />;
+      case "warning": return <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0" />;
+      default: return <Info className="h-4 w-4 text-blue-500 shrink-0" />;
+    }
+  };
+
+  const severityBadge = (severity: string) => {
+    switch (severity) {
+      case "error": return <Badge variant="destructive" className="text-[10px]">Error</Badge>;
+      case "warning": return <Badge className="text-[10px] bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 hover:bg-yellow-100">Warning</Badge>;
+      default: return <Badge variant="secondary" className="text-[10px]">Info</Badge>;
+    }
+  };
+
+  const unreadCount = messages.filter(m => !m.readAt).length;
+
+  return (
+    <Card data-testid="widget-system-messages" id="system-messages">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bell className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">System Messages</CardTitle>
+            {unreadCount > 0 && (
+              <Badge variant="destructive" className="text-xs" data-testid="badge-system-unread">{unreadCount}</Badge>
+            )}
+          </div>
+          {messages.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => dismissAllMutation.mutate()}
+              disabled={dismissAllMutation.isPending}
+              data-testid="button-dismiss-all-system"
+            >
+              Clear All
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {messages.map(msg => (
+            <div
+              key={msg.id}
+              className={`border rounded-lg p-3 space-y-1 ${!msg.readAt ? "bg-muted/30" : ""}`}
+              data-testid={`system-msg-${msg.id}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 min-w-0">
+                  {severityIcon(msg.severity)}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">{msg.title}</span>
+                      {severityBadge(msg.severity)}
+                    </div>
+                    {msg.body && <p className="text-xs text-muted-foreground mt-0.5">{msg.body}</p>}
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {new Date(msg.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 shrink-0"
+                  onClick={() => dismissMutation.mutate(msg.id)}
+                  disabled={dismissMutation.isPending}
+                  data-testid={`button-dismiss-${msg.id}`}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
@@ -2381,6 +2513,8 @@ export default function Dashboard() {
       ) : null}
 
       <ClientRequestsCard />
+
+      <SystemMessagesCard />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
