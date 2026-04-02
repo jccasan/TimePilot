@@ -699,10 +699,10 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     setPropertyId(id);
     const prop = contactProperties?.find(p => p.id === id);
     if (prop) {
-      setPropertyAddress(prop.address || "");
-      setPropertyCity((prop as any).city || "");
-      setPropertyState((prop as any).state || "");
-      setPropertyZip((prop as any).zipCode || "");
+      setPropertyAddress(prop.streetAddress || "");
+      setPropertyCity(prop.city || "");
+      setPropertyState(prop.state || "");
+      setPropertyZip(prop.zipCode || "");
       const lat = prop.latitude ? parseFloat(String(prop.latitude)) : null;
       const lng = prop.longitude ? parseFloat(String(prop.longitude)) : null;
       if (lat && lng) {
@@ -942,7 +942,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
                   <SelectContent>
                     {contactProperties.map(p => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.address}
+                        {p.streetAddress}{p.city ? `, ${p.city}` : ""}{p.state ? `, ${p.state}` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
