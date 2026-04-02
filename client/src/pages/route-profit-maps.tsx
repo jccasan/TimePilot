@@ -703,14 +703,14 @@ export default function RouteProfitMaps() {
         )}
 
         {sidebarOpen && isComparing && optResult && (
-          <ComparisonSidebar optResult={optResult} />
+          <ComparisonSidebar optResult={optResult} onCommit={() => commitMutation.mutate()} isCommitting={commitMutation.isPending} />
         )}
       </div>
     </div>
   );
 }
 
-function ComparisonSidebar({ optResult }: { optResult: OptResult }) {
+function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: OptResult; onCommit: () => void; isCommitting: boolean }) {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const currentSchedule = optResult.current;
@@ -788,11 +788,11 @@ function ComparisonSidebar({ optResult }: { optResult: OptResult }) {
               <Button
                 size="sm"
                 className="mt-2 w-full h-8 text-xs"
-                onClick={() => commitMutation.mutate()}
-                disabled={commitMutation.isPending}
+                onClick={onCommit}
+                disabled={isCommitting}
                 data-testid="button-commit-optimization-sidebar"
               >
-                {commitMutation.isPending ? (
+                {isCommitting ? (
                   <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Applying...</>
                 ) : (
                   <><CheckCircle className="h-3 w-3 mr-1" /> Commit Changes</>
@@ -801,7 +801,6 @@ function ComparisonSidebar({ optResult }: { optResult: OptResult }) {
             </div>
           );
         })()}
-        </div>
       </div>
 
       <div className="divide-y">
