@@ -1045,8 +1045,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNextInvoiceNumber(companyId: string): Promise<string> {
-    const [result] = await db.select({ count: count() }).from(invoices).where(eq(invoices.companyId, companyId));
-    const num = (result?.count ?? 0) + 1;
+    const [result] = await db.select({
+      maxNum: sql<string>`MAX(
+        CASE WHEN ${invoices.invoiceNumber} ~ '^INV-[0-9]+$'
+        THEN CAST(SUBSTRING(${invoices.invoiceNumber} FROM 5) AS integer)
+        ELSE 0 END
+      )`
+    }).from(invoices).where(eq(invoices.companyId, companyId));
+    const num = (parseInt(result?.maxNum || "0") || 0) + 1;
     return `INV-${String(num).padStart(5, "0")}`;
   }
 
