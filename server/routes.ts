@@ -12302,23 +12302,32 @@ Return ONLY valid JSON, no markdown.`,
         ? new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
         : "";
 
-      const billingAddr = contact.address ? {
+      const billingAddr = contact.streetAddress ? {
+        line1: contact.streetAddress,
+        line2: contact.address2 || "",
+        city: contact.city || "",
+        state: contact.state || "",
+        zip: contact.zipCode || "",
+      } : (contact.address ? {
         line1: contact.address,
         line2: "",
         city: "",
         state: "",
         zip: "",
-      } : null;
+      } : null);
       const serviceAddrObj = serviceAddr ? {
-        line1: serviceAddr.street || "",
+        line1: serviceAddr.streetAddress || serviceAddr.street || "",
         line2: "",
         city: serviceAddr.city || "",
         state: serviceAddr.state || "",
-        zip: serviceAddr.zip || "",
+        zip: serviceAddr.zipCode || serviceAddr.zip || "",
       } : null;
       const billingLine = billingAddr ? `${billingAddr.line1} ${billingAddr.city} ${billingAddr.state} ${billingAddr.zip}`.trim() : "";
       const serviceLine = serviceAddrObj ? `${serviceAddrObj.line1} ${serviceAddrObj.city} ${serviceAddrObj.state} ${serviceAddrObj.zip}`.trim() : "";
       const showServiceAddress = serviceAddrObj && serviceLine && serviceLine !== billingLine;
+
+      const hasStripe = isStripeConfigured() && parseFloat(invoice.total) > 0 && invoice.status !== "paid";
+      const previewPaymentUrl = hasStripe ? "#preview" : "";
 
       const invoiceData: any = {
         business: {
@@ -12355,13 +12364,14 @@ Return ONLY valid JSON, no markdown.`,
           tax_rate: taxRateNum,
           paid: paidNum,
         },
-        visits: [],
-        notes: "",
+        visits: undefined,
+        notes: invoice.notes || "",
         payment_instructions: "",
         thank_you: "Thank you for your business!",
         hasFooter: true,
+        paymentUrl: previewPaymentUrl,
         venmoHandle: company?.venmoHandle || "",
-        venmoHandleOnly: !!company?.venmoHandle ? company.venmoHandle : "",
+        venmoHandleOnly: !previewPaymentUrl && !!company?.venmoHandle ? company.venmoHandle : "",
       };
 
       const computed = computeInvoice(invoiceData);
