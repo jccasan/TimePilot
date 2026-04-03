@@ -1068,7 +1068,209 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
   );
 }
 
+interface PropertyProfitData {
+  propertyId: string;
+  propertyAddress: string;
+  revenuePerVisitCents: number;
+  costPerVisitCents: number;
+  profitPerVisitCents: number;
+  profitMarginPct: number;
+  recommendedPriceCents: number;
+  costBreakdown?: {
+    laborCostCents: number;
+    travelCostCents: number;
+    equipmentCostCents: number;
+    overheadCostCents: number;
+  };
+}
+
+function CostBreakdownBar({ breakdown, totalCost }: { breakdown: PropertyProfitData["costBreakdown"]; totalCost: number }) {
+  if (!breakdown || totalCost <= 0) return null;
+  const items = [
+    { label: "Labor", cents: breakdown.laborCostCents, color: "bg-blue-500" },
+    { label: "Travel", cents: breakdown.travelCostCents, color: "bg-orange-500" },
+    { label: "Overhead", cents: breakdown.overheadCostCents, color: "bg-purple-500" },
+    { label: "Supplies", cents: breakdown.equipmentCostCents, color: "bg-green-500" },
+  ];
+  const dominant = items.reduce((a, b) => (b.cents > a.cents ? b : a));
+  return (
+    <div className="space-y-1">
+      <div className="flex h-2 rounded-full overflow-hidden" data-testid="bar-cost-breakdown">
+        {items.map(item => {
+          const pct = (item.cents / totalCost) * 100;
+          if (pct < 1) return null;
+          return <div key={item.label} className={`${item.color}`} style={{ width: `${pct}%` }} />;
+        })}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+        {items.map(item => (
+          <span key={item.label} className={item.label === dominant.label ? "font-semibold text-foreground" : ""}>
+            {item.label}: ${(item.cents / 100).toFixed(2)}
+            {item.label === dominant.label && " (highest)"}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CostOverridesEditor({ contactId }: { contactId: string }) {
+  const { toast } = useToast();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const { data: overridesData, isLoading } = useQuery<{ costOverrides: {
+    techHourlyWageCents?: number;
+    burdenMultiplier?: number;
+    distanceFromNearestStopMiles?: number;
+    overheadAllocationCents?: number;
+  } | null }>({
+    queryKey: ["/api/contacts", contactId, "cost-overrides"],
+    queryFn: async () => {
+      const res = await fetch(`/api/contacts/${contactId}/cost-overrides`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load");
+      return res.json();
+    },
+  });
+
+  const [wage, setWage] = useState("");
+  const [burden, setBurden] = useState("");
+  const [distance, setDistance] = useState("");
+  const [overhead, setOverhead] = useState("");
+
+  useEffect(() => {
+    const o = overridesData?.costOverrides;
+    setWage(o?.techHourlyWageCents !== undefined ? (o.techHourlyWageCents / 100).toFixed(2) : "");
+    setBurden(o?.burdenMultiplier !== undefined ? String(o.burdenMultiplier) : "");
+    setDistance(o?.distanceFromNearestStopMiles !== undefined ? String(o.distanceFromNearestStopMiles) : "");
+    setOverhead(o?.overheadAllocationCents !== undefined ? (o.overheadAllocationCents / 100).toFixed(2) : "");
+  }, [overridesData]);
+
+  const hasOverrides = overridesData?.costOverrides && Object.keys(overridesData.costOverrides).length > 0;
+
+  const saveMutation = useMutation({
+    mutationFn: async (body: Record<string, number | null>) => {
+      const res = await apiRequest("PATCH", `/api/contacts/${contactId}/cost-overrides`, body);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId, "cost-overrides"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
+      toast({ title: "Cost overrides saved", description: "Profitability will recalculate with your custom values." });
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  const handleSave = () => {
+    saveMutation.mutate({
+      techHourlyWageCents: wage ? Math.round(parseFloat(wage) * 100) : null,
+      burdenMultiplier: burden ? parseFloat(burden) : null,
+      distanceFromNearestStopMiles: distance ? parseFloat(distance) : null,
+      overheadAllocationCents: overhead ? Math.round(parseFloat(overhead) * 100) : null,
+    });
+  };
+
+  const handleReset = () => {
+    saveMutation.mutate({
+      techHourlyWageCents: null,
+      burdenMultiplier: null,
+      distanceFromNearestStopMiles: null,
+      overheadAllocationCents: null,
+    });
+    setWage("");
+    setBurden("");
+    setDistance("");
+    setOverhead("");
+  };
+
+  if (isLoading) return null;
+
+  return (
+    <div className="border-t pt-3" data-testid="section-cost-overrides">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
+        data-testid="button-toggle-cost-overrides"
+      >
+        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-0" : "-rotate-90"}`} />
+        Cost Overrides
+        {hasOverrides && <Badge variant="secondary" className="ml-2 text-xs">Custom</Badge>}
+      </button>
+      {isOpen && (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Override company defaults for this customer. Leave blank to use company settings.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Hourly Wage ($)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Company default"
+                value={wage}
+                onChange={(e) => setWage(e.target.value)}
+                data-testid="input-override-wage"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Burden Multiplier</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="1"
+                max="5"
+                placeholder="Company default"
+                value={burden}
+                onChange={(e) => setBurden(e.target.value)}
+                data-testid="input-override-burden"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Travel Distance (miles)</Label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                placeholder="Company default"
+                value={distance}
+                onChange={(e) => setDistance(e.target.value)}
+                data-testid="input-override-distance"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Overhead/Visit ($)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Company default"
+                value={overhead}
+                onChange={(e) => setOverhead(e.target.value)}
+                data-testid="input-override-overhead"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-overrides">
+              <Save className="h-3.5 w-3.5 mr-1" />
+              {saveMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+            {hasOverrides && (
+              <Button size="sm" variant="outline" onClick={handleReset} disabled={saveMutation.isPending} data-testid="button-reset-overrides">
+                Reset to Defaults
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: string; contactStatus: string }) {
+  const [expanded, setExpanded] = useState(false);
   const { data, isLoading, isError } = useQuery<{
     contactId: string;
     contactName: string;
@@ -1078,15 +1280,7 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
     totalProfitPerVisitCents: number;
     profitMarginPct: number;
     status: "profitable" | "marginal" | "unprofitable";
-    properties: Array<{
-      propertyId: string;
-      propertyAddress: string;
-      revenuePerVisitCents: number;
-      costPerVisitCents: number;
-      profitPerVisitCents: number;
-      profitMarginPct: number;
-      recommendedPriceCents: number;
-    }>;
+    properties: PropertyProfitData[];
     monthlyRevenueCents: number;
     monthlyCostCents: number;
     monthlyProfitCents: number;
@@ -1122,8 +1316,10 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
 
   const cfg = statusConfig[data.status] || statusConfig.profitable;
   const isUnprofitable = data.status === "unprofitable";
+  const isMarginal = data.status === "marginal";
+  const showBreakdowns = isUnprofitable || isMarginal;
 
-  const unprofitableProperties = (data.properties || []).filter(p => p.profitMarginPct < 0);
+  const flaggedProperties = (data.properties || []).filter(p => p.profitMarginPct <= 15);
 
   return (
     <Card data-testid="card-profitability-indicator">
@@ -1169,21 +1365,65 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
           </div>
         </div>
 
-        {isUnprofitable && unprofitableProperties.length > 0 && (
-          <div className="flex items-start gap-2 p-2 rounded-md bg-destructive/10 text-destructive text-sm" data-testid="alert-unprofitable-warning">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            <div>
+        {showBreakdowns && flaggedProperties.length > 0 && (
+          <div
+            className={`p-3 rounded-md text-sm space-y-2 ${
+              isUnprofitable ? "bg-destructive/10 text-destructive" : "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300"
+            }`}
+            data-testid="alert-unprofitable-warning"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
               <p className="font-medium">
-                {unprofitableProperties.length} {unprofitableProperties.length === 1 ? "property is" : "properties are"} losing money
+                {flaggedProperties.length} {flaggedProperties.length === 1 ? "property" : "properties"}{" "}
+                {isUnprofitable ? "losing money" : "below target margin"}
               </p>
-              {unprofitableProperties.slice(0, 2).map(p => (
-                <p key={p.propertyId} className="text-xs opacity-75">
-                  {p.propertyAddress}: Current {centsToDisplay(p.revenuePerVisitCents)}/visit — Recommended {centsToDisplay(p.recommendedPriceCents)}/visit
-                </p>
-              ))}
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="ml-auto text-xs underline"
+                data-testid="button-toggle-breakdown"
+              >
+                {expanded ? "Hide details" : "Show why"}
+              </button>
             </div>
+
+            {!expanded && flaggedProperties.slice(0, 2).map(p => (
+              <p key={p.propertyId} className="text-xs opacity-75">
+                {p.propertyAddress}: Current {centsToDisplay(p.revenuePerVisitCents)}/visit — Recommended {centsToDisplay(p.recommendedPriceCents)}/visit
+              </p>
+            ))}
+
+            {expanded && flaggedProperties.map(p => (
+              <div key={p.propertyId} className="border-t border-current/10 pt-2 space-y-1.5" data-testid={`breakdown-property-${p.propertyId}`}>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium">{p.propertyAddress}</p>
+                  <Badge variant={p.profitMarginPct < 0 ? "destructive" : "secondary"} className="text-xs">
+                    {p.profitMarginPct.toFixed(1)}% margin
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <span className="opacity-60">Current:</span>{" "}
+                    <span className="font-medium">{centsToDisplay(p.revenuePerVisitCents)}</span>
+                  </div>
+                  <div>
+                    <span className="opacity-60">Cost:</span>{" "}
+                    <span className="font-medium">{centsToDisplay(p.costPerVisitCents)}</span>
+                  </div>
+                  <div>
+                    <span className="opacity-60">Recommended:</span>{" "}
+                    <span className="font-medium">{centsToDisplay(p.recommendedPriceCents)}</span>
+                  </div>
+                </div>
+                {p.costBreakdown && (
+                  <CostBreakdownBar breakdown={p.costBreakdown} totalCost={p.costPerVisitCents} />
+                )}
+              </div>
+            ))}
           </div>
         )}
+
+        <CostOverridesEditor contactId={contactId} />
       </CardContent>
     </Card>
   );

@@ -103,6 +103,25 @@ export async function calculateCustomerProfitability(
   const overheadTotal = await storage.getTotalMonthlyOverheadCents(companyId);
   const overrideOverhead = overheadTotal > 0 ? overheadTotal : undefined;
 
+  const costOverrides = (contact as any).costOverrides as {
+    techHourlyWageCents?: number;
+    burdenMultiplier?: number;
+    distanceFromNearestStopMiles?: number;
+    overheadAllocationCents?: number;
+  } | null;
+
+  const effectivePricingConfig: Partial<PricingConfig> = { ...pricingConfig };
+  if (costOverrides?.techHourlyWageCents !== undefined) {
+    effectivePricingConfig.techHourlyWageCents = costOverrides.techHourlyWageCents;
+  }
+  if (costOverrides?.burdenMultiplier !== undefined) {
+    effectivePricingConfig.burdenMultiplier = costOverrides.burdenMultiplier;
+  }
+
+  const effectiveOverhead = costOverrides?.overheadAllocationCents !== undefined
+    ? undefined
+    : overrideOverhead;
+
   const propertyResults: CustomerPropertyProfitability[] = [];
 
   for (const plan of plans) {
@@ -122,17 +141,21 @@ export async function calculateCustomerProfitability(
     const addOnsCents = planAddOns.filter(a => a.isActive).reduce((s, a) => s + Math.round((parseFloat(a.price) || 0) * 100), 0);
     const totalPerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100) + addOnsCents;
 
+    const distanceMiles = costOverrides?.distanceFromNearestStopMiles !== undefined
+      ? costOverrides.distanceFromNearestStopMiles
+      : (effectiveConfig.distanceFromNearestStopMiles ?? 1.0);
+
     const inputs: PriceCalculatorInputs = {
       yardSizeAcres,
       dogCount,
       serviceFrequency: plan.frequency as "weekly" | "biweekly" | "monthly" | "onetime",
       yardDifficulty: (property.yardDifficulty ?? "flat") as "flat" | "moderate" | "difficult",
-      distanceFromNearestStopMiles: effectiveConfig.distanceFromNearestStopMiles ?? 1.0,
+      distanceFromNearestStopMiles: distanceMiles,
       routeStopsPerMile: effectiveConfig.routeStopsPerMile,
       currentPriceCents: totalPerVisitCents,
     };
 
-    const result = calculatePrice(inputs, pricingConfig, overrideOverhead);
+    const result = calculatePrice(inputs, effectivePricingConfig, effectiveOverhead, costOverrides?.overheadAllocationCents);
 
     const revenuePerVisitCents = totalPerVisitCents;
     const costPerVisitCents = result.minimumPriceCents;
@@ -235,6 +258,24 @@ export async function calculateAllCustomerProfitability(
     const plans = plansByContact.get(contact.id);
     if (!plans || plans.length === 0) continue;
 
+    const contactOverrides = (contact as any).costOverrides as {
+      techHourlyWageCents?: number;
+      burdenMultiplier?: number;
+      distanceFromNearestStopMiles?: number;
+      overheadAllocationCents?: number;
+    } | null;
+
+    const contactPricingConfig: Partial<PricingConfig> = { ...pricingConfig };
+    if (contactOverrides?.techHourlyWageCents !== undefined) {
+      contactPricingConfig.techHourlyWageCents = contactOverrides.techHourlyWageCents;
+    }
+    if (contactOverrides?.burdenMultiplier !== undefined) {
+      contactPricingConfig.burdenMultiplier = contactOverrides.burdenMultiplier;
+    }
+    const contactOverhead = contactOverrides?.overheadAllocationCents !== undefined
+      ? undefined
+      : overrideOverhead;
+
     const propertyResults: CustomerPropertyProfitability[] = [];
     for (const plan of plans) {
       const property = propertyMap.get(plan.propertyId);
@@ -252,17 +293,21 @@ export async function calculateAllCustomerProfitability(
       const addOnsCents = planAddOns.filter(a => a.isActive).reduce((s, a) => s + Math.round((parseFloat(a.price) || 0) * 100), 0);
       const totalPerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100) + addOnsCents;
 
+      const distanceMiles = contactOverrides?.distanceFromNearestStopMiles !== undefined
+        ? contactOverrides.distanceFromNearestStopMiles
+        : (effectiveConfig.distanceFromNearestStopMiles ?? 1.0);
+
       const inputs: PriceCalculatorInputs = {
         yardSizeAcres,
         dogCount,
         serviceFrequency: plan.frequency as "weekly" | "biweekly" | "monthly" | "onetime",
         yardDifficulty: (property.yardDifficulty ?? "flat") as "flat" | "moderate" | "difficult",
-        distanceFromNearestStopMiles: effectiveConfig.distanceFromNearestStopMiles ?? 1.0,
+        distanceFromNearestStopMiles: distanceMiles,
         routeStopsPerMile: effectiveConfig.routeStopsPerMile,
         currentPriceCents: totalPerVisitCents,
       };
 
-      const result = calculatePrice(inputs, pricingConfig, overrideOverhead);
+      const result = calculatePrice(inputs, contactPricingConfig, contactOverhead, contactOverrides?.overheadAllocationCents);
       const revenuePerVisitCents = totalPerVisitCents;
       const costPerVisitCents = result.minimumPriceCents;
       const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;

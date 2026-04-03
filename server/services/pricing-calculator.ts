@@ -80,7 +80,8 @@ function roundToNearestDollar(cents: number): number {
 export function calculatePrice(
   inputs: PriceCalculatorInputs,
   tenantConfig: Partial<PricingConfig> | null | undefined,
-  overrideMonthlyOverheadCents?: number
+  overrideMonthlyOverheadCents?: number,
+  overridePerVisitOverheadCents?: number
 ): PriceCalculatorResult {
   const config = getEffectivePricingConfig(tenantConfig);
   const SMALL_EPSILON = 0.01;
@@ -120,16 +121,21 @@ export function calculatePrice(
 
   const equipmentCostCents = config.disinfectantCents + config.deodorizerCents + config.bagsCents;
 
-  const monthlyOverheadCents = overrideMonthlyOverheadCents !== undefined
-    ? overrideMonthlyOverheadCents
-    : (config.advertisingCents +
-       config.payrollProviderCents +
-       config.benefitsCents +
-       config.insuranceCents +
-       config.softwareCents +
-       config.otherOverheadCents);
-  const estimatedMonthlyStops = Math.max(config.estimatedMonthlyStops, 1);
-  const overheadPerVisitCents = monthlyOverheadCents / estimatedMonthlyStops;
+  let overheadPerVisitCents: number;
+  if (overridePerVisitOverheadCents !== undefined) {
+    overheadPerVisitCents = overridePerVisitOverheadCents;
+  } else {
+    const monthlyOverheadCents = overrideMonthlyOverheadCents !== undefined
+      ? overrideMonthlyOverheadCents
+      : (config.advertisingCents +
+         config.payrollProviderCents +
+         config.benefitsCents +
+         config.insuranceCents +
+         config.softwareCents +
+         config.otherOverheadCents);
+    const estimatedMonthlyStops = Math.max(config.estimatedMonthlyStops, 1);
+    overheadPerVisitCents = monthlyOverheadCents / estimatedMonthlyStops;
+  }
 
   const totalCostPerVisitCents = laborCostCents + adjustedTravelCostCents + equipmentCostCents + overheadPerVisitCents;
 

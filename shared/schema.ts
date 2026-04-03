@@ -280,6 +280,12 @@ export const contacts = pgTable("contacts", {
   resetTokenExpiry: timestamp("reset_token_expiry"),
   qboCustomerId: varchar("qbo_customer_id", { length: 50 }),
   notes: text("notes"),
+  costOverrides: jsonb("cost_overrides").$type<{
+    techHourlyWageCents?: number;
+    burdenMultiplier?: number;
+    distanceFromNearestStopMiles?: number;
+    overheadAllocationCents?: number;
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

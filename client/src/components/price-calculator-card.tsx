@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, Calculator, RefreshCw, ArrowRight, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
+import { AlertTriangle, Calculator, RefreshCw, ArrowRight, TrendingUp, TrendingDown, DollarSign, Info } from "lucide-react";
 import type { Property, ServicePlan } from "@shared/schema";
 
 interface PriceCalculatorCardProps {
@@ -86,6 +86,11 @@ function mapFrequency(freq: string | null | undefined): "weekly" | "biweekly" | 
 export function PriceCalculatorCard({ property, servicePlans }: PriceCalculatorCardProps) {
   const [result, setResult] = useState<PriceResult | null>(null);
   const [hasCalculated, setHasCalculated] = useState(false);
+
+  const { data: overheadData } = useQuery<{ totalMonthlyOverheadCents: number }>({
+    queryKey: ["/api/overhead-costs/total"],
+  });
+  const hasNoOverhead = overheadData && overheadData.totalMonthlyOverheadCents === 0;
 
   const activePlan = servicePlans?.find((sp) => sp.isActive);
   const frequency = activePlan ? mapFrequency(activePlan.frequency) : "weekly";
@@ -223,6 +228,18 @@ export function PriceCalculatorCard({ property, servicePlans }: PriceCalculatorC
           <p className="text-xs text-muted-foreground" data-testid={`text-calc-prompt-${property.id}`}>
             Click Calculate to see recommended pricing for this property based on yard size ({(yardSizeAcres).toFixed(2)} acres), {property.numberOfDogs || 1} dog(s), {property.yardDifficulty || "flat"} terrain.
           </p>
+        )}
+
+        {hasNoOverhead && (
+          <div className="flex items-start gap-2 p-2 rounded-md bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300 text-xs" data-testid="alert-no-overhead-warning">
+            <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <p>
+              Monthly business expenses not configured — results may underestimate true costs.{" "}
+              <Link href="/overhead-costs" className="underline font-medium">
+                Set up overhead costs
+              </Link>
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>

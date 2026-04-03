@@ -3316,7 +3316,8 @@ Return ONLY valid JSON, no markdown.`,
       if (req.body.status && !validStatuses.includes(req.body.status)) {
         return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
       }
-      const contact = await storage.updateContact(req.params.id, companyId, req.body);
+      const { costOverrides: _stripCostOverrides, ...safeBody } = req.body;
+      const contact = await storage.updateContact(req.params.id, companyId, safeBody);
       auditLog(companyId, userId, "contact", req.params.id, "update", { old: existing, new: contact }, req.ip);
 
       if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
@@ -7142,6 +7143,45 @@ Return ONLY valid JSON, no markdown.`,
       const result = await calculateCustomerProfitability(companyId, req.params.contactId);
       if (!result) return res.status(404).json({ message: "No profitability data for this customer" });
       res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/contacts/:id/cost-overrides", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ message: "Contact not found" });
+      res.json({ costOverrides: (contact as any).costOverrides || null });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/contacts/:id/cost-overrides", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ message: "Contact not found" });
+      const costOverridesSchema = z.object({
+        techHourlyWageCents: z.number().min(0).optional().nullable(),
+        burdenMultiplier: z.number().min(1).max(5).optional().nullable(),
+        distanceFromNearestStopMiles: z.number().min(0).max(100).optional().nullable(),
+        overheadAllocationCents: z.number().min(0).optional().nullable(),
+      });
+      const parsed = costOverridesSchema.parse(req.body);
+      const cleaned: Record<string, number> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v !== null && v !== undefined) cleaned[k] = v;
+      }
+      const overrides = Object.keys(cleaned).length > 0 ? cleaned : null;
+      await storage.updateContact(req.params.id, companyId, { costOverrides: overrides } as any);
+      res.json({ costOverrides: overrides });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/overhead-costs/total", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const total = await storage.getTotalMonthlyOverheadCents(companyId);
+      res.json({ totalMonthlyOverheadCents: total });
     } catch (err) { handleError(res, err); }
   });
 
