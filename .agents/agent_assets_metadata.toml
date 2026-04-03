@@ -6,3 +6,9 @@ id = "I2R_kLWtmgc85VJJDE3WA"
 uri = "file://.local/tasks/invoice-fix-guide.md"
 type = "text"
 title = "Invoice Fix Guide for Remixed Apps"
+
+[[outputs]]
+id = "T8qekw8ZBRIDt7GFlOMKm"
+uri = "file://.local/tasks/sms-implementation-guide.md"
+type = "text"
+title = "SMS Implementation Guide — Complete Reference"
