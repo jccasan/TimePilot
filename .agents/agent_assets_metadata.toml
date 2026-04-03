@@ -12,3 +12,9 @@ id = "T8qekw8ZBRIDt7GFlOMKm"
 uri = "file://.local/tasks/sms-implementation-guide.md"
 type = "text"
 title = "SMS Implementation Guide — Complete Reference"
+
+[[outputs]]
+id = "AMLskpbRkm7WmV4xtAOws"
+uri = "file://.local/tasks/email-implementation-guide.md"
+type = "text"
+title = "Email Handling Implementation Guide — Complete Reference"
