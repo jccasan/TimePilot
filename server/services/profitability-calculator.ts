@@ -103,12 +103,7 @@ export async function calculateCustomerProfitability(
   const overheadTotal = await storage.getTotalMonthlyOverheadCents(companyId);
   const overrideOverhead = overheadTotal > 0 ? overheadTotal : undefined;
 
-  const costOverrides = (contact as any).costOverrides as {
-    techHourlyWageCents?: number;
-    burdenMultiplier?: number;
-    distanceFromNearestStopMiles?: number;
-    overheadAllocationCents?: number;
-  } | null;
+  const costOverrides = contact.costOverrides;
 
   const effectivePricingConfig: Partial<PricingConfig> = { ...pricingConfig };
   if (costOverrides?.techHourlyWageCents !== undefined) {
@@ -258,12 +253,7 @@ export async function calculateAllCustomerProfitability(
     const plans = plansByContact.get(contact.id);
     if (!plans || plans.length === 0) continue;
 
-    const contactOverrides = (contact as any).costOverrides as {
-      techHourlyWageCents?: number;
-      burdenMultiplier?: number;
-      distanceFromNearestStopMiles?: number;
-      overheadAllocationCents?: number;
-    } | null;
+    const contactOverrides = contact.costOverrides;
 
     const contactPricingConfig: Partial<PricingConfig> = { ...pricingConfig };
     if (contactOverrides?.techHourlyWageCents !== undefined) {

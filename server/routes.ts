@@ -7151,7 +7151,7 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId } = await getCompanyContext(req);
       const contact = await storage.getContact(req.params.id, companyId);
       if (!contact) return res.status(404).json({ message: "Contact not found" });
-      res.json({ costOverrides: (contact as any).costOverrides || null });
+      res.json({ costOverrides: contact.costOverrides || null });
     } catch (err) { handleError(res, err); }
   });
 
@@ -7172,7 +7172,7 @@ Return ONLY valid JSON, no markdown.`,
         if (v !== null && v !== undefined) cleaned[k] = v;
       }
       const overrides = Object.keys(cleaned).length > 0 ? cleaned : null;
-      await storage.updateContact(req.params.id, companyId, { costOverrides: overrides } as any);
+      await storage.updateContact(req.params.id, companyId, { costOverrides: overrides });
       res.json({ costOverrides: overrides });
     } catch (err) { handleError(res, err); }
   });

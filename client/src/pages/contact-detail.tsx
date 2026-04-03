@@ -1316,10 +1316,9 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
 
   const cfg = statusConfig[data.status] || statusConfig.profitable;
   const isUnprofitable = data.status === "unprofitable";
-  const isMarginal = data.status === "marginal";
-  const showBreakdowns = isUnprofitable || isMarginal;
 
   const flaggedProperties = (data.properties || []).filter(p => p.profitMarginPct <= 15);
+  const showBreakdowns = flaggedProperties.length > 0;
 
   return (
     <Card data-testid="card-profitability-indicator">
@@ -1368,7 +1367,9 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
         {showBreakdowns && flaggedProperties.length > 0 && (
           <div
             className={`p-3 rounded-md text-sm space-y-2 ${
-              isUnprofitable ? "bg-destructive/10 text-destructive" : "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300"
+              flaggedProperties.some(p => p.profitMarginPct < 0)
+                ? "bg-destructive/10 text-destructive"
+                : "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300"
             }`}
             data-testid="alert-unprofitable-warning"
           >
@@ -1376,7 +1377,7 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <p className="font-medium">
                 {flaggedProperties.length} {flaggedProperties.length === 1 ? "property" : "properties"}{" "}
-                {isUnprofitable ? "losing money" : "below target margin"}
+                {flaggedProperties.some(p => p.profitMarginPct < 0) ? "losing money" : "below target margin"}
               </p>
               <button
                 onClick={() => setExpanded(!expanded)}
