@@ -558,7 +558,7 @@ export class DatabaseStorage implements IStorage {
         like(contacts.phone, `%${filters.search}%`),
       )!);
     }
-    return db.select().from(contacts).where(and(...conditions)).orderBy(asc(contacts.lastName), asc(contacts.firstName));
+    return db.select().from(contacts).where(and(...conditions)).orderBy(asc(contacts.firstName), asc(contacts.lastName));
   }
 
   async createContact(data: InsertContact): Promise<Contact> {
