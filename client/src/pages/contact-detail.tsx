@@ -1124,12 +1124,7 @@ function CostOverridesEditor({ contactId }: { contactId: string }) {
     distanceFromNearestStopMiles?: number;
     overheadAllocationCents?: number;
   } | null }>({
-    queryKey: ["/api/contacts", contactId, "cost-overrides"],
-    queryFn: async () => {
-      const res = await fetch(`/api/contacts/${contactId}/cost-overrides`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load");
-      return res.json();
-    },
+    queryKey: [`/api/contacts/${contactId}/cost-overrides`],
   });
 
   const [wage, setWage] = useState("");
@@ -1153,7 +1148,7 @@ function CostOverridesEditor({ contactId }: { contactId: string }) {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId, "cost-overrides"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/cost-overrides`] });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
       toast({ title: "Cost overrides saved", description: "Profitability will recalculate with your custom values." });
     },
@@ -1161,11 +1156,29 @@ function CostOverridesEditor({ contactId }: { contactId: string }) {
   });
 
   const handleSave = () => {
+    const wageNum = wage ? parseFloat(wage) : NaN;
+    const burdenNum = burden ? parseFloat(burden) : NaN;
+    const distanceNum = distance ? parseFloat(distance) : NaN;
+    const overheadNum = overhead ? parseFloat(overhead) : NaN;
+
+    if (wage && (isNaN(wageNum) || wageNum < 0)) {
+      toast({ title: "Invalid hourly wage", variant: "destructive" }); return;
+    }
+    if (burden && (isNaN(burdenNum) || burdenNum < 1 || burdenNum > 5)) {
+      toast({ title: "Burden multiplier must be between 1 and 5", variant: "destructive" }); return;
+    }
+    if (distance && (isNaN(distanceNum) || distanceNum < 0)) {
+      toast({ title: "Invalid travel distance", variant: "destructive" }); return;
+    }
+    if (overhead && (isNaN(overheadNum) || overheadNum < 0)) {
+      toast({ title: "Invalid overhead amount", variant: "destructive" }); return;
+    }
+
     saveMutation.mutate({
-      techHourlyWageCents: wage ? Math.round(parseFloat(wage) * 100) : null,
-      burdenMultiplier: burden ? parseFloat(burden) : null,
-      distanceFromNearestStopMiles: distance ? parseFloat(distance) : null,
-      overheadAllocationCents: overhead ? Math.round(parseFloat(overhead) * 100) : null,
+      techHourlyWageCents: wage ? Math.round(wageNum * 100) : null,
+      burdenMultiplier: burden ? burdenNum : null,
+      distanceFromNearestStopMiles: distance ? distanceNum : null,
+      overheadAllocationCents: overhead ? Math.round(overheadNum * 100) : null,
     });
   };
 
