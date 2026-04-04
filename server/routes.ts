@@ -9548,11 +9548,18 @@ Return ONLY valid JSON, no markdown.`,
               notify(tenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
               qboAutoSync(tenantId, invoiceId, "payment");
               resolved = true;
+            } else if (invoice && invoice.status === "paid") {
+              console.log(`[Stripe Webhook] checkout.session.completed: invoice ${invoiceId} already paid — skipping (session ${session.id})`);
+              resolved = true;
             }
           }
 
           if (!resolved) {
-            console.warn(`[Stripe Webhook] checkout.session.completed: could not resolve invoice ${invoiceId} — tenant_id missing or invoice not found (session ${session.id}). Manual resolution required.`);
+            if (!tenantId) {
+              console.warn(`[Stripe Webhook] checkout.session.completed: missing tenant_id for invoice ${invoiceId} (session ${session.id}). Manual resolution required.`);
+            } else {
+              console.warn(`[Stripe Webhook] checkout.session.completed: invoice ${invoiceId} not found for tenant ${tenantId} (session ${session.id}). Manual resolution required.`);
+            }
           }
         }
       }
@@ -9580,11 +9587,18 @@ Return ONLY valid JSON, no markdown.`,
               notify(piTenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
               qboAutoSync(piTenantId, invoiceId, "payment");
               resolved = true;
+            } else if (invoice && invoice.status === "paid") {
+              console.log(`[Stripe Webhook] payment_intent.succeeded: invoice ${invoiceId} already paid — skipping (pi ${pi.id})`);
+              resolved = true;
             }
           }
 
           if (!resolved) {
-            console.warn(`[Stripe Webhook] payment_intent.succeeded: could not resolve invoice ${invoiceId} — tenant_id missing or invoice not found (pi ${pi.id}). Manual resolution required.`);
+            if (!piTenantId) {
+              console.warn(`[Stripe Webhook] payment_intent.succeeded: missing tenant_id for invoice ${invoiceId} (pi ${pi.id}). Manual resolution required.`);
+            } else {
+              console.warn(`[Stripe Webhook] payment_intent.succeeded: invoice ${invoiceId} not found for tenant ${piTenantId} (pi ${pi.id}). Manual resolution required.`);
+            }
           }
         }
       }
