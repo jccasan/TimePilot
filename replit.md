@@ -25,7 +25,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Framework**: Express.js with TypeScript
 - **Database**: PostgreSQL (Neon-backed) with Drizzle ORM
 - **Authentication**: Custom email/password with session cookies and Bearer token.
-- **API & Webhooks**: Comprehensive REST API with scoped API keys and HMAC-signed webhook delivery.
+- **API & Webhooks**: Comprehensive REST API with scoped API keys and HMAC-signed webhook delivery. Stripe webhook event deduplication via `stripe_events` table (30-day retention, nightly cleanup).
 - **Security**: Helmet middleware, CORS, rate limiting, and multi-tenant data isolation.
 - **Automation**: Configurable reminder system and quiet hours.
 - **Route Optimization**: Nearest-neighbor TSP with 2-opt improvement.

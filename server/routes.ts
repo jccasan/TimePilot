@@ -7,7 +7,7 @@ import multer from "multer";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, gte, isNotNull, like, or, inArray, desc } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable, stripeEvents } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -9455,6 +9455,12 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "Webhook signature verification failed" });
       }
 
+      const [existingEvent] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
+      if (existingEvent) {
+        console.log(`[Stripe Webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
+        return res.json({ received: true });
+      }
+
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as any;
         const meta = session.metadata || {};
@@ -9998,6 +10004,8 @@ Return ONLY valid JSON, no markdown.`,
           }
         }
       }
+
+      await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
 
       res.json({ received: true });
     } catch (err) {
@@ -15562,6 +15570,11 @@ Return ONLY valid JSON, no markdown.`,
     setInterval(() => runMessageCleanup().catch(console.error), 24 * 60 * 60 * 1000);
   });
 
+  import("./jobs/stripe-event-cleanup").then(({ runStripeEventCleanup }) => {
+    setTimeout(() => runStripeEventCleanup().catch(console.error), 60000);
+    setInterval(() => runStripeEventCleanup().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
   import("./jobs/reminders").then(({ runReminders }) => {
     setTimeout(() => runReminders().catch(console.error), 60000);
     setInterval(() => runReminders().catch(console.error), 10 * 60 * 1000);
@@ -15874,7 +15887,12 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).send(`Webhook Error: ${msg}`);
       }
 
-      // Immediately acknowledge receipt to Stripe (they retry on non-2xx).
+      const [existingV2] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, thinEvent.id)).limit(1);
+      if (existingV2) {
+        console.log(`[V2 Webhook] Duplicate event ${thinEvent.id} (${thinEvent.type}) — skipping`);
+        return res.json({ received: true });
+      }
+
       res.json({ received: true });
 
       try {
@@ -15914,8 +15932,9 @@ Return ONLY valid JSON, no markdown.`,
         } else {
           console.log(`[V2 Webhook] Unhandled event type: ${thinEvent.type}`);
         }
+
+        await db.insert(stripeEvents).values({ id: thinEvent.id, eventType: thinEvent.type }).onConflictDoNothing();
       } catch (err: unknown) {
-        // Log but don't return an error — we already sent 200 to Stripe.
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[V2 Webhook] Error processing event:", msg);
       }
@@ -15959,6 +15978,12 @@ Return ONLY valid JSON, no markdown.`,
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[V1 Sub Webhook] Signature verification failed:", msg);
         return res.status(400).send(`Webhook Error: ${msg}`);
+      }
+
+      const [existingV1] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
+      if (existingV1) {
+        console.log(`[V1 Sub Webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
+        return res.json({ received: true });
       }
 
       res.json({ received: true });
@@ -16052,6 +16077,8 @@ Return ONLY valid JSON, no markdown.`,
           default:
             console.log(`[V1 Sub Webhook] Unhandled event type: ${event.type}`);
         }
+
+        await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[V1 Sub Webhook] Error processing event:", msg);

@@ -1802,3 +1802,11 @@ export const systemMessages = pgTable("system_messages", {
 export const insertSystemMessageSchema = createInsertSchema(systemMessages).omit({ id: true, createdAt: true });
 export type SystemMessage = typeof systemMessages.$inferSelect;
 export type InsertSystemMessage = z.infer<typeof insertSystemMessageSchema>;
+
+export const stripeEvents = pgTable("stripe_events", {
+  id: varchar("id").primaryKey(),
+  eventType: varchar("event_type", { length: 255 }).notNull(),
+  processedAt: timestamp("processed_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_stripe_events_processed").on(table.processedAt),
+]);
