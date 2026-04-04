@@ -274,6 +274,7 @@ async function ensureCompanyColumns() {
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS retell_agent_id VARCHAR(255);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS retell_knowledge_base_id VARCHAR(255);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS venmo_handle VARCHAR(100);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS subscription_updated_at TIMESTAMP;
       ALTER TABLE routes ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false;
     `);
     await pool.query(`UPDATE companies SET sms_provider = 'telnyx' WHERE sms_provider = 'twilio'`);

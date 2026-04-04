@@ -9706,18 +9706,23 @@ Return ONLY valid JSON, no markdown.`,
             if (existingCompanies.length > 0) {
               const company = await storage.getCompany(existingCompanies[0].companyId);
               if (company) {
-                const subStatus = subscription.status === "trialing" ? "trialing" : "active";
-                const updateData: Record<string, unknown> = {
-                  stripeCustomerId: subscription.customer,
-                  stripeSubscriptionId: subscription.id,
-                  subscriptionTier: planTier,
-                  subscriptionStatus: subStatus,
-                };
-                if (subscription.trial_end) {
-                  updateData.trialEndsAt = new Date(subscription.trial_end * 1000);
+                if (isStaleSubscriptionEvent(company)) {
+                  console.log(`[Stripe Subscription] Skipping stale subscription.created for existing company "${company.name}" (event ${event.id} ts=${event.created})`);
+                } else {
+                  const subStatus = subscription.status === "trialing" ? "trialing" : "active";
+                  const updateData: Record<string, unknown> = {
+                    stripeCustomerId: subscription.customer,
+                    stripeSubscriptionId: subscription.id,
+                    subscriptionTier: planTier,
+                    subscriptionStatus: subStatus,
+                    subscriptionUpdatedAt: eventTs,
+                  };
+                  if (subscription.trial_end) {
+                    updateData.trialEndsAt = new Date(subscription.trial_end * 1000);
+                  }
+                  await storage.updateCompany(company.id, updateData as Partial<typeof companies.$inferInsert>);
+                  console.log(`[Stripe Subscription] Updated existing company "${company.name}" (${company.id}) for subscription ${subscription.id} status=${subStatus}`);
                 }
-                await storage.updateCompany(company.id, updateData as Partial<typeof companies.$inferInsert>);
-                console.log(`[Stripe Subscription] Updated existing company "${company.name}" (${company.id}) for subscription ${subscription.id} status=${subStatus}`);
               }
             } else {
               const subStatus2 = subscription.status === "trialing" ? "trialing" : "active";
@@ -9729,6 +9734,7 @@ Return ONLY valid JSON, no markdown.`,
                 subscriptionStatus: subStatus2,
                 stripeCustomerId: subscription.customer,
                 stripeSubscriptionId: subscription.id,
+                subscriptionUpdatedAt: eventTs,
               };
               if (subscription.trial_end) {
                 createData.trialEndsAt = new Date(subscription.trial_end * 1000);
@@ -9753,6 +9759,7 @@ Return ONLY valid JSON, no markdown.`,
               subscriptionStatus: subStatus3,
               stripeCustomerId: subscription.customer,
               stripeSubscriptionId: subscription.id,
+              subscriptionUpdatedAt: eventTs,
             };
             if (subscription.trial_end) {
               createData2.trialEndsAt = new Date(subscription.trial_end * 1000);
