@@ -292,6 +292,9 @@ export const contacts = pgTable("contacts", {
 }, (table) => [
   index("idx_contacts_company").on(table.companyId),
   index("idx_contacts_status").on(table.status),
+  index("idx_contacts_email").on(table.email),
+  index("idx_contacts_phone").on(table.phone),
+  index("idx_contacts_qbo_customer").on(table.qboCustomerId),
 ]);
 
 export const tags = pgTable("tags", {
@@ -511,6 +514,7 @@ export const visits = pgTable("visits", {
   index("idx_visits_status").on(table.status),
   index("idx_visits_route").on(table.routeId),
   index("idx_visits_job").on(table.jobId),
+  index("idx_visits_invoice").on(table.invoiceId),
 ]);
 
 export const invoices = pgTable("invoices", {
@@ -550,6 +554,7 @@ export const invoices = pgTable("invoices", {
   index("idx_invoices_contact").on(table.contactId),
   index("idx_invoices_status").on(table.status),
   index("idx_invoices_source").on(table.source),
+  index("idx_invoices_qbo_invoice").on(table.qboInvoiceId),
   unique().on(table.companyId, table.invoiceNumber),
 ]);
 
@@ -696,6 +701,9 @@ export const messages = pgTable("messages", {
   index("idx_messages_contact").on(table.contactId),
   index("idx_messages_channel").on(table.channel),
   index("idx_messages_email_thread").on(table.emailThreadId),
+  index("idx_messages_from_address").on(table.fromAddress),
+  index("idx_messages_to_address").on(table.toAddress),
+  index("idx_messages_external_id").on(table.externalId),
 ]);
 
 export const messageAttachments = pgTable("message_attachments", {
