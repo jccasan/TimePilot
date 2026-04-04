@@ -9501,22 +9501,17 @@ Return ONLY valid JSON, no markdown.`,
                 }
               }
 
-              await storage.updateCompany(company.id, companyUpdates);
-
               const websiteField = customFields.find((f) => f.key === "business_website");
               const businessWebsite = websiteField?.text?.value?.trim() || "";
-              console.log(`[Stripe Voice] checkout.session.completed: activated ${voicePlan} for company "${company.name}" (${company.id})`);
 
+              let kbId: string | null = null;
               if (businessWebsite && company.retellAgentId) {
                 try {
-                  const kbId = await seedRetellKnowledgeBase({
+                  kbId = await seedRetellKnowledgeBase({
                     tenantId: company.id,
                     agentId: company.retellAgentId,
                     websiteUrl: businessWebsite,
                   });
-                  await storage.updateCompany(company.id, {
-                    retellKnowledgeBaseId: kbId,
-                  } as Partial<typeof companies.$inferInsert>);
                   console.log(`[Retell KB] Created knowledge base "${kbId}" for company "${company.name}" (${company.id}) from ${businessWebsite}`);
                 } catch (kbErr: any) {
                   console.warn(`[Retell KB] Failed to seed knowledge base for company "${company.name}" (${company.id}): ${kbErr.message}`);
@@ -9526,6 +9521,16 @@ Return ONLY valid JSON, no markdown.`,
                 console.warn(`[Retell KB] Business website provided but no Retell agent ID found for company "${company.name}" (${company.id}). Skipping KB creation.`);
                 notify(tenantId, "system_warning", "Knowledge Base Setup Skipped", `A business website was provided during checkout but no Retell agent is linked to your account. Please contact support to set up the knowledge base.`, `/settings`);
               }
+
+              if (kbId) {
+                companyUpdates.retellKnowledgeBaseId = kbId as any;
+              }
+
+              await db.transaction(async (tx) => {
+                await tx.update(companies).set({ ...companyUpdates, updatedAt: new Date() }).where(eq(companies.id, company.id));
+              });
+
+              console.log(`[Stripe Voice] checkout.session.completed: activated ${voicePlan} for company "${company.name}" (${company.id})`);
             }
           }
         }
@@ -9538,11 +9543,14 @@ Return ONLY valid JSON, no markdown.`,
           if (tenantId) {
             const invoice = await storage.getInvoice(invoiceId, tenantId);
             if (invoice && invoice.status !== "paid") {
-              await storage.updateInvoice(invoiceId, tenantId, {
-                status: "paid",
-                paidAt: new Date(),
-                stripePaymentIntentId: session.payment_intent,
-                tipAmount,
+              await db.transaction(async (tx) => {
+                await tx.update(invoices).set({
+                  status: "paid",
+                  paidAt: new Date(),
+                  stripePaymentIntentId: session.payment_intent,
+                  tipAmount,
+                  updatedAt: new Date(),
+                } as any).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, tenantId)));
               });
               const tipNote = parseFloat(tipAmount) > 0 ? ` (includes $${tipAmount} tip)` : "";
               notify(tenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
