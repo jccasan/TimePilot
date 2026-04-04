@@ -9461,6 +9461,8 @@ Return ONLY valid JSON, no markdown.`,
         return res.json({ received: true });
       }
 
+      await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
+
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as any;
         const meta = session.metadata || {};
@@ -10004,8 +10006,6 @@ Return ONLY valid JSON, no markdown.`,
           }
         }
       }
-
-      await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
 
       res.json({ received: true });
     } catch (err) {
@@ -15893,6 +15893,8 @@ Return ONLY valid JSON, no markdown.`,
         return res.json({ received: true });
       }
 
+      await db.insert(stripeEvents).values({ id: thinEvent.id, eventType: thinEvent.type }).onConflictDoNothing();
+
       res.json({ received: true });
 
       try {
@@ -15932,8 +15934,6 @@ Return ONLY valid JSON, no markdown.`,
         } else {
           console.log(`[V2 Webhook] Unhandled event type: ${thinEvent.type}`);
         }
-
-        await db.insert(stripeEvents).values({ id: thinEvent.id, eventType: thinEvent.type }).onConflictDoNothing();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[V2 Webhook] Error processing event:", msg);
@@ -15985,6 +15985,8 @@ Return ONLY valid JSON, no markdown.`,
         console.log(`[V1 Sub Webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
         return res.json({ received: true });
       }
+
+      await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
 
       res.json({ received: true });
 
@@ -16077,8 +16079,6 @@ Return ONLY valid JSON, no markdown.`,
           default:
             console.log(`[V1 Sub Webhook] Unhandled event type: ${event.type}`);
         }
-
-        await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[V1 Sub Webhook] Error processing event:", msg);
