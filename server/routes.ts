@@ -9485,20 +9485,9 @@ Return ONLY valid JSON, no markdown.`,
                 const areaCodeField = customFields.find((f) => f.key === "preferred_area_code");
                 const areaCode = areaCodeField?.text?.value?.trim() || "703";
 
-                try {
-                  const dedicatedPhoneNumber = await provisionRetellNumber({ areaCode });
-                  companyUpdates.dedicatedPhoneNumber = dedicatedPhoneNumber;
-                  console.log(`[Retell] Provisioned number ${dedicatedPhoneNumber} for company "${company.name}" (${company.id})`);
-                } catch (provisionErr: unknown) {
-                  const message = provisionErr instanceof Error ? provisionErr.message : String(provisionErr);
-                  console.error(`[Retell] Number provisioning failed for company "${company.name}" (${company.id}):`, message);
-                  notify(
-                    company.id,
-                    "general",
-                    "Voice Number Provisioning Failed",
-                    `Your ${planConfig.name} plan is active but we could not automatically provision a phone number (area code ${areaCode}). Please contact support to resolve this.`,
-                  );
-                }
+                const dedicatedPhoneNumber = await provisionRetellNumber({ areaCode });
+                companyUpdates.dedicatedPhoneNumber = dedicatedPhoneNumber;
+                console.log(`[Retell] Provisioned number ${dedicatedPhoneNumber} for company "${company.name}" (${company.id})`);
               }
 
               const websiteField = customFields.find((f) => f.key === "business_website");
@@ -9523,7 +9512,7 @@ Return ONLY valid JSON, no markdown.`,
               }
 
               if (kbId) {
-                companyUpdates.retellKnowledgeBaseId = kbId as any;
+                (companyUpdates as Record<string, unknown>).retellKnowledgeBaseId = kbId;
               }
 
               await db.transaction(async (tx) => {
@@ -9545,12 +9534,12 @@ Return ONLY valid JSON, no markdown.`,
             if (invoice && invoice.status !== "paid") {
               await db.transaction(async (tx) => {
                 await tx.update(invoices).set({
-                  status: "paid",
+                  status: "paid" as const,
                   paidAt: new Date(),
                   stripePaymentIntentId: session.payment_intent,
                   tipAmount,
                   updatedAt: new Date(),
-                } as any).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, tenantId)));
+                }).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, tenantId)));
               });
               const tipNote = parseFloat(tipAmount) > 0 ? ` (includes $${tipAmount} tip)` : "";
               notify(tenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
