@@ -9455,14 +9455,11 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "Webhook signature verification failed" });
       }
 
-      const inserted = await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing().returning({ id: stripeEvents.id });
-      if (inserted.length === 0) {
+      const [alreadyProcessed] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
+      if (alreadyProcessed) {
         console.log(`[Stripe Webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
         return res.json({ received: true });
       }
-
-      let processingSucceeded = false;
-      try {
 
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as any;
@@ -9665,6 +9662,7 @@ Return ONLY valid JSON, no markdown.`,
               console.log(`[Stripe Voice] Activated ${voicePlan} for company "${company.name}" (${company.id}), subscriber=${isSubscriber}`);
             }
           }
+          await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
           res.json({ received: true });
           return;
         }
@@ -9699,6 +9697,7 @@ Return ONLY valid JSON, no markdown.`,
             }
             await storage.updateCompany(company.id, updateData as Partial<typeof companies.$inferInsert>);
             console.log(`[Stripe Subscription] Updated company "${company.name}" via tenant_id (${company.id}) status=${subStatus}`);
+            await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
             res.json({ received: true });
             return;
           }
@@ -10008,15 +10007,9 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      processingSucceeded = true;
+      await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
+
       res.json({ received: true });
-      } catch (processingErr) {
-        if (!processingSucceeded) {
-          await db.delete(stripeEvents).where(eq(stripeEvents.id, event.id)).catch(() => {});
-          console.error(`[Stripe Webhook] Processing failed for ${event.id} (${event.type}), removed from dedup table for retry`);
-        }
-        throw processingErr;
-      }
     } catch (err) {
       console.error("Stripe webhook error:", err);
       res.status(500).json({ error: "Webhook processing failed" });
@@ -15896,8 +15889,8 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).send(`Webhook Error: ${msg}`);
       }
 
-      const insertedV2 = await db.insert(stripeEvents).values({ id: thinEvent.id, eventType: thinEvent.type }).onConflictDoNothing().returning({ id: stripeEvents.id });
-      if (insertedV2.length === 0) {
+      const [alreadyProcessedV2] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, thinEvent.id)).limit(1);
+      if (alreadyProcessedV2) {
         console.log(`[V2 Webhook] Duplicate event ${thinEvent.id} (${thinEvent.type}) — skipping`);
         return res.json({ received: true });
       }
@@ -15940,10 +15933,11 @@ Return ONLY valid JSON, no markdown.`,
         } else {
           console.log(`[V2 Webhook] Unhandled event type: ${thinEvent.type}`);
         }
+
+        await db.insert(stripeEvents).values({ id: thinEvent.id, eventType: thinEvent.type }).onConflictDoNothing();
       } catch (err: unknown) {
-        await db.delete(stripeEvents).where(eq(stripeEvents.id, thinEvent.id)).catch(() => {});
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[V2 Webhook] Error processing event ${thinEvent.id}, removed from dedup table for retry:`, msg);
+        console.error(`[V2 Webhook] Error processing event ${thinEvent.id}:`, msg);
       }
     }
   );
@@ -15987,8 +15981,8 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).send(`Webhook Error: ${msg}`);
       }
 
-      const insertedV1 = await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing().returning({ id: stripeEvents.id });
-      if (insertedV1.length === 0) {
+      const [alreadyProcessedV1] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
+      if (alreadyProcessedV1) {
         console.log(`[V1 Sub Webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
         return res.json({ received: true });
       }
@@ -16084,10 +16078,11 @@ Return ONLY valid JSON, no markdown.`,
           default:
             console.log(`[V1 Sub Webhook] Unhandled event type: ${event.type}`);
         }
+
+        await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
       } catch (err: unknown) {
-        await db.delete(stripeEvents).where(eq(stripeEvents.id, event.id)).catch(() => {});
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[V1 Sub Webhook] Error processing event ${event.id}, removed from dedup table for retry:`, msg);
+        console.error(`[V1 Sub Webhook] Error processing event ${event.id}:`, msg);
       }
     }
   );
