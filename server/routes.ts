@@ -9621,6 +9621,13 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
+      const eventTs = new Date(event.created * 1000);
+
+      const isStaleSubscriptionEvent = (company: { subscriptionUpdatedAt?: Date | null }): boolean => {
+        if (!company.subscriptionUpdatedAt) return false;
+        return eventTs <= company.subscriptionUpdatedAt;
+      };
+
       if (event.type === "customer.subscription.created") {
         const subscription = event.data.object as { id: string; customer: string; status: string; metadata: Record<string, string>; trial_end?: number | null; items?: { data?: Array<{ id: string }> } };
         const meta = subscription.metadata || {};
@@ -9666,12 +9673,19 @@ Return ONLY valid JSON, no markdown.`,
         if (meta.tenant_id) {
           const company = await storage.getCompany(meta.tenant_id);
           if (company) {
+            if (isStaleSubscriptionEvent(company)) {
+              console.log(`[Stripe Subscription] Skipping stale subscription.created for company "${company.name}" (event ${event.id} ts=${event.created})`);
+              await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
+              res.json({ received: true });
+              return;
+            }
             const subStatus = subscription.status === "trialing" ? "trialing" : "active";
             const updateData: Record<string, unknown> = {
               stripeCustomerId: subscription.customer,
               stripeSubscriptionId: subscription.id,
               subscriptionTier: planTier,
               subscriptionStatus: subStatus,
+              subscriptionUpdatedAt: eventTs,
             };
             if (subscription.trial_end) {
               updateData.trialEndsAt = new Date(subscription.trial_end * 1000);
@@ -9830,6 +9844,10 @@ Return ONLY valid JSON, no markdown.`,
           const allCompanies = await storage.listCompanies();
           for (const company of allCompanies) {
             if (company.stripeSubscriptionId === stripeSubId) {
+              if (isStaleSubscriptionEvent(company)) {
+                console.log(`[Stripe Subscription] Skipping stale subscription.updated for company "${company.name}" (event ${event.id} ts=${event.created})`);
+                break;
+              }
               const statusMap: Record<string, string> = {
                 active: "active",
                 past_due: "past_due",
@@ -9842,7 +9860,7 @@ Return ONLY valid JSON, no markdown.`,
                 free_trial: "free_trial", tier_1: "tier_1", tier_1_3: "tier_1_3",
                 tier_3_5: "tier_3_5", tier_6_10: "tier_6_10", tier_10_plus: "tier_10_plus",
               };
-              const updates: Record<string, unknown> = { subscriptionStatus: newStatus };
+              const updates: Record<string, unknown> = { subscriptionStatus: newStatus, subscriptionUpdatedAt: eventTs };
               if (meta.plan_tier && tierMap[meta.plan_tier]) {
                 updates.subscriptionTier = tierMap[meta.plan_tier];
               }
@@ -9882,7 +9900,11 @@ Return ONLY valid JSON, no markdown.`,
         if (!handled) {
           for (const company of allCompanies) {
             if (company.stripeSubscriptionId === stripeSubId) {
-              await storage.updateCompany(company.id, { subscriptionStatus: "cancelled", canceledAt: new Date() } as Partial<typeof companies.$inferInsert>);
+              if (isStaleSubscriptionEvent(company)) {
+                console.log(`[Stripe Subscription] Skipping stale subscription.deleted for company "${company.name}" (event ${event.id} ts=${event.created})`);
+                break;
+              }
+              await storage.updateCompany(company.id, { subscriptionStatus: "cancelled", canceledAt: new Date(), subscriptionUpdatedAt: eventTs } as Partial<typeof companies.$inferInsert>);
               console.log(`[Stripe Subscription] Company "${company.name}" subscription cancelled`);
               break;
             }
@@ -9929,9 +9951,14 @@ Return ONLY valid JSON, no markdown.`,
           const allCompanies = await storage.listCompanies();
           for (const company of allCompanies) {
             if (company.stripeCustomerId === stripeCustomerId && company.stripeSubscriptionId === invoice.subscription) {
+              if (isStaleSubscriptionEvent(company)) {
+                console.log(`[Stripe Subscription] Skipping stale invoice.payment_failed for company "${company.name}" (event ${event.id} ts=${event.created})`);
+                break;
+              }
               await storage.updateCompany(company.id, {
                 subscriptionStatus: "suspended",
                 frozenAt: new Date(),
+                subscriptionUpdatedAt: eventTs,
               } as Partial<typeof companies.$inferInsert>);
               const attemptCount = invoice.attempt_count || 1;
               console.log(`[Stripe Subscription] Company "${company.name}" SUSPENDED after subscription payment failure (attempt ${attemptCount})`);
@@ -9951,10 +9978,15 @@ Return ONLY valid JSON, no markdown.`,
           const allCompanies = await storage.listCompanies();
           for (const company of allCompanies) {
             if (company.stripeCustomerId === stripeCustomerId && company.stripeSubscriptionId === stripeInvoice.subscription) {
+              if (isStaleSubscriptionEvent(company)) {
+                console.log(`[Stripe Subscription] Skipping stale invoice.payment_succeeded for company "${company.name}" (event ${event.id} ts=${event.created})`);
+                break;
+              }
               if (company.subscriptionStatus === "suspended" || company.frozenAt) {
                 await storage.updateCompany(company.id, {
                   subscriptionStatus: "active",
                   frozenAt: null,
+                  subscriptionUpdatedAt: eventTs,
                 } as Partial<typeof companies.$inferInsert>);
                 console.log(`[Stripe Subscription] Company "${company.name}" REACTIVATED after successful subscription payment`);
                 notify(company.id, "general", "Payment Received",

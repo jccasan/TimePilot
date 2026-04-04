@@ -199,6 +199,7 @@ export const companies = pgTable("companies", {
   frozenAt: timestamp("frozen_at"),
   trialEndsAt: timestamp("trial_ends_at"),
   canceledAt: timestamp("canceled_at"),
+  subscriptionUpdatedAt: timestamp("subscription_updated_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
   churnNotes: text("churn_notes"),
   voicePlanTier: varchar("voice_plan_tier", { length: 50 }),
