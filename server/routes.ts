@@ -9455,13 +9455,14 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "Webhook signature verification failed" });
       }
 
-      const [existingEvent] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
-      if (existingEvent) {
+      const inserted = await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing().returning({ id: stripeEvents.id });
+      if (inserted.length === 0) {
         console.log(`[Stripe Webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
         return res.json({ received: true });
       }
 
-      await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
+      let processingSucceeded = false;
+      try {
 
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as any;
@@ -10007,7 +10008,15 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
+      processingSucceeded = true;
       res.json({ received: true });
+      } catch (processingErr) {
+        if (!processingSucceeded) {
+          await db.delete(stripeEvents).where(eq(stripeEvents.id, event.id)).catch(() => {});
+          console.error(`[Stripe Webhook] Processing failed for ${event.id} (${event.type}), removed from dedup table for retry`);
+        }
+        throw processingErr;
+      }
     } catch (err) {
       console.error("Stripe webhook error:", err);
       res.status(500).json({ error: "Webhook processing failed" });
@@ -15887,18 +15896,15 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).send(`Webhook Error: ${msg}`);
       }
 
-      const [existingV2] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, thinEvent.id)).limit(1);
-      if (existingV2) {
+      const insertedV2 = await db.insert(stripeEvents).values({ id: thinEvent.id, eventType: thinEvent.type }).onConflictDoNothing().returning({ id: stripeEvents.id });
+      if (insertedV2.length === 0) {
         console.log(`[V2 Webhook] Duplicate event ${thinEvent.id} (${thinEvent.type}) — skipping`);
         return res.json({ received: true });
       }
 
-      await db.insert(stripeEvents).values({ id: thinEvent.id, eventType: thinEvent.type }).onConflictDoNothing();
-
       res.json({ received: true });
 
       try {
-        // Retrieve the full event data from the V2 events API.
         const fullEvent = await retrieveV2Event(thinEvent.id);
 
         if (thinEvent.type === "v2.core.account[requirements].updated") {
@@ -15935,8 +15941,9 @@ Return ONLY valid JSON, no markdown.`,
           console.log(`[V2 Webhook] Unhandled event type: ${thinEvent.type}`);
         }
       } catch (err: unknown) {
+        await db.delete(stripeEvents).where(eq(stripeEvents.id, thinEvent.id)).catch(() => {});
         const msg = err instanceof Error ? err.message : String(err);
-        console.error("[V2 Webhook] Error processing event:", msg);
+        console.error(`[V2 Webhook] Error processing event ${thinEvent.id}, removed from dedup table for retry:`, msg);
       }
     }
   );
@@ -15980,13 +15987,11 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).send(`Webhook Error: ${msg}`);
       }
 
-      const [existingV1] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
-      if (existingV1) {
+      const insertedV1 = await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing().returning({ id: stripeEvents.id });
+      if (insertedV1.length === 0) {
         console.log(`[V1 Sub Webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
         return res.json({ received: true });
       }
-
-      await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
 
       res.json({ received: true });
 
@@ -16080,8 +16085,9 @@ Return ONLY valid JSON, no markdown.`,
             console.log(`[V1 Sub Webhook] Unhandled event type: ${event.type}`);
         }
       } catch (err: unknown) {
+        await db.delete(stripeEvents).where(eq(stripeEvents.id, event.id)).catch(() => {});
         const msg = err instanceof Error ? err.message : String(err);
-        console.error("[V1 Sub Webhook] Error processing event:", msg);
+        console.error(`[V1 Sub Webhook] Error processing event ${event.id}, removed from dedup table for retry:`, msg);
       }
     }
   );
