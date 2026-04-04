@@ -9552,22 +9552,7 @@ Return ONLY valid JSON, no markdown.`,
           }
 
           if (!resolved) {
-            const allCompanies = await storage.listCompanies();
-            for (const company of allCompanies) {
-              const invoice = await storage.getInvoice(invoiceId, company.id);
-              if (invoice && invoice.status !== "paid") {
-                await storage.updateInvoice(invoiceId, company.id, {
-                  status: "paid",
-                  paidAt: new Date(),
-                  stripePaymentIntentId: session.payment_intent,
-                  tipAmount,
-                });
-                const tipNote = parseFloat(tipAmount) > 0 ? ` (includes $${tipAmount} tip)` : "";
-                notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
-                qboAutoSync(company.id, invoiceId, "payment");
-                break;
-              }
-            }
+            console.warn(`[Stripe Webhook] checkout.session.completed: could not resolve invoice ${invoiceId} — tenant_id missing or invoice not found (session ${session.id}). Manual resolution required.`);
           }
         }
       }
@@ -9599,25 +9584,7 @@ Return ONLY valid JSON, no markdown.`,
           }
 
           if (!resolved) {
-            const allCompanies = await storage.listCompanies();
-            for (const company of allCompanies) {
-              const invoice = await storage.getInvoice(invoiceId, company.id);
-              if (invoice && invoice.status !== "paid") {
-                await storage.updateInvoice(invoiceId, company.id, {
-                  status: "paid",
-                  paidAt: new Date(),
-                  stripePaymentIntentId: pi.id,
-                });
-                auditLog(company.id, null, "invoice", invoiceId, "update", {
-                  old: { status: invoice.status },
-                  new: { status: "paid", paymentMethod: "stripe_webhook" },
-                  actor: "stripe_webhook",
-                });
-                notify(company.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
-                qboAutoSync(company.id, invoiceId, "payment");
-                break;
-              }
-            }
+            console.warn(`[Stripe Webhook] payment_intent.succeeded: could not resolve invoice ${invoiceId} — tenant_id missing or invoice not found (pi ${pi.id}). Manual resolution required.`);
           }
         }
       }
