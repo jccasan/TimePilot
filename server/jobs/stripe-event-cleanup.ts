@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { lt, sql, count } from "drizzle-orm";
+import { lt, count } from "drizzle-orm";
 import { stripeEvents } from "@shared/schema";
 
 export async function runStripeEventCleanup() {
