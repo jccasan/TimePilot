@@ -194,6 +194,7 @@ export const companies = pgTable("companies", {
   qboTokenExpiresAt: timestamp("qbo_token_expires_at"),
   qboConnectedAt: timestamp("qbo_connected_at"),
   qboIncomeAccountRef: varchar("qbo_income_account_ref", { length: 50 }),
+  qboFeeAccountRef: varchar("qbo_fee_account_ref", { length: 50 }),
   timezone: varchar("timezone", { length: 100 }).notNull().default("America/New_York"),
   lastAutoInvoiceRun: date("last_auto_invoice_run"),
   frozenAt: timestamp("frozen_at"),

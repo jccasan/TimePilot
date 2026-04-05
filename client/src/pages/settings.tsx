@@ -549,6 +549,7 @@ function QuickBooksSection() {
     lastSync: string | null;
     totalSynced: number;
     totalErrors: number;
+    feeAccountRef: string | null;
     recentLogs: { id: string; entityType: string; entityId: string; action: string; status: string; errorMessage: string | null; syncedAt: string | null; createdAt: string }[];
   }>({
     queryKey: ["/api/qbo/status"],
@@ -617,6 +618,25 @@ function QuickBooksSection() {
     },
     onError: (err: any) => {
       toast({ title: "Retry failed", description: err.message || "Failed to retry sync.", variant: "destructive" });
+    },
+  });
+
+  const { data: expenseAccounts, isLoading: loadingAccounts } = useQuery<{ id: string; name: string; accountSubType: string }[]>({
+    queryKey: ["/api/qbo/expense-accounts"],
+    enabled: !!qboStatus?.connected,
+  });
+
+  const feeAccountMutation = useMutation({
+    mutationFn: async (accountId: string) => {
+      const res = await apiRequest("POST", "/api/qbo/fee-account", { accountId });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/qbo/status"] });
+      toast({ title: "Fee account saved", description: "Stripe fees will be posted to this account in QuickBooks." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to save fee account.", variant: "destructive" });
     },
   });
 
@@ -749,6 +769,33 @@ function QuickBooksSection() {
                     )}
                     Disconnect
                   </Button>
+                </div>
+
+                <div className="border-t pt-3 space-y-2">
+                  <Label htmlFor="qbo-fee-account" className="text-sm font-medium">Stripe Fee Expense Account</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Select the QuickBooks expense account where Stripe processing fees will be recorded.
+                  </p>
+                  {loadingAccounts ? (
+                    <Skeleton className="h-9 w-full" />
+                  ) : (
+                    <Select
+                      value={qboStatus?.feeAccountRef || ""}
+                      onValueChange={(val) => feeAccountMutation.mutate(val)}
+                      disabled={feeAccountMutation.isPending}
+                    >
+                      <SelectTrigger id="qbo-fee-account" data-testid="select-qbo-fee-account">
+                        <SelectValue placeholder="Auto-detect or select an account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {expenseAccounts?.map((acct) => (
+                          <SelectItem key={acct.id} value={acct.id} data-testid={`option-qbo-account-${acct.id}`}>
+                            {acct.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
                 {qboStatus.recentLogs.length > 0 && (

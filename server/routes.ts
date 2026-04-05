@@ -15186,6 +15186,29 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/qbo/expense-accounts", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const { listQboExpenseAccounts } = await import("./services/quickbooks");
+      const accounts = await listQboExpenseAccounts(companyId);
+      res.json(accounts);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/qbo/fee-account", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const { accountId } = req.body;
+      if (!accountId || typeof accountId !== "string") {
+        return res.status(400).json({ error: "accountId is required" });
+      }
+      await storage.updateCompany(companyId, { qboFeeAccountRef: accountId } as any);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Voice Agent Scheduling API ================
 
   app.get("/api/voice/lookup", isAuthenticated, async (req: Request, res: Response) => {

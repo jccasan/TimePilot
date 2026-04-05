@@ -431,6 +431,71 @@ export async function syncInvoiceToQbo(companyId: string, invoiceId: string): Pr
   return { qboInvoiceId };
 }
 
+async function lookupQboAccount(companyId: string, accountType: string, accountSubType: string): Promise<string | null> {
+  try {
+    const query = `SELECT * FROM Account WHERE AccountType = '${accountType}' AND AccountSubType = '${accountSubType}' MAXRESULTS 1`;
+    const res = await qboRequest(companyId, "GET", `/query?query=${encodeURIComponent(query)}`);
+    const accounts = res?.QueryResponse?.Account;
+    if (accounts?.length > 0) return String(accounts[0].Id);
+  } catch {
+  }
+  return null;
+}
+
+async function lookupQboUndepositedFundsId(companyId: string): Promise<string | null> {
+  return lookupQboAccount(companyId, "Other Current Asset", "UndepositedFunds");
+}
+
+async function lookupQboCheckingAccount(companyId: string): Promise<string | null> {
+  try {
+    const query = `SELECT * FROM Account WHERE AccountType = 'Bank' AND Active = true MAXRESULTS 5`;
+    const res = await qboRequest(companyId, "GET", `/query?query=${encodeURIComponent(query)}`);
+    const accounts = res?.QueryResponse?.Account;
+    if (accounts?.length > 0) {
+      const checking = accounts.find((a: any) => a.AccountSubType === "Checking");
+      return String((checking || accounts[0]).Id);
+    }
+  } catch {
+  }
+  return null;
+}
+
+async function lookupDefaultFeeAccount(companyId: string): Promise<string | null> {
+  const id = await lookupQboAccount(companyId, "Expense", "OtherMiscellaneousServiceCost");
+  if (id) return id;
+  try {
+    const query = `SELECT * FROM Account WHERE AccountType = 'Expense' AND Name IN ('Merchant Service Fees', 'Bank Charges', 'Bank Service Charges') MAXRESULTS 1`;
+    const res = await qboRequest(companyId, "GET", `/query?query=${encodeURIComponent(query)}`);
+    const accounts = res?.QueryResponse?.Account;
+    if (accounts?.length > 0) return String(accounts[0].Id);
+  } catch {
+  }
+  return null;
+}
+
+async function getStripeFeeForPayment(stripePaymentIntentId: string): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
+  try {
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-04-30.basil" as any });
+    const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId, { expand: ["latest_charge.balance_transaction"] });
+    const charge = (pi as any).latest_charge;
+    if (!charge || typeof charge === "string") return null;
+    const bt = charge.balance_transaction;
+    if (!bt || typeof bt === "string") return null;
+    return { feeCents: bt.fee, netCents: bt.net, grossCents: bt.amount };
+  } catch (err: any) {
+    console.warn(`[QBO] Failed to retrieve Stripe fee for PI ${stripePaymentIntentId}: ${err.message}`);
+    return null;
+  }
+}
+
+export async function listQboExpenseAccounts(companyId: string): Promise<{ id: string; name: string; accountSubType: string }[]> {
+  const query = `SELECT Id, Name, AccountSubType FROM Account WHERE AccountType = 'Expense' MAXRESULTS 100`;
+  const res = await qboRequest(companyId, "GET", `/query?query=${encodeURIComponent(query)}`);
+  const accounts = res?.QueryResponse?.Account || [];
+  return accounts.map((a: any) => ({ id: String(a.Id), name: a.Name, accountSubType: a.AccountSubType || "" }));
+}
+
 export async function syncPaymentToQbo(companyId: string, invoiceId: string): Promise<void> {
   const [invoice] = await db.select().from(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
   if (!invoice?.qboInvoiceId) {
@@ -471,8 +536,11 @@ export async function syncPaymentToQbo(companyId: string, invoiceId: string): Pr
   }
 
   const [contact] = await db.select().from(contacts).where(eq(contacts.id, freshInvoice.contactId));
+  const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
 
-  const paymentRes = await qboRequest(companyId, "POST", `/payment`, {
+  const undepositedFundsId = await lookupQboUndepositedFundsId(companyId);
+
+  const paymentBody: Record<string, any> = {
     CustomerRef: { value: contact?.qboCustomerId },
     TotalAmt: parseFloat(freshInvoice.total),
     Line: [{
@@ -482,9 +550,92 @@ export async function syncPaymentToQbo(companyId: string, invoiceId: string): Pr
         TxnType: "Invoice",
       }],
     }],
-  });
+  };
 
-  await logSync(companyId, "payment", invoiceId, "create", "synced", String(paymentRes.Payment.Id));
+  if (undepositedFundsId) {
+    paymentBody.DepositToAccountRef = { value: undepositedFundsId };
+  }
+
+  const paymentRes = await qboRequest(companyId, "POST", `/payment`, paymentBody);
+  const qboPaymentId = String(paymentRes.Payment.Id);
+
+  await logSync(companyId, "payment", invoiceId, "create", "synced", qboPaymentId);
+
+  if (!undepositedFundsId || !freshInvoice.stripePaymentIntentId) {
+    return;
+  }
+
+  const stripeFee = await getStripeFeeForPayment(freshInvoice.stripePaymentIntentId);
+  if (!stripeFee || stripeFee.feeCents === 0) {
+    return;
+  }
+
+  let feeAccountId = company?.qboFeeAccountRef || null;
+  if (!feeAccountId) {
+    feeAccountId = await lookupDefaultFeeAccount(companyId);
+    if (feeAccountId) {
+      await db.update(companies).set({ qboFeeAccountRef: feeAccountId }).where(eq(companies.id, companyId));
+    }
+  }
+
+  if (!feeAccountId) {
+    console.warn(`[QBO] No fee expense account found for company ${companyId}. Skipping deposit creation.`);
+    await logSync(companyId, "deposit", invoiceId, "skip", "error", undefined, "No fee expense account configured. Set one in Settings > QuickBooks.");
+    return;
+  }
+
+  try {
+    const existingDepositLogs = await db.select().from(qboSyncLogs)
+      .where(and(
+        eq(qboSyncLogs.companyId, companyId),
+        eq(qboSyncLogs.entityType, "deposit"),
+        eq(qboSyncLogs.entityId, invoiceId),
+        eq(qboSyncLogs.status, "synced"),
+      ))
+      .limit(1);
+
+    if (existingDepositLogs.length > 0) {
+      return;
+    }
+
+    const grossAmount = stripeFee.grossCents / 100;
+    const feeAmount = stripeFee.feeCents / 100;
+
+    const bankAccountId = await lookupQboCheckingAccount(companyId);
+    if (!bankAccountId) {
+      console.warn(`[QBO] No bank/checking account found for company ${companyId}. Skipping deposit.`);
+      await logSync(companyId, "deposit", invoiceId, "skip", "error", undefined, "No bank account found in QuickBooks.");
+      return;
+    }
+
+    const depositRes = await qboRequest(companyId, "POST", `/deposit`, {
+      DepositToAccountRef: { value: bankAccountId },
+      TxnDate: new Date().toISOString().split("T")[0],
+      Line: [
+        {
+          Amount: grossAmount,
+          LinkedTxn: [{
+            TxnId: qboPaymentId,
+            TxnType: "Payment",
+          }],
+        },
+        {
+          Amount: -feeAmount,
+          DetailType: "DepositLineDetail",
+          DepositLineDetail: {
+            AccountRef: { value: feeAccountId },
+          },
+          Description: "Stripe processing fee",
+        },
+      ],
+      PrivateNote: `Stripe net deposit for invoice ${freshInvoice.invoiceNumber}. Fee: $${feeAmount.toFixed(2)}`,
+    });
+
+    await logSync(companyId, "deposit", invoiceId, "create", "synced", String(depositRes.Deposit.Id));
+  } catch (depositErr: any) {
+    console.error(`[QBO] Deposit creation failed for invoice ${invoiceId} (company ${companyId}):`, depositErr.message);
+    await logSync(companyId, "deposit", invoiceId, "create", "error", undefined, depositErr.message);
+  }
 }
 
 export async function getQboSyncStatus(companyId: string): Promise<{
@@ -494,6 +645,7 @@ export async function getQboSyncStatus(companyId: string): Promise<{
   lastSync: string | null;
   totalSynced: number;
   totalErrors: number;
+  feeAccountRef: string | null;
   recentLogs: any[];
 }> {
   const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
@@ -515,6 +667,7 @@ export async function getQboSyncStatus(companyId: string): Promise<{
     lastSync: lastSyncedLog?.syncedAt?.toISOString() || null,
     totalSynced,
     totalErrors,
+    feeAccountRef: company?.qboFeeAccountRef || null,
     recentLogs: logs.slice(0, 20).map(l => ({
       id: l.id,
       entityType: l.entityType,
