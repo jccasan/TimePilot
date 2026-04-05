@@ -562,6 +562,8 @@ export async function syncPaymentToQbo(companyId: string, invoiceId: string): Pr
 
     if (undepositedFundsId) {
       paymentBody.DepositToAccountRef = { value: undepositedFundsId };
+    } else {
+      console.warn(`[QBO] Undeposited Funds account not found for company ${companyId}. Payment will use QBO default deposit account; deposit reconciliation will be skipped.`);
     }
 
     const paymentRes = await qboRequest(companyId, "POST", `/payment`, paymentBody);
