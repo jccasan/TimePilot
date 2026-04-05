@@ -1,0 +1,41 @@
+Task: Update QuickBooks Online (QBO) Sync Logic to Automate Stripe Fee Reconciliation
+
+Objective:
+Modify the current 2-way QuickBooks sync so that when a Stripe payment is processed, the system automatically accounts for Stripe fees. This will ensure the QBO bank deposit matches the actual net amount received in the bank feed.
+
+Requirements:
+
+1. Payment Recording (Undeposited Funds):
+
+When a Stripe payment is successful, do not post the payment directly to the bank account.
+
+Instead, record the Payment entity in QBO for the Gross Amount (the full invoice total) and set the DepositToAccountRef to the "Undeposited Funds" account.
+
+2. Fee Retrieval & Deposit Creation:
+
+Retrieve the fee amount from the Stripe balance_transaction object associated with the payment.
+
+Create a Deposit entity in QBO that combines two lines:
+
+Line 1 (Linked Payment): Link the Payment created in Step 1 (the Gross Amount).
+
+Line 2 (The Fee): Add a new line to the deposit with a negative value equal to the Stripe fee.
+
+Account Mapping: Map this negative line to the QBO expense account labeled "Bank Charges" or "Merchant Service Fees."
+
+3. Reconciliation Logic:
+
+Ensure the final TotalAmt of the QBO Deposit matches the net amount from Stripe (Gross - Fee).
+
+Include error handling to verify that the Deposit is only created after the Payment has been successfully confirmed in QBO.
+
+Technical Context:
+
+Use the existing QBO OAuth2 tokens and client configuration.
+
+Update the webhook handler/sync service responsible for processing payment_intent.succeeded or your internal "Invoice Paid" event.
+
+A few tips for the implementation:
+The "Undeposited Funds" ID: QBO account IDs vary by user. You might want to have your code look up the account by AccountType ("Asset") and AccountSubType ("UndepositedFunds") rather than hardcoding an ID.
+
+The Expense Account: Similarly, ensure your SaaS allows the user to select which expense account they want the fees to hit (usually "Merchant Service Fees") during the setup of your integration.
