@@ -476,15 +476,17 @@ async function lookupDefaultFeeAccount(companyId: string): Promise<string | null
 async function getStripeFeeForPayment(stripePaymentIntentId: string): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
   try {
     const Stripe = (await import("stripe")).default;
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-04-30.basil" as any });
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
     const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId, { expand: ["latest_charge.balance_transaction"] });
-    const charge = (pi as any).latest_charge;
+    const piData = pi as Record<string, unknown>;
+    const charge = piData.latest_charge as Record<string, unknown> | string | null;
     if (!charge || typeof charge === "string") return null;
-    const bt = charge.balance_transaction;
+    const bt = charge.balance_transaction as Record<string, unknown> | string | null;
     if (!bt || typeof bt === "string") return null;
-    return { feeCents: bt.fee, netCents: bt.net, grossCents: bt.amount };
-  } catch (err: any) {
-    console.warn(`[QBO] Failed to retrieve Stripe fee for PI ${stripePaymentIntentId}: ${err.message}`);
+    return { feeCents: bt.fee as number, netCents: bt.net as number, grossCents: bt.amount as number };
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[QBO] Failed to retrieve Stripe fee for PI ${stripePaymentIntentId}: ${errMsg}`);
     return null;
   }
 }
@@ -493,7 +495,7 @@ export async function listQboExpenseAccounts(companyId: string): Promise<{ id: s
   const query = `SELECT Id, Name, AccountSubType FROM Account WHERE AccountType = 'Expense' MAXRESULTS 100`;
   const res = await qboRequest(companyId, "GET", `/query?query=${encodeURIComponent(query)}`);
   const accounts = res?.QueryResponse?.Account || [];
-  return accounts.map((a: any) => ({ id: String(a.Id), name: a.Name, accountSubType: a.AccountSubType || "" }));
+  return accounts.map((a: Record<string, unknown>) => ({ id: String(a.Id), name: String(a.Name), accountSubType: String(a.AccountSubType || "") }));
 }
 
 export async function syncPaymentToQbo(companyId: string, invoiceId: string): Promise<void> {
@@ -505,6 +507,11 @@ export async function syncPaymentToQbo(companyId: string, invoiceId: string): Pr
   const freshInvoice = (await db.select().from(invoices).where(eq(invoices.id, invoiceId)))[0];
   if (!freshInvoice?.qboInvoiceId) throw new Error("Could not sync invoice to QBO first");
 
+  const [contact] = await db.select().from(contacts).where(eq(contacts.id, freshInvoice.contactId));
+  const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
+
+  let qboPaymentId: string | null = null;
+
   const existingPaymentLogs = await db.select().from(qboSyncLogs)
     .where(and(
       eq(qboSyncLogs.companyId, companyId),
@@ -515,58 +522,84 @@ export async function syncPaymentToQbo(companyId: string, invoiceId: string): Pr
     .limit(1);
 
   if (existingPaymentLogs.length > 0) {
-    return;
+    qboPaymentId = existingPaymentLogs[0].qboEntityId || null;
   }
 
-  try {
-    const safeInvoiceNum = (freshInvoice.invoiceNumber || "").replace(/'/g, "\\'");
-    const paymentQuery = await qboRequest(companyId, "GET",
-      `/query?query=${encodeURIComponent(`SELECT * FROM Payment WHERE PaymentRefNum = '${safeInvoiceNum}'`)}`);
-    const existingPayments = paymentQuery?.QueryResponse?.Payment;
-    if (existingPayments?.length > 0) {
-      const linked = existingPayments.find((p: any) =>
-        p.Line?.some((l: any) => l.LinkedTxn?.some((t: any) => t.TxnId === freshInvoice.qboInvoiceId))
-      );
-      if (linked) {
-        await logSync(companyId, "payment", invoiceId, "match", "synced", String(linked.Id));
-        return;
+  if (!qboPaymentId) {
+    try {
+      const safeInvoiceNum = (freshInvoice.invoiceNumber || "").replace(/'/g, "\\'");
+      const paymentQuery = await qboRequest(companyId, "GET",
+        `/query?query=${encodeURIComponent(`SELECT * FROM Payment WHERE PaymentRefNum = '${safeInvoiceNum}'`)}`);
+      const existingPayments = paymentQuery?.QueryResponse?.Payment;
+      if (existingPayments?.length > 0) {
+        const linked = existingPayments.find((p: Record<string, unknown>) =>
+          (p.Line as Array<Record<string, unknown>>)?.some((l) =>
+            (l.LinkedTxn as Array<Record<string, unknown>>)?.some((t) => t.TxnId === freshInvoice.qboInvoiceId))
+        );
+        if (linked) {
+          qboPaymentId = String(linked.Id);
+          await logSync(companyId, "payment", invoiceId, "match", "synced", qboPaymentId);
+        }
       }
+    } catch {
     }
-  } catch {
   }
 
-  const [contact] = await db.select().from(contacts).where(eq(contacts.id, freshInvoice.contactId));
-  const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
+  if (!qboPaymentId) {
+    const undepositedFundsId = await lookupQboUndepositedFundsId(companyId);
 
-  const undepositedFundsId = await lookupQboUndepositedFundsId(companyId);
-
-  const paymentBody: Record<string, any> = {
-    CustomerRef: { value: contact?.qboCustomerId },
-    TotalAmt: parseFloat(freshInvoice.total),
-    Line: [{
-      Amount: parseFloat(freshInvoice.total),
-      LinkedTxn: [{
-        TxnId: freshInvoice.qboInvoiceId,
-        TxnType: "Invoice",
+    const paymentBody: Record<string, unknown> = {
+      CustomerRef: { value: contact?.qboCustomerId },
+      TotalAmt: parseFloat(freshInvoice.total),
+      Line: [{
+        Amount: parseFloat(freshInvoice.total),
+        LinkedTxn: [{
+          TxnId: freshInvoice.qboInvoiceId,
+          TxnType: "Invoice",
+        }],
       }],
-    }],
-  };
+    };
 
-  if (undepositedFundsId) {
-    paymentBody.DepositToAccountRef = { value: undepositedFundsId };
+    if (undepositedFundsId) {
+      paymentBody.DepositToAccountRef = { value: undepositedFundsId };
+    }
+
+    const paymentRes = await qboRequest(companyId, "POST", `/payment`, paymentBody);
+    qboPaymentId = String(paymentRes.Payment.Id);
+
+    await logSync(companyId, "payment", invoiceId, "create", "synced", qboPaymentId);
   }
 
-  const paymentRes = await qboRequest(companyId, "POST", `/payment`, paymentBody);
-  const qboPaymentId = String(paymentRes.Payment.Id);
+  await reconcileDeposit(companyId, invoiceId, qboPaymentId, freshInvoice, company);
+}
 
-  await logSync(companyId, "payment", invoiceId, "create", "synced", qboPaymentId);
+async function reconcileDeposit(
+  companyId: string,
+  invoiceId: string,
+  qboPaymentId: string,
+  freshInvoice: typeof invoices.$inferSelect,
+  company: typeof companies.$inferSelect | undefined,
+): Promise<void> {
+  if (!freshInvoice.stripePaymentIntentId) return;
 
-  if (!undepositedFundsId || !freshInvoice.stripePaymentIntentId) {
-    return;
-  }
+  const existingDepositLogs = await db.select().from(qboSyncLogs)
+    .where(and(
+      eq(qboSyncLogs.companyId, companyId),
+      eq(qboSyncLogs.entityType, "deposit"),
+      eq(qboSyncLogs.entityId, invoiceId),
+      eq(qboSyncLogs.status, "synced"),
+    ))
+    .limit(1);
+
+  if (existingDepositLogs.length > 0) return;
 
   const stripeFee = await getStripeFeeForPayment(freshInvoice.stripePaymentIntentId);
-  if (!stripeFee || stripeFee.feeCents === 0) {
+  if (!stripeFee || stripeFee.feeCents === 0) return;
+
+  const expectedNet = stripeFee.grossCents - stripeFee.feeCents;
+  if (expectedNet !== stripeFee.netCents) {
+    console.warn(`[QBO] Stripe fee math mismatch for PI ${freshInvoice.stripePaymentIntentId}: gross(${stripeFee.grossCents}) - fee(${stripeFee.feeCents}) != net(${stripeFee.netCents}). Skipping deposit.`);
+    await logSync(companyId, "deposit", invoiceId, "skip", "error", undefined, "Stripe fee math verification failed.");
     return;
   }
 
@@ -584,29 +617,16 @@ export async function syncPaymentToQbo(companyId: string, invoiceId: string): Pr
     return;
   }
 
+  const bankAccountId = await lookupQboCheckingAccount(companyId);
+  if (!bankAccountId) {
+    console.warn(`[QBO] No bank/checking account found for company ${companyId}. Skipping deposit.`);
+    await logSync(companyId, "deposit", invoiceId, "skip", "error", undefined, "No bank account found in QuickBooks.");
+    return;
+  }
+
   try {
-    const existingDepositLogs = await db.select().from(qboSyncLogs)
-      .where(and(
-        eq(qboSyncLogs.companyId, companyId),
-        eq(qboSyncLogs.entityType, "deposit"),
-        eq(qboSyncLogs.entityId, invoiceId),
-        eq(qboSyncLogs.status, "synced"),
-      ))
-      .limit(1);
-
-    if (existingDepositLogs.length > 0) {
-      return;
-    }
-
     const grossAmount = stripeFee.grossCents / 100;
     const feeAmount = stripeFee.feeCents / 100;
-
-    const bankAccountId = await lookupQboCheckingAccount(companyId);
-    if (!bankAccountId) {
-      console.warn(`[QBO] No bank/checking account found for company ${companyId}. Skipping deposit.`);
-      await logSync(companyId, "deposit", invoiceId, "skip", "error", undefined, "No bank account found in QuickBooks.");
-      return;
-    }
 
     const depositRes = await qboRequest(companyId, "POST", `/deposit`, {
       DepositToAccountRef: { value: bankAccountId },
@@ -632,9 +652,10 @@ export async function syncPaymentToQbo(companyId: string, invoiceId: string): Pr
     });
 
     await logSync(companyId, "deposit", invoiceId, "create", "synced", String(depositRes.Deposit.Id));
-  } catch (depositErr: any) {
-    console.error(`[QBO] Deposit creation failed for invoice ${invoiceId} (company ${companyId}):`, depositErr.message);
-    await logSync(companyId, "deposit", invoiceId, "create", "error", undefined, depositErr.message);
+  } catch (depositErr: unknown) {
+    const errMsg = depositErr instanceof Error ? depositErr.message : String(depositErr);
+    console.error(`[QBO] Deposit creation failed for invoice ${invoiceId} (company ${companyId}):`, errMsg);
+    await logSync(companyId, "deposit", invoiceId, "create", "error", undefined, errMsg);
   }
 }
 

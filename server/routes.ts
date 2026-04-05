@@ -15204,7 +15204,7 @@ Return ONLY valid JSON, no markdown.`,
       if (!accountId || typeof accountId !== "string") {
         return res.status(400).json({ error: "accountId is required" });
       }
-      await storage.updateCompany(companyId, { qboFeeAccountRef: accountId } as any);
+      await db.update(companies).set({ qboFeeAccountRef: accountId }).where(eq(companies.id, companyId));
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
