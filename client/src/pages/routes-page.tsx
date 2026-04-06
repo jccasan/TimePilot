@@ -1100,14 +1100,25 @@ export default function RoutesPage() {
     return weekPlanIds.has(sp.id) || sp.routeId != null;
   }), [servicePlans, weekPlanIds, currentWeekRange]);
 
+  const dayPlanIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const v of dayVisits) {
+      if (v.servicePlanId) ids.add(v.servicePlanId);
+    }
+    return ids;
+  }, [dayVisits]);
+
   const stopsByRoute = useMemo(() => {
     const map: Record<string, ServicePlan[]> = {};
     for (const r of allRoutes) map[r.id] = [];
     for (const sp of visiblePlans) {
-      if (sp.routeId && map[sp.routeId]) map[sp.routeId].push(sp);
+      if (!sp.routeId || !map[sp.routeId]) continue;
+      if (sp.frequency === "weekly" || dayPlanIds.has(sp.id)) {
+        map[sp.routeId].push(sp);
+      }
     }
     return map;
-  }, [allRoutes, visiblePlans]);
+  }, [allRoutes, visiblePlans, dayPlanIds]);
 
   const fetchRouteMetrics = useCallback(async (routeId: string) => {
     try {
@@ -1173,6 +1184,15 @@ export default function RoutesPage() {
 
   const dayStopCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    const visitPlanIdsByDay: Record<string, Set<string>> = {};
+    for (const d of DAYS) visitPlanIdsByDay[d] = new Set();
+    for (const v of weekVisits) {
+      if (!v.servicePlanId || !v.scheduledDate) continue;
+      const vDate = new Date(v.scheduledDate + "T12:00:00");
+      const dayIdx = (vDate.getDay() + 6) % 7;
+      const dayKey = DAYS[dayIdx];
+      if (dayKey) visitPlanIdsByDay[dayKey].add(v.servicePlanId);
+    }
     for (const d of DAYS) {
       const dayRouteIds = new Set(allRoutes.filter(r => {
         if (r.dayOfWeek !== d) return false;
@@ -1182,10 +1202,14 @@ export default function RoutesPage() {
         }
         return true;
       }).map(r => r.id));
-      counts[d] = visiblePlans.filter(sp => sp.routeId && dayRouteIds.has(sp.routeId)).length;
+      const planIdsForDay = visitPlanIdsByDay[d];
+      counts[d] = visiblePlans.filter(sp => {
+        if (!sp.routeId || !dayRouteIds.has(sp.routeId)) return false;
+        return sp.frequency === "weekly" || planIdsForDay.has(sp.id);
+      }).length;
     }
     return counts;
-  }, [allRoutes, visiblePlans, currentWeekRange]);
+  }, [allRoutes, visiblePlans, currentWeekRange, weekVisits]);
 
   const createRouteMutation = useMutation({
     mutationFn: async (data: { name: string; dayOfWeek: string; technicianId: string | null; color: string }) => {
