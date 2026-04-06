@@ -7,7 +7,7 @@ import multer from "multer";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, gte, isNotNull, like, or, inArray, desc } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable, stripeEvents } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable, stripeEvents, automationRules, automationEventLogs } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -14924,6 +14924,179 @@ Return ONLY valid JSON, no markdown.`,
           frequency: serviceFrequency,
         },
         smsSent,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  const webhookQuoteSchema = z.object({
+    firstName: z.string().min(1).max(255),
+    lastName: z.string().max(255).default(""),
+    email: z.string().email().max(255).optional().or(z.literal("")),
+    phone: z.string().max(50).optional().or(z.literal("")),
+    streetAddress: z.string().max(255).optional().or(z.literal("")),
+    city: z.string().max(100).optional().or(z.literal("")),
+    state: z.string().max(50).optional().or(z.literal("")),
+    zipCode: z.string().max(20).optional().or(z.literal("")),
+    numberOfDogs: z.union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)]).default(1),
+    yardSize: z.enum(["small", "medium", "large", "estate"]).default("medium"),
+    frequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
+    isFirstTime: z.boolean().default(true),
+    source: z.string().max(100).optional(),
+    notes: z.string().max(5000).optional(),
+  });
+
+  app.post("/api/webhooks/quotes", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const parsed = webhookQuoteSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten().fieldErrors });
+
+      const { firstName, lastName, email, phone, streetAddress, city, state: st, zipCode, numberOfDogs, yardSize, frequency, isFirstTime, source, notes } = parsed.data;
+
+      const leadSource = source || "website";
+
+      const existingSources = await storage.getLeadSources(companyId);
+      if (!existingSources.some(s => s.name.toLowerCase() === leadSource.toLowerCase())) {
+        await storage.createLeadSource({ companyId, name: leadSource });
+      }
+
+      let contactId: string | null = null;
+      const normalizedEmail = email ? email.trim().toLowerCase() : null;
+      const normalizedPhone = phone ? phone.replace(/[^\d+]/g, "") : null;
+      if (normalizedEmail) {
+        const [existing] = await db.select().from(contacts)
+          .where(and(eq(contacts.companyId, companyId), sql`LOWER(TRIM(${contacts.email})) = ${normalizedEmail}`))
+          .limit(1);
+        if (existing) contactId = existing.id;
+      }
+      if (!contactId && normalizedPhone) {
+        const [existing] = await db.select().from(contacts)
+          .where(and(eq(contacts.companyId, companyId), eq(contacts.phone, normalizedPhone)))
+          .limit(1);
+        if (existing) contactId = existing.id;
+      }
+
+      if (!contactId) {
+        const newContact = await storage.createContact({
+          companyId,
+          firstName,
+          lastName,
+          email: normalizedEmail || null,
+          phone: normalizedPhone || null,
+          streetAddress: streetAddress || null,
+          city: city || null,
+          state: st || null,
+          zipCode: zipCode || null,
+          numberOfDogs,
+          yardSize: yardSize || null,
+          serviceFrequency: frequency,
+          status: "lead",
+          leadSource,
+          notes: notes || null,
+        });
+        contactId = newContact.id;
+      }
+
+      let propertyId: string | null = null;
+      const hasFullAddress = !!(streetAddress && city && st && zipCode);
+      if (hasFullAddress && contactId) {
+        try {
+          const prop = await createPropertyWithGeocode({
+            companyId,
+            contactId,
+            streetAddress: streetAddress!,
+            city: city!,
+            state: st!,
+            zipCode: zipCode!,
+            numberOfDogs,
+            yardSize: yardSize || null,
+          });
+          propertyId = prop.id;
+        } catch {
+        }
+      }
+
+      const company = await storage.getCompany(companyId);
+      const pricingInput: ResidentialQuoteInput = {
+        type: "residential",
+        dogCount: numberOfDogs,
+        yardSize,
+        frequency,
+        isFirstTime,
+      };
+      const tierPricing = calculateQuotePricing(pricingInput, company?.quoteDefaults ?? null);
+
+      const fullAddress = hasFullAddress ? `${streetAddress}, ${city}, ${st} ${zipCode}` : (streetAddress || "");
+
+      const quoteNumber = await storage.getNextQuoteNumber(companyId);
+      const quote = await storage.createQuote({
+        companyId,
+        type: "residential",
+        quoteNumber,
+        contactId,
+        propertyId,
+        contactName: `${firstName} ${lastName}`.trim(),
+        contactEmail: email || null,
+        contactPhone: phone || null,
+        propertyAddress: fullAddress || null,
+        dogCount: numberOfDogs,
+        yardSize,
+        frequency,
+        isFirstTime,
+        essentialPrice: tierPricing.essential.toFixed(2),
+        premiumPrice: tierPricing.premium.toFixed(2),
+        deluxePrice: tierPricing.deluxe.toFixed(2),
+        initialCleanFee: tierPricing.initialCleanFee.toFixed(2),
+        essentialFeatures: tierPricing.essentialFeatures,
+        premiumFeatures: tierPricing.premiumFeatures,
+        deluxeFeatures: tierPricing.deluxeFeatures,
+        pricingBreakdown: tierPricing.breakdown,
+        notes: notes || null,
+        status: "draft",
+      });
+
+      notify(companyId, "new_quote", "New Quote (Webhook)", `Quote #${quoteNumber} created for ${firstName} ${lastName} via ${leadSource}.`.trim(), `/quotes/${quote.id}`);
+
+      try {
+        const { dispatchWebhooksForEvent } = await import("./services/webhook-dispatcher");
+        await dispatchWebhooksForEvent(companyId, "quote.created", {
+          quoteId: quote.id,
+          quoteNumber,
+          contactId,
+          contactName: `${firstName} ${lastName}`.trim(),
+          essentialPrice: tierPricing.essential,
+          premiumPrice: tierPricing.premium,
+          deluxePrice: tierPricing.deluxe,
+          source: leadSource,
+        });
+
+        const matchedRules = await db.select().from(automationRules)
+          .where(and(eq(automationRules.companyId, companyId), eq(automationRules.trigger, "quote_created"), eq(automationRules.isActive, true)));
+        for (const rule of matchedRules) {
+          await db.insert(automationEventLogs).values({
+            companyId,
+            ruleId: rule.id,
+            trigger: "quote_created",
+            payload: { quoteId: quote.id, contactId, source: leadSource },
+            result: { success: true },
+          });
+        }
+      } catch (autoErr) {
+        console.error("[webhook-quote] Automation trigger error:", autoErr);
+      }
+
+      res.status(201).json({
+        quoteId: quote.id,
+        quoteNumber,
+        contactId,
+        propertyId,
+        pricing: {
+          essential: tierPricing.essential,
+          premium: tierPricing.premium,
+          deluxe: tierPricing.deluxe,
+          initialCleanFee: tierPricing.initialCleanFee,
+        },
+        source: leadSource,
       });
     } catch (err) { handleError(res, err); }
   });

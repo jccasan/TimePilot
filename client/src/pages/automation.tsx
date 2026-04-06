@@ -38,6 +38,7 @@ import { Plus, Zap } from "lucide-react";
 
 const triggers = [
   { value: "lead_created", label: "Lead Created" },
+  { value: "quote_created", label: "Quote Created" },
   { value: "service_completed", label: "Service Completed" },
   { value: "payment_failed", label: "Payment Failed" },
   { value: "invoice_created", label: "Invoice Created" },
@@ -51,7 +52,7 @@ const actionTypes = [
 
 const ruleFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  trigger: z.enum(["lead_created", "service_completed", "payment_failed", "invoice_created"]),
+  trigger: z.enum(["lead_created", "quote_created", "service_completed", "payment_failed", "invoice_created"]),
   actionType: z.string().min(1, "Action type is required"),
   description: z.string().optional(),
 });

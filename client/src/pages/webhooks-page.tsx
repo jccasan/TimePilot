@@ -39,6 +39,7 @@ import { Plus, Webhook as WebhookIcon, Trash2, CheckCircle, XCircle, Clock, Chev
 const availableEvents = [
   "contact.created",
   "contact.updated",
+  "quote.created",
   "visit.completed",
   "invoice.created",
   "invoice.paid",

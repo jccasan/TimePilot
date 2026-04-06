@@ -22,7 +22,7 @@ export const invoiceFrequencyEnum = pgEnum("invoice_frequency", ["per_service", 
 export const discountTypeEnum = pgEnum("discount_type", ["percent", "amount"]);
 export const subscriptionTierEnum = pgEnum("subscription_tier", ["free_trial", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "past_due", "cancelled", "trialing", "suspended"]);
-export const automationTriggerEnum = pgEnum("automation_trigger", ["lead_created", "service_completed", "payment_failed", "invoice_created"]);
+export const automationTriggerEnum = pgEnum("automation_trigger", ["lead_created", "service_completed", "payment_failed", "invoice_created", "quote_created"]);
 
 export const yardDifficultyEnum = pgEnum("yard_difficulty", ["flat", "moderate", "difficult"]);
 export const priceRecommendationSourceEnum = pgEnum("price_recommendation_source", ["manual", "auto", "ai_optimizer"]);
