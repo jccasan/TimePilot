@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
@@ -213,6 +213,19 @@ export default function Invoices() {
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [themeDialogOpen, setThemeDialogOpen] = useState(false);
+
+  type SortField = "invoiceNumber" | "contact" | "dueDate" | "total" | "status" | "createdAt";
+  type SortDir = "asc" | "desc";
+  const [sortField, setSortField] = useState<SortField>("createdAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
 
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices", statusFilter],
@@ -638,6 +651,56 @@ export default function Invoices() {
     return map;
   }, [contacts]);
 
+  const sortedInvoices = useMemo(() => {
+    if (!invoices) return [];
+    return [...invoices].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "invoiceNumber":
+          cmp = (a.invoiceNumber || "").localeCompare(b.invoiceNumber || "", undefined, { numeric: true });
+          break;
+        case "contact": {
+          const ca = contactMap[a.contactId];
+          const cb = contactMap[b.contactId];
+          const nameA = ca ? `${ca.lastName} ${ca.firstName}` : "";
+          const nameB = cb ? `${cb.lastName} ${cb.firstName}` : "";
+          cmp = nameA.localeCompare(nameB);
+          break;
+        }
+        case "dueDate":
+          cmp = (a.dueDate || "").localeCompare(b.dueDate || "");
+          break;
+        case "total":
+          cmp = Number(a.total) - Number(b.total);
+          break;
+        case "status":
+          cmp = (a.status || "").localeCompare(b.status || "");
+          break;
+        case "createdAt":
+          cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [invoices, sortField, sortDir, contactMap]);
+
+  const SortHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
+    <TableHead>
+      <button
+        className="flex items-center gap-1 hover:text-foreground transition-colors font-medium"
+        onClick={() => toggleSort(field)}
+        data-testid={`sort-${field}`}
+      >
+        {children}
+        {sortField === field ? (
+          sortDir === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+        ) : (
+          <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+        )}
+      </button>
+    </TableHead>
+  );
+
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -935,126 +998,154 @@ export default function Invoices() {
             </Card>
           )}
         </div>
-      ) : invoices && invoices.length > 0 ? (
-        <div className="space-y-3">
-          {invoices.map((invoice) => {
-            const contact = contactMap[invoice.contactId];
-            const isOverdue = invoice.dueDate && invoice.status !== "paid" && invoice.status !== "voided" && new Date(invoice.dueDate + "T23:59:59") < new Date();
-            return (
-              <Card key={invoice.id} data-testid={`card-invoice-${invoice.id}`} className={`cursor-pointer hover:bg-muted/50 transition-colors ${isOverdue ? "border-red-400 bg-red-50/50 dark:border-red-700 dark:bg-red-950/30" : ""}`} onClick={() => viewInvoiceDetail(invoice.id)}>
-                <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
-                  <div className="flex items-center gap-3">
-                    {isOverdue ? (
-                      <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
-                    ) : (
-                      <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                    )}
-                    <div>
-                      <p className="font-medium" data-testid={`text-invoice-number-${invoice.id}`}>
+      ) : sortedInvoices.length > 0 ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortHeader field="invoiceNumber">Invoice</SortHeader>
+                <SortHeader field="contact">Client</SortHeader>
+                <SortHeader field="createdAt">Created</SortHeader>
+                <SortHeader field="dueDate">Due Date</SortHeader>
+                <SortHeader field="total">Amount</SortHeader>
+                <SortHeader field="status">Status</SortHeader>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedInvoices.map((invoice) => {
+                const contact = contactMap[invoice.contactId];
+                const isOverdue = invoice.dueDate && invoice.status !== "paid" && invoice.status !== "voided" && new Date(invoice.dueDate + "T23:59:59") < new Date();
+                return (
+                  <TableRow
+                    key={invoice.id}
+                    data-testid={`row-invoice-${invoice.id}`}
+                    className={`cursor-pointer ${isOverdue ? "bg-red-50/60 dark:bg-red-950/20" : ""}`}
+                    onClick={() => viewInvoiceDetail(invoice.id)}
+                  >
+                    <TableCell className="font-medium" data-testid={`text-invoice-number-${invoice.id}`}>
+                      <div className="flex items-center gap-2">
+                        {isOverdue && <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />}
                         {invoice.invoiceNumber}
-                      </p>
-                      <p className={`text-sm ${isOverdue ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}`}>
-                        {contact ? (
-                          <ClientInfoPopover contactId={contact.id}>
-                            <span className="inline">{contact.firstName} {contact.lastName}</span>
-                          </ClientInfoPopover>
-                        ) : "Unknown"} -- Due: {invoice.dueDate}{isOverdue ? " (Overdue)" : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2" onClick={e => e.stopPropagation()}>
-                    {invoice.autoGenerated && (
-                      <Badge variant="outline" className="text-xs">Auto</Badge>
-                    )}
-                    <span className="font-semibold" data-testid={`text-invoice-total-${invoice.id}`}>
+                        {invoice.autoGenerated && (
+                          <Badge variant="outline" className="text-xs">Auto</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {contact ? (
+                        <ClientInfoPopover contactId={contact.id}>
+                          <span className="hover:underline">{contact.firstName} {contact.lastName}</span>
+                        </ClientInfoPopover>
+                      ) : <span className="text-muted-foreground">Unknown</span>}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(invoice.createdAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className={isOverdue ? "text-red-600 dark:text-red-400 font-medium" : ""}>
+                      {invoice.dueDate}{isOverdue ? " (Overdue)" : ""}
+                    </TableCell>
+                    <TableCell className="font-semibold" data-testid={`text-invoice-total-${invoice.id}`}>
                       ${Number(invoice.total).toFixed(2)}
-                    </span>
-                    <Badge variant="secondary" className={invoiceStatusColors[invoice.status] || ""} data-testid={`badge-invoice-status-${invoice.id}`}>
-                      {invoiceStatusLabels[invoice.status] || invoice.status}
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setPreviewInvoiceId(invoice.id);
-                        setPreviewDialogOpen(true);
-                      }}
-                      data-testid={`button-preview-invoice-${invoice.id}`}
-                      title="Preview invoice"
-                    >
-                      <Printer className="h-4 w-4" />
-                    </Button>
-                    {invoice.status !== "paid" && stripeConfig?.configured && (
-                      <>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className={invoiceStatusColors[invoice.status] || ""} data-testid={`badge-invoice-status-${invoice.id}`}>
+                        {invoiceStatusLabels[invoice.status] || invoice.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => chargeMutation.mutate(invoice.id)}
-                          disabled={chargeMutation.isPending}
-                          data-testid={`button-charge-invoice-${invoice.id}`}
-                          title="Charge card on file"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            setPreviewInvoiceId(invoice.id);
+                            setPreviewDialogOpen(true);
+                          }}
+                          data-testid={`button-preview-invoice-${invoice.id}`}
+                          title="Preview invoice"
                         >
-                          <CreditCard className="h-4 w-4" />
+                          <Printer className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => checkoutMutation.mutate(invoice.id)}
-                          disabled={checkoutMutation.isPending}
-                          data-testid={`button-checkout-invoice-${invoice.id}`}
-                          title="Send to Stripe Checkout"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                    {invoice.status !== "paid" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => markPaidMutation.mutate(invoice.id)}
-                        disabled={markPaidMutation.isPending}
-                        data-testid={`button-markpaid-invoice-${invoice.id}`}
-                        title="Mark as paid"
-                      >
-                        <span className="text-xs font-bold">$</span>
-                      </Button>
-                    )}
-                    {invoice.status !== "paid" && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => sendEmailMutation.mutate(invoice.id)}
-                        disabled={sendEmailMutation.isPending}
-                        data-testid={`button-email-invoice-${invoice.id}`}
-                      >
-                        {sendEmailMutation.isPending && sendEmailMutation.variables === invoice.id
-                          ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                          : <Mail className="mr-1 h-4 w-4" />}
-                        Send to Client
-                      </Button>
-                    )}
-                    {invoice.status !== "paid" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          if (window.confirm("Permanently delete this invoice? This cannot be undone.")) {
-                            deleteMutation.mutate(invoice.id);
-                          }
-                        }}
-                        disabled={deleteMutation.isPending}
-                        data-testid={`button-delete-invoice-${invoice.id}`}
-                        title="Delete invoice"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                        {invoice.status !== "paid" && stripeConfig?.configured && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => chargeMutation.mutate(invoice.id)}
+                              disabled={chargeMutation.isPending}
+                              data-testid={`button-charge-invoice-${invoice.id}`}
+                              title="Charge card on file"
+                            >
+                              <CreditCard className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => checkoutMutation.mutate(invoice.id)}
+                              disabled={checkoutMutation.isPending}
+                              data-testid={`button-checkout-invoice-${invoice.id}`}
+                              title="Send to Stripe Checkout"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                        {invoice.status !== "paid" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => markPaidMutation.mutate(invoice.id)}
+                            disabled={markPaidMutation.isPending}
+                            data-testid={`button-markpaid-invoice-${invoice.id}`}
+                            title="Mark as paid"
+                          >
+                            <span className="text-xs font-bold">$</span>
+                          </Button>
+                        )}
+                        {invoice.status !== "paid" && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => sendEmailMutation.mutate(invoice.id)}
+                            disabled={sendEmailMutation.isPending}
+                            data-testid={`button-email-invoice-${invoice.id}`}
+                          >
+                            {sendEmailMutation.isPending && sendEmailMutation.variables === invoice.id
+                              ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                              : <Mail className="mr-1 h-4 w-4" />}
+                            Send
+                          </Button>
+                        )}
+                        {invoice.status !== "paid" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              if (window.confirm("Permanently delete this invoice? This cannot be undone.")) {
+                                deleteMutation.mutate(invoice.id);
+                              }
+                            }}
+                            disabled={deleteMutation.isPending}
+                            data-testid={`button-delete-invoice-${invoice.id}`}
+                            title="Delete invoice"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <Card>
