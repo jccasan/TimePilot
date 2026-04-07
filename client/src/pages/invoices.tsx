@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2 } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
@@ -939,21 +939,26 @@ export default function Invoices() {
         <div className="space-y-3">
           {invoices.map((invoice) => {
             const contact = contactMap[invoice.contactId];
+            const isOverdue = invoice.dueDate && invoice.status !== "paid" && invoice.status !== "voided" && new Date(invoice.dueDate + "T23:59:59") < new Date();
             return (
-              <Card key={invoice.id} data-testid={`card-invoice-${invoice.id}`} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => viewInvoiceDetail(invoice.id)}>
+              <Card key={invoice.id} data-testid={`card-invoice-${invoice.id}`} className={`cursor-pointer hover:bg-muted/50 transition-colors ${isOverdue ? "border-red-400 bg-red-50/50 dark:border-red-700 dark:bg-red-950/30" : ""}`} onClick={() => viewInvoiceDetail(invoice.id)}>
                 <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
                   <div className="flex items-center gap-3">
-                    <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                    {isOverdue ? (
+                      <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
+                    ) : (
+                      <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                    )}
                     <div>
                       <p className="font-medium" data-testid={`text-invoice-number-${invoice.id}`}>
                         {invoice.invoiceNumber}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className={`text-sm ${isOverdue ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}`}>
                         {contact ? (
                           <ClientInfoPopover contactId={contact.id}>
                             <span className="inline">{contact.firstName} {contact.lastName}</span>
                           </ClientInfoPopover>
-                        ) : "Unknown"} -- Due: {invoice.dueDate}
+                        ) : "Unknown"} -- Due: {invoice.dueDate}{isOverdue ? " (Overdue)" : ""}
                       </p>
                     </div>
                   </div>
