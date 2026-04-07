@@ -230,7 +230,8 @@ export default function Invoices() {
       const queryParams = statusFilter !== "all" && statusFilter !== "uninvoiced" ? `?status=${statusFilter}` : "";
       const r = await fetch(`/api/invoices${queryParams}`, { credentials: "include", headers });
       if (!r.ok) throw new Error("Failed to fetch invoices");
-      return r.json();
+      const all = await r.json();
+      return all.filter((inv: Invoice) => inv.status !== "voided");
     },
   });
 

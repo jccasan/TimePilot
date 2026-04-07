@@ -2971,7 +2971,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
       return fetch(`/api/invoices?contactId=${contactId}`, { credentials: "include", headers }).then(r => {
         if (!r.ok) throw new Error("Failed to fetch");
         return r.json();
-      });
+      }).then((all: Invoice[]) => all.filter(inv => inv.status !== "voided"));
     },
   });
 
