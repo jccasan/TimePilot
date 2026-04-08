@@ -214,6 +214,7 @@ function notify(companyId: string, type: string, title: string, message: string,
             return true;
           })
           .map(row => sendEmail({
+            companyId: companyId,
             to: row.email!,
             subject: `${companyName} - ${title}`,
             text: `${message}${fullLink ? `\n\nView details: ${fullLink}` : ""}`,
@@ -1681,6 +1682,7 @@ Return ONLY valid JSON, no markdown.`,
 
       if (tempPassword) {
         await sendEmail({
+          companyId: companyId,
           to: email,
           subject: `You've been invited to ${companyName} on ScooPilot`,
           senderName: company?.name || undefined,
@@ -1710,6 +1712,7 @@ Return ONLY valid JSON, no markdown.`,
         });
       } else {
         await sendEmail({
+          companyId: companyId,
           to: email,
           subject: `You've been added to ${companyName} on ScooPilot`,
           senderName: company?.name || undefined,
@@ -7937,6 +7940,7 @@ Return ONLY valid JSON, no markdown.`,
       });
 
       const result = await sendEmail({
+        companyId: companyId,
         to,
         from: fromAddress,
         subject,
@@ -9165,6 +9169,7 @@ Return ONLY valid JSON, no markdown.`,
 
       console.log(`[send-email] Sending invoice ${invoice.invoiceNumber} to ${contact.email} from ${fromAddress}`);
       const result = await sendEmail({
+        companyId: companyId,
         to: contact.email,
         from: fromAddress,
         subject,
@@ -9771,6 +9776,7 @@ Return ONLY valid JSON, no markdown.`,
               const host = req.headers.host || "localhost:5000";
               const appUrl = `${protocol}://${host}`;
               await sendEmail({
+                companyId: company.id,
                 to: email,
                 subject: `Your ScooPilot account is ready`,
                 text: `Hi ${firstName},\n\nYour ScooPilot account "${companyName}" has been created.\n\nLog in at: ${appUrl}\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
@@ -9929,6 +9935,7 @@ Return ONLY valid JSON, no markdown.`,
                 ? `https://${process.env.REPLIT_DEV_DOMAIN}`
                 : "https://scoopilot.replit.app";
             await sendEmail({
+              companyId: company.id,
               to: email,
               subject: `Your ScooPilot trial ends soon`,
               text: `Hi,\n\nYour 14-day free trial for "${companyName}" ends in 3 days. Add a payment method to keep your account active.\n\nVisit ${baseUrl}/billing to update your billing.`,
@@ -10480,6 +10487,7 @@ Return ONLY valid JSON, no markdown.`,
       if ((sendVia === "email" || sendVia === "both") && quote.contactEmail) {
         try {
           await sendEmail({
+            companyId: companyId,
             to: quote.contactEmail,
             subject: `${company.name} — Service ${quote.type === "commercial" ? "Proposal" : "Quote"} #${quote.quoteNumber}`,
             html,
@@ -10747,6 +10755,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const { sendEmail } = await import("./services/email");
       sendEmail({
+        companyId: company.id,
         to: foundContact.email!,
         subject: `Reset your ${companyName} portal password`,
         senderName: company?.name || undefined,
@@ -11095,6 +11104,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const emailSubject = subject || `Message from ${contact.firstName} ${contact.lastName}`;
       await sendEmail({
+        companyId: companyId,
         to: companyEmail,
         subject: emailSubject,
         replyTo: contact.email || undefined,
@@ -11228,6 +11238,7 @@ Return ONLY valid JSON, no markdown.`,
 
         const { sendEmail } = await import("./services/email");
         sendEmail({
+          companyId: companyId,
           to: pendingEmailChange,
           subject: `Verify your new email address - ${companyName}`,
           senderName: company?.name || undefined,
@@ -11907,6 +11918,7 @@ Return ONLY valid JSON, no markdown.`,
         const company = await storage.getCompany(companyId);
         const portalUrl = `${getBaseUrl(req)}/portal/client`;
         sendEmail({
+          companyId: companyId,
           to: contact.email,
           subject: `New Estimate from ${company?.name || "Your Service Provider"}`,
           senderName: company?.name || undefined,
@@ -12037,6 +12049,7 @@ Return ONLY valid JSON, no markdown.`,
     const company = await storage.getCompany(companyId);
     const portalUrl = `${portalBaseUrl}/portal/login`;
     sendEmail({
+      companyId: companyId,
       to: contact.email,
       subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
       senderName: company?.name || undefined,
@@ -12138,6 +12151,7 @@ Return ONLY valid JSON, no markdown.`,
       const company = await storage.getCompany(companyId);
       const portalUrl = `${getBaseUrl(req)}/portal/login`;
       sendEmail({
+        companyId: companyId,
         to: contact.email,
         subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
         senderName: company?.name || undefined,
@@ -12213,6 +12227,7 @@ Return ONLY valid JSON, no markdown.`,
           }
 
           sendEmail({
+            companyId: companyId,
             to: contact.email,
             subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
             senderName: company?.name || undefined,
@@ -12674,6 +12689,7 @@ Return ONLY valid JSON, no markdown.`,
           try {
             const subject = `Service Day Change - ${companyName}`;
             const emailResult = await sendEmail({
+              companyId: companyId,
               to: contact.email,
               subject,
               text: personalizedMsg,
@@ -13029,6 +13045,7 @@ Return ONLY valid JSON, no markdown.`,
 
         if (tempPassword) {
           await sendEmail({
+            companyId: company.id,
             to: ownerEmail,
             subject: `Your ScooPilot account is ready`,
             text: `Hi ${ownerFirstName},\n\nYour ScooPilot account "${companyName}" has been created.\n\nLog in at: ${appUrl}\nEmail: ${ownerEmail}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
@@ -13056,6 +13073,7 @@ Return ONLY valid JSON, no markdown.`,
           emailSent = true;
         } else {
           await sendEmail({
+            companyId: company.id,
             to: ownerEmail,
             subject: `You've been added to ${companyName} on ScooPilot`,
             text: `Hi,\n\nYou've been added as the owner of "${companyName}" on ScooPilot.\n\nLog in at: ${appUrl}`,
@@ -13144,6 +13162,7 @@ Return ONLY valid JSON, no markdown.`,
       const resetUrl = `${isLocalhost ? "http" : "https"}://${host}/reset-password?token=${result.token}`;
 
       const emailResult = await sendEmail({
+        companyId: companyId,
         to: user.email,
         subject: "Reset your ScooPilot password",
         text: `Hi ${user.firstName || "there"},\n\nA password reset was requested for your account. Click the link below to set a new password:\n\n${resetUrl}\n\nThis link expires in 1 hour.`,
@@ -13199,6 +13218,7 @@ Return ONLY valid JSON, no markdown.`,
       const appUrl = `${isLocalhost ? "http" : "https"}://${host}`;
 
       const emailResult = await sendEmail({
+        companyId: companyId,
         to: user.email,
         subject: "Your ScooPilot login credentials",
         text: `Hi ${user.firstName || "there"},\n\nHere are your ScooPilot login credentials:\n\nLogin: ${appUrl}\nEmail: ${user.email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
@@ -14494,6 +14514,7 @@ Return ONLY valid JSON, no markdown.`,
 
       try {
         await sendEmail({
+          companyId: companyId,
           to: email,
           subject: "Verify your email to start your ScooPilot free trial",
           text: `Hi ${firstName},\n\nThanks for signing up for ScooPilot! Please verify your email to activate your free trial:\n\n${verifyUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't sign up for ScooPilot, you can safely ignore this email.`,
@@ -14599,6 +14620,7 @@ Return ONLY valid JSON, no markdown.`,
 
       try {
         await sendEmail({
+          companyId: company.id,
           to: record.email,
           subject: "Welcome to ScooPilot - Your login credentials",
           text: `Hi ${record.firstName},\n\nYour ScooPilot free trial is active!\n\nCompany: ${record.companyName}\nLogin: ${appUrl}\nEmail: ${record.email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,

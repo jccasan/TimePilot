@@ -84,6 +84,7 @@ export async function runTrialExpirationCheck(): Promise<void> {
               : "https://scoopilot.replit.app";
 
           const emailResult = await sendEmail({
+            companyId: company.id,
             to: ownerRow[0].email,
             subject: "Your ScooPilot trial has ended",
             text: `Hi,\n\nYour 14-day free trial for "${company.name}" has ended. Subscribe now to restore access to your account.\n\nVisit ${baseUrl}/billing to choose a plan.`,

@@ -14,6 +14,7 @@ interface SendEmailOptions {
   to: string;
   from?: string;
   senderName?: string;
+  companyId?: string;
   subject: string;
   text: string;
   html?: string;
@@ -28,6 +29,13 @@ interface SendEmailResult {
 }
 
 const VERIFIED_SENDER = "jeremy@scoopilot.com";
+const OUTBOUND_DOMAIN = process.env.OUTBOUND_EMAIL_DOMAIN || "scoopilot.com";
+const FALLBACK_SENDER = `notifications@${OUTBOUND_DOMAIN}`;
+
+export function buildCompanySenderAddress(companyId: string): string {
+  const shortId = companyId.split("-")[0];
+  return `notifications+${shortId}@${OUTBOUND_DOMAIN}`;
+}
 
 export function generateEmailThreadId(): string {
   return crypto.randomBytes(16).toString("hex");
@@ -59,13 +67,13 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
         || (options.from && options.from !== VERIFIED_SENDER ? options.from : undefined);
     }
 
-    const displayName = options.senderName && (typeof replyTo === "string" ? replyTo : replyTo?.email)
-      ? `${options.senderName} (${typeof replyTo === "string" ? replyTo : replyTo?.email})`
-      : options.senderName || undefined;
+    const senderEmail = options.companyId
+      ? buildCompanySenderAddress(options.companyId)
+      : FALLBACK_SENDER;
 
-    const from = displayName
-      ? { name: displayName, email: VERIFIED_SENDER }
-      : VERIFIED_SENDER;
+    const from = options.senderName
+      ? { name: options.senderName, email: senderEmail }
+      : { name: "ScooPilot", email: senderEmail };
 
     const headers: Record<string, string> = {};
     if (options.emailThreadId) {

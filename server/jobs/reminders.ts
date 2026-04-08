@@ -370,6 +370,7 @@ async function sendServiceRemindersForRule(
       if (needEmail) {
         try {
           const emailRes = await sendEmail({
+            companyId,
             to: contact.email!,
             subject: `Service Reminder - ${companyName}`,
             text: message,
@@ -560,6 +561,7 @@ async function sendInvoiceReminders(
     if (needEmail) {
       try {
         const emailRes = await sendEmail({
+          companyId,
           to: contact.email!,
           subject,
           text: message,
