@@ -66,7 +66,8 @@ export async function getCustomerPaymentMethods(customerId: string) {
 function getPlatformFeePercent(): number {
   const raw = process.env.PLATFORM_FEE_PERCENT;
   const parsed = raw ? parseFloat(raw) : NaN;
-  return Number.isFinite(parsed) ? parsed : 2.9;
+  if (!Number.isFinite(parsed)) return 2.9;
+  return Math.max(0, Math.min(100, parsed));
 }
 
 function computeApplicationFee(amountCents: number): number {
