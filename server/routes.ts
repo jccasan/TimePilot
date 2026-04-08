@@ -437,6 +437,7 @@ export async function registerRoutes(
 
       const resolvedPriceId = TIER_PRICE_MAP[tier];
       if (!resolvedPriceId) {
+        console.error(`[Checkout] Invalid or unconfigured tier: "${tier}". Configured tiers: ${Object.entries(TIER_PRICE_MAP).filter(([,v]) => !!v).map(([k]) => k).join(", ")}`);
         return res.status(400).json({ error: `Invalid tier: ${tier}. Valid tiers: ${Object.keys(TIER_PRICE_MAP).join(", ")}` });
       }
 
