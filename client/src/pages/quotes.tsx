@@ -400,7 +400,7 @@ export default function Quotes() {
                               <Download className="h-4 w-4" />
                             </Button>
                             {downloadMenuId === quote.id && (
-                              <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-md border bg-white dark:bg-gray-900 shadow-lg py-1">
+                              <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-md border bg-white dark:bg-gray-900 shadow-lg py-1">
                                 <button className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted flex items-center gap-2"
                                   data-testid={`button-download-pdf-${quote.id}`}
                                   onClick={() => handleDownload(quote.id, "pdf")}>
