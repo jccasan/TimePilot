@@ -426,7 +426,7 @@ export default function Quotes() {
                               </Button>
                             </>
                           )}
-                          {quote.status === "draft" && (
+                          {quote.status !== "accepted" && (
                             <Button variant="ghost" size="icon" data-testid={`button-delete-${quote.id}`}
                               onClick={() => { if (confirm("Delete this quote?")) deleteMutation.mutate(quote.id); }}>
                               <Trash2 className="h-4 w-4 text-red-500" />
