@@ -537,15 +537,15 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
   const [propertyState, setPropertyState] = useState("");
   const [propertyZip, setPropertyZip] = useState("");
   const [expiresAt, setExpiresAt] = useState(quote?.expiresAt ? toLocalDateString(new Date(quote.expiresAt), tz) : "");
-  const [dogCount, setDogCount] = useState(quote?.dogCount || 2);
+  const [dogCount, setDogCount] = useState<number | string>(quote?.dogCount || 2);
   const [yardSize, setYardSize] = useState(quote?.yardSize || "small");
-  const [stationCount, setStationCount] = useState(quote?.stationCount ?? 4);
-  const [commonAreaMinutes, setCommonAreaMinutes] = useState(quote?.commonAreaMinutes || 30);
-  const [timePerStation, setTimePerStation] = useState(quote?.timePerStation || 10);
-  const [mileageDistance, setMileageDistance] = useState(parseFloat(String(quote?.mileageDistance || 0)));
-  const [dumpFee, setDumpFee] = useState(parseFloat(String(quote?.dumpFee || 25)));
-  const [crewSize, setCrewSize] = useState(quote?.crewSize || 1);
-  const [siteSqft, setSiteSqft] = useState(quote?.siteSqft || 0);
+  const [stationCount, setStationCount] = useState<number | string>(quote?.stationCount ?? 4);
+  const [commonAreaMinutes, setCommonAreaMinutes] = useState<number | string>(quote?.commonAreaMinutes || 30);
+  const [timePerStation, setTimePerStation] = useState<number | string>(quote?.timePerStation || 10);
+  const [mileageDistance, setMileageDistance] = useState<number | string>(parseFloat(String(quote?.mileageDistance || 0)));
+  const [dumpFee, setDumpFee] = useState<number | string>(parseFloat(String(quote?.dumpFee || 25)));
+  const [crewSize, setCrewSize] = useState<number | string>(quote?.crewSize || 1);
+  const [siteSqft, setSiteSqft] = useState<number | string>(quote?.siteSqft || 0);
   const [isInitialClean, setIsInitialClean] = useState(false);
   const [markupPct, setMarkupPct] = useState(20);
   const [overrideInitialClean, setOverrideInitialClean] = useState("");
@@ -811,16 +811,16 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     };
 
     if (quoteType === "residential") {
-      data.dogCount = dogCount;
+      data.dogCount = Number(dogCount) || 1;
       data.yardSize = yardSize;
     } else {
-      data.stationCount = stationCount;
-      data.commonAreaMinutes = commonAreaMinutes;
-      data.timePerStation = timePerStation;
-      data.mileageDistance = mileageDistance.toFixed(2);
-      data.dumpFee = dumpFee.toFixed(2);
-      data.crewSize = crewSize;
-      data.siteSqft = siteSqft;
+      data.stationCount = Number(stationCount) || 0;
+      data.commonAreaMinutes = Number(commonAreaMinutes) || 0;
+      data.timePerStation = Number(timePerStation) || 10;
+      data.mileageDistance = (Number(mileageDistance) || 0).toFixed(2);
+      data.dumpFee = (Number(dumpFee) || 0).toFixed(2);
+      data.crewSize = Number(crewSize) || 1;
+      data.siteSqft = Number(siteSqft) || 0;
     }
 
     createMutation.mutate(data);
@@ -982,7 +982,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <Label>Number of Dogs</Label>
-                <Input data-testid="input-dog-count" type="number" min={1} max={20} value={dogCount} onChange={e => setDogCount(parseInt(e.target.value) || 1)} />
+                <Input data-testid="input-dog-count" type="number" min={1} max={20} value={dogCount} onChange={e => { const v = e.target.value; setDogCount(v === "" ? "" : (parseInt(v) || "")); }} onBlur={() => { if (dogCount === "" || dogCount === 0) setDogCount(1); }} />
               </div>
               <div>
                 <Label>Yard Size</Label>
@@ -1021,34 +1021,34 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <Label>Waste Stations</Label>
-                  <Input data-testid="input-station-count" type="number" min={0} max={100} value={stationCount} onChange={e => { const v = parseInt(e.target.value); setStationCount(isNaN(v) ? 0 : v); }} />
+                  <Input data-testid="input-station-count" type="number" min={0} max={100} value={stationCount} onChange={e => { const v = e.target.value; setStationCount(v === "" ? "" : (parseInt(v) ?? "")); }} onBlur={() => { if (stationCount === "") setStationCount(0); }} />
                 </div>
                 <div>
                   <Label>Time/Station (min)</Label>
-                  <Input data-testid="input-time-per-station" type="number" min={1} max={60} value={timePerStation} onChange={e => setTimePerStation(parseInt(e.target.value) || 10)} />
+                  <Input data-testid="input-time-per-station" type="number" min={1} max={60} value={timePerStation} onChange={e => { const v = e.target.value; setTimePerStation(v === "" ? "" : (parseInt(v) || "")); }} onBlur={() => { if (timePerStation === "" || timePerStation === 0) setTimePerStation(10); }} />
                 </div>
                 <div>
                   <Label>Common Area (min)</Label>
-                  <Input data-testid="input-common-area" type="number" min={0} max={480} value={commonAreaMinutes} onChange={e => setCommonAreaMinutes(parseInt(e.target.value) || 0)} />
+                  <Input data-testid="input-common-area" type="number" min={0} max={480} value={commonAreaMinutes} onChange={e => { const v = e.target.value; setCommonAreaMinutes(v === "" ? "" : (parseInt(v) ?? "")); }} onBlur={() => { if (commonAreaMinutes === "") setCommonAreaMinutes(0); }} />
                 </div>
                 <div>
                   <Label>Crew Size</Label>
-                  <Input data-testid="input-crew-size" type="number" min={1} max={10} value={crewSize} onChange={e => setCrewSize(parseInt(e.target.value) || 1)} />
+                  <Input data-testid="input-crew-size" type="number" min={1} max={10} value={crewSize} onChange={e => { const v = e.target.value; setCrewSize(v === "" ? "" : (parseInt(v) || "")); }} onBlur={() => { if (crewSize === "" || crewSize === 0) setCrewSize(1); }} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <Label>Round Trip Miles</Label>
-                  <Input data-testid="input-mileage" type="number" min={0} step="0.1" value={mileageDistance} onChange={e => setMileageDistance(parseFloat(e.target.value) || 0)} />
+                  <Input data-testid="input-mileage" type="number" min={0} step="0.1" value={mileageDistance} onChange={e => { const v = e.target.value; setMileageDistance(v === "" ? "" : (parseFloat(v) ?? "")); }} onBlur={() => { if (mileageDistance === "") setMileageDistance(0); }} />
                 </div>
                 <div>
                   <Label>Dump Fee ($/visit)</Label>
-                  <Input data-testid="input-dump-fee" type="number" min={0} step="0.01" value={dumpFee} onChange={e => setDumpFee(parseFloat(e.target.value) || 0)} />
+                  <Input data-testid="input-dump-fee" type="number" min={0} step="0.01" value={dumpFee} onChange={e => { const v = e.target.value; setDumpFee(v === "" ? "" : (parseFloat(v) ?? "")); }} onBlur={() => { if (dumpFee === "") setDumpFee(0); }} />
                 </div>
                 <div>
                   <Label>Site Area (sq ft)</Label>
-                  <Input data-testid="input-site-sqft" type="number" min={0} value={siteSqft} onChange={e => setSiteSqft(parseInt(e.target.value) || 0)} />
+                  <Input data-testid="input-site-sqft" type="number" min={0} value={siteSqft} onChange={e => { const v = e.target.value; setSiteSqft(v === "" ? "" : (parseInt(v) ?? "")); }} onBlur={() => { if (siteSqft === "") setSiteSqft(0); }} />
                 </div>
                 <div>
                   <Label>Frequency</Label>
@@ -1087,16 +1087,16 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
                     <span className="text-muted-foreground">Labor ({livePricing.breakdown.totalLaborHours} hrs x {crewSize} crew @ ${livePricing.breakdown.crewRate?.toFixed(2)}/hr)</span>
                     <span className="font-medium">${livePricing.breakdown.laborCost?.toFixed(2)}</span>
                   </div>
-                  {mileageDistance > 0 && (
+                  {Number(mileageDistance) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Mileage ({mileageDistance} mi x ${livePricing.breakdown.mileageRate?.toFixed(3)})</span>
                       <span className="font-medium">${livePricing.breakdown.mileageCost?.toFixed(2)}</span>
                     </div>
                   )}
-                  {dumpFee > 0 && (
+                  {Number(dumpFee) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Dump fee</span>
-                      <span className="font-medium">${dumpFee.toFixed(2)}</span>
+                      <span className="font-medium">${Number(dumpFee).toFixed(2)}</span>
                     </div>
                   )}
 
