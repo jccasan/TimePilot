@@ -273,6 +273,25 @@ export default function ContactDetail() {
     },
   });
 
+  const deleteContactMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/contacts/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["/api/contacts", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({ title: "Contact deleted", description: "Contact has been permanently deleted." });
+      navigate("/contacts");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
@@ -349,6 +368,37 @@ export default function ContactDetail() {
             >
               <Edit2 />
             </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  data-testid="button-delete-contact"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Contact</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete {contact.firstName} {contact.lastName}? This action is permanent and will remove all associated data including properties, service plans, and job history.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-delete-contact-cancel">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => deleteContactMutation.mutate()}
+                    disabled={deleteContactMutation.isPending}
+                    data-testid="button-delete-contact-confirm"
+                  >
+                    {deleteContactMutation.isPending ? "Deleting..." : "Delete Contact"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </CardHeader>
         <CardContent>
