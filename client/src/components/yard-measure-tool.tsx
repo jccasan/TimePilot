@@ -42,7 +42,7 @@ function formatArea(sqft: number): string {
   if (acres >= 1) {
     return `${sqft.toLocaleString()} sq ft / ${acres.toFixed(2)} acres`;
   }
-  return `${sqft.toLocaleString()} sq ft / ${pctAcre.toFixed(1)}% of an acre`;
+  return `${sqft.toLocaleString()} sq ft / ${acres.toFixed(3)} acres`;
 }
 
 export { getYardCategory, formatArea };
