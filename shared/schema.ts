@@ -1729,25 +1729,6 @@ export const quoteRelations = relations(quotes, ({ one }) => ({
   property: one(properties, { fields: [quotes.propertyId], references: [properties.id] }),
 }));
 
-// ─── Stripe Connect V2 ──────────────────────────────────────────────────────
-// Tracks connected accounts created via the V2 API and their platform
-// subscription status.  We keep this separate from the companies table so the
-// V1 stripeConnectAccountId field remains untouched (backward compat).
-export const connectedAccounts = pgTable("connected_accounts", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
-  stripeAccountId: varchar("stripe_account_id", { length: 255 }).notNull().unique(),
-  subscriptionStatus: varchar("subscription_status", { length: 50 }).notNull().default("none"),
-  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => [
-  index("idx_connected_accounts_company").on(table.companyId),
-]);
-
-export const insertConnectedAccountSchema = createInsertSchema(connectedAccounts).omit({ id: true, createdAt: true, updatedAt: true });
-export type ConnectedAccount = typeof connectedAccounts.$inferSelect;
-export type InsertConnectedAccount = z.infer<typeof insertConnectedAccountSchema>;
 
 // ─── Shared Number Message Routing ──────────────────────────────────────────
 export const messageRouting = pgTable("message_routing", {

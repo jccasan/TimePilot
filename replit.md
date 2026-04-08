@@ -65,7 +65,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **SendGrid**: Email sending.
 - **Twilio**: SMS messaging (global provider).
 - **Telnyx**: SMS/MMS messaging (per-tenant provider option). Supports inbound/outbound MMS with media attachments.
-- **Stripe**: Payment gateway with Stripe Connect for multi-tenant payment routing.
+- **Stripe**: Payment gateway with Stripe Connect V1 (Express accounts) for multi-tenant payment routing. Platform fee configurable via `PLATFORM_FEE_PERCENT` env var (default 2.9%).
 - **Mapbox**: Directions API, Geocoding API, and GL JS for mapping and routing.
 - **Google Maps**: Street View Static API and Static Maps API for property images.
 - **OpenAI**: Used for AI-assisted import wizard and Rover AI chatbot.

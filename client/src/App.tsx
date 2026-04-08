@@ -67,8 +67,6 @@ import PrivacyPolicy from "@/pages/privacy-policy";
 import SmsTerms from "@/pages/sms-terms";
 import Jobs from "@/pages/jobs";
 import Pipeline from "@/pages/pipeline";
-import ConnectV2Dashboard from "@/pages/connect-v2-dashboard";
-import { StorefrontPage, StorefrontSuccessPage } from "@/pages/storefront";
 import { NotificationBell } from "@/components/notification-bell";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
@@ -92,7 +90,6 @@ function Router() {
       <Route path="/routes" component={RoutesPage} />
       <Route path="/jobs" component={Jobs} />
       <Route path="/pipeline" component={Pipeline} />
-      <Route path="/connect-v2" component={ConnectV2Dashboard} />
       <Route path="/m/today" component={TechMobile} />
       <Route path="/quotes" component={Quotes} />
       <Route path="/invoices" component={Invoices} />
@@ -508,24 +505,12 @@ function AppContent() {
   const isSmsTermsPath = typeof window !== "undefined" &&
     window.location.pathname === "/sms-terms";
 
-  const isStorefrontPath = typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/store/");
-
   if (isPrivacyPolicyPath) {
     return <PrivacyPolicy />;
   }
 
   if (isSmsTermsPath) {
     return <SmsTerms />;
-  }
-
-  if (isStorefrontPath) {
-    return (
-      <Switch>
-        <Route path="/store/:accountId/success" component={StorefrontSuccessPage} />
-        <Route path="/store/:accountId" component={StorefrontPage} />
-      </Switch>
-    );
   }
 
   if (isResetPasswordPath) {

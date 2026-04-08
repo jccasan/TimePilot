@@ -63,10 +63,14 @@ export async function getCustomerPaymentMethods(customerId: string) {
   }));
 }
 
-const PLATFORM_FEE_PERCENT = 2.9;
+function getPlatformFeePercent(): number {
+  const raw = process.env.PLATFORM_FEE_PERCENT;
+  const parsed = raw ? parseFloat(raw) : NaN;
+  return Number.isFinite(parsed) ? parsed : 2.9;
+}
 
 function computeApplicationFee(amountCents: number): number {
-  return Math.round(amountCents * (PLATFORM_FEE_PERCENT / 100));
+  return Math.round(amountCents * (getPlatformFeePercent() / 100));
 }
 
 export async function createPaymentIntent(params: {
@@ -472,25 +476,6 @@ export function validateStripeConfig(): void {
   }
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
-  // V2 Connect env var check (advisory — features degrade gracefully when missing)
-  console.log("[Connect V2 Config] Startup validation");
-  const connectV2Vars: Array<{ name: string; desc: string }> = [
-    { name: "STRIPE_CONNECT_WEBHOOK_SECRET", desc: "V2 thin-event webhook endpoint secret" },
-    { name: "STRIPE_V1_WEBHOOK_SECRET",      desc: "V1 subscription webhook endpoint secret" },
-    { name: "CONNECT_PLATFORM_PRICE_ID",     desc: "Price ID for platform subscription checkout" },
-    { name: "CONNECT_APP_FEE_PERCENT",       desc: "Platform fee % on storefront purchases (default 5)" },
-  ];
-  for (const { name, desc } of connectV2Vars) {
-    if (process.env[name]) {
-      console.log(`[Connect V2 Config] ✓ ${name} set`);
-    } else {
-      const optional = name === "CONNECT_APP_FEE_PERCENT";
-      const level = optional ? "info" : "warn";
-      const suffix = optional ? " (optional — defaults to 5 %)" : " — Connect V2 feature partially disabled";
-      console[level](`[Connect V2 Config] ${optional ? "ℹ" : "⚠"} ${name} not set — ${desc}${suffix}`);
-    }
-  }
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 
 export async function fetchStripePrices(): Promise<Record<string, number>> {
