@@ -94,7 +94,7 @@ export async function runMessageCleanup() {
 
         for (let i = 0; i < expiredIds.length; i += BATCH_SIZE) {
           const batch = expiredIds.slice(i, i + BATCH_SIZE);
-          await db.execute(sql`DELETE FROM messages WHERE id = ANY(${batch}) AND company_id = ${company.id}`);
+          await db.delete(messages).where(and(inArray(messages.id, batch), eq(messages.companyId, company.id)));
         }
         totalMessagesDeleted += expiredIds.length;
 
