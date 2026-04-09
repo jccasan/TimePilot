@@ -1405,8 +1405,13 @@ export async function registerRoutes(
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
-      const { websiteUrl } = req.body;
+      let { websiteUrl } = req.body;
       if (!websiteUrl || typeof websiteUrl !== "string") return res.status(400).json({ error: "Website URL is required" });
+
+      websiteUrl = websiteUrl.trim();
+      if (!/^https?:\/\//i.test(websiteUrl)) {
+        websiteUrl = `https://${websiteUrl}`;
+      }
 
       let parsed: URL;
       try {
