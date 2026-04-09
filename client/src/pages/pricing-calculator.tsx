@@ -1039,7 +1039,7 @@ export default function PricingCalculator() {
     queryKey: ["/api/pricing-config"],
   });
 
-  const effectiveConfig = configData || DEFAULT_PRICING_CONFIG;
+  const effectiveConfig = { ...DEFAULT_PRICING_CONFIG, ...(configData || {}) };
 
   if (configLoading) {
     return (
