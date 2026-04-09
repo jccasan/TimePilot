@@ -333,6 +333,7 @@ export async function registerRoutes(
     "/api/billing/", "/api/subscriptions/",
     "/api/webhooks/", "/api/portal/",
     "/api/password/",
+    "/api/create-tenant",
   ];
   const GATE_READ_EXEMPT_PREFIXES = [
     "/api/company/stats",
@@ -10038,6 +10039,129 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) {
       console.error("Stripe webhook error:", err);
       res.status(500).json({ error: "Webhook processing failed" });
+    }
+  });
+
+  // ================ Tenant Provisioning (marketing site → app) ================
+
+  app.post("/api/create-tenant", async (req: Request, res: Response) => {
+    try {
+      const apiKey = req.headers["x-api-key"] as string | undefined;
+      const expectedKey = process.env.SCOOPILOT_API_KEY;
+      if (!expectedKey || !apiKey || apiKey !== expectedKey) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { email, first_name, last_name, company, phone, plan, domain, stripe_customer_id, stripe_subscription_id } = req.body;
+
+      if (!email || !first_name || !company) {
+        return res.status(400).json({ error: "Missing required fields: email, first_name, company" });
+      }
+
+      const existingUser = await getUserByEmail(email);
+
+      if (existingUser) {
+        const existingCompanies = await storage.getCompaniesForUser(existingUser.id);
+        if (existingCompanies.length > 0) {
+          const existingCompany = await storage.getCompany(existingCompanies[0].companyId);
+          if (existingCompany) {
+            const updateData: Record<string, unknown> = {};
+            if (stripe_customer_id) updateData.stripeCustomerId = stripe_customer_id;
+            if (stripe_subscription_id) updateData.stripeSubscriptionId = stripe_subscription_id;
+            if (plan) updateData.subscriptionTier = plan;
+            updateData.subscriptionStatus = "trialing";
+            if (Object.keys(updateData).length > 0) {
+              await storage.updateCompany(existingCompany.id, updateData as Partial<typeof companies.$inferInsert>);
+            }
+            console.log(`[Create Tenant] Updated existing company "${existingCompany.name}" (${existingCompany.id}) for ${email}`);
+            return res.json({
+              success: true,
+              tenant_id: existingCompany.id,
+              user_id: existingUser.id,
+              existing: true,
+            });
+          }
+        }
+      }
+
+      const crypto = await import("crypto");
+      const tempPassword = crypto.randomBytes(6).toString("base64url");
+      let user = existingUser;
+      if (!user) {
+        user = await createUserWithTempPassword(email, first_name, last_name || "", tempPassword);
+      }
+
+      const tierMap: Record<string, string> = {
+        free_trial: "free_trial",
+        tier_1: "tier_1",
+        tier_1_3: "tier_1_3",
+        tier_3_5: "tier_3_5",
+        tier_6_10: "tier_6_10",
+        tier_10_plus: "tier_10_plus",
+      };
+      const subscriptionTier = tierMap[plan] || "free_trial";
+
+      const trialEnd = new Date();
+      trialEnd.setDate(trialEnd.getDate() + 14);
+
+      const createData: Record<string, unknown> = {
+        name: company.trim(),
+        email,
+        phone: phone || "",
+        subscriptionTier,
+        subscriptionStatus: "trialing",
+        trialEndsAt: trialEnd,
+      };
+      if (stripe_customer_id) createData.stripeCustomerId = stripe_customer_id;
+      if (stripe_subscription_id) createData.stripeSubscriptionId = stripe_subscription_id;
+      if (domain) createData.website = domain;
+
+      const newCompany = await storage.createCompany(createData as typeof companies.$inferInsert);
+      await storage.addUserToCompany(user.id, newCompany.id, "owner");
+      await seedDefaultLeadSources(newCompany.id);
+      await storage.seedDefaultPricing(newCompany.id);
+
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host || "app.scoopilot.com";
+      const appUrl = `${protocol}://${host}`;
+
+      try {
+        await sendEmail({
+          companyId: newCompany.id,
+          to: email,
+          subject: "Your ScooPilot account is ready",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">ScooPilot</h1>
+              </div>
+              <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                <h2 style="margin-top: 0;">Welcome to ScooPilot!</h2>
+                <p>Hi ${first_name},</p>
+                <p>Your account <strong>"${company}"</strong> has been created and is ready to use.</p>
+                <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 4px 0;"><strong>Email:</strong> ${email}</p>
+                  <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+                </div>
+                <a href="${appUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Log In Now</a>
+              </div>
+            </div>`,
+        });
+        console.log(`[Create Tenant] Welcome email sent to ${email}`);
+      } catch (emailErr) {
+        console.error(`[Create Tenant] Failed to send welcome email to ${email}:`, emailErr);
+      }
+
+      console.log(`[Create Tenant] Provisioned new tenant "${company}" (${newCompany.id}) for ${email}`);
+      return res.json({
+        success: true,
+        tenant_id: newCompany.id,
+        user_id: user.id,
+        existing: false,
+      });
+    } catch (err) {
+      console.error("[Create Tenant] Error:", err);
+      return res.status(500).json({ error: "Tenant creation failed" });
     }
   });
 
