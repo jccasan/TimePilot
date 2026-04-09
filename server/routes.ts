@@ -10046,8 +10046,9 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/create-tenant", async (req: Request, res: Response) => {
     try {
-      const apiKey = req.headers["x-api-key"] as string | undefined;
+      const apiKey = (req.headers["x-api-key"] || req.headers["authorization"]?.replace(/^Bearer\s+/i, "")) as string | undefined;
       const expectedKey = process.env.SCOOPILOT_API_KEY;
+      console.log(`[Create Tenant] Auth check — header present: ${!!apiKey}, expected present: ${!!expectedKey}, key length: ${apiKey?.length || 0}, expected length: ${expectedKey?.length || 0}, match: ${apiKey === expectedKey}`);
       if (!expectedKey || !apiKey || apiKey !== expectedKey) {
         return res.status(401).json({ error: "Unauthorized" });
       }
