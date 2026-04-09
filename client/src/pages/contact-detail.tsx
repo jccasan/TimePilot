@@ -8,7 +8,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
-import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, ActivityLog, Invoice } from "@shared/schema";
+import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, ActivityLog, Invoice, Message } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +49,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle } from "lucide-react";
+import { compressImage, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/image-compress";
 import { Switch } from "@/components/ui/switch";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
@@ -92,6 +93,7 @@ export default function ContactDetail() {
   const [measurePropertyId, setMeasurePropertyId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [newTagName, setNewTagName] = useState("");
+  const smsComposeRef = useRef<HTMLDivElement>(null);
 
   const { data: contact, isLoading } = useQuery<Contact>({
     queryKey: ["/api/contacts", id],
@@ -335,7 +337,7 @@ export default function ContactDetail() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => navigate(`/communications?contactId=${id}`)}
+                onClick={() => smsComposeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
                 data-testid="button-text-contact"
               >
                 <MessageSquare className="mr-1 h-4 w-4" /> Text
@@ -940,6 +942,16 @@ export default function ContactDetail() {
           </Button>
         </CardContent>
       </Card>
+
+      {contact.phone && (
+        <div ref={smsComposeRef}>
+          <InlineSmsCompose
+            contactId={id!}
+            contactName={`${contact.firstName} ${contact.lastName}`}
+            phone={contact.phone}
+          />
+        </div>
+      )}
 
       <ActivitySection contactId={id!} />
     </div>
@@ -2702,6 +2714,332 @@ const activityActionLabels: Record<string, string> = {
   note_added: "Note Added",
   portal_login: "Portal Login",
 };
+
+function InlineSmsCompose({ contactId, contactName, phone }: { contactId: string; contactName: string; phone: string }) {
+  const { toast } = useToast();
+  const [messageText, setMessageText] = useState("");
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [attachedPreviews, setAttachedPreviews] = useState<string[]>([]);
+  const [originalFileSizes, setOriginalFileSizes] = useState<number[]>([]);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const threadKey = contactId || `phone:${phone}`;
+
+  const { data: threadMessages, isLoading } = useQuery<Message[]>({
+    queryKey: ["/api/messages", "sms", threadKey],
+    queryFn: async () => {
+      const params = new URLSearchParams({ channel: "sms" });
+      if (contactId) {
+        params.set("contactId", contactId);
+      } else if (phone) {
+        params.set("phone", phone);
+      }
+      const res = await fetch(`/api/messages?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [threadMessages]);
+
+  useEffect(() => {
+    return () => {
+      attachedPreviews.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
+    if (e.target) e.target.value = "";
+
+    const maxAttach = 5;
+    if (attachedFiles.length >= maxAttach) {
+      toast({ title: "Limit reached", description: `Maximum ${maxAttach} images per message.`, variant: "destructive" });
+      return;
+    }
+
+    setIsCompressing(true);
+    try {
+      const newFiles: File[] = [];
+      const newPreviews: string[] = [];
+      const newOrigSizes: number[] = [];
+
+      for (let i = 0; i < selectedFiles.length && (attachedFiles.length + newFiles.length) < maxAttach; i++) {
+        const file = selectedFiles[i];
+        if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+          toast({ title: "Unsupported file type", description: `${file.name}: Only JPG, PNG, and WebP images are allowed.`, variant: "destructive" });
+          continue;
+        }
+        if (file.size > MAX_ATTACHMENT_SIZE) {
+          toast({ title: "File too large", description: `${file.name}: Maximum size is ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
+          continue;
+        }
+        const preCompressSize = file.size;
+        const compressed = await compressImage(file);
+        newFiles.push(compressed);
+        newPreviews.push(URL.createObjectURL(compressed));
+        newOrigSizes.push(preCompressSize);
+      }
+
+      if (newFiles.length > 0) {
+        setAttachedFiles((prev) => [...prev, ...newFiles]);
+        setAttachedPreviews((prev) => [...prev, ...newPreviews]);
+        setOriginalFileSizes((prev) => [...prev, ...newOrigSizes]);
+      }
+    } catch {
+      toast({ title: "Compression failed", description: "Could not process the image.", variant: "destructive" });
+    } finally {
+      setIsCompressing(false);
+    }
+  }, [toast, attachedFiles.length]);
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachedPreviews((prev) => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+    setOriginalFileSizes((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const clearAllAttachments = useCallback(() => {
+    attachedPreviews.forEach((url) => URL.revokeObjectURL(url));
+    setAttachedFiles([]);
+    setAttachedPreviews([]);
+    setOriginalFileSizes([]);
+  }, [attachedPreviews]);
+
+  const sendMutation = useMutation({
+    mutationFn: async ({ body, files, origSizes }: { body: string; files: File[]; origSizes: number[] }) => {
+      if (files.length > 0) {
+        const formData = new FormData();
+        files.forEach((f) => formData.append("media", f));
+        formData.append("to", phone);
+        formData.append("body", body);
+        if (contactId) formData.append("contactId", contactId);
+        if (origSizes.length > 0) formData.append("originalSizes", JSON.stringify(origSizes));
+        const res = await fetch("/api/messages/mms", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Send failed" }));
+          throw new Error(err.error || "Failed to send MMS");
+        }
+        return res.json();
+      } else {
+        await apiRequest("POST", "/api/messages/sms", {
+          contactId: contactId || undefined,
+          to: phone,
+          body,
+        });
+      }
+    },
+    onMutate: async ({ body }) => {
+      const cacheKey = ["/api/messages", "sms", threadKey];
+      await queryClient.cancelQueries({ queryKey: cacheKey });
+      const previous = queryClient.getQueryData<Message[]>(cacheKey);
+      const optimisticMsg: Message = {
+        id: `optimistic-${Date.now()}`,
+        companyId: "",
+        contactId: contactId || null,
+        channel: "sms",
+        direction: "outbound",
+        status: "queued",
+        fromAddress: "",
+        toAddress: phone,
+        subject: null,
+        body,
+        htmlBody: null,
+        externalId: null,
+        metadata: null,
+        sentBy: null,
+        errorMessage: null,
+        isRead: true,
+        createdAt: new Date().toISOString(),
+        mediaUrls: [],
+        mediaCount: 0,
+        emailThreadId: null,
+      };
+      queryClient.setQueryData<Message[]>(cacheKey, (old) =>
+        old ? [...old, optimisticMsg] : [optimisticMsg]
+      );
+      return { previous, cacheKey };
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(context.cacheKey, context.previous);
+      }
+      toast({ title: "Failed to send", description: error.message, variant: "destructive" });
+    },
+    onSuccess: () => {
+      setMessageText("");
+      clearAllAttachments();
+      toast({ title: "Message sent", description: "SMS sent successfully." });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
+    },
+  });
+
+  const handleSend = useCallback(() => {
+    const trimmed = messageText.trim();
+    if (!trimmed && attachedFiles.length === 0) return;
+    setMessageText("");
+    sendMutation.mutate({ body: trimmed, files: attachedFiles, origSizes: originalFileSizes });
+  }, [messageText, attachedFiles, originalFileSizes, sendMutation]);
+
+  const sortedMessages = threadMessages
+    ? [...threadMessages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    : [];
+
+  return (
+    <Card data-testid="section-inline-sms">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <MessageSquare className="h-5 w-5" /> Messages
+        </CardTitle>
+        <Badge variant="secondary" data-testid="badge-sms-phone">{phone}</Badge>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div
+          ref={scrollRef}
+          className="max-h-80 overflow-auto space-y-2 rounded-md border p-3"
+          data-testid="sms-thread-container"
+        >
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : sortedMessages.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6" data-testid="text-no-sms-messages">
+              No messages yet. Send a text to start the conversation.
+            </p>
+          ) : (
+            sortedMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}
+                data-testid={`sms-bubble-${msg.id}`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-lg px-3 py-2 ${
+                    msg.direction === "outbound"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  }`}
+                >
+                  {msg.mediaUrls && msg.mediaUrls.length > 0 && (
+                    <div className="mb-1.5 space-y-1">
+                      {msg.mediaUrls.map((url, idx) => (
+                        <a key={idx} href={url} target="_blank" rel="noopener noreferrer" data-testid={`sms-media-link-${msg.id}-${idx}`}>
+                          <img
+                            src={url}
+                            alt="Attached image"
+                            className="rounded max-w-full max-h-48 object-cover cursor-pointer"
+                            loading="lazy"
+                            data-testid={`sms-media-img-${msg.id}-${idx}`}
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  {msg.body && <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>}
+                  <div className={`flex items-center gap-1.5 mt-1 ${msg.direction === "outbound" ? "justify-end" : ""}`}>
+                    <span className={`text-[10px] ${msg.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                    {msg.status === "failed" && (
+                      <AlertCircle className="h-3 w-3 text-destructive" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {attachedPreviews.length > 0 && (
+          <div className="flex gap-2 flex-wrap" data-testid="inline-mms-preview-container">
+            {attachedPreviews.map((preview, idx) => (
+              <div key={idx} className="relative inline-block">
+                <img src={preview} alt={`Attached ${idx + 1}`} className="h-16 w-16 object-cover rounded border" data-testid={`inline-mms-preview-img-${idx}`} />
+                <button
+                  onClick={() => removeAttachment(idx)}
+                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
+                  data-testid={`button-inline-remove-attachment-${idx}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {isCompressing && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Compressing image...
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          className="hidden"
+          onChange={handleFileSelect}
+          data-testid="input-inline-mms-file"
+        />
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sendMutation.isPending || isCompressing}
+            data-testid="button-inline-attach-image"
+            title="Attach image"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+          <Input
+            value={messageText}
+            onChange={(e) => setMessageText(e.target.value)}
+            placeholder="Type a message..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            disabled={sendMutation.isPending}
+            data-testid="input-inline-sms-message"
+          />
+          <Button
+            onClick={handleSend}
+            disabled={(!messageText.trim() && attachedFiles.length === 0) || sendMutation.isPending}
+            size="icon"
+            data-testid="button-inline-send-sms"
+          >
+            {sendMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);

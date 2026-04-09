@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
@@ -35,9 +35,11 @@ import {
   Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
   CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert, Lock, Unlock,
-  Sparkles, ArrowRight, Check, X, ToggleLeft, ToggleRight, Calendar
+  Sparkles, ArrowRight, Check, X, ToggleLeft, ToggleRight, Calendar,
+  Camera, DoorClosed
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
@@ -178,7 +180,7 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
                   #{stop.stopOrder}
                 </Badge>
               )}
-              {visit && onVisitStatusChange && visit.status !== "completed" && (
+              {visit && onVisitStatusChange && (visit.status === "scheduled" || visit.status === "in_progress") && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -199,7 +201,7 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {visit.status !== "completed" && (
+                    {(visit.status === "scheduled" || visit.status === "in_progress") && (
                       <DropdownMenuItem onClick={() => onVisitStatusChange(visit.id, "completed")} disabled={updatingVisitId === visit.id} data-testid={`menu-complete-${stop.id}`}>
                         {updatingVisitId === visit.id && updatingVisitStatus === "completed" ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5 mr-2 text-green-600" />} Mark Completed
                       </DropdownMenuItem>
@@ -477,7 +479,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
 }
 
 function RouteVisitDetailSheet({
-  visit, servicePlan, open, onOpenChange, contacts, properties, routes, selectedDayDate,
+  visit, servicePlan, open, onOpenChange, contacts, properties, routes, selectedDayDate, onRequestComplete,
 }: {
   visit: Visit | null;
   servicePlan: ServicePlan | null;
@@ -487,6 +489,7 @@ function RouteVisitDetailSheet({
   properties: Property[];
   routes: Route[];
   selectedDayDate: string;
+  onRequestComplete?: (visitId: string, contactName: string, address: string) => void;
 }) {
   const { toast } = useToast();
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
@@ -539,7 +542,7 @@ function RouteVisitDetailSheet({
       label: "Mark Complete",
       icon: CheckCircle,
       color: "text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 border-green-200 dark:border-green-800",
-      show: visit.status !== "completed",
+      show: visit.status === "scheduled" || visit.status === "in_progress",
     },
     {
       status: "skipped",
@@ -688,7 +691,16 @@ function RouteVisitDetailSheet({
                     key={action.status}
                     variant="outline"
                     className={`justify-start gap-2 ${action.color}`}
-                    onClick={() => statusMutation.mutate({ visitId: visit.id, status: action.status })}
+                    onClick={() => {
+                      if (action.status === "completed" && onRequestComplete) {
+                        const c = contacts.find((ct) => ct.id === servicePlan?.contactId);
+                        const p = properties.find((pr) => pr.id === visit.propertyId);
+                        onRequestComplete(visit.id, c ? `${c.firstName} ${c.lastName}` : "", p?.streetAddress || "");
+                        onOpenChange(false);
+                      } else {
+                        statusMutation.mutate({ visitId: visit.id, status: action.status });
+                      }
+                    }}
                     disabled={statusMutation.isPending}
                     data-testid={`button-route-action-${action.status}`}
                   >
@@ -911,6 +923,17 @@ export default function RoutesPage() {
   const [showZones, setShowZones] = useState(false);
   const [showWeeklyOptimizer, setShowWeeklyOptimizer] = useState(false);
 
+  const [completeDialogVisitId, setCompleteDialogVisitId] = useState<string | null>(null);
+  const [completeDialogContactName, setCompleteDialogContactName] = useState<string>("");
+  const [completeDialogAddress, setCompleteDialogAddress] = useState<string>("");
+  const [gatePhoto, setGatePhoto] = useState<File | null>(null);
+  const [gatePhotoPreview, setGatePhotoPreview] = useState<string | null>(null);
+  const [extraFiles, setExtraFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [completionNotes, setCompletionNotes] = useState("");
+  const gateFileInputRef = useRef<HTMLInputElement>(null);
+  const extraFileInputRef = useRef<HTMLInputElement>(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
@@ -923,6 +946,7 @@ export default function RoutesPage() {
   const { data: team = [] } = useQuery<TeamMember[]>({ queryKey: ["/api/company/team"] });
   const { data: creditData } = useQuery<{ credits: number }>({ queryKey: ["/api/route-credits"] });
   const credits = creditData?.credits ?? 0;
+  const { data: company } = useQuery<{ name: string }>({ queryKey: ["/api/company"] });
 
   const selectedDayDate = useMemo(() => {
     const now = new Date();
@@ -994,8 +1018,128 @@ export default function RoutesPage() {
   });
 
   const handleVisitStatusChange = useCallback((visitId: string, status: string) => {
+    if (status === "completed") {
+      const visit = dayVisits.find(v => v.id === visitId);
+      if (visit) {
+        const plan = servicePlans.find(sp => sp.id === visit.servicePlanId);
+        const contact = plan ? contacts.find(c => c.id === plan.contactId) : null;
+        const property = plan ? properties.find(p => p.id === plan.propertyId) : null;
+        setCompleteDialogVisitId(visitId);
+        setCompleteDialogContactName(contact ? `${contact.firstName} ${contact.lastName}` : "");
+        setCompleteDialogAddress(property ? `${property.streetAddress}${property.city ? `, ${property.city}` : ""}` : "");
+        setGatePhoto(null);
+        setGatePhotoPreview(null);
+        setExtraFiles([]);
+        setIsCompleting(false);
+        setCompletionNotes("");
+        return;
+      }
+    }
     visitStatusMutation.mutate({ visitId, status });
-  }, [visitStatusMutation]);
+  }, [visitStatusMutation, dayVisits, servicePlans, contacts, properties]);
+
+  const completionContactFirstName = useMemo(() => {
+    if (!completeDialogVisitId) return "";
+    const visit = dayVisits.find(v => v.id === completeDialogVisitId);
+    if (!visit) return "";
+    const plan = servicePlans.find(sp => sp.id === visit.servicePlanId);
+    if (!plan) return "";
+    const contact = contacts.find(c => c.id === plan.contactId);
+    return contact?.firstName || "";
+  }, [completeDialogVisitId, dayVisits, servicePlans, contacts]);
+
+  const completionMessage = completeDialogVisitId && completionContactFirstName
+    ? `Hi ${completionContactFirstName}. ${company?.name || "Our team"} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`
+    : "";
+
+  const handleGatePhotoCapture = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setGatePhoto(file);
+    const reader = new FileReader();
+    reader.onload = () => setGatePhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }, []);
+
+  const handleExtraPhotoCapture = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const reader = new FileReader();
+    reader.onload = () => {
+      setExtraFiles(prev => [...prev, { file, preview: reader.result as string }]);
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const removeExtraPhoto = useCallback((index: number) => {
+    setExtraFiles(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleCompleteAndSend = useCallback(async () => {
+    if (!completeDialogVisitId || !gatePhoto) return;
+    setIsCompleting(true);
+
+    try {
+      const currentVisit = dayVisits.find(v => v.id === completeDialogVisitId);
+      if (currentVisit && currentVisit.status === "scheduled") {
+        await apiRequest("PATCH", `/api/visits/${completeDialogVisitId}`, {
+          status: "in_progress",
+          startedAt: new Date().toISOString(),
+        });
+      }
+
+      const token = localStorage.getItem("sessionToken");
+      const hdrs: Record<string, string> = {};
+      if (token) hdrs["Authorization"] = `Bearer ${token}`;
+
+      const formData = new FormData();
+      formData.append("file", gatePhoto);
+      const uploadRes = await fetch("/api/uploads/direct", {
+        method: "POST",
+        credentials: "include",
+        headers: hdrs,
+        body: formData,
+      });
+      if (!uploadRes.ok) throw new Error("Failed to upload photo");
+      const uploadData = await uploadRes.json();
+      const gateClosedPath = uploadData.objectPath;
+
+      const extraPaths: string[] = [];
+      for (const extra of extraFiles) {
+        const extraForm = new FormData();
+        extraForm.append("file", extra.file);
+        const extraRes = await fetch("/api/uploads/direct", {
+          method: "POST",
+          credentials: "include",
+          headers: hdrs,
+          body: extraForm,
+        });
+        if (!extraRes.ok) throw new Error("Failed to upload extra photo");
+        const extraData = await extraRes.json();
+        extraPaths.push(extraData.objectPath);
+      }
+
+      await apiRequest("POST", `/api/visits/${completeDialogVisitId}/complete-notify`, {
+        gateClosedPhoto: gateClosedPath,
+        extraPhotos: extraPaths.length > 0 ? extraPaths : undefined,
+        technicianNotes: completionNotes || undefined,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/range", selectedDayDate] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
+      setCompleteDialogVisitId(null);
+      toast({ title: "Visit completed", description: "Customer has been notified." });
+    } catch (err: any) {
+      toast({ title: "Completion failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsCompleting(false);
+    }
+  }, [completeDialogVisitId, gatePhoto, extraFiles, completionNotes, selectedDayDate, toast, dayVisits]);
 
   const [onMyWaySending, setOnMyWaySending] = useState<string | null>(null);
   const [onMyWayCooldowns, setOnMyWayCooldowns] = useState<Record<string, number>>({});
@@ -1675,6 +1819,16 @@ export default function RoutesPage() {
         properties={properties}
         routes={allRoutes}
         selectedDayDate={selectedDayDate}
+        onRequestComplete={(visitId, contactName, address) => {
+          setCompleteDialogVisitId(visitId);
+          setCompleteDialogContactName(contactName);
+          setCompleteDialogAddress(address);
+          setGatePhoto(null);
+          setGatePhotoPreview(null);
+          setExtraFiles([]);
+          setCompletionNotes("");
+          setIsCompleting(false);
+        }}
       />
 
       {showWeeklyOptimizer && (
@@ -1685,6 +1839,148 @@ export default function RoutesPage() {
           onNeedCredits={() => setShowPurchase(true)}
         />
       )}
+
+      <Dialog open={!!completeDialogVisitId} onOpenChange={(open) => { if (!open) setCompleteDialogVisitId(null); }}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto" data-testid="dialog-complete-visit">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DoorClosed className="h-5 w-5" />
+              Complete Visit
+            </DialogTitle>
+            <DialogDescription>
+              {completeDialogAddress} - {completeDialogContactName}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-1">Proof Photo (required)</p>
+              <p className="text-xs text-muted-foreground mb-2">Take a photo showing the service area is clean and secure</p>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                ref={gateFileInputRef}
+                className="hidden"
+                onChange={handleGatePhotoCapture}
+                data-testid="input-gate-photo"
+              />
+              {gatePhotoPreview ? (
+                <div className="relative">
+                  <img
+                    src={gatePhotoPreview}
+                    alt="Gate closed"
+                    className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
+                    data-testid="img-gate-preview"
+                  />
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-1 right-1 h-6 w-6"
+                    onClick={() => { setGatePhoto(null); setGatePhotoPreview(null); }}
+                    data-testid="button-remove-gate-photo"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full h-24 border-dashed"
+                  onClick={() => gateFileInputRef.current?.click()}
+                  data-testid="button-capture-gate-photo"
+                >
+                  <Camera className="mr-2 h-5 w-5" />
+                  Take Proof Photo
+                </Button>
+              )}
+            </div>
+
+            <div>
+              <p className="text-sm font-medium mb-2">Additional Photos (optional)</p>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                ref={extraFileInputRef}
+                className="hidden"
+                onChange={handleExtraPhotoCapture}
+                data-testid="input-extra-photo"
+              />
+              {extraFiles.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  {extraFiles.map((ef, i) => (
+                    <div key={i} className="relative">
+                      <img
+                        src={ef.preview}
+                        alt={`Extra ${i + 1}`}
+                        className="rounded-md h-20 w-full object-cover"
+                        data-testid={`img-extra-preview-${i}`}
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-0.5 right-0.5 h-5 w-5"
+                        onClick={() => removeExtraPhoto(i)}
+                        data-testid={`button-remove-extra-${i}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => extraFileInputRef.current?.click()}
+                data-testid="button-add-extra-photo"
+              >
+                <Plus className="mr-1 h-4 w-4" /> Add Photo
+              </Button>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium mb-1">Notes (optional)</p>
+              <Textarea
+                value={completionNotes}
+                onChange={(e) => setCompletionNotes(e.target.value)}
+                placeholder="Add notes..."
+                className="text-sm"
+                data-testid="input-completion-notes"
+              />
+            </div>
+
+            <div className="rounded-md bg-muted p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Text to customer:</p>
+              <p className="text-sm" data-testid="text-completion-sms-preview">{completionMessage}</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCompleteDialogVisitId(null)}
+              disabled={isCompleting}
+              data-testid="button-cancel-complete"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCompleteAndSend}
+              disabled={!gatePhoto || isCompleting}
+              data-testid="button-send-complete"
+            >
+              {isCompleting ? (
+                <Loader2 className="animate-spin mr-2 h-4 w-4" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {isCompleting ? "Completing..." : "Complete & Notify"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
