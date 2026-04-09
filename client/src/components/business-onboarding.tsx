@@ -523,11 +523,11 @@ function PricingSetupStep({
   onSkip: () => void;
   isPending: boolean;
 }) {
-  const existingConfig = companyData.pricingConfig || DEFAULT_PRICING_CONFIG;
+  const existingConfig = { ...DEFAULT_PRICING_CONFIG, ...(companyData.pricingConfig || {}) };
   const [pricingMode, setPricingMode] = useState<"aggressive" | "standard" | "premium">(existingConfig.pricingMode || "standard");
-  const [techWage, setTechWage] = useState((existingConfig.techHourlyWageCents / 100).toString());
-  const [vehicleCost, setVehicleCost] = useState((existingConfig.vehicleCostPerMileCents / 100).toString());
-  const [monthlyStops, setMonthlyStops] = useState(existingConfig.estimatedMonthlyStops.toString());
+  const [techWage, setTechWage] = useState(((existingConfig.techHourlyWageCents ?? 1500) / 100).toString());
+  const [vehicleCost, setVehicleCost] = useState(((existingConfig.vehicleCostPerMileCents ?? 65) / 100).toString());
+  const [monthlyStops, setMonthlyStops] = useState((existingConfig.estimatedMonthlyStops ?? 100).toString());
   const [marketPrice, setMarketPrice] = useState(
     existingConfig.localMarketAverageWeeklyPriceCents
       ? (existingConfig.localMarketAverageWeeklyPriceCents / 100).toString()
