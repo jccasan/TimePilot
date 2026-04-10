@@ -1,10 +1,7 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
-import { rm, readFile, writeFile } from "fs/promises";
-import { createHash } from "crypto";
+import { rm, readFile } from "fs/promises";
 
-// server deps to bundle to reduce openat(2) syscalls
-// which helps cold start times
 const allowlist = [
   "@google/generative-ai",
   "axios",
@@ -38,12 +35,6 @@ async function buildAll() {
 
   console.log("building client...");
   await viteBuild();
-
-  const buildHash = createHash("md5").update(Date.now().toString()).digest("hex").slice(0, 8);
-  const swPath = "dist/public/sw.js";
-  const swContent = await readFile(swPath, "utf-8");
-  await writeFile(swPath, swContent.replace("__BUILD_HASH__", buildHash));
-  console.log(`stamped sw.js with build hash: ${buildHash}`);
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
