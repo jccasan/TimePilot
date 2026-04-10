@@ -34,7 +34,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Framework**: React with TypeScript
 - **State Management**: TanStack Query v5
 - **UI Components**: Shadcn/ui with Tailwind CSS, utilizing a green/earth tone theme.
-- **Mobile View**: Dedicated mobile-optimized views for field technicians, including PWA support and offline capabilities.
+- **Mobile View**: Dedicated mobile-optimized views for field technicians, including PWA support and offline capabilities. Service worker cache busting is handled by a Vite build plugin (`swBuildHashPlugin` in `vite.config.ts`) that replaces the `__BUILD_HASH__` placeholder in `client/public/sw.js` with a unique timestamp hash at build time. The `controllerchange` event in `client/index.html` auto-reloads the page when a new service worker activates.
 - **Client Portal**: Self-service portal for managing services, billing, and account information.
 - **Admin Dashboard**: Platform-level administration for tenant management.
 - **Rover Chatbot**: AI-powered in-app assistant with SSE streaming responses and function calling.

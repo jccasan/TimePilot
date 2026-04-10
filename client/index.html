@@ -22,6 +22,13 @@
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
+        var swRefreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+          if (!swRefreshing) {
+            swRefreshing = true;
+            window.location.reload();
+          }
+        });
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js').catch(function() {});
         });
