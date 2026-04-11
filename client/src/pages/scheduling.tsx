@@ -1,8 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
@@ -15,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Sheet,
   SheetContent,
@@ -28,15 +27,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import {
   Select,
   SelectContent,
@@ -45,25 +37,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  ChevronLeft, ChevronRight, Plus, Wand2, Calendar, CalendarDays, CalendarRange,
+  ChevronLeft, ChevronRight, Plus, Calendar, CalendarDays, CalendarRange,
   CheckCircle, XCircle, Ban, Clock, MapPin, DollarSign, User, CalendarCheck, Loader2, GripVertical,
-  Send, MessageSquare,
+  Send, MessageSquare, Trash2,
 } from "lucide-react";
 import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
@@ -128,16 +109,318 @@ function getCalendarDays(date: Date): Date[] {
   return days;
 }
 
-const servicePlanSchema = z.object({
-  contactId: z.string().min(1, "Contact is required"),
-  propertyId: z.string().min(1, "Property is required"),
-  frequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]),
-  dayOfWeek: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
-  pricePerVisit: z.string().min(1, "Price is required"),
-  startDate: z.string().min(1, "Start date is required"),
-});
+type TeamMember = {
+  id: string;
+  role: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+};
 
-type ServicePlanFormValues = z.infer<typeof servicePlanSchema>;
+interface JobFormPayload {
+  contactId: string;
+  propertyId: string;
+  serviceName: string | null;
+  jobType: string;
+  frequency: string;
+  dayOfWeek: string | null;
+  pricePerVisit: string;
+  startDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  anytime: boolean;
+  visitInstructions: string | null;
+  assignedUserId: string | null;
+  endsAfterCount?: number | null;
+  endsAfterUnit?: string | null;
+  endDate?: string | null;
+}
+
+const frequencyLabels: Record<string, string> = {
+  weekly: "Weekly",
+  biweekly: "Every 2 Weeks",
+  monthly: "Monthly",
+  onetime: "One-Time",
+};
+
+const dayOfWeekLabels: Record<string, string> = {
+  monday: "Monday",
+  tuesday: "Tuesday",
+  wednesday: "Wednesday",
+  thursday: "Thursday",
+  friday: "Friday",
+  saturday: "Saturday",
+  sunday: "Sunday",
+};
+
+function ScheduleJobForm({
+  onSubmit,
+  isPending,
+  contacts,
+  properties,
+  team,
+  services,
+}: {
+  onSubmit: (data: JobFormPayload) => void;
+  isPending: boolean;
+  contacts: Contact[];
+  properties: Property[];
+  team: TeamMember[];
+  services: ServicePricingItem[];
+}) {
+  const tz = useCompanyTimezone();
+  const [jobType, setJobType] = useState<string>("recurring");
+  const [contactId, setContactId] = useState("");
+  const [propertyId, setPropertyId] = useState("");
+  const [selectedServices, setSelectedServices] = useState<Array<{ id: string; name: string; price: string }>>([]);
+  const [addServiceId, setAddServiceId] = useState("");
+  const [frequency, setFrequency] = useState("weekly");
+  const [dayOfWeek, setDayOfWeek] = useState("");
+  const [pricePerVisit, setPricePerVisit] = useState("");
+  const [startDate, setStartDate] = useState(toLocalDateString(new Date(), tz));
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [anytime, setAnytime] = useState(true);
+  const [endsAfterMode, setEndsAfterMode] = useState<"none" | "count" | "date">("none");
+  const [endsAfterCount, setEndsAfterCount] = useState("");
+  const [endsAfterUnit, setEndsAfterUnit] = useState("months");
+  const [endDate, setEndDate] = useState("");
+  const [visitInstructions, setVisitInstructions] = useState("");
+  const [assignedUserId, setAssignedUserId] = useState("");
+
+  const activeServices = useMemo(() => services.filter(s => s.isActive), [services]);
+
+  const filteredProperties = useMemo(() => {
+    if (!contactId) return [];
+    return properties.filter(p => p.contactId === contactId);
+  }, [contactId, properties]);
+
+  const totalPrice = useMemo(() => {
+    if (selectedServices.length === 0) return pricePerVisit;
+    const sum = selectedServices.reduce((acc, s) => acc + parseFloat(s.price || "0"), 0);
+    return sum > 0 ? sum.toFixed(2) : pricePerVisit;
+  }, [selectedServices, pricePerVisit]);
+
+  const combinedServiceName = useMemo(() => {
+    if (selectedServices.length === 0) return null;
+    return selectedServices.map(s => s.name).join(" + ");
+  }, [selectedServices]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload: JobFormPayload = {
+      contactId,
+      propertyId,
+      serviceName: combinedServiceName,
+      jobType,
+      frequency: jobType === "one_off" ? "onetime" : frequency,
+      dayOfWeek: dayOfWeek || null,
+      pricePerVisit: totalPrice || "0",
+      startDate,
+      startTime: anytime ? null : (startTime || null),
+      endTime: anytime ? null : (endTime || null),
+      anytime,
+      visitInstructions: visitInstructions || null,
+      assignedUserId: (assignedUserId && assignedUserId !== "none") ? assignedUserId : null,
+    };
+    if (jobType === "recurring") {
+      if (endsAfterMode === "count" && endsAfterCount) {
+        payload.endsAfterCount = parseInt(endsAfterCount);
+        payload.endsAfterUnit = endsAfterUnit;
+        payload.endDate = null;
+      } else if (endsAfterMode === "date" && endDate) {
+        payload.endDate = endDate;
+        payload.endsAfterCount = null;
+        payload.endsAfterUnit = null;
+      } else {
+        payload.endsAfterCount = null;
+        payload.endsAfterUnit = null;
+        payload.endDate = null;
+      }
+    } else {
+      payload.endsAfterCount = null;
+      payload.endsAfterUnit = null;
+      payload.endDate = null;
+    }
+    onSubmit(payload);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div>
+        <Label className="text-sm font-semibold">Job Type</Label>
+        <div className="flex gap-2 mt-1.5">
+          <Button type="button" variant={jobType === "one_off" ? "default" : "outline"} size="sm" onClick={() => { setJobType("one_off"); setFrequency("onetime"); }} data-testid="button-job-type-one-off">One-off</Button>
+          <Button type="button" variant={jobType === "recurring" ? "default" : "outline"} size="sm" onClick={() => { setJobType("recurring"); setFrequency("weekly"); }} data-testid="button-job-type-recurring">Recurring</Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label>Customer</Label>
+          <Select value={contactId} onValueChange={(v) => { setContactId(v); setPropertyId(""); }}>
+            <SelectTrigger data-testid="select-job-contact"><SelectValue placeholder="Select customer" /></SelectTrigger>
+            <SelectContent>{contacts.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}</SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Property</Label>
+          <Select value={propertyId} onValueChange={setPropertyId} disabled={!contactId}>
+            <SelectTrigger data-testid="select-job-property"><SelectValue placeholder={contactId ? "Select property" : "Select customer first"} /></SelectTrigger>
+            <SelectContent>{filteredProperties.map(p => (<SelectItem key={p.id} value={p.id}>{p.streetAddress}</SelectItem>))}</SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <Label>Services</Label>
+        {selectedServices.length > 0 && (
+          <div className="space-y-2">
+            {selectedServices.map((svc, idx) => (
+              <div key={svc.id + idx} className="flex items-center justify-between bg-muted/50 rounded-md px-3 py-2" data-testid={`service-row-${idx}`}>
+                <span className="text-sm font-medium">{svc.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">${parseFloat(svc.price || "0").toFixed(2)}</span>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setSelectedServices(prev => prev.filter((_, i) => i !== idx))} data-testid={`button-remove-service-${idx}`}>
+                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {activeServices.length > 0 ? (
+          <div className="flex gap-2">
+            <Select value={addServiceId} onValueChange={setAddServiceId}>
+              <SelectTrigger className="flex-1" data-testid="select-job-service"><SelectValue placeholder="Add a service..." /></SelectTrigger>
+              <SelectContent>{activeServices.map(s => (<SelectItem key={s.id} value={s.id}>{s.name} — ${parseFloat(s.basePrice).toFixed(2)}</SelectItem>))}</SelectContent>
+            </Select>
+            <Button type="button" variant="outline" size="sm" disabled={!addServiceId} onClick={() => { const svc = activeServices.find(s => s.id === addServiceId); if (svc) { setSelectedServices(prev => [...prev, { id: svc.id, name: svc.name, price: svc.basePrice }]); setAddServiceId(""); } }} data-testid="button-add-service">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <Input value={pricePerVisit} onChange={e => setPricePerVisit(e.target.value)} placeholder="Price per visit" data-testid="input-job-price-manual" />
+        )}
+        <div className="flex items-center justify-between pt-1">
+          <Label className="text-sm">Total per Visit</Label>
+          <span className="text-sm font-semibold" data-testid="text-total-price">${parseFloat(totalPrice || "0").toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div className="border-t pt-4">
+        <h3 className="text-sm font-semibold mb-3">Schedule</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <Label>Start Date</Label>
+            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} data-testid="input-job-start-date" />
+          </div>
+          {!anytime && (
+            <>
+              <div className="space-y-1.5">
+                <Label>Start Time</Label>
+                <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} data-testid="input-job-start-time" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>End Time</Label>
+                <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} data-testid="input-job-end-time" />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-3">
+          <Checkbox id="anytime" checked={anytime} onCheckedChange={(checked) => setAnytime(!!checked)} data-testid="checkbox-job-anytime" />
+          <Label htmlFor="anytime" className="text-sm cursor-pointer">Anytime</Label>
+        </div>
+      </div>
+
+      {jobType === "recurring" && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Repeats</Label>
+              <Select value={frequency} onValueChange={setFrequency}>
+                <SelectTrigger data-testid="select-job-frequency"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {frequency !== "monthly" && (
+              <div className="space-y-1.5">
+                <Label>Day of Week</Label>
+                <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
+                  <SelectTrigger data-testid="select-job-day"><SelectValue placeholder="Select day" /></SelectTrigger>
+                  <SelectContent>{Object.entries(dayOfWeekLabels).map(([val, label]) => (<SelectItem key={val} value={val}>{label}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <div className="space-y-3">
+            <Label className="text-sm font-semibold">End Condition</Label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="endsAfterMode" checked={endsAfterMode === "none"} onChange={() => setEndsAfterMode("none")} className="accent-primary" data-testid="radio-ends-never" />
+                <span className="text-sm">No end date</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="endsAfterMode" checked={endsAfterMode === "count"} onChange={() => setEndsAfterMode("count")} className="accent-primary" data-testid="radio-ends-after" />
+                <span className="text-sm">Ends after</span>
+              </label>
+              {endsAfterMode === "count" && (
+                <div className="flex gap-2 ml-6">
+                  <Input type="number" min="1" value={endsAfterCount} onChange={e => setEndsAfterCount(e.target.value)} className="w-20" data-testid="input-ends-after-count" />
+                  <Select value={endsAfterUnit} onValueChange={setEndsAfterUnit}>
+                    <SelectTrigger className="w-32" data-testid="select-ends-after-unit"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="days">Days</SelectItem>
+                      <SelectItem value="weeks">Weeks</SelectItem>
+                      <SelectItem value="months">Months</SelectItem>
+                      <SelectItem value="years">Years</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="endsAfterMode" checked={endsAfterMode === "date"} onChange={() => setEndsAfterMode("date")} className="accent-primary" data-testid="radio-ends-on" />
+                <span className="text-sm">Ends on</span>
+              </label>
+              {endsAfterMode === "date" && (
+                <div className="ml-6">
+                  <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} data-testid="input-ends-on-date" />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <Label>Assigned Team Member</Label>
+        <Select value={assignedUserId} onValueChange={setAssignedUserId}>
+          <SelectTrigger data-testid="select-job-assigned"><SelectValue placeholder="Select team member (optional)" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Unassigned</SelectItem>
+            {team.map(t => (<SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Visit Instructions</Label>
+        <Textarea value={visitInstructions} onChange={e => setVisitInstructions(e.target.value)} placeholder="Instructions for technician..." rows={3} data-testid="input-job-instructions" />
+      </div>
+
+      <DialogFooter>
+        <Button type="submit" disabled={isPending || !contactId || !propertyId} data-testid="button-submit-job">
+          {isPending ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Creating...</> : "Create Job"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
 
 export default function Scheduling() {
   const tz = useCompanyTimezone();
@@ -174,94 +457,24 @@ export default function Scheduling() {
   const { data: routes } = useQuery<Route[]>({ queryKey: ["/api/routes"] });
   const { data: servicePlans } = useQuery<ServicePlan[]>({ queryKey: ["/api/service-plans"] });
   const { data: pricingItems } = useQuery<ServicePricingItem[]>({ queryKey: ["/api/pricing"] });
+  const { data: team } = useQuery<TeamMember[]>({ queryKey: ["/api/company/team"] });
 
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [quickAddDate, setQuickAddDate] = useState<string | null>(null);
   const [quickAddPlanId, setQuickAddPlanId] = useState("");
   const [quickAddRouteId, setQuickAddRouteId] = useState("");
 
-  const recurringPricing = useMemo(() => {
-    if (!pricingItems) return [];
-    return pricingItems.filter((p) => p.category === "recurring_service" && p.isActive);
-  }, [pricingItems]);
-
-  const oneTimePricing = useMemo(() => {
-    if (!pricingItems) return [];
-    return pricingItems.filter((p) => p.category === "one_time_service" && p.isActive);
-  }, [pricingItems]);
-
-  const form = useForm<ServicePlanFormValues>({
-    resolver: zodResolver(servicePlanSchema),
-    defaultValues: {
-      contactId: "", propertyId: "", frequency: "weekly", dayOfWeek: "monday",
-      pricePerVisit: "", startDate: formatDate(new Date(), tz),
-    },
-  });
-
-  const selectedContactId = form.watch("contactId");
-  const selectedFrequency = form.watch("frequency");
-
-  const templatePricing = useMemo(() => {
-    return selectedFrequency === "monthly" || selectedFrequency === "onetime"
-      ? oneTimePricing
-      : recurringPricing;
-  }, [selectedFrequency, oneTimePricing, recurringPricing]);
-
-  const contactProperties = useMemo(() => {
-    if (!selectedContactId || !properties) return [];
-    return properties.filter((p) => p.contactId === selectedContactId);
-  }, [selectedContactId, properties]);
-
-  useEffect(() => {
-    if (!selectedContactId) { form.setValue("propertyId", ""); return; }
-    if (contactProperties.length === 1) {
-      form.setValue("propertyId", contactProperties[0].id);
-    } else {
-      const cur = form.getValues("propertyId");
-      if (cur && !contactProperties.some((p) => p.id === cur)) form.setValue("propertyId", "");
-    }
-  }, [selectedContactId, contactProperties, form]);
-
-  const prevFrequencyRef = useRef(selectedFrequency);
-  useEffect(() => {
-    if (!dialogOpen) return;
-    const frequencyChanged = prevFrequencyRef.current !== selectedFrequency;
-    prevFrequencyRef.current = selectedFrequency;
-    if (frequencyChanged) {
-      const defaultPrice = templatePricing.length > 0 ? templatePricing[0].basePrice : "";
-      form.setValue("pricePerVisit", defaultPrice);
-    } else if (templatePricing.length > 0 && !form.getValues("pricePerVisit")) {
-      form.setValue("pricePerVisit", templatePricing[0].basePrice);
-    }
-  }, [dialogOpen, selectedFrequency, templatePricing, form]);
-
-  const generateMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/visits/generate", { startDate: startStr, endDate: endStr });
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
-      queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
-      toast({ title: `${data.generated} visit${data.generated === 1 ? "" : "s"} generated`, description: data.generated > 0 ? "Visits created from active jobs." : "No new visits needed." });
-    },
-    onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
-  });
-
   const createMutation = useMutation({
-    mutationFn: async (data: ServicePlanFormValues) => { await apiRequest("POST", "/api/service-plans", data); },
+    mutationFn: async (data: JobFormPayload) => { await apiRequest("POST", "/api/jobs", data); },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
-      toast({ title: "Job created", description: "New job added successfully." });
+      toast({ title: "Job created", description: "Visits have been auto-generated." });
       setDialogOpen(false);
-      form.reset();
     },
     onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
   });
@@ -401,114 +614,22 @@ export default function Scheduling() {
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold" data-testid="text-scheduling-heading">Scheduling</h1>
-        <div className="flex items-center gap-2">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" disabled={generateMutation.isPending} data-testid="button-generate-visits">
-                <Wand2 className="mr-1 h-4 w-4" />
-                {generateMutation.isPending ? "Creating..." : "Create Visits"}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Create Visits</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will create visits for all active jobs in the selected date range ({dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}). Existing visits won't be duplicated.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => generateMutation.mutate()} data-testid="button-confirm-generate">Generate</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Add Job</Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Add Job</DialogTitle></DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
-                  <FormField control={form.control} name="contactId" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contact</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger data-testid="select-contact"><SelectValue placeholder="Select contact" /></SelectTrigger></FormControl>
-                        <SelectContent>{contacts?.map((c) => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}</SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="propertyId" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Property</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger data-testid="select-property"><SelectValue placeholder={selectedContactId ? (contactProperties.length === 0 ? "No properties for this contact" : "Select property") : "Select a contact first"} /></SelectTrigger></FormControl>
-                        <SelectContent>{contactProperties.map((p) => (<SelectItem key={p.id} value={p.id}>{p.streetAddress}, {p.city}</SelectItem>))}</SelectContent>
-                      </Select>
-                      {selectedContactId && contactProperties.length === 0 && (<p className="text-sm text-muted-foreground">This contact has no properties. Add one from their contact detail page first.</p>)}
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="frequency" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Frequency</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger data-testid="select-frequency"><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                          <SelectItem value="biweekly">Biweekly</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="onetime">One-time</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  {selectedFrequency !== "onetime" && (
-                    <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Day of Week</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger data-testid="select-day"><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>{daysOfWeek.map((d) => (<SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>))}</SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  )}
-                  {templatePricing.length > 0 && (
-                    <div>
-                      <Label className="text-sm">Use Pricing Template</Label>
-                      <Select onValueChange={(v) => { const item = pricingItems?.find((p) => p.id === v); if (item) form.setValue("pricePerVisit", item.basePrice); }}>
-                        <SelectTrigger data-testid="select-pricing-template"><SelectValue placeholder="Select pricing template" /></SelectTrigger>
-                        <SelectContent>{templatePricing.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name} - ${p.basePrice}</SelectItem>))}</SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                  <FormField control={form.control} name="pricePerVisit" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Price Per Visit ($)</FormLabel>
-                      <FormControl><Input type="number" step="0.01" {...field} data-testid="input-price" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="startDate" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{selectedFrequency === "onetime" ? "Job Date" : "Start Date"}</FormLabel>
-                      <FormControl><Input type="date" {...field} data-testid="input-start-date" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-service-plan">
-                    {createMutation.isPending ? "Creating..." : "Create Job"}
-                  </Button>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Add Job</Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Add Job</DialogTitle></DialogHeader>
+            <ScheduleJobForm
+              onSubmit={(data) => createMutation.mutate(data)}
+              isPending={createMutation.isPending}
+              contacts={contacts || []}
+              properties={properties || []}
+              team={team || []}
+              services={pricingItems || []}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

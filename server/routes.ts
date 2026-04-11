@@ -4845,6 +4845,42 @@ Return ONLY valid JSON, no markdown.`,
         isStopOnly: body.isStopOnly || false,
       });
 
+      try {
+        const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+        const today = new Date();
+        const jobStart = body.startDate ? new Date(body.startDate + "T00:00:00") : today;
+        const anchor = jobStart > today ? jobStart : today;
+        const sixMonthsOut = new Date(anchor);
+        sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+        await generateVisitsForPlans(companyId, [sp.id], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
+      } catch (genErr) {
+        console.error("[jobs] Failed to auto-generate visits:", genErr);
+      }
+
+      const contact = await storage.getContact(body.contactId, companyId);
+      if (contact && (contact.status === "lead" || contact.status === "estimate")) {
+        await storage.updateContact(body.contactId, companyId, { status: "active" });
+        if (contact.email && !contact.hasPortalAccess) {
+          provisionPortalAccess(body.contactId, companyId, getBaseUrl(req)).catch((err) =>
+            console.error("[auto-portal] Failed to provision portal access on job creation:", err)
+          );
+        }
+      }
+
+      if (contact && !contact.stripeCustomerId && contact.email) {
+        createStripeCustomer({
+          email: contact.email,
+          name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || contact.email,
+          metadata: { scoopilotContactId: contact.id, companyId },
+        })
+          .then((stripeCustomerId) =>
+            storage.updateContact(body.contactId, companyId, { stripeCustomerId })
+          )
+          .catch((err) =>
+            console.error("[auto-stripe] Failed to auto-create Stripe customer:", err)
+          );
+      }
+
       const linkedJob = await storage.getJobByServicePlanId(sp.id);
       const linkedAgreement = await storage.getAgreementByServicePlanId(sp.id);
       res.status(201).json({ ...(linkedJob || {}), agreementId: linkedAgreement?.id, contactId: body.contactId, frequency: body.frequency, servicePlanId: sp.id });

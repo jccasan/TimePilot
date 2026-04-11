@@ -81,7 +81,6 @@ const menuSections = [
     items: [
       { title: "Scheduling", url: "/scheduling", icon: Calendar },
       { title: "Routes", url: "/routes", icon: MapPin },
-      { title: "Jobs", url: "/jobs", icon: Briefcase },
       { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Field View", url: "/m/today", icon: Smartphone },
       { title: "Reports", url: "/reports", icon: BarChart3 },
@@ -182,7 +181,7 @@ export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => 
                 New Invoice
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => navigate("/jobs")}
+                onClick={() => navigate("/scheduling")}
                 data-testid="quick-create-job"
               >
                 <Briefcase className="h-4 w-4 mr-2" />

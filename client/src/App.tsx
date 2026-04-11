@@ -65,7 +65,6 @@ import SignupWidget from "@/pages/signup-widget";
 import VoiceSignup from "@/pages/voice-signup";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import SmsTerms from "@/pages/sms-terms";
-import Jobs from "@/pages/jobs";
 import Pipeline from "@/pages/pipeline";
 import { NotificationBell } from "@/components/notification-bell";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
@@ -88,7 +87,7 @@ function Router() {
       <Route path="/contacts/:id" component={ContactDetail} />
       <Route path="/scheduling" component={Scheduling} />
       <Route path="/routes" component={RoutesPage} />
-      <Route path="/jobs" component={Jobs} />
+      <Route path="/jobs" component={Scheduling} />
       <Route path="/pipeline" component={Pipeline} />
       <Route path="/m/today" component={TechMobile} />
       <Route path="/quotes" component={Quotes} />
