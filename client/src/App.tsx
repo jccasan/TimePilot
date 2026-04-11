@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation, Link as WouterLink } from "wouter";
+import { Switch, Route, Redirect, useLocation, Link as WouterLink } from "wouter";
 import { queryClient, apiRequest } from "./lib/queryClient";
 import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -87,7 +87,7 @@ function Router() {
       <Route path="/contacts/:id" component={ContactDetail} />
       <Route path="/scheduling" component={Scheduling} />
       <Route path="/routes" component={RoutesPage} />
-      <Route path="/jobs" component={Scheduling} />
+      <Route path="/jobs"><Redirect to="/scheduling" /></Route>
       <Route path="/pipeline" component={Pipeline} />
       <Route path="/m/today" component={TechMobile} />
       <Route path="/quotes" component={Quotes} />

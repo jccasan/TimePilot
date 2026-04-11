@@ -181,7 +181,7 @@ export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => 
                 New Invoice
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => navigate("/scheduling")}
+                onClick={() => navigate("/scheduling?addJob=1")}
                 data-testid="quick-create-job"
               >
                 <Briefcase className="h-4 w-4 mr-2" />

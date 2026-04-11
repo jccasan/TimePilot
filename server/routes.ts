@@ -4736,6 +4736,29 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
+      const reactivated = body.isActive === true && existing.isActive === false;
+      const scheduleChanged = (body.frequency && body.frequency !== existing.frequency) ||
+                              (body.dayOfWeek && body.dayOfWeek !== existing.dayOfWeek);
+
+      if (reactivated || scheduleChanged) {
+        try {
+          if (scheduleChanged && !reactivated) {
+            const todayStr = new Date().toISOString().split("T")[0];
+            await storage.cancelFutureVisitsForPlans([req.params.id], todayStr);
+          }
+          const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+          const today = new Date();
+          const startDate = plan?.startDate ? new Date(plan.startDate + "T00:00:00") : today;
+          const anchor = startDate > today ? startDate : today;
+          const sixMonthsOut = new Date(anchor);
+          sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+          const generated = await generateVisitsForPlans(companyId, [req.params.id], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
+          console.log(`[plan-update] ${reactivated ? "Reactivated" : "Schedule changed"}: generated ${generated} visits for plan ${req.params.id}`);
+        } catch (genErr) {
+          console.error("[plan-update] Failed to regenerate visits:", genErr);
+        }
+      }
+
       if (addOnsData && Array.isArray(addOnsData)) {
         const validatedAddOns = await validateAndResolveAddOns(addOnsData, companyId);
         const addOns = await storage.setServicePlanAddOns(req.params.id, validatedAddOns);
@@ -11609,7 +11632,7 @@ Return ONLY valid JSON, no markdown.`,
       if (estimate.propertyId) {
         try {
           await storage.createJobFromEstimate(estimate, contactId);
-          notify(companyId, "general", "Draft Job Created from Estimate", `${contactName} approved estimate "${estimate.description}". A draft job has been created — review and approve the schedule.`, `/jobs`);
+          notify(companyId, "general", "Draft Job Created from Estimate", `${contactName} approved estimate "${estimate.description}". A draft job has been created — review and approve the schedule.`, `/scheduling`);
         } catch (jobErr) {
           console.error("[estimate-approve] Failed to auto-create job:", jobErr);
           notify(companyId, "general", "Estimate Approved", `${contactName} approved estimate: ${estimate.description}`, `/contacts/${contactId}`);
