@@ -4928,6 +4928,19 @@ Return ONLY valid JSON, no markdown.`,
 
       if (job.servicePlanId) {
         await storage.updateServicePlan(job.servicePlanId, companyId, { jobStatus: "active", isActive: true });
+        try {
+          const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+          const today = new Date();
+          const plan = await storage.getServicePlan(job.servicePlanId, companyId);
+          const planStart = plan?.startDate ? new Date(plan.startDate + "T00:00:00") : today;
+          const anchor = planStart > today ? planStart : today;
+          const sixMonthsOut = new Date(anchor);
+          sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+          const generated = await generateVisitsForPlans(companyId, [job.servicePlanId], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
+          console.log(`[job-approve] Generated ${generated} visits for approved job ${job.id}`);
+        } catch (genErr) {
+          console.error("[job-approve] Failed to generate visits:", genErr);
+        }
       }
 
       res.json(updated);

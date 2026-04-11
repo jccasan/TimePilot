@@ -427,9 +427,14 @@ export default function Scheduling() {
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [dialogOpen, setDialogOpen] = useState(() => {
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("addJob") === "1";
+    if (params.get("addJob") === "1") {
+      setDialogOpen(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   });
 
   const dateRange = useMemo(() => {
