@@ -3573,9 +3573,11 @@ Return ONLY valid JSON, no markdown.`,
       try {
         const { generateVisitsForPlans } = await import("./jobs/auto-visits");
         const today = new Date();
-        const sixMonths = new Date(today);
-        sixMonths.setDate(sixMonths.getDate() + 182);
-        await generateVisitsForPlans(companyId, [plan.id], today.toISOString().split("T")[0], sixMonths.toISOString().split("T")[0]);
+        const planStart = plan.startDate ? new Date(plan.startDate + "T00:00:00") : today;
+        const anchor = planStart > today ? planStart : today;
+        const sixMonthsOut = new Date(anchor);
+        sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+        await generateVisitsForPlans(companyId, [plan.id], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
       } catch (genErr) {
         console.error("[contact-service] Failed to auto-generate visits:", genErr);
       }
@@ -4599,9 +4601,11 @@ Return ONLY valid JSON, no markdown.`,
       try {
         const { generateVisitsForPlans } = await import("./jobs/auto-visits");
         const today = new Date();
-        const sixMonths = new Date(today);
-        sixMonths.setDate(sixMonths.getDate() + 182);
-        await generateVisitsForPlans(companyId, [plan.id], today.toISOString().split("T")[0], sixMonths.toISOString().split("T")[0]);
+        const planStart = plan.startDate ? new Date(plan.startDate + "T00:00:00") : today;
+        const anchor = planStart > today ? planStart : today;
+        const sixMonthsOut = new Date(anchor);
+        sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+        await generateVisitsForPlans(companyId, [plan.id], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
       } catch (genErr) {
         console.error("[service-plan] Failed to auto-generate visits:", genErr);
       }

@@ -435,7 +435,7 @@ export default function Scheduling() {
       setDialogOpen(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
-  });
+  }, []);
 
   const dateRange = useMemo(() => {
     const d = new Date(currentDate);
