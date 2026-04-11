@@ -17,7 +17,7 @@ CORE MODULES:
 - Contacts/CRM: Manage clients with statuses (lead, estimate, active, paused, cancelled). Add properties, tags, service plans.
 - Properties: Service locations tied to contacts. Include address, gate code, yard size, dog count, special instructions. Auto-geocoded.
 - Routes: Organize daily service stops. Drag-and-drop Route Builder, route optimization algorithm, dispatch to technicians.
-- Jobs/Service Plans: Set up recurring (weekly, biweekly, monthly) or one-time schedules. Auto-generates visits and assigns to routes.
+- Scheduling: The unified hub for jobs and the service calendar. Create one-time or recurring jobs directly from this page using the "Add Job" button. When you create a job, visits are generated automatically for the next 6 months — no extra steps needed. You can set job type (recurring or one-time), assign a team member, choose frequency (weekly, biweekly, monthly, one-time), pick service days, set time windows or mark as "anytime," add visit instructions, and configure end conditions (ongoing, number of visits, or end date). The calendar view shows all upcoming visits. There is no separate Jobs page — everything is managed from Scheduling.
 - Invoicing: Create invoices with line items, tax, discounts. Send via email. Stripe payment integration. Auto-invoice capability.
 - Technician/Field View: Simplified mobile view showing assigned routes and client info. Mark visits complete, add notes, upload proof photos.
 - Client Portal: Self-service view for customers — schedule, visit history, invoices, pause/resume service, messaging.
@@ -28,13 +28,27 @@ CORE MODULES:
 - Tags: Custom colored tags for organizing/filtering contacts.
 - Notifications: Real-time bell alerts for new leads, completed visits, overdue invoices, portal messages.
 - API & Webhooks: REST API with scoped keys, webhooks for real-time event notifications.
-- Estimates: Create and send service estimates to potential clients.
+- Quotes & Proposals: Create and send service quotes to potential clients with detailed pricing breakdowns.
 - Reminders: Automated service reminders via email/SMS with configurable timing and quiet hours.
+- Pipeline: Visual Kanban-style board for tracking leads through stages (new lead, contacted, quoted, won, lost).
+- Reports & Analytics: Service reports, revenue analytics, and performance trends.
+- Profitability: See which customers, routes, and service areas are profitable.
+- Route Profit Maps: Geographic heatmap showing profitability by neighborhood.
+- Price Calculator: Measure yards and calculate service pricing based on your actual costs.
+- Pricing Simulator: Test pricing changes before applying them to see impact on revenue and margins.
 
 NAVIGATION:
-- Main sidebar: Dashboard, Contacts, Routes, Jobs, Invoices, Estimates, Messages, Automation, Settings
+- Main sidebar sections: Main (Dashboard), CRM (Contacts, Pipeline, Quotes & Proposals, Messages), Operations (Scheduling, Routes, Invoices, Field View, Reports, Analytics), Business (Profitability, Route Profit Maps, Expenses), Pricing Tools (Price Calculator, Pricing Simulator), Billing (Pricing, Subscription), Settings (Settings, Automation, API Keys, Webhooks, Data Migration)
+- Quick Create button in sidebar: New Contact, New Quote, New Invoice, New Job (opens Add Job on Scheduling page)
 - Top bar: Search, notifications bell, user menu
-- Rover (me!): Floating chat button in bottom-right corner
+- Rover (me!): The green "Ask Rover" floating button — drag it anywhere on screen
+
+KEY WORKFLOWS:
+- Adding a new job: Go to Scheduling > click "Add Job" (or use Quick Create > New Job). Fill in customer, property, job type, frequency, services, and schedule. Visits are auto-generated.
+- Reactivating a paused job: Edit the service plan from the Scheduling page. When you change status back to active, visits are automatically regenerated.
+- Changing a schedule: Edit the service plan's frequency or service day. Future visits are automatically cancelled and regenerated with the new schedule.
+- Creating an invoice: Go to Invoices > Create Invoice, or use Quick Create > New Invoice. Select customer, add line items, and send.
+- Importing contacts: Go to Data Migration in Settings. Upload a CSV and map columns to contact fields.
 `;
 
 interface UserContext {

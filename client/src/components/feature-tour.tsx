@@ -13,7 +13,7 @@ export type TourDefinition = {
 
 const WELCOME_TOUR: TourDefinition = {
   id: "welcome",
-  version: "1.0",
+  version: "2.0",
   title: "Welcome Tour",
   steps: [
     {
@@ -38,16 +38,9 @@ const WELCOME_TOUR: TourDefinition = {
       disableBeacon: true,
     },
     {
-      target: '[data-testid="link-jobs"]',
-      title: "Jobs",
-      content: "Create and manage service jobs -- both one-time cleanups and recurring schedules. Set pricing, assign to routes, and track completion.",
-      placement: "right",
-      disableBeacon: true,
-    },
-    {
       target: '[data-testid="link-scheduling"]',
       title: "Scheduling",
-      content: "View and manage your service calendar. See upcoming visits, plan your week, and keep your team on schedule.",
+      content: "Your all-in-one scheduling hub. Create one-time or recurring jobs, assign team members, set time windows, and manage your service calendar. Visits are generated automatically when you add a job.",
       placement: "right",
       disableBeacon: true,
     },
@@ -98,14 +91,14 @@ const WELCOME_TOUR: TourDefinition = {
 
 const WHATS_NEW_TOURS: TourDefinition[] = [
   {
-    id: "whats_new_v1",
-    version: "1.0",
-    title: "New Features",
+    id: "whats_new_v2",
+    version: "2.0",
+    title: "What's New",
     steps: [
       {
-        target: '[data-testid="link-jobs"]',
-        title: "Jobs System",
-        content: "Jobs replace service plans with more control. Create one-time or recurring jobs, set time windows, assign team members, and track completion with end conditions.",
+        target: '[data-testid="link-scheduling"]',
+        title: "Unified Scheduling",
+        content: "Jobs and scheduling are now combined in one place. Create jobs directly from the Scheduling page -- visits are generated automatically. No extra steps needed.",
         placement: "right",
         disableBeacon: true,
       },
@@ -121,6 +114,13 @@ const WHATS_NEW_TOURS: TourDefinition[] = [
         title: "Pricing Simulator",
         content: "Test pricing changes before you make them. See how adjustments affect your revenue and margins across your entire customer base.",
         placement: "right",
+        disableBeacon: true,
+      },
+      {
+        target: '[data-testid="button-rover-open"]',
+        title: "Meet Rover",
+        content: "Look for the green 'Ask Rover' button. Rover is your AI assistant -- ask about any feature, look up business data, or submit trouble tickets. Drag the button to reposition it.",
+        placement: "left",
         disableBeacon: true,
       },
     ],

@@ -932,9 +932,21 @@ export default function BusinessOnboarding({ onComplete }: { onComplete: () => v
           <p className="text-[10px] text-muted-foreground">Business Setup</p>
         </div>
         <div className="flex-1" />
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-muted-foreground mr-3">
           Step {currentStep + 1} of {STEPS.length}
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            completeMutation.mutate();
+          }}
+          disabled={completeMutation.isPending}
+          data-testid="button-skip-onboarding"
+        >
+          Skip Setup
+        </Button>
       </header>
 
       <div className="flex-1 overflow-auto">

@@ -35,23 +35,25 @@ function getStorageKey(userId: string) {
   return `rover_fab_pos_${userId}`;
 }
 
-function clampPos(x: number, y: number, btnSize: number) {
+function clampPos(x: number, y: number, btnW: number, btnH?: number) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  const h = btnH ?? btnW;
   return {
-    x: Math.max(EDGE_MARGIN, Math.min(x, vw - btnSize - EDGE_MARGIN)),
-    y: Math.max(EDGE_MARGIN, Math.min(y, vh - btnSize - EDGE_MARGIN)),
+    x: Math.max(EDGE_MARGIN, Math.min(x, vw - btnW - EDGE_MARGIN)),
+    y: Math.max(EDGE_MARGIN, Math.min(y, vh - h - EDGE_MARGIN)),
   };
 }
 
-function snapToEdge(x: number, y: number, btnSize: number) {
+function snapToEdge(x: number, y: number, btnW: number, btnH?: number) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  const h = btnH ?? btnW;
 
   const distLeft = x;
-  const distRight = vw - x - btnSize;
+  const distRight = vw - x - btnW;
   const distTop = y;
-  const distBottom = vh - y - btnSize;
+  const distBottom = vh - y - h;
 
   const minDist = Math.min(distLeft, distRight, distTop, distBottom);
 
@@ -61,32 +63,34 @@ function snapToEdge(x: number, y: number, btnSize: number) {
   if (minDist === distLeft) {
     snappedX = EDGE_MARGIN;
   } else if (minDist === distRight) {
-    snappedX = vw - btnSize - EDGE_MARGIN;
+    snappedX = vw - btnW - EDGE_MARGIN;
   } else if (minDist === distTop) {
     snappedY = EDGE_MARGIN;
   } else {
-    snappedY = vh - btnSize - EDGE_MARGIN;
+    snappedY = vh - h - EDGE_MARGIN;
   }
 
-  return clampPos(snappedX, snappedY, btnSize);
+  return clampPos(snappedX, snappedY, btnW, h);
 }
 
-function loadPosition(userId: string, btnSize: number): { x: number; y: number } {
+function loadPosition(userId: string, btnW: number, btnH?: number): { x: number; y: number } {
+  const h = btnH ?? btnW;
   try {
     const raw = localStorage.getItem(getStorageKey(userId));
     if (raw) {
       const { x, y } = JSON.parse(raw);
-      return clampPos(x, y, btnSize);
+      return clampPos(x, y, btnW, h);
     }
   } catch {}
-  return { x: window.innerWidth - btnSize - EDGE_MARGIN, y: window.innerHeight - btnSize - EDGE_MARGIN };
+  return { x: window.innerWidth - btnW - EDGE_MARGIN, y: window.innerHeight - h - EDGE_MARGIN };
 }
 
-function getPanelStyle(fabX: number, fabY: number, btnSize: number) {
+function getPanelStyle(fabX: number, fabY: number, btnW: number, btnH?: number) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const fabCenterX = fabX + btnSize / 2;
-  const fabCenterY = fabY + btnSize / 2;
+  const h = btnH ?? btnW;
+  const fabCenterX = fabX + btnW / 2;
+  const fabCenterY = fabY + h / 2;
 
   const pw = Math.min(PANEL_W, vw - 40);
   const ph = Math.min(PANEL_H, vh - 100);
@@ -97,11 +101,11 @@ function getPanelStyle(fabX: number, fabY: number, btnSize: number) {
   if (fabCenterX < vw / 2) {
     left = fabX;
   } else {
-    left = fabX + btnSize - pw;
+    left = fabX + btnW - pw;
   }
 
   if (fabCenterY < vh / 2) {
-    top = fabY + btnSize + 8;
+    top = fabY + h + 8;
   } else {
     top = fabY - ph - 8;
   }
@@ -135,9 +139,11 @@ export default function RoverChatbot() {
   const [submittingTicket, setSubmittingTicket] = useState(false);
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
 
-  const btnSize = typeof window !== "undefined" && window.innerWidth < 640 ? BTN_SIZE_SM : BTN_SIZE;
+  const btnHeight = typeof window !== "undefined" && window.innerWidth < 640 ? BTN_SIZE_SM : BTN_SIZE;
+  const fabRef = useRef<HTMLButtonElement>(null);
+  const fabWidthRef = useRef(120);
   const [fabPos, setFabPos] = useState<{ x: number; y: number }>(() =>
-    user ? loadPosition(user.id.toString(), btnSize) : { x: window.innerWidth - btnSize - EDGE_MARGIN, y: window.innerHeight - btnSize - EDGE_MARGIN }
+    user ? loadPosition(user.id.toString(), fabWidthRef.current) : { x: window.innerWidth - fabWidthRef.current - EDGE_MARGIN, y: window.innerHeight - btnHeight - EDGE_MARGIN }
   );
   const draggingRef = useRef(false);
   const dragStartRef = useRef<{ mx: number; my: number; fx: number; fy: number } | null>(null);
@@ -145,6 +151,12 @@ export default function RoverChatbot() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (fabRef.current) {
+      fabWidthRef.current = fabRef.current.offsetWidth;
+    }
+  });
 
   useEffect(() => {
     if (open && aiAvailable === null) {
@@ -165,6 +177,17 @@ export default function RoverChatbot() {
   }, [user]);
 
   useEffect(() => {
+    if (showIntro && user) {
+      const joyrideActive = document.querySelector(".react-joyride__overlay, .__floater");
+      if (joyrideActive) {
+        const key = `rover_intro_seen_${user.id}`;
+        localStorage.setItem(key, "true");
+        setShowIntro(false);
+      }
+    }
+  });
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -182,17 +205,17 @@ export default function RoverChatbot() {
 
   useEffect(() => {
     if (user) {
-      setFabPos(loadPosition(user.id.toString(), btnSize));
+      setFabPos(loadPosition(user.id.toString(), fabWidthRef.current, btnHeight));
     }
-  }, [user, btnSize]);
+  }, [user, btnHeight]);
 
   useEffect(() => {
     const onResize = () => {
-      setFabPos((prev) => clampPos(prev.x, prev.y, btnSize));
+      setFabPos((prev) => clampPos(prev.x, prev.y, fabWidthRef.current, btnHeight));
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [btnSize]);
+  }, [btnHeight]);
 
   const savePosition = useCallback(
     (pos: { x: number; y: number }) => {
@@ -220,17 +243,17 @@ export default function RoverChatbot() {
       if (!draggingRef.current && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
       draggingRef.current = true;
       e.preventDefault();
-      const newPos = clampPos(dragStartRef.current.fx + dx, dragStartRef.current.fy + dy, btnSize);
+      const newPos = clampPos(dragStartRef.current.fx + dx, dragStartRef.current.fy + dy, fabWidthRef.current, btnHeight);
       setFabPos(newPos);
     },
-    [btnSize]
+    [btnHeight]
   );
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent) => {
       e.currentTarget.releasePointerCapture(e.pointerId);
       if (draggingRef.current) {
-        const snapped = snapToEdge(fabPos.x, fabPos.y, btnSize);
+        const snapped = snapToEdge(fabPos.x, fabPos.y, fabWidthRef.current, btnHeight);
         setFabPos(snapped);
         savePosition(snapped);
       } else {
@@ -239,7 +262,7 @@ export default function RoverChatbot() {
       dragStartRef.current = null;
       draggingRef.current = false;
     },
-    [fabPos, btnSize, savePosition]
+    [fabPos, btnHeight, savePosition]
   );
 
   if (!user) return null;
@@ -557,7 +580,7 @@ export default function RoverChatbot() {
                 </li>
               </ul>
               <p className="text-xs text-muted-foreground">
-                Look for the green button on the screen anytime. You can drag it to move it.
+                Look for the green "Ask Rover" button on screen anytime. You can drag it to move it.
               </p>
               <div className="flex gap-2 pt-1">
                 <Button variant="outline" className="flex-1" onClick={dismissIntro} data-testid="button-rover-intro-dismiss">
@@ -579,23 +602,26 @@ export default function RoverChatbot() {
           onPointerUp={onPointerUp}
           onPointerCancel={() => { dragStartRef.current = null; draggingRef.current = false; }}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
-          className="fixed z-[100] flex items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow select-none touch-none"
+          className="fixed z-[100] flex items-center gap-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all select-none touch-none group"
+          ref={fabRef}
           style={{
             left: fabPos.x,
             top: fabPos.y,
-            width: btnSize,
-            height: btnSize,
+            height: btnHeight,
+            paddingLeft: btnHeight <= BTN_SIZE_SM ? 12 : 14,
+            paddingRight: btnHeight <= BTN_SIZE_SM ? 14 : 16,
             cursor: draggingRef.current ? "grabbing" : "grab",
           }}
           data-testid="button-rover-open"
           aria-label="Open Rover assistant"
         >
-          <MessageCircle className={btnSize === BTN_SIZE_SM ? "h-5 w-5" : "h-6 w-6"} />
+          <MessageCircle className="h-5 w-5 shrink-0" />
+          <span className="text-sm font-medium whitespace-nowrap">Ask Rover</span>
         </button>
       )}
 
       {open && (() => {
-        const ps = getPanelStyle(fabPos.x, fabPos.y, btnSize);
+        const ps = getPanelStyle(fabPos.x, fabPos.y, fabWidthRef.current, btnHeight);
         return (
         <div
           className="fixed z-[100] flex flex-col bg-background border rounded-xl shadow-2xl overflow-hidden"
