@@ -625,7 +625,9 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
         const totalCostCents = smsCostCents + emailCostCents + voiceCostCents + stripeFeesCents + allocatedInfraCents;
         const mrrCents = Math.round(getTierPrice(c.subscriptionTier) * 100);
         const netMarginCents = mrrCents - totalCostCents;
-        const costRatioPct = mrrCents > 0 ? Math.round((totalCostCents / mrrCents) * 10000) / 100 : 0;
+        const costRatioPct = mrrCents > 0
+          ? Math.round((totalCostCents / mrrCents) * 10000) / 100
+          : (totalCostCents > 0 ? 999 : 0);
 
         return {
           id: c.id,

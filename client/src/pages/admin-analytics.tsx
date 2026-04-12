@@ -645,7 +645,7 @@ function CustomerCostsTab() {
                   <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("allocatedInfraCents")}>Infra<SortIcon col="allocatedInfraCents" /></TableHead>
                   <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("totalCostCents")}>Total Cost<SortIcon col="totalCostCents" /></TableHead>
                   <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("netMarginCents")}>Net Margin<SortIcon col="netMarginCents" /></TableHead>
-                  <TableHead className="text-right">Cost Ratio</TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("costRatioPct")}>Cost Ratio<SortIcon col="costRatioPct" /></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -653,7 +653,7 @@ function CustomerCostsTab() {
                   <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground" data-testid="text-no-customer-costs">No customers found</TableCell></TableRow>
                 ) : sorted.map((r: any) => {
                   const tierConfig = TIER_CONFIG[r.subscriptionTier as keyof typeof TIER_CONFIG];
-                  const barWidth = Math.min(r.costRatioPct, 200);
+                  const barPct = Math.min(r.costRatioPct, 100);
                   const barColor = r.costRatioPct > 100 ? "bg-red-500" : r.costRatioPct > 70 ? "bg-yellow-500" : "bg-green-500";
                   return (
                     <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/admin/companies/${r.id}`)} data-testid={`row-customer-cost-${r.id}`}>
@@ -684,9 +684,9 @@ function CustomerCostsTab() {
                       <TableCell className="text-right" data-testid={`text-cost-ratio-${r.id}`}>
                         <div className="flex items-center justify-end gap-2">
                           <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(barWidth / 2, 100)}%` }} />
+                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${barPct}%` }} />
                           </div>
-                          <span className={`text-xs font-medium ${r.costRatioPct > 100 ? "text-red-700 dark:text-red-400" : "text-muted-foreground"}`}>{r.costRatioPct}%</span>
+                          <span className={`text-xs font-medium ${r.costRatioPct > 100 ? "text-red-700 dark:text-red-400" : "text-muted-foreground"}`}>{r.costRatioPct >= 999 ? "N/A" : `${r.costRatioPct}%`}</span>
                         </div>
                       </TableCell>
                     </TableRow>
