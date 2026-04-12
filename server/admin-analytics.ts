@@ -919,4 +919,37 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
       res.status(500).json({ error: "Failed to update messaging config" });
     }
   });
+
+  app.get("/api/admin/analytics/fixed-costs", isAdmin as any, async (_req: Request, res: Response) => {
+    try {
+      const rows = await storage.getAllSaasCosts();
+      res.json(rows);
+    } catch (err) {
+      console.error("Fixed costs fetch error:", err);
+      res.status(500).json({ error: "Failed to fetch fixed costs" });
+    }
+  });
+
+  app.put("/api/admin/analytics/fixed-costs", isAdmin as any, async (req: Request, res: Response) => {
+    try {
+      const { month, hostingCents, dbCents, emailPlatformCents, smsPlatformCents, monitoringCents, otherCents, supportLaborCents } = req.body;
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ error: "Invalid month format (expected YYYY-MM)" });
+      }
+      const result = await storage.upsertSaasCosts({
+        month,
+        hostingCents: Math.round(hostingCents ?? 0),
+        dbCents: Math.round(dbCents ?? 0),
+        emailPlatformCents: Math.round(emailPlatformCents ?? 0),
+        smsPlatformCents: Math.round(smsPlatformCents ?? 0),
+        monitoringCents: Math.round(monitoringCents ?? 0),
+        otherCents: Math.round(otherCents ?? 0),
+        supportLaborCents: Math.round(supportLaborCents ?? 0),
+      });
+      res.json(result);
+    } catch (err) {
+      console.error("Fixed costs upsert error:", err);
+      res.status(500).json({ error: "Failed to save fixed costs" });
+    }
+  });
 }

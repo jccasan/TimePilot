@@ -1,10 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -12,11 +17,11 @@ import {
   Building2, DollarSign, TrendingUp, AlertTriangle,
   CreditCard, Repeat, Target, MessageSquare, Calculator, Search,
   ChevronRight, ArrowUpRight, ArrowDownRight, Activity,
-  Mail, Phone, BarChart3, Wallet, ArrowUpDown,
+  Mail, Phone, BarChart3, Wallet, ArrowUpDown, Plus, Pencil,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState, useMemo } from "react";
-import { adminFetchFn } from "@/lib/adminApi";
+import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 
 function fmt(n: number | undefined, decimals = 2): string {
   if (n === undefined || n === null || isNaN(n)) return "$0.00";
@@ -568,6 +573,175 @@ function UnitEconomicsTab() {
   );
 }
 
+const COST_FIELDS = [
+  { key: "hostingCents", label: "Hosting (Replit)" },
+  { key: "dbCents", label: "Database" },
+  { key: "emailPlatformCents", label: "Email Platform" },
+  { key: "smsPlatformCents", label: "SMS Platform" },
+  { key: "monitoringCents", label: "Monitoring" },
+  { key: "supportLaborCents", label: "Support Labor" },
+  { key: "otherCents", label: "Other" },
+] as const;
+
+function FixedCostsSection() {
+  const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editMonth, setEditMonth] = useState("");
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
+
+  const { data: fixedCosts, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/analytics/fixed-costs"],
+    queryFn: adminFetchFn("/api/admin/analytics/fixed-costs"),
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (body: any) => {
+      const res = await adminRequest("PUT", "/api/admin/analytics/fixed-costs", body);
+      if (!res.ok) throw new Error("Failed to save");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/analytics/fixed-costs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/analytics/customer-costs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/analytics/executive"] });
+      setDialogOpen(false);
+    },
+  });
+
+  const cFmt = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const openNew = () => {
+    const now = new Date();
+    const m = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    setEditMonth(m);
+    setFormValues({});
+    setDialogOpen(true);
+  };
+
+  const openEdit = (row: any) => {
+    setEditMonth(row.month);
+    const vals: Record<string, string> = {};
+    for (const f of COST_FIELDS) {
+      vals[f.key] = ((row[f.key] ?? 0) / 100).toFixed(2);
+    }
+    setFormValues(vals);
+    setDialogOpen(true);
+  };
+
+  const handleSave = () => {
+    const body: any = { month: editMonth };
+    for (const f of COST_FIELDS) {
+      body[f.key] = Math.round(parseFloat(formValues[f.key] || "0") * 100);
+    }
+    mutation.mutate(body);
+  };
+
+  const formTotal = COST_FIELDS.reduce((s, f) => s + (parseFloat(formValues[f.key] || "0") || 0), 0);
+
+  const currentMonthKey = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  })();
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm">Monthly Fixed Costs</CardTitle>
+          <Button size="sm" variant="outline" onClick={openNew} data-testid="button-add-fixed-cost">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Month
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-32" />
+        ) : !fixedCosts?.length ? (
+          <p className="text-sm text-muted-foreground text-center py-6" data-testid="text-no-fixed-costs">No fixed costs entered yet. Add your monthly platform costs to see accurate overhead calculations.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  {COST_FIELDS.map(f => <TableHead key={f.key} className="text-right">{f.label}</TableHead>)}
+                  <TableHead className="text-right font-medium">Total</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {fixedCosts.map((row: any) => {
+                  const total = COST_FIELDS.reduce((s, f) => s + (row[f.key] ?? 0), 0);
+                  const isCurrent = row.month === currentMonthKey;
+                  return (
+                    <TableRow key={row.id} className={isCurrent ? "bg-primary/5" : ""} data-testid={`row-fixed-cost-${row.month}`}>
+                      <TableCell className="font-medium">
+                        {row.month}
+                        {isCurrent && <Badge variant="outline" className="ml-2 text-[10px] px-1 py-0">current</Badge>}
+                      </TableCell>
+                      {COST_FIELDS.map(f => (
+                        <TableCell key={f.key} className="text-right text-muted-foreground">{cFmt(row[f.key] ?? 0)}</TableCell>
+                      ))}
+                      <TableCell className="text-right font-medium">{cFmt(total)}</TableCell>
+                      <TableCell>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(row)} data-testid={`button-edit-fixed-cost-${row.month}`}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-fixed-costs">
+          <DialogHeader>
+            <DialogTitle>{formValues.hostingCents !== undefined ? "Edit" : "Add"} Monthly Fixed Costs</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="fc-month">Month</Label>
+              <Input id="fc-month" type="month" value={editMonth} onChange={(e) => setEditMonth(e.target.value)} data-testid="input-fixed-cost-month" />
+            </div>
+            {COST_FIELDS.map(f => (
+              <div key={f.key} className="flex items-center gap-3">
+                <Label className="w-36 shrink-0 text-sm">{f.label}</Label>
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-2 text-sm text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="pl-6"
+                    value={formValues[f.key] ?? ""}
+                    onChange={(e) => setFormValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                    placeholder="0.00"
+                    data-testid={`input-fixed-cost-${f.key}`}
+                  />
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center justify-between pt-2 border-t">
+              <span className="text-sm font-medium">Total</span>
+              <span className="text-sm font-bold" data-testid="text-fixed-cost-total">${formTotal.toFixed(2)}</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} data-testid="button-cancel-fixed-cost">Cancel</Button>
+            <Button onClick={handleSave} disabled={mutation.isPending} data-testid="button-save-fixed-cost">
+              {mutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 function CustomerCostsTab() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
@@ -696,6 +870,8 @@ function CustomerCostsTab() {
           </div>
         </CardContent>
       </Card>
+
+      <FixedCostsSection />
     </div>
   );
 }
