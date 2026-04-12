@@ -9667,12 +9667,35 @@ Return ONLY valid JSON, no markdown.`,
             }
           }
 
-          if (!resolved) {
-            if (!tenantId) {
-              console.warn(`[Stripe Webhook] checkout.session.completed: missing tenant_id for invoice ${invoiceId} (session ${session.id}). Manual resolution required.`);
-            } else {
-              console.warn(`[Stripe Webhook] checkout.session.completed: invoice ${invoiceId} not found for tenant ${tenantId} (session ${session.id}). Manual resolution required.`);
+          if (!resolved && !tenantId && connectAccountId) {
+            const connCompany = await storage.getCompanyByStripeConnectAccountId(connectAccountId);
+            if (connCompany) {
+              const invoice = await storage.getInvoice(invoiceId, connCompany.id);
+              if (invoice && invoice.status !== "paid") {
+                const resolvedTenantId = connCompany.id;
+                await db.transaction(async (tx) => {
+                  await tx.update(invoices).set({
+                    status: "paid" as const,
+                    paidAt: new Date(),
+                    stripePaymentIntentId: session.payment_intent,
+                    tipAmount,
+                    updatedAt: new Date(),
+                  }).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, resolvedTenantId)));
+                });
+                const tipNote = parseFloat(tipAmount) > 0 ? ` (includes $${tipAmount} tip)` : "";
+                notify(resolvedTenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
+                qboAutoSync(resolvedTenantId, invoiceId, "payment");
+                resolved = true;
+                console.log(`[Stripe Webhook] checkout.session.completed: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`);
+              } else if (invoice && invoice.status === "paid") {
+                console.log(`[Stripe Webhook] checkout.session.completed: invoice ${invoiceId} already paid — skipping (session ${session.id})`);
+                resolved = true;
+              }
             }
+          }
+
+          if (!resolved) {
+            console.warn(`[Stripe Webhook] checkout.session.completed: could not resolve invoice ${invoiceId} (session ${session.id}, tenant_id=${tenantId || "missing"}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`);
           }
         }
       }
@@ -9706,12 +9729,34 @@ Return ONLY valid JSON, no markdown.`,
             }
           }
 
-          if (!resolved) {
-            if (!piTenantId) {
-              console.warn(`[Stripe Webhook] payment_intent.succeeded: missing tenant_id for invoice ${invoiceId} (pi ${pi.id}). Manual resolution required.`);
-            } else {
-              console.warn(`[Stripe Webhook] payment_intent.succeeded: invoice ${invoiceId} not found for tenant ${piTenantId} (pi ${pi.id}). Manual resolution required.`);
+          if (!resolved && !piTenantId && connectAccountId) {
+            const connCompany = await storage.getCompanyByStripeConnectAccountId(connectAccountId);
+            if (connCompany) {
+              const invoice = await storage.getInvoice(invoiceId, connCompany.id);
+              if (invoice && invoice.status !== "paid") {
+                await storage.updateInvoice(invoiceId, connCompany.id, {
+                  status: "paid",
+                  paidAt: new Date(),
+                  stripePaymentIntentId: pi.id,
+                });
+                auditLog(connCompany.id, null, "invoice", invoiceId, "update", {
+                  old: { status: invoice.status },
+                  new: { status: "paid", paymentMethod: "stripe_webhook" },
+                  actor: "stripe_webhook",
+                });
+                notify(connCompany.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+                qboAutoSync(connCompany.id, invoiceId, "payment");
+                resolved = true;
+                console.log(`[Stripe Webhook] payment_intent.succeeded: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`);
+              } else if (invoice && invoice.status === "paid") {
+                console.log(`[Stripe Webhook] payment_intent.succeeded: invoice ${invoiceId} already paid — skipping (pi ${pi.id})`);
+                resolved = true;
+              }
             }
+          }
+
+          if (!resolved) {
+            console.warn(`[Stripe Webhook] payment_intent.succeeded: could not resolve invoice ${invoiceId} (pi ${pi.id}, tenant_id=${piTenantId || "missing"}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`);
           }
         }
       }
@@ -9720,15 +9765,12 @@ Return ONLY valid JSON, no markdown.`,
         const account = event.data.object as any;
         const accountId = account.id;
         if (accountId) {
-          const allCompanies = await storage.listCompanies();
-          for (const company of allCompanies) {
-            if (company.stripeConnectAccountId === accountId) {
-              const isOnboarded = account.charges_enabled === true;
-              if (isOnboarded !== company.stripeConnectOnboarded) {
-                await storage.updateCompany(company.id, { stripeConnectOnboarded: isOnboarded } as any);
-                console.log(`[Stripe Connect] Company ${company.name} (${company.id}) onboarded=${isOnboarded}`);
-              }
-              break;
+          const company = await storage.getCompanyByStripeConnectAccountId(accountId);
+          if (company) {
+            const isOnboarded = account.charges_enabled === true;
+            if (isOnboarded !== company.stripeConnectOnboarded) {
+              await storage.updateCompany(company.id, { stripeConnectOnboarded: isOnboarded } as any);
+              console.log(`[Stripe Connect] Company ${company.name} (${company.id}) onboarded=${isOnboarded}`);
             }
           }
         }
@@ -10124,20 +10166,31 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       if (event.type === "payment_intent.payment_failed") {
-        const pi = event.data.object as { metadata?: Record<string, string> };
+        const pi = event.data.object as { id: string; metadata?: Record<string, string> };
         const invoiceId = pi.metadata?.invoiceId;
         if (invoiceId) {
-          const allCompanies = await storage.listCompanies();
-          for (const company of allCompanies) {
-            const invoice = await storage.getInvoice(invoiceId, company.id);
+          let resolvedCompanyId = pi.metadata?.tenant_id;
+
+          if (!resolvedCompanyId && connectAccountId) {
+            const connCompany = await storage.getCompanyByStripeConnectAccountId(connectAccountId);
+            if (connCompany) {
+              resolvedCompanyId = connCompany.id;
+              console.log(`[Stripe Webhook] payment_intent.payment_failed: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`);
+            }
+          }
+
+          if (resolvedCompanyId) {
+            const invoice = await storage.getInvoice(invoiceId, resolvedCompanyId);
             if (invoice) {
-              await storage.updateInvoice(invoiceId, company.id, {
+              await storage.updateInvoice(invoiceId, resolvedCompanyId, {
                 status: "failed",
                 paymentAttempts: (invoice.paymentAttempts || 0) + 1,
                 lastPaymentAttempt: new Date(),
               });
-              break;
+              notify(resolvedCompanyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}.`, `/invoices`);
             }
+          } else {
+            console.warn(`[Stripe Webhook] payment_intent.payment_failed: could not resolve tenant for invoice ${invoiceId} (pi ${pi.id}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`);
           }
         }
       }

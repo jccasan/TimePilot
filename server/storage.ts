@@ -86,6 +86,7 @@ export interface IStorage {
   listCompanies(): Promise<Company[]>;
   getCompanyByPhone(phone: string): Promise<Company | undefined>;
   getCompanyBySlug(slug: string): Promise<Company | undefined>;
+  getCompanyByStripeConnectAccountId(accountId: string): Promise<Company | undefined>;
   createCompany(data: InsertCompany): Promise<Company>;
   updateCompany(id: string, data: Partial<InsertCompany>): Promise<Company>;
 
@@ -475,6 +476,11 @@ export class DatabaseStorage implements IStorage {
 
   async getCompanyBySlug(slug: string): Promise<Company | undefined> {
     const [company] = await db.select().from(companies).where(eq(companies.slug, slug));
+    return company;
+  }
+
+  async getCompanyByStripeConnectAccountId(accountId: string): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.stripeConnectAccountId, accountId));
     return company;
   }
 
