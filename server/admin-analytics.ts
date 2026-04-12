@@ -614,8 +614,8 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
         const paidInvs = paidInvoiceResult;
         const paidTotal = paidInvs.reduce((s, inv) => s + parseFloat(inv.total), 0);
 
-        const smsCostCents = smsSegments * SMS_COST_PER_SEGMENT_CENTS;
-        const emailCostCents = emailCount * EMAIL_COST_PER_UNIT_CENTS;
+        const smsCostCents = Math.round(smsSegments * SMS_COST_PER_SEGMENT_CENTS / 100);
+        const emailCostCents = Math.round(emailCount * EMAIL_COST_PER_UNIT_CENTS / 100);
         const voiceCostCents = voiceMinutes * VOICE_COST_PER_MINUTE_CENTS;
         const stripeFeesCents = Math.round(paidTotal * STRIPE_PCT) + (paidInvs.length * STRIPE_FIXED_CENTS);
 
@@ -647,6 +647,8 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
           costRatioPct,
         };
       }));
+
+      rows.sort((a, b) => b.totalCostCents - a.totalCostCents);
 
       const totalPlatformCostCents = rows.reduce((s, r) => s + r.totalCostCents, 0);
       const avgCostPerCustomerCents = rows.length > 0 ? Math.round(totalPlatformCostCents / rows.length) : 0;
