@@ -87,8 +87,7 @@ function ExecutiveTab({ onDrillDown }: { onDrillDown: (tab: string) => void }) {
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <StatCard label="GRR" value={pct(data?.grr)} icon={Activity} onClick={() => onDrillDown("retention")} />
-        <StatCard label="Telnyx Cost" value={fmt(data?.totalTelnyxCostEst)} icon={Phone} onClick={() => onDrillDown("messaging")} />
-        <StatCard label="Email Cost" value={fmt(data?.totalEmailCostEst)} icon={Mail} onClick={() => onDrillDown("messaging")} />
+        <StatCard label="Total Overhead" value={fmt(data?.totalOverhead)} icon={Wallet} subtitle="last 30 days" onClick={() => onDrillDown("costs")} />
       </div>
     </div>
   );
@@ -617,7 +616,7 @@ function CustomerCostsTab() {
   );
 
   return (
-    <div className="space-y-6" data-testid="tab-content-customer-costs">
+    <div className="space-y-6" data-testid="tab-content-overhead">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Total Platform Cost" value={cFmt(summary?.totalPlatformCostCents ?? 0)} icon={Wallet} subtitle="last 30 days" />
         <StatCard label="Avg Cost / Customer" value={cFmt(summary?.avgCostPerCustomerCents ?? 0)} icon={Calculator} subtitle={`${summary?.totalCustomers ?? 0} customers`} />
@@ -704,7 +703,7 @@ function CustomerCostsTab() {
 const TABS = [
   { key: "executive", label: "Executive", icon: BarChart3 },
   { key: "accounts", label: "Accounts", icon: Building2 },
-  { key: "costs", label: "Customer Costs", icon: Wallet },
+  { key: "costs", label: "Overhead", icon: Wallet },
   { key: "billing", label: "Billing", icon: CreditCard },
   { key: "retention", label: "Retention", icon: Repeat },
   { key: "activation", label: "Activation", icon: Target },

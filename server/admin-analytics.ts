@@ -11,6 +11,7 @@ import {
 
 const SMS_COST_PER_SEGMENT_CENTS = 75;
 const EMAIL_COST_PER_UNIT_CENTS = 10;
+const VOICE_COST_PER_MINUTE_CENTS = 50;
 const STRIPE_PCT = 2.9;
 const STRIPE_FIXED_CENTS = 30;
 
@@ -84,23 +85,46 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
       const nrr = lastMonthMrr > 0 ? (mrr / lastMonthMrr) * 100 : 100;
       const grr = lastMonthMrr > 0 ? Math.min(100, ((lastMonthMrr - churnedMrrThisMonth) / lastMonthMrr) * 100) : 100;
 
-      const [smsCountResult] = await db.select({ total: sql<number>`coalesce(sum(${smsMessages.segments}), 0)` }).from(smsMessages);
-      const [emailCountResult] = await db.select({ total: count() }).from(emailsSent);
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const [smsCountResult] = await db.select({ total: sql<number>`coalesce(sum(${smsMessages.segments}), 0)` })
+        .from(smsMessages).where(gte(smsMessages.createdAt, thirtyDaysAgo));
+      const [emailCountResult] = await db.select({ total: count() })
+        .from(emailsSent).where(gte(emailsSent.createdAt, thirtyDaysAgo));
+      const [voiceMinResult] = await db.select({ total: sql<number>`coalesce(sum(${voiceCalls.durationMinutes}), 0)` })
+        .from(voiceCalls).where(gte(voiceCalls.createdAt, thirtyDaysAgo));
 
       const totalSmsSeg = Number(smsCountResult?.total ?? 0);
       const totalEmailCount = Number(emailCountResult?.total ?? 0);
-      const totalTelnyxCostEst = (totalSmsSeg * SMS_COST_PER_SEGMENT_CENTS) / 10000;
-      const totalEmailCostEst = (totalEmailCount * EMAIL_COST_PER_UNIT_CENTS) / 10000;
-      const totalCosts = totalTelnyxCostEst + totalEmailCostEst;
-      const estimatedGrossMarginPct = mrr > 0 ? ((mrr - totalCosts) / mrr) * 100 : 0;
+      const totalVoiceMin = Number(voiceMinResult?.total ?? 0);
+      const telnyxCost = (totalSmsSeg * SMS_COST_PER_SEGMENT_CENTS) / 10000;
+      const emailCost = (totalEmailCount * EMAIL_COST_PER_UNIT_CENTS) / 10000;
+      const voiceCost = (totalVoiceMin * VOICE_COST_PER_MINUTE_CENTS) / 100;
+
+      const paidInvs30d = await db.select().from(invoices).where(and(eq(invoices.status, "paid"), gte(invoices.paidAt, thirtyDaysAgo)));
+      const paidTotal30d = paidInvs30d.reduce((s, inv) => s + parseFloat(inv.total), 0);
+      const stripeFees = (paidTotal30d * STRIPE_PCT / 100) + (paidInvs30d.length * STRIPE_FIXED_CENTS / 100);
+
+      const currentMonthKey = monthKey(now);
+      const [currentMonthCost] = await db.select().from(saasCostsMonthly).where(eq(saasCostsMonthly.month, currentMonthKey));
+      const fixedCosts = currentMonthCost
+        ? (currentMonthCost.hostingCents + currentMonthCost.dbCents + currentMonthCost.emailPlatformCents + currentMonthCost.smsPlatformCents + currentMonthCost.monitoringCents + currentMonthCost.otherCents + currentMonthCost.supportLaborCents) / 100
+        : 0;
+
+      const totalOverhead = telnyxCost + emailCost + voiceCost + stripeFees + fixedCosts;
+      const estimatedGrossMarginPct = mrr > 0 ? ((mrr - totalOverhead) / mrr) * 100 : 0;
 
       res.json({
         activeAccounts, totalAccounts, mrr, arr,
         newMrrThisMonth, churnedMrrThisMonth, logoChurnPct,
         nrr: Math.round(nrr * 100) / 100,
         grr: Math.round(grr * 100) / 100,
-        totalTelnyxCostEst: Math.round(totalTelnyxCostEst * 100) / 100,
-        totalEmailCostEst: Math.round(totalEmailCostEst * 100) / 100,
+        totalOverhead: Math.round(totalOverhead * 100) / 100,
+        telnyxCost: Math.round(telnyxCost * 100) / 100,
+        emailCost: Math.round(emailCost * 100) / 100,
+        voiceCost: Math.round(voiceCost * 100) / 100,
+        stripeFees: Math.round(stripeFees * 100) / 100,
+        fixedCosts: Math.round(fixedCosts * 100) / 100,
         estimatedGrossMarginPct: Math.round(estimatedGrossMarginPct * 100) / 100,
       });
     } catch (err) {
@@ -572,7 +596,6 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
   });
 
   // 7a. Customer Costs — per-account itemized cost breakdown
-  const VOICE_COST_PER_MINUTE_CENTS = 50;
   app.get("/api/admin/analytics/customer-costs", isAdmin as any, async (_req: Request, res: Response) => {
     try {
       const now = new Date();
