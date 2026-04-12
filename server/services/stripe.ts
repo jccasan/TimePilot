@@ -22,38 +22,51 @@ export async function createStripeCustomer(params: {
   name: string;
   phone?: string;
   metadata?: Record<string, string>;
+  stripeAccount?: string | null;
 }): Promise<string> {
   const stripe = getStripe();
+  const opts: Stripe.RequestOptions = {};
+  if (params.stripeAccount) {
+    opts.stripeAccount = params.stripeAccount;
+  }
   const customer = await stripe.customers.create({
     email: params.email || undefined,
     name: params.name,
     phone: params.phone || undefined,
     metadata: params.metadata || {},
-  });
+  }, opts);
   return customer.id;
 }
 
-export async function createSetupIntent(customerId: string): Promise<{
+export async function createSetupIntent(customerId: string, stripeAccount?: string | null): Promise<{
   clientSecret: string;
   setupIntentId: string;
 }> {
   const stripe = getStripe();
+  const opts: Stripe.RequestOptions = {};
+  if (stripeAccount) {
+    opts.stripeAccount = stripeAccount;
+  }
   const setupIntent = await stripe.setupIntents.create({
     customer: customerId,
     payment_method_types: ["card"],
-  });
+  }, opts);
   return {
     clientSecret: setupIntent.client_secret!,
     setupIntentId: setupIntent.id,
   };
 }
 
-export async function getCustomerPaymentMethods(customerId: string) {
+export async function getCustomerPaymentMethods(customerId: string, stripeAccount?: string | null) {
   const stripe = getStripe();
+  const opts: Stripe.RequestOptions = {};
+  if (stripeAccount) {
+    opts.stripeAccount = stripeAccount;
+  }
   const methods = await stripe.paymentMethods.list({
     customer: customerId,
     type: "card",
-  });
+  }, opts);
   return methods.data.map((pm) => ({
     id: pm.id,
     brand: pm.card?.brand || "unknown",
@@ -97,9 +110,10 @@ export async function createPaymentIntent(params: {
     automatic_payment_methods: { enabled: true },
   };
 
+  const opts: Stripe.RequestOptions = {};
+
   if (params.stripeConnectAccountId) {
-    piParams.on_behalf_of = params.stripeConnectAccountId;
-    piParams.transfer_data = { destination: params.stripeConnectAccountId };
+    opts.stripeAccount = params.stripeConnectAccountId;
     piParams.application_fee_amount = computeApplicationFee(amountCents);
   }
 
@@ -110,7 +124,7 @@ export async function createPaymentIntent(params: {
     piParams.automatic_payment_methods = undefined;
   }
 
-  const paymentIntent = await stripe.paymentIntents.create(piParams);
+  const paymentIntent = await stripe.paymentIntents.create(piParams, opts);
   return {
     clientSecret: paymentIntent.client_secret!,
     paymentIntentId: paymentIntent.id,
@@ -131,11 +145,16 @@ export async function chargeInvoiceAutomatically(params: {
 }> {
   const stripe = getStripe();
 
+  const listOpts: Stripe.RequestOptions = {};
+  if (params.stripeConnectAccountId) {
+    listOpts.stripeAccount = params.stripeConnectAccountId;
+  }
+
   const methods = await stripe.paymentMethods.list({
     customer: params.customerId,
     type: "card",
     limit: 1,
-  });
+  }, listOpts);
 
   if (methods.data.length === 0) {
     return { paymentIntentId: "", status: "no_payment_method", error: "No payment method on file" };
@@ -157,13 +176,13 @@ export async function chargeInvoiceAutomatically(params: {
       },
     };
 
+    const opts: Stripe.RequestOptions = {};
     if (params.stripeConnectAccountId) {
-      piParams.on_behalf_of = params.stripeConnectAccountId;
-      piParams.transfer_data = { destination: params.stripeConnectAccountId };
+      opts.stripeAccount = params.stripeConnectAccountId;
       piParams.application_fee_amount = computeApplicationFee(amountCents);
     }
 
-    const pi = await stripe.paymentIntents.create(piParams);
+    const pi = await stripe.paymentIntents.create(piParams, opts);
     return { paymentIntentId: pi.id, status: pi.status };
   } catch (err: any) {
     return {
@@ -222,21 +241,79 @@ export async function createCheckoutSession(params: {
     cancel_url: params.cancelUrl,
   };
 
+  const opts: Stripe.RequestOptions = {};
   if (params.stripeConnectAccountId) {
+    opts.stripeAccount = params.stripeConnectAccountId;
     sessionParams.payment_intent_data = {
-      on_behalf_of: params.stripeConnectAccountId,
-      transfer_data: { destination: params.stripeConnectAccountId },
       application_fee_amount: computeApplicationFee(amountCents),
     };
   }
 
-  const session = await stripe.checkout.sessions.create(sessionParams);
+  const session = await stripe.checkout.sessions.create(sessionParams, opts);
   return { url: session.url!, sessionId: session.id };
 }
 
-export async function detachPaymentMethod(paymentMethodId: string): Promise<void> {
+export async function detachPaymentMethod(paymentMethodId: string, stripeAccount?: string | null): Promise<void> {
   const stripe = getStripe();
-  await stripe.paymentMethods.detach(paymentMethodId);
+  const opts: Stripe.RequestOptions = {};
+  if (stripeAccount) {
+    opts.stripeAccount = stripeAccount;
+  }
+  await stripe.paymentMethods.detach(paymentMethodId, opts);
+}
+
+export async function isCustomerOnPlatform(customerId: string): Promise<boolean> {
+  const stripe = getStripe();
+  try {
+    await stripe.customers.retrieve(customerId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function migrateCustomerToConnectedAccount(params: {
+  platformCustomerId: string;
+  stripeAccount: string;
+  email?: string;
+  name: string;
+  metadata?: Record<string, string>;
+}): Promise<{ newCustomerId: string; migratedPaymentMethods: number; skipped: boolean }> {
+  const stripe = getStripe();
+
+  const isPlatform = await isCustomerOnPlatform(params.platformCustomerId);
+  if (!isPlatform) {
+    return { newCustomerId: params.platformCustomerId, migratedPaymentMethods: 0, skipped: true };
+  }
+
+  const newCustomer = await stripe.customers.create({
+    email: params.email || undefined,
+    name: params.name,
+    metadata: { ...params.metadata, migratedFromPlatform: params.platformCustomerId },
+  }, { stripeAccount: params.stripeAccount });
+
+  const platformMethods = await stripe.paymentMethods.list({
+    customer: params.platformCustomerId,
+    type: "card",
+  });
+
+  let migratedCount = 0;
+  for (const pm of platformMethods.data) {
+    try {
+      const cloned = await stripe.paymentMethods.create({
+        customer: newCustomer.id,
+        payment_method: pm.id,
+      }, { stripeAccount: params.stripeAccount });
+      await stripe.paymentMethods.attach(cloned.id, {
+        customer: newCustomer.id,
+      }, { stripeAccount: params.stripeAccount });
+      migratedCount++;
+    } catch (cloneErr: any) {
+      console.warn(`[Stripe Migration] Failed to clone payment method ${pm.id}: ${cloneErr.message}`);
+    }
+  }
+
+  return { newCustomerId: newCustomer.id, migratedPaymentMethods: migratedCount, skipped: false };
 }
 
 export async function createConnectAccount(
@@ -413,6 +490,15 @@ export function validateStripeConfig(): void {
   } else {
     console.log("[Stripe Config] ✓ STRIPE_WEBHOOK_SECRET present");
   }
+
+  const connectWebhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+  if (!connectWebhookSecret) {
+    console.warn("[Stripe Config] ⚠ STRIPE_CONNECT_WEBHOOK_SECRET is NOT set — Connect webhook events may not be verified separately");
+  } else {
+    console.log("[Stripe Config] ✓ STRIPE_CONNECT_WEBHOOK_SECRET present (direct charges mode)");
+  }
+
+  console.log("[Stripe Config] ℹ Connect mode: DIRECT CHARGES (stripeAccount header + application_fee_amount)");
 
   const missingPrices: string[] = [];
   const presentPrices: string[] = [];

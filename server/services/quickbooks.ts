@@ -473,11 +473,16 @@ async function lookupDefaultFeeAccount(companyId: string): Promise<string | null
   return null;
 }
 
-async function getStripeFeeForPayment(stripePaymentIntentId: string): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
+async function getStripeFeeForPayment(stripePaymentIntentId: string, stripeAccount?: string | null): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
   try {
     const Stripe = (await import("stripe")).default;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-    const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId, { expand: ["latest_charge.balance_transaction"] });
+    const opts: Record<string, unknown> = { expand: ["latest_charge.balance_transaction"] };
+    const reqOpts: Record<string, unknown> = {};
+    if (stripeAccount) {
+      reqOpts.stripeAccount = stripeAccount;
+    }
+    const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId, opts as any, reqOpts as any);
     const piData = pi as Record<string, unknown>;
     const charge = piData.latest_charge as Record<string, unknown> | string | null;
     if (!charge || typeof charge === "string") return null;
@@ -595,7 +600,8 @@ async function reconcileDeposit(
 
   if (existingDepositLogs.length > 0) return;
 
-  const stripeFee = await getStripeFeeForPayment(freshInvoice.stripePaymentIntentId);
+  const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+  const stripeFee = await getStripeFeeForPayment(freshInvoice.stripePaymentIntentId, connectAcct);
   if (!stripeFee || stripeFee.feeCents === 0) return;
 
   const expectedNet = stripeFee.grossCents - stripeFee.feeCents;

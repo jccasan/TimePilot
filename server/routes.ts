@@ -38,6 +38,7 @@ import {
   fetchStripePrices,
   getCachedStripePrices,
   createVoicePlanCheckout,
+  migrateCustomerToConnectedAccount,
 } from "./services/stripe";
 import { seedRetellKnowledgeBase, provisionRetellNumber } from "./services/retell";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
@@ -3290,11 +3291,14 @@ Return ONLY valid JSON, no markdown.`,
 
       if (contact.email && isStripeConfigured()) {
         try {
+          const companyForStripe = await storage.getCompany(companyId);
+          const connectAcct = companyForStripe?.stripeConnectOnboarded ? companyForStripe.stripeConnectAccountId : null;
           const stripeCustomerId = await createStripeCustomer({
             email: contact.email,
             name: `${contact.firstName} ${contact.lastName}`.trim(),
             phone: contact.phone || undefined,
             metadata: { contactId: contact.id, companyId },
+            stripeAccount: connectAcct,
           });
           await storage.updateContact(contact.id, companyId, { stripeCustomerId });
         } catch (stripeErr) {
@@ -3551,17 +3555,21 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       if (!contact.stripeCustomerId && contact.email) {
-        createStripeCustomer({
-          email: contact.email,
-          name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || contact.email,
-          metadata: { scoopilotContactId: contact.id, companyId },
-        })
-          .then((stripeCustomerId) =>
-            storage.updateContact(req.params.id, companyId, { stripeCustomerId })
-          )
-          .catch((err) =>
-            console.error("[auto-stripe] Failed to auto-create Stripe customer:", err)
-          );
+        (async () => {
+          try {
+            const co = await storage.getCompany(companyId);
+            const acct = co?.stripeConnectOnboarded ? co.stripeConnectAccountId : null;
+            const stripeCustomerId = await createStripeCustomer({
+              email: contact.email!,
+              name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || contact.email!,
+              metadata: { scoopilotContactId: contact.id, companyId },
+              stripeAccount: acct,
+            });
+            await storage.updateContact(req.params.id, companyId, { stripeCustomerId });
+          } catch (err) {
+            console.error("[auto-stripe] Failed to auto-create Stripe customer:", err);
+          }
+        })();
       }
 
       let planAddOns: any[] = [];
@@ -4579,17 +4587,21 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       if (contact && !contact.stripeCustomerId && contact.email) {
-        createStripeCustomer({
-          email: contact.email,
-          name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || contact.email,
-          metadata: { scoopilotContactId: contact.id, companyId },
-        })
-          .then((stripeCustomerId) =>
-            storage.updateContact(parsed.contactId, companyId, { stripeCustomerId })
-          )
-          .catch((err) =>
-            console.error("[auto-stripe] Failed to auto-create Stripe customer:", err)
-          );
+        (async () => {
+          try {
+            const co = await storage.getCompany(companyId);
+            const acct = co?.stripeConnectOnboarded ? co.stripeConnectAccountId : null;
+            const stripeCustomerId = await createStripeCustomer({
+              email: contact.email!,
+              name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || contact.email!,
+              metadata: { scoopilotContactId: contact.id, companyId },
+              stripeAccount: acct,
+            });
+            await storage.updateContact(parsed.contactId, companyId, { stripeCustomerId });
+          } catch (err) {
+            console.error("[auto-stripe] Failed to auto-create Stripe customer:", err);
+          }
+        })();
       }
 
       let planAddOns: any[] = [];
@@ -4895,17 +4907,21 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       if (contact && !contact.stripeCustomerId && contact.email) {
-        createStripeCustomer({
-          email: contact.email,
-          name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || contact.email,
-          metadata: { scoopilotContactId: contact.id, companyId },
-        })
-          .then((stripeCustomerId) =>
-            storage.updateContact(body.contactId, companyId, { stripeCustomerId })
-          )
-          .catch((err) =>
-            console.error("[auto-stripe] Failed to auto-create Stripe customer:", err)
-          );
+        (async () => {
+          try {
+            const co = await storage.getCompany(companyId);
+            const acct = co?.stripeConnectOnboarded ? co.stripeConnectAccountId : null;
+            const stripeCustomerId = await createStripeCustomer({
+              email: contact.email!,
+              name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || contact.email!,
+              metadata: { scoopilotContactId: contact.id, companyId },
+              stripeAccount: acct,
+            });
+            await storage.updateContact(body.contactId, companyId, { stripeCustomerId });
+          } catch (err) {
+            console.error("[auto-stripe] Failed to auto-create Stripe customer:", err);
+          }
+        })();
       }
 
       const linkedJob = await storage.getJobByServicePlanId(sp.id);
@@ -9043,11 +9059,13 @@ Return ONLY valid JSON, no markdown.`,
       if (isStripeConfigured() && parseFloat(invoice.total) > 0) {
         try {
           let stripeCustomerId = contact.stripeCustomerId;
+          const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
           if (!stripeCustomerId) {
             stripeCustomerId = await createStripeCustomer({
               email: contact.email || undefined,
               name: `${contact.firstName} ${contact.lastName}`.trim(),
               metadata: { contactId: contact.id, companyId },
+              stripeAccount: connectAccountId,
             });
             await storage.updateContact(contact.id, companyId, { stripeCustomerId });
           }
@@ -9062,6 +9080,7 @@ Return ONLY valid JSON, no markdown.`,
               email: contact.email || undefined,
               name: `${contact.firstName} ${contact.lastName}`.trim(),
               metadata: { contactId: contact.id, companyId },
+              stripeAccount: connectAccountId,
             });
             await storage.updateContact(contact.id, companyId, { stripeCustomerId: newCustomerId });
             console.log(`[send-email] Stale Stripe customer ${stripeCustomerId} replaced with ${newCustomerId} for contact ${contact.id}`);
@@ -9069,7 +9088,6 @@ Return ONLY valid JSON, no markdown.`,
           };
 
           const baseUrl = getBaseUrl(req);
-          const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
           try {
             let checkoutResult;
             try {
@@ -9102,41 +9120,7 @@ Return ONLY valid JSON, no markdown.`,
             }
             paymentUrl = checkoutResult.url;
           } catch (connectErr: any) {
-            if (connectAccountId) {
-              console.log(`[send-email] Stripe Connect checkout failed (${connectErr?.message}), retrying without Connect...`);
-              let fallbackResult;
-              try {
-                fallbackResult = await createCheckoutSession({
-                  customerId: stripeCustomerId,
-                  invoiceId: invoice.id,
-                  invoiceNumber: invoice.invoiceNumber,
-                  amount: parseFloat(invoice.total),
-                  successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
-                  cancelUrl: `${baseUrl}/portal`,
-                  stripeConnectAccountId: null,
-                  tenantId: companyId,
-                });
-              } catch (fallbackErr: any) {
-                if (isStaleCustomerError(fallbackErr)) {
-                  await refreshStripeCustomer();
-                  fallbackResult = await createCheckoutSession({
-                    customerId: stripeCustomerId,
-                    invoiceId: invoice.id,
-                    invoiceNumber: invoice.invoiceNumber,
-                    amount: parseFloat(invoice.total),
-                    successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
-                    cancelUrl: `${baseUrl}/portal`,
-                    stripeConnectAccountId: null,
-                    tenantId: companyId,
-                  });
-                } else {
-                  throw fallbackErr;
-                }
-              }
-              paymentUrl = fallbackResult.url;
-            } else {
-              throw connectErr;
-            }
+            throw connectErr;
           }
         } catch (stripeErr: any) {
           console.error("[send-email] Could not generate Stripe checkout URL, sending without payment link:", stripeErr?.message || stripeErr);
@@ -9294,11 +9278,14 @@ Return ONLY valid JSON, no markdown.`,
         return res.json({ stripeCustomerId: contact.stripeCustomerId, alreadyExists: true });
       }
 
+      const company = await storage.getCompany(companyId);
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
       const stripeCustomerId = await createStripeCustomer({
         email: contact.email || undefined,
         name: `${contact.firstName} ${contact.lastName}`.trim(),
         phone: contact.phone || undefined,
         metadata: { contactId: contact.id, companyId },
+        stripeAccount: connectAcct,
       });
 
       await storage.updateContact(req.params.id, companyId, { stripeCustomerId });
@@ -9314,7 +9301,9 @@ Return ONLY valid JSON, no markdown.`,
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       if (!contact.stripeCustomerId) return res.status(400).json({ error: "Contact has no Stripe customer. Create one first." });
 
-      const result = await createSetupIntent(contact.stripeCustomerId);
+      const company = await storage.getCompany(companyId);
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+      const result = await createSetupIntent(contact.stripeCustomerId, connectAcct);
       res.json(result);
     } catch (err) { handleError(res, err); }
   });
@@ -9326,15 +9315,19 @@ Return ONLY valid JSON, no markdown.`,
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       if (!contact.stripeCustomerId) return res.json([]);
 
-      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId);
+      const company = await storage.getCompany(companyId);
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId, connectAcct);
       res.json(methods);
     } catch (err) { handleError(res, err); }
   });
 
   app.delete("/api/payment-methods/:pmId", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      await getCompanyContext(req);
-      await detachPaymentMethod(req.params.pmId);
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+      await detachPaymentMethod(req.params.pmId, connectAcct);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -9395,18 +9388,21 @@ Return ONLY valid JSON, no markdown.`,
       const contact = await storage.getContact(invoice.contactId, companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
+      const company = await storage.getCompany(companyId);
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+
       let stripeCustomerId = contact.stripeCustomerId;
       if (!stripeCustomerId) {
         stripeCustomerId = await createStripeCustomer({
           email: contact.email || undefined,
           name: `${contact.firstName} ${contact.lastName}`.trim(),
           metadata: { contactId: contact.id, companyId },
+          stripeAccount: connectAcct,
         });
         await storage.updateContact(contact.id, companyId, { stripeCustomerId });
       }
 
       const baseUrl = getBaseUrl(req);
-      const company = await storage.getCompany(companyId);
       const result = await createCheckoutSession({
         customerId: stripeCustomerId,
         invoiceId: invoice.id,
@@ -9414,7 +9410,7 @@ Return ONLY valid JSON, no markdown.`,
         amount: parseFloat(invoice.total),
         successUrl: `${baseUrl}/invoices?paid=${invoice.id}`,
         cancelUrl: `${baseUrl}/invoices`,
-        stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
+        stripeConnectAccountId: connectAcct,
         tenantId: companyId,
       });
 
@@ -9523,6 +9519,7 @@ Return ONLY valid JSON, no markdown.`,
       const secrets = [
         process.env.STRIPE_WEBHOOK_SECRET,
         process.env.STRIPE_WEBHOOK_SECRET_SCOOPILOT_SITE,
+        process.env.STRIPE_CONNECT_WEBHOOK_SECRET,
       ].filter(Boolean) as string[];
 
       if (!sig || secrets.length === 0) {
@@ -9541,6 +9538,11 @@ Return ONLY valid JSON, no markdown.`,
       if (!event) {
         console.error("Stripe webhook signature verification failed against all configured secrets");
         return res.status(400).json({ error: "Webhook signature verification failed" });
+      }
+
+      const connectAccountId = (event as any).account as string | undefined;
+      if (connectAccountId) {
+        console.log(`[Stripe Webhook] Connect event ${event.id} (${event.type}) from account ${connectAccountId}`);
       }
 
       const [alreadyProcessed] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
@@ -11163,19 +11165,22 @@ Return ONLY valid JSON, no markdown.`,
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
+      const company = await storage.getCompany(companyId);
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+
       let stripeCustomerId = contact.stripeCustomerId;
       if (!stripeCustomerId) {
         stripeCustomerId = await createStripeCustomer({
           email: contact.email || undefined,
           name: `${contact.firstName} ${contact.lastName}`.trim(),
           metadata: { contactId: contact.id, companyId },
+          stripeAccount: connectAcct,
         });
         await storage.updateContact(contact.id, companyId, { stripeCustomerId });
       }
 
       const chargeAmount = parseFloat(invoice.total) + tipAmount;
       const baseUrl = getBaseUrl(req);
-      const company = await storage.getCompany(companyId);
       const result = await createCheckoutSession({
         customerId: stripeCustomerId,
         invoiceId: invoice.id,
@@ -11184,7 +11189,7 @@ Return ONLY valid JSON, no markdown.`,
         successUrl: `${baseUrl}/portal/client?paid=${invoice.id}`,
         cancelUrl: `${baseUrl}/portal/client`,
         tipAmount: tipAmount.toFixed(2),
-        stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
+        stripeConnectAccountId: connectAcct,
         tenantId: companyId,
       });
 
@@ -11519,12 +11524,16 @@ Return ONLY valid JSON, no markdown.`,
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
+      const company = await storage.getCompany(companyId);
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+
       let stripeCustomerId = contact.stripeCustomerId;
       if (!stripeCustomerId) {
         stripeCustomerId = await createStripeCustomer({
           email: contact.email || undefined,
           name: `${contact.firstName} ${contact.lastName}`.trim(),
           metadata: { contactId: contact.id, companyId },
+          stripeAccount: connectAcct,
         });
         await storage.updateContact(contact.id, companyId, { stripeCustomerId });
       }
@@ -11532,6 +11541,10 @@ Return ONLY valid JSON, no markdown.`,
       const baseUrl = getBaseUrl(req);
       const Stripe = (await import("stripe")).default;
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-04-30.basil" });
+      const setupOpts: Stripe.RequestOptions = {};
+      if (connectAcct) {
+        setupOpts.stripeAccount = connectAcct;
+      }
       const session = await stripe.checkout.sessions.create({
         customer: stripeCustomerId,
         mode: "setup",
@@ -11539,7 +11552,7 @@ Return ONLY valid JSON, no markdown.`,
         success_url: `${baseUrl}/portal/client?card_added=1`,
         cancel_url: `${baseUrl}/portal/client`,
         metadata: { tenant_id: companyId, checkout_type: "portal_setup" },
-      });
+      }, setupOpts);
 
       res.json({ url: session.url });
     } catch (err) { handleError(res, err); }
@@ -11547,27 +11560,31 @@ Return ONLY valid JSON, no markdown.`,
 
   app.get("/api/portal/payment-methods", async (req: Request, res: Response) => {
     try {
-      const { contactId } = await getPortalContext(req);
+      const { contactId, companyId } = await getPortalContext(req);
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       if (!contact.stripeCustomerId) return res.json({ methods: [], autoPayEnabled: contact.autoPayEnabled });
 
-      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId);
+      const company = await storage.getCompany(companyId);
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId, connectAcct);
       res.json({ methods, autoPayEnabled: contact.autoPayEnabled });
     } catch (err) { handleError(res, err); }
   });
 
   app.delete("/api/portal/payment-methods/:id", async (req: Request, res: Response) => {
     try {
-      const { contactId } = await getPortalContext(req);
+      const { contactId, companyId } = await getPortalContext(req);
       const contact = await storage.getContactById(contactId);
       if (!contact?.stripeCustomerId) return res.status(400).json({ error: "No payment methods on file" });
 
-      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId);
+      const company = await storage.getCompany(companyId);
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId, connectAcct);
       const owns = methods.some((m) => m.id === req.params.id);
       if (!owns) return res.status(403).json({ error: "Payment method not found" });
 
-      await detachPaymentMethod(req.params.id);
+      await detachPaymentMethod(req.params.id, connectAcct);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -13308,6 +13325,61 @@ Return ONLY valid JSON, no markdown.`,
         isExistingUser,
         emailSent,
       });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/migrate-stripe-customers", isAdmin, async (req: Request, res: Response) => {
+    try {
+      if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe is not configured" });
+
+      const dryRun = req.body?.dryRun === true;
+      const allCompanies = await storage.listCompanies();
+      const results: Array<{ companyId: string; companyName: string; migratedContacts: number; skippedContacts: number; errors: string[] }> = [];
+
+      for (const company of allCompanies) {
+        if (!company.stripeConnectOnboarded || !company.stripeConnectAccountId) continue;
+
+        const contacts = await storage.getContacts(company.id);
+        const companyResult = { companyId: company.id, companyName: company.name, migratedContacts: 0, skippedContacts: 0, errors: [] as string[] };
+
+        for (const contact of contacts) {
+          if (!contact.stripeCustomerId) continue;
+
+          if (dryRun) {
+            companyResult.migratedContacts++;
+            continue;
+          }
+
+          try {
+            const { newCustomerId, migratedPaymentMethods, skipped } = await migrateCustomerToConnectedAccount({
+              platformCustomerId: contact.stripeCustomerId,
+              stripeAccount: company.stripeConnectAccountId!,
+              email: contact.email || undefined,
+              name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || "Unknown",
+              metadata: { contactId: contact.id, companyId: company.id },
+            });
+
+            if (skipped) {
+              companyResult.skippedContacts++;
+              console.log(`[Stripe Migration] Skipped contact ${contact.id} — customer ${contact.stripeCustomerId} not found on platform (already migrated)`);
+            } else {
+              await storage.updateContact(contact.id, company.id, { stripeCustomerId: newCustomerId });
+              companyResult.migratedContacts++;
+              console.log(`[Stripe Migration] Migrated contact ${contact.id} (${contact.firstName} ${contact.lastName}): ${contact.stripeCustomerId} → ${newCustomerId} (${migratedPaymentMethods} payment methods)`);
+            }
+          } catch (migErr: any) {
+            companyResult.errors.push(`Contact ${contact.id}: ${migErr.message}`);
+            console.error(`[Stripe Migration] Failed to migrate contact ${contact.id}: ${migErr.message}`);
+          }
+        }
+
+        results.push(companyResult);
+      }
+
+      const totalMigrated = results.reduce((sum, r) => sum + r.migratedContacts, 0);
+      const totalSkipped = results.reduce((sum, r) => sum + r.skippedContacts, 0);
+      const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);
+      res.json({ dryRun, totalMigrated, totalSkipped, totalErrors, results });
     } catch (err) { handleError(res, err); }
   });
 
