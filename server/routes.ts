@@ -39,6 +39,7 @@ import {
   getCachedStripePrices,
   createVoicePlanCheckout,
   migrateCustomerToConnectedAccount,
+  ensureConnectedCustomer,
 } from "./services/stripe";
 import { seedRetellKnowledgeBase, provisionRetellNumber } from "./services/retell";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
@@ -9060,68 +9061,31 @@ Return ONLY valid JSON, no markdown.`,
         try {
           let stripeCustomerId = contact.stripeCustomerId;
           const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-          if (!stripeCustomerId) {
-            stripeCustomerId = await createStripeCustomer({
-              email: contact.email || undefined,
-              name: `${contact.firstName} ${contact.lastName}`.trim(),
-              metadata: { contactId: contact.id, companyId },
-              stripeAccount: connectAccountId,
-            });
-            await storage.updateContact(contact.id, companyId, { stripeCustomerId });
+          const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+          const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
+            currentCustomerId: contact.stripeCustomerId,
+            stripeAccount: connectAccountId,
+            email: contact.email || undefined,
+            name: contactName,
+            metadata: { contactId: contact.id, companyId },
+          });
+          if (wasRecreated) {
+            await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustId });
           }
-
-          const isStaleCustomerError = (err: any) =>
-            err?.type === "StripeInvalidRequestError" &&
-            typeof err?.message === "string" &&
-            err.message.toLowerCase().includes("no such customer");
-
-          const refreshStripeCustomer = async () => {
-            const newCustomerId = await createStripeCustomer({
-              email: contact.email || undefined,
-              name: `${contact.firstName} ${contact.lastName}`.trim(),
-              metadata: { contactId: contact.id, companyId },
-              stripeAccount: connectAccountId,
-            });
-            await storage.updateContact(contact.id, companyId, { stripeCustomerId: newCustomerId });
-            console.log(`[send-email] Stale Stripe customer ${stripeCustomerId} replaced with ${newCustomerId} for contact ${contact.id}`);
-            stripeCustomerId = newCustomerId;
-          };
+          stripeCustomerId = resolvedCustId;
 
           const baseUrl = getBaseUrl(req);
-          try {
-            let checkoutResult;
-            try {
-              checkoutResult = await createCheckoutSession({
-                customerId: stripeCustomerId,
-                invoiceId: invoice.id,
-                invoiceNumber: invoice.invoiceNumber,
-                amount: parseFloat(invoice.total),
-                successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
-                cancelUrl: `${baseUrl}/portal`,
-                stripeConnectAccountId: connectAccountId,
-                tenantId: companyId,
-              });
-            } catch (primaryErr: any) {
-              if (isStaleCustomerError(primaryErr)) {
-                await refreshStripeCustomer();
-                checkoutResult = await createCheckoutSession({
-                  customerId: stripeCustomerId,
-                  invoiceId: invoice.id,
-                  invoiceNumber: invoice.invoiceNumber,
-                  amount: parseFloat(invoice.total),
-                  successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
-                  cancelUrl: `${baseUrl}/portal`,
-                  stripeConnectAccountId: connectAccountId,
-                  tenantId: companyId,
-                });
-              } else {
-                throw primaryErr;
-              }
-            }
-            paymentUrl = checkoutResult.url;
-          } catch (connectErr: any) {
-            throw connectErr;
-          }
+          const checkoutResult = await createCheckoutSession({
+            customerId: stripeCustomerId,
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            amount: parseFloat(invoice.total),
+            successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
+            cancelUrl: `${baseUrl}/portal`,
+            stripeConnectAccountId: connectAccountId,
+            tenantId: companyId,
+          });
+          paymentUrl = checkoutResult.url;
         } catch (stripeErr: any) {
           console.error("[send-email] Could not generate Stripe checkout URL, sending without payment link:", stripeErr?.message || stripeErr);
         }
@@ -9303,7 +9267,18 @@ Return ONLY valid JSON, no markdown.`,
 
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-      const result = await createSetupIntent(contact.stripeCustomerId, connectAcct);
+      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+      const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact.stripeCustomerId,
+        stripeAccount: connectAcct,
+        email: contact.email || undefined,
+        name: contactName,
+        metadata: { contactId: contact.id, companyId },
+      });
+      if (wasRecreated) {
+        await storage.updateContact(req.params.id, companyId, { stripeCustomerId: resolvedCustId });
+      }
+      const result = await createSetupIntent(resolvedCustId, connectAcct);
       res.json(result);
     } catch (err) { handleError(res, err); }
   });
@@ -9317,7 +9292,18 @@ Return ONLY valid JSON, no markdown.`,
 
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId, connectAcct);
+      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+      const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact.stripeCustomerId,
+        stripeAccount: connectAcct,
+        email: contact.email || undefined,
+        name: contactName,
+        metadata: { contactId: contact.id, companyId },
+      });
+      if (wasRecreated) {
+        await storage.updateContact(req.params.id, companyId, { stripeCustomerId: resolvedCustId });
+      }
+      const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
       res.json(methods);
     } catch (err) { handleError(res, err); }
   });
@@ -9325,8 +9311,31 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/payment-methods/:pmId", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const contactId = req.query.contactId as string;
+      if (!contactId) return res.status(400).json({ error: "contactId query parameter is required" });
+
+      const contact = await storage.getContact(contactId, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (!contact.stripeCustomerId) return res.status(400).json({ error: "Contact has no payment methods" });
+
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+      const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact.stripeCustomerId,
+        stripeAccount: connectAcct,
+        email: contact.email || undefined,
+        name: contactName,
+        metadata: { contactId: contact.id, companyId },
+      });
+      if (wasRecreated) {
+        await storage.updateContact(contactId, companyId, { stripeCustomerId: resolvedCustId });
+      }
+
+      const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
+      const owns = methods.some((m) => m.id === req.params.pmId);
+      if (!owns) return res.status(403).json({ error: "Payment method not found for this contact" });
+
       await detachPaymentMethod(req.params.pmId, connectAcct);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
@@ -9343,12 +9352,26 @@ Return ONLY valid JSON, no markdown.`,
       if (!contact?.stripeCustomerId) return res.status(400).json({ error: "Contact has no payment method on file" });
 
       const company = await storage.getCompany(companyId);
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+
+      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+      const { customerId: resolvedCustomerId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact.stripeCustomerId,
+        stripeAccount: connectAcct,
+        email: contact.email || undefined,
+        name: contactName,
+        metadata: { contactId: contact.id, companyId },
+      });
+      if (wasRecreated) {
+        await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustomerId });
+      }
+
       const result = await chargeInvoiceAutomatically({
-        customerId: contact.stripeCustomerId,
+        customerId: resolvedCustomerId,
         amount: parseFloat(invoice.total),
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
-        stripeConnectAccountId: company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null,
+        stripeConnectAccountId: connectAcct,
       });
 
       const updateData: any = {
@@ -9391,14 +9414,15 @@ Return ONLY valid JSON, no markdown.`,
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
 
-      let stripeCustomerId = contact.stripeCustomerId;
-      if (!stripeCustomerId) {
-        stripeCustomerId = await createStripeCustomer({
-          email: contact.email || undefined,
-          name: `${contact.firstName} ${contact.lastName}`.trim(),
-          metadata: { contactId: contact.id, companyId },
-          stripeAccount: connectAcct,
-        });
+      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+      const { customerId: stripeCustomerId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact.stripeCustomerId,
+        stripeAccount: connectAcct,
+        email: contact.email || undefined,
+        name: contactName,
+        metadata: { contactId: contact.id, companyId },
+      });
+      if (wasRecreated) {
         await storage.updateContact(contact.id, companyId, { stripeCustomerId });
       }
 
@@ -11168,14 +11192,15 @@ Return ONLY valid JSON, no markdown.`,
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
 
-      let stripeCustomerId = contact.stripeCustomerId;
-      if (!stripeCustomerId) {
-        stripeCustomerId = await createStripeCustomer({
-          email: contact.email || undefined,
-          name: `${contact.firstName} ${contact.lastName}`.trim(),
-          metadata: { contactId: contact.id, companyId },
-          stripeAccount: connectAcct,
-        });
+      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+      const { customerId: stripeCustomerId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact.stripeCustomerId,
+        stripeAccount: connectAcct,
+        email: contact.email || undefined,
+        name: contactName,
+        metadata: { contactId: contact.id, companyId },
+      });
+      if (wasRecreated) {
         await storage.updateContact(contact.id, companyId, { stripeCustomerId });
       }
 
@@ -11527,14 +11552,15 @@ Return ONLY valid JSON, no markdown.`,
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
 
-      let stripeCustomerId = contact.stripeCustomerId;
-      if (!stripeCustomerId) {
-        stripeCustomerId = await createStripeCustomer({
-          email: contact.email || undefined,
-          name: `${contact.firstName} ${contact.lastName}`.trim(),
-          metadata: { contactId: contact.id, companyId },
-          stripeAccount: connectAcct,
-        });
+      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+      const { customerId: stripeCustomerId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact.stripeCustomerId,
+        stripeAccount: connectAcct,
+        email: contact.email || undefined,
+        name: contactName,
+        metadata: { contactId: contact.id, companyId },
+      });
+      if (wasRecreated) {
         await storage.updateContact(contact.id, companyId, { stripeCustomerId });
       }
 
@@ -11567,7 +11593,18 @@ Return ONLY valid JSON, no markdown.`,
 
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId, connectAcct);
+      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+      const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact.stripeCustomerId,
+        stripeAccount: connectAcct,
+        email: contact.email || undefined,
+        name: contactName,
+        metadata: { contactId: contact.id, companyId },
+      });
+      if (wasRecreated) {
+        await storage.updateContact(contactId, companyId, { stripeCustomerId: resolvedCustId });
+      }
+      const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
       res.json({ methods, autoPayEnabled: contact.autoPayEnabled });
     } catch (err) { handleError(res, err); }
   });
@@ -11580,7 +11617,18 @@ Return ONLY valid JSON, no markdown.`,
 
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-      const methods = await getCustomerPaymentMethods(contact.stripeCustomerId, connectAcct);
+      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+      const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact.stripeCustomerId,
+        stripeAccount: connectAcct,
+        email: contact.email || undefined,
+        name: contactName,
+        metadata: { contactId: contact.id, companyId },
+      });
+      if (wasRecreated) {
+        await storage.updateContact(contactId, companyId, { stripeCustomerId: resolvedCustId });
+      }
+      const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
       const owns = methods.some((m) => m.id === req.params.id);
       if (!owns) return res.status(403).json({ error: "Payment method not found" });
 

@@ -272,6 +272,52 @@ export async function isCustomerOnPlatform(customerId: string): Promise<boolean>
   }
 }
 
+export function isStaleCustomerError(err: unknown): boolean {
+  const e = err as { type?: string; message?: string };
+  return e?.type === "StripeInvalidRequestError" &&
+    typeof e?.message === "string" &&
+    e.message.toLowerCase().includes("no such customer");
+}
+
+export async function ensureConnectedCustomer(params: {
+  currentCustomerId: string | null;
+  stripeAccount: string | null;
+  email?: string;
+  name: string;
+  metadata?: Record<string, string>;
+}): Promise<{ customerId: string; wasRecreated: boolean }> {
+  if (!params.currentCustomerId) {
+    const newId = await createStripeCustomer({
+      email: params.email,
+      name: params.name,
+      metadata: params.metadata,
+      stripeAccount: params.stripeAccount,
+    });
+    return { customerId: newId, wasRecreated: true };
+  }
+
+  if (!params.stripeAccount) {
+    return { customerId: params.currentCustomerId, wasRecreated: false };
+  }
+
+  const stripe = getStripe();
+  try {
+    await stripe.customers.retrieve(params.currentCustomerId, { stripeAccount: params.stripeAccount });
+    return { customerId: params.currentCustomerId, wasRecreated: false };
+  } catch (err: unknown) {
+    if (isStaleCustomerError(err)) {
+      const newId = await createStripeCustomer({
+        email: params.email,
+        name: params.name,
+        metadata: { ...params.metadata, migratedFromPlatform: params.currentCustomerId },
+        stripeAccount: params.stripeAccount,
+      });
+      return { customerId: newId, wasRecreated: true };
+    }
+    throw err;
+  }
+}
+
 export async function migrateCustomerToConnectedAccount(params: {
   platformCustomerId: string;
   stripeAccount: string;

@@ -475,14 +475,15 @@ async function lookupDefaultFeeAccount(companyId: string): Promise<string | null
 
 async function getStripeFeeForPayment(stripePaymentIntentId: string, stripeAccount?: string | null): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
   try {
-    const Stripe = (await import("stripe")).default;
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-    const opts: Record<string, unknown> = { expand: ["latest_charge.balance_transaction"] };
-    const reqOpts: Record<string, unknown> = {};
+    const StripeSDK = (await import("stripe")).default;
+    type StripeType = InstanceType<typeof StripeSDK>;
+    const stripe: StripeType = new StripeSDK(process.env.STRIPE_SECRET_KEY!);
+    const retrieveParams: StripeSDK.PaymentIntentRetrieveParams = { expand: ["latest_charge.balance_transaction"] };
+    const requestOptions: StripeSDK.RequestOptions = {};
     if (stripeAccount) {
-      reqOpts.stripeAccount = stripeAccount;
+      requestOptions.stripeAccount = stripeAccount;
     }
-    const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId, opts as any, reqOpts as any);
+    const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId, retrieveParams, requestOptions);
     const piData = pi as Record<string, unknown>;
     const charge = piData.latest_charge as Record<string, unknown> | string | null;
     if (!charge || typeof charge === "string") return null;
