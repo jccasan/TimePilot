@@ -9372,6 +9372,7 @@ Return ONLY valid JSON, no markdown.`,
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
         stripeConnectAccountId: connectAcct,
+        tenantId: companyId,
       });
 
       const updateData: any = {

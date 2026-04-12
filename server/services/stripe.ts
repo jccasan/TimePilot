@@ -138,6 +138,7 @@ export async function chargeInvoiceAutomatically(params: {
   invoiceId: string;
   invoiceNumber: string;
   stripeConnectAccountId?: string | null;
+  tenantId?: string;
 }): Promise<{
   paymentIntentId: string;
   status: string;
@@ -173,6 +174,7 @@ export async function chargeInvoiceAutomatically(params: {
       metadata: {
         invoiceId: params.invoiceId,
         invoiceNumber: params.invoiceNumber,
+        ...(params.tenantId ? { tenant_id: params.tenantId } : {}),
       },
     };
 
