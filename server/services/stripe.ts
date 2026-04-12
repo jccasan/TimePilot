@@ -326,12 +326,18 @@ export async function migrateCustomerToConnectedAccount(params: {
   email?: string;
   name: string;
   metadata?: Record<string, string>;
-}): Promise<{ newCustomerId: string; migratedPaymentMethods: number; skipped: boolean }> {
+}): Promise<{
+  newCustomerId: string;
+  migratedPaymentMethods: number;
+  totalPaymentMethods: number;
+  failedPaymentMethods: string[];
+  status: "skipped" | "migrated" | "partial" | "no_methods";
+}> {
   const stripe = getStripe();
 
   const isPlatform = await isCustomerOnPlatform(params.platformCustomerId);
   if (!isPlatform) {
-    return { newCustomerId: params.platformCustomerId, migratedPaymentMethods: 0, skipped: true };
+    return { newCustomerId: params.platformCustomerId, migratedPaymentMethods: 0, totalPaymentMethods: 0, failedPaymentMethods: [], status: "skipped" };
   }
 
   const newCustomer = await stripe.customers.create({
@@ -345,7 +351,12 @@ export async function migrateCustomerToConnectedAccount(params: {
     type: "card",
   });
 
+  if (platformMethods.data.length === 0) {
+    return { newCustomerId: newCustomer.id, migratedPaymentMethods: 0, totalPaymentMethods: 0, failedPaymentMethods: [], status: "no_methods" };
+  }
+
   let migratedCount = 0;
+  const failedMethods: string[] = [];
   for (const pm of platformMethods.data) {
     try {
       const cloned = await stripe.paymentMethods.create({
@@ -357,11 +368,13 @@ export async function migrateCustomerToConnectedAccount(params: {
       }, { stripeAccount: params.stripeAccount });
       migratedCount++;
     } catch (cloneErr: any) {
+      failedMethods.push(pm.id);
       console.warn(`[Stripe Migration] Failed to clone payment method ${pm.id}: ${cloneErr.message}`);
     }
   }
 
-  return { newCustomerId: newCustomer.id, migratedPaymentMethods: migratedCount, skipped: false };
+  const status = migratedCount === platformMethods.data.length ? "migrated" : (migratedCount > 0 ? "partial" : "no_methods");
+  return { newCustomerId: newCustomer.id, migratedPaymentMethods: migratedCount, totalPaymentMethods: platformMethods.data.length, failedPaymentMethods: failedMethods, status };
 }
 
 export async function createConnectAccount(

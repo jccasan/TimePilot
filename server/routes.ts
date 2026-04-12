@@ -13400,7 +13400,7 @@ Return ONLY valid JSON, no markdown.`,
           }
 
           try {
-            const { newCustomerId, migratedPaymentMethods, skipped } = await migrateCustomerToConnectedAccount({
+            const migrationResult = await migrateCustomerToConnectedAccount({
               platformCustomerId: contact.stripeCustomerId,
               stripeAccount: company.stripeConnectAccountId!,
               email: contact.email || undefined,
@@ -13408,13 +13408,17 @@ Return ONLY valid JSON, no markdown.`,
               metadata: { contactId: contact.id, companyId: company.id },
             });
 
-            if (skipped) {
+            if (migrationResult.status === "skipped") {
               companyResult.skippedContacts++;
               console.log(`[Stripe Migration] Skipped contact ${contact.id} — customer ${contact.stripeCustomerId} not found on platform (already migrated)`);
             } else {
-              await storage.updateContact(contact.id, company.id, { stripeCustomerId: newCustomerId });
+              await storage.updateContact(contact.id, company.id, { stripeCustomerId: migrationResult.newCustomerId });
               companyResult.migratedContacts++;
-              console.log(`[Stripe Migration] Migrated contact ${contact.id} (${contact.firstName} ${contact.lastName}): ${contact.stripeCustomerId} → ${newCustomerId} (${migratedPaymentMethods} payment methods)`);
+              const statusLabel = migrationResult.status === "partial" ? " (PARTIAL — some payment methods failed)" : "";
+              console.log(`[Stripe Migration] Migrated contact ${contact.id} (${contact.firstName} ${contact.lastName}): ${contact.stripeCustomerId} → ${migrationResult.newCustomerId} (${migrationResult.migratedPaymentMethods}/${migrationResult.totalPaymentMethods} payment methods)${statusLabel}`);
+              if (migrationResult.failedPaymentMethods.length > 0) {
+                companyResult.errors.push(`Contact ${contact.id}: partial PM migration — failed: ${migrationResult.failedPaymentMethods.join(", ")}`);
+              }
             }
           } catch (migErr: any) {
             companyResult.errors.push(`Contact ${contact.id}: ${migErr.message}`);
