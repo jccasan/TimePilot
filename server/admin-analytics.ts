@@ -933,18 +933,20 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
   app.put("/api/admin/analytics/fixed-costs", isAdmin as any, async (req: Request, res: Response) => {
     try {
       const { month, hostingCents, dbCents, emailPlatformCents, smsPlatformCents, monitoringCents, otherCents, supportLaborCents } = req.body;
-      if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-        return res.status(400).json({ error: "Invalid month format (expected YYYY-MM)" });
+      if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        return res.status(400).json({ error: "Invalid month format (expected YYYY-MM with valid month 01-12)" });
       }
+      const centFields = [hostingCents, dbCents, emailPlatformCents, smsPlatformCents, monitoringCents, otherCents, supportLaborCents];
+      const toInt = (v: any) => { const n = Number(v ?? 0); return isFinite(n) ? Math.round(n) : 0; };
       const result = await storage.upsertSaasCosts({
         month,
-        hostingCents: Math.round(hostingCents ?? 0),
-        dbCents: Math.round(dbCents ?? 0),
-        emailPlatformCents: Math.round(emailPlatformCents ?? 0),
-        smsPlatformCents: Math.round(smsPlatformCents ?? 0),
-        monitoringCents: Math.round(monitoringCents ?? 0),
-        otherCents: Math.round(otherCents ?? 0),
-        supportLaborCents: Math.round(supportLaborCents ?? 0),
+        hostingCents: toInt(hostingCents),
+        dbCents: toInt(dbCents),
+        emailPlatformCents: toInt(emailPlatformCents),
+        smsPlatformCents: toInt(smsPlatformCents),
+        monitoringCents: toInt(monitoringCents),
+        otherCents: toInt(otherCents),
+        supportLaborCents: toInt(supportLaborCents),
       });
       res.json(result);
     } catch (err) {
