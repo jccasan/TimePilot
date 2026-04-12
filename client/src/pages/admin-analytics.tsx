@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import {
   Building2, DollarSign, TrendingUp, AlertTriangle,
   CreditCard, Repeat, Target, MessageSquare, Calculator, Search,
   ChevronRight, ArrowUpRight, ArrowDownRight, Activity,
-  Mail, Phone, BarChart3,
+  Mail, Phone, BarChart3, Wallet, ArrowUpDown,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState, useMemo } from "react";
@@ -77,7 +77,7 @@ function ExecutiveTab({ onDrillDown }: { onDrillDown: (tab: string) => void }) {
         <StatCard label="Active Accounts" value={data?.activeAccounts ?? 0} icon={Building2} subtitle={`${data?.totalAccounts ?? 0} total`} onClick={() => onDrillDown("accounts")} />
         <StatCard label="MRR" value={fmt(data?.mrr)} icon={DollarSign} onClick={() => onDrillDown("billing")} />
         <StatCard label="ARR" value={fmt(data?.arr)} icon={TrendingUp} onClick={() => onDrillDown("billing")} />
-        <StatCard label="Gross Margin" value={pct(data?.estimatedGrossMarginPct)} icon={Calculator} onClick={() => onDrillDown("economics")} />
+        <StatCard label="Gross Margin" value={pct(data?.estimatedGrossMarginPct)} icon={Calculator} onClick={() => onDrillDown("costs")} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="New MRR" value={fmt(data?.newMrrThisMonth)} icon={ArrowUpRight} subtitle="this month" onClick={() => onDrillDown("billing")} />
@@ -569,9 +569,142 @@ function UnitEconomicsTab() {
   );
 }
 
+function CustomerCostsTab() {
+  const [, setLocation] = useLocation();
+  const [search, setSearch] = useState("");
+  const [sortCol, setSortCol] = useState<string>("totalCostCents");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/analytics/customer-costs"],
+    queryFn: adminFetchFn("/api/admin/analytics/customer-costs"),
+  });
+
+  const toggleSort = (col: string) => {
+    if (sortCol === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir("desc");
+    }
+  };
+
+  const cFmt = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const sorted = useMemo(() => {
+    if (!data?.rows) return [];
+    let rows = [...data.rows];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      rows = rows.filter((r: any) => r.name?.toLowerCase().includes(q));
+    }
+    rows.sort((a: any, b: any) => {
+      const av = a[sortCol] ?? 0;
+      const bv = b[sortCol] ?? 0;
+      if (typeof av === "string" && typeof bv === "string") {
+        return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      return sortDir === "asc" ? av - bv : bv - av;
+    });
+    return rows;
+  }, [data?.rows, search, sortCol, sortDir]);
+
+  if (isLoading) return <div className="space-y-4"><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div><Skeleton className="h-64" /></div>;
+
+  const summary = data?.summary;
+  const SortIcon = ({ col }: { col: string }) => (
+    <ArrowUpDown className={`h-3 w-3 inline ml-1 ${sortCol === col ? "text-foreground" : "text-muted-foreground/40"}`} />
+  );
+
+  return (
+    <div className="space-y-6" data-testid="tab-content-customer-costs">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Total Platform Cost" value={cFmt(summary?.totalPlatformCostCents ?? 0)} icon={Wallet} subtitle="last 30 days" />
+        <StatCard label="Avg Cost / Customer" value={cFmt(summary?.avgCostPerCustomerCents ?? 0)} icon={Calculator} subtitle={`${summary?.totalCustomers ?? 0} customers`} />
+        <StatCard label="Highest Cost" value={summary?.highestCostCustomer?.name ?? "—"} icon={AlertTriangle} subtitle={cFmt(summary?.highestCostCustomer?.totalCostCents ?? 0)} />
+        <StatCard label="Unprofitable" value={summary?.unprofitableCount ?? 0} icon={ArrowDownRight} subtitle="negative margin" />
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input placeholder="Search customers..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} data-testid="input-customer-costs-search" />
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("name")}>Customer<SortIcon col="name" /></TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("mrrCents")}>MRR<SortIcon col="mrrCents" /></TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("smsCostCents")}>SMS<SortIcon col="smsCostCents" /></TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("emailCostCents")}>Email<SortIcon col="emailCostCents" /></TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("voiceCostCents")}>Voice AI<SortIcon col="voiceCostCents" /></TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("stripeFeesCents")}>Stripe Fees<SortIcon col="stripeFeesCents" /></TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("allocatedInfraCents")}>Infra<SortIcon col="allocatedInfraCents" /></TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("totalCostCents")}>Total Cost<SortIcon col="totalCostCents" /></TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("netMarginCents")}>Net Margin<SortIcon col="netMarginCents" /></TableHead>
+                  <TableHead className="text-right">Cost Ratio</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sorted.length === 0 ? (
+                  <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground" data-testid="text-no-customer-costs">No customers found</TableCell></TableRow>
+                ) : sorted.map((r: any) => {
+                  const tierConfig = TIER_CONFIG[r.subscriptionTier as keyof typeof TIER_CONFIG];
+                  const barWidth = Math.min(r.costRatioPct, 200);
+                  const barColor = r.costRatioPct > 100 ? "bg-red-500" : r.costRatioPct > 70 ? "bg-yellow-500" : "bg-green-500";
+                  return (
+                    <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/admin/companies/${r.id}`)} data-testid={`row-customer-cost-${r.id}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-2" data-testid={`link-customer-${r.id}`}>
+                          <div className="min-w-0">
+                            <p className="font-medium truncate text-sm" data-testid={`text-customer-name-${r.id}`}>{r.name}</p>
+                            <div className="flex items-center gap-1">
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">{tierConfig?.name || r.subscriptionTier}</Badge>
+                              {r.subscriptionStatus !== "active" && <Badge variant="destructive" className="text-[10px] px-1 py-0">{r.subscriptionStatus}</Badge>}
+                            </div>
+                          </div>
+                          <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-medium" data-testid={`text-mrr-${r.id}`}>{cFmt(r.mrrCents)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-sms-cost-${r.id}`}>{cFmt(r.smsCostCents)}<span className="text-[10px] block">{r.smsSegments} seg</span></TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-email-cost-${r.id}`}>{cFmt(r.emailCostCents)}<span className="text-[10px] block">{r.emailCount}</span></TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-voice-cost-${r.id}`}>{cFmt(r.voiceCostCents)}<span className="text-[10px] block">{r.voiceMinutes} min</span></TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-stripe-cost-${r.id}`}>{cFmt(r.stripeFeesCents)}<span className="text-[10px] block">{r.paidInvoiceCount} inv</span></TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-infra-cost-${r.id}`}>{cFmt(r.allocatedInfraCents)}</TableCell>
+                      <TableCell className="text-right font-medium" data-testid={`text-total-cost-${r.id}`}>{cFmt(r.totalCostCents)}</TableCell>
+                      <TableCell className="text-right">
+                        <span className={`font-medium ${r.netMarginCents >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`} data-testid={`text-margin-${r.id}`}>
+                          {cFmt(r.netMarginCents)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right" data-testid={`text-cost-ratio-${r.id}`}>
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(barWidth / 2, 100)}%` }} />
+                          </div>
+                          <span className={`text-xs font-medium ${r.costRatioPct > 100 ? "text-red-700 dark:text-red-400" : "text-muted-foreground"}`}>{r.costRatioPct}%</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 const TABS = [
   { key: "executive", label: "Executive", icon: BarChart3 },
   { key: "accounts", label: "Accounts", icon: Building2 },
+  { key: "costs", label: "Customer Costs", icon: Wallet },
   { key: "billing", label: "Billing", icon: CreditCard },
   { key: "retention", label: "Retention", icon: Repeat },
   { key: "activation", label: "Activation", icon: Target },
@@ -673,6 +806,7 @@ export default function AdminAnalytics() {
       <div>
         {activeTab === "executive" && <ExecutiveTab onDrillDown={setActiveTab} />}
         {activeTab === "accounts" && <AccountsTab />}
+        {activeTab === "costs" && <CustomerCostsTab />}
         {activeTab === "billing" && <BillingTab />}
         {activeTab === "retention" && <RetentionTab />}
         {activeTab === "activation" && <ActivationTab />}

@@ -6,6 +6,7 @@ import {
   companies, companyUsers, contacts, servicePlans, invoices,
   visits, smsMessages, emailsSent, saasCostsMonthly,
   TIER_CONFIG, messages, messageAttachments, messageExceptions,
+  voiceCalls,
 } from "@shared/schema";
 
 const SMS_COST_PER_SEGMENT_CENTS = 75;
@@ -570,7 +571,105 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
     }
   });
 
-  // 7. Unit Economics
+  // 7a. Customer Costs — per-account itemized cost breakdown
+  const VOICE_COST_PER_MINUTE_CENTS = 50;
+  app.get("/api/admin/analytics/customer-costs", isAdmin as any, async (_req: Request, res: Response) => {
+    try {
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const allCompanies = await db.select().from(companies);
+      const allActive = allCompanies.filter(c => c.subscriptionStatus === "active");
+      const totalActiveWeight = allActive.reduce((s, c) => s + getPlanWeight(c.subscriptionTier), 0);
+
+      const currentMonthKey = monthKey(now);
+      const allSaasCosts = await db.select().from(saasCostsMonthly);
+      const currentMonthCost = allSaasCosts.find(sc => sc.month === currentMonthKey);
+      const monthlyFixedTotal = currentMonthCost
+        ? (currentMonthCost.hostingCents + currentMonthCost.dbCents + currentMonthCost.emailPlatformCents + currentMonthCost.smsPlatformCents + currentMonthCost.monitoringCents + currentMonthCost.otherCents + currentMonthCost.supportLaborCents) / 100
+        : 0;
+      const fixedCostPerWeight = totalActiveWeight > 0 ? monthlyFixedTotal / totalActiveWeight : 0;
+
+      const rows = await Promise.all(allCompanies.map(async (c) => {
+        const [smsResult, emailResult, voiceResult, paidInvoiceResult] = await Promise.all([
+          db.select({ total: sql<number>`coalesce(sum(${smsMessages.segments}), 0)` })
+            .from(smsMessages)
+            .where(and(eq(smsMessages.companyId, c.id), gte(smsMessages.createdAt, thirtyDaysAgo))),
+          db.select({ total: count() })
+            .from(emailsSent)
+            .where(and(eq(emailsSent.companyId, c.id), gte(emailsSent.createdAt, thirtyDaysAgo))),
+          db.select({ total: sql<number>`coalesce(sum(${voiceCalls.durationMinutes}), 0)` })
+            .from(voiceCalls)
+            .where(and(eq(voiceCalls.companyId, c.id), gte(voiceCalls.createdAt, thirtyDaysAgo))),
+          db.select().from(invoices).where(and(
+            eq(invoices.companyId, c.id),
+            eq(invoices.status, "paid"),
+            gte(invoices.paidAt, thirtyDaysAgo)
+          )),
+        ]);
+
+        const smsSegments = Number(smsResult[0]?.total ?? 0);
+        const emailCount = Number(emailResult[0]?.total ?? 0);
+        const voiceMinutes = Number(voiceResult[0]?.total ?? 0);
+        const paidInvs = paidInvoiceResult;
+        const paidTotal = paidInvs.reduce((s, inv) => s + parseFloat(inv.total), 0);
+
+        const smsCostCents = smsSegments * SMS_COST_PER_SEGMENT_CENTS;
+        const emailCostCents = emailCount * EMAIL_COST_PER_UNIT_CENTS;
+        const voiceCostCents = voiceMinutes * VOICE_COST_PER_MINUTE_CENTS;
+        const stripeFeesCents = Math.round(paidTotal * STRIPE_PCT) + (paidInvs.length * STRIPE_FIXED_CENTS);
+
+        const accountWeight = getPlanWeight(c.subscriptionTier);
+        const allocatedInfraCents = Math.round(accountWeight * fixedCostPerWeight * 100);
+
+        const totalCostCents = smsCostCents + emailCostCents + voiceCostCents + stripeFeesCents + allocatedInfraCents;
+        const mrrCents = Math.round(getTierPrice(c.subscriptionTier) * 100);
+        const netMarginCents = mrrCents - totalCostCents;
+        const costRatioPct = mrrCents > 0 ? Math.round((totalCostCents / mrrCents) * 10000) / 100 : 0;
+
+        return {
+          id: c.id,
+          name: c.name,
+          subscriptionTier: c.subscriptionTier,
+          subscriptionStatus: c.subscriptionStatus,
+          mrrCents,
+          smsCostCents,
+          smsSegments,
+          emailCostCents,
+          emailCount,
+          voiceCostCents,
+          voiceMinutes,
+          stripeFeesCents,
+          paidInvoiceCount: paidInvs.length,
+          allocatedInfraCents,
+          totalCostCents,
+          netMarginCents,
+          costRatioPct,
+        };
+      }));
+
+      const totalPlatformCostCents = rows.reduce((s, r) => s + r.totalCostCents, 0);
+      const avgCostPerCustomerCents = rows.length > 0 ? Math.round(totalPlatformCostCents / rows.length) : 0;
+      const unprofitableCount = rows.filter(r => r.netMarginCents < 0).length;
+      const highestCostRow = rows.reduce((max, r) => r.totalCostCents > (max?.totalCostCents ?? 0) ? r : max, rows[0]);
+
+      res.json({
+        rows,
+        summary: {
+          totalPlatformCostCents,
+          avgCostPerCustomerCents,
+          unprofitableCount,
+          highestCostCustomer: highestCostRow ? { id: highestCostRow.id, name: highestCostRow.name, totalCostCents: highestCostRow.totalCostCents } : null,
+          totalCustomers: rows.length,
+        },
+      });
+    } catch (err) {
+      console.error("Customer costs analytics error:", err);
+      res.status(500).json({ error: "Failed to compute customer costs analytics" });
+    }
+  });
+
+  // 7b. Unit Economics
   app.get("/api/admin/analytics/unit-economics", isAdmin as any, async (_req: Request, res: Response) => {
     try {
       const now = new Date();
