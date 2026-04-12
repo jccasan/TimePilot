@@ -39,6 +39,7 @@ import {
   getCachedStripePrices,
   createVoicePlanCheckout,
   migrateCustomerToConnectedAccount,
+  isCustomerOnPlatform,
   ensureConnectedCustomer,
 } from "./services/stripe";
 import { seedRetellKnowledgeBase, provisionRetellNumber } from "./services/retell";
@@ -13395,7 +13396,12 @@ Return ONLY valid JSON, no markdown.`,
           if (!contact.stripeCustomerId) continue;
 
           if (dryRun) {
-            companyResult.migratedContacts++;
+            const isPlatform = await isCustomerOnPlatform(contact.stripeCustomerId);
+            if (isPlatform) {
+              companyResult.migratedContacts++;
+            } else {
+              companyResult.skippedContacts++;
+            }
             continue;
           }
 
