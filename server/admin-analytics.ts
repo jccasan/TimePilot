@@ -89,9 +89,9 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
 
       const totalSmsSeg = Number(smsCountResult?.total ?? 0);
       const totalEmailCount = Number(emailCountResult?.total ?? 0);
-      const totalTwilioCostEst = (totalSmsSeg * SMS_COST_PER_SEGMENT_CENTS) / 100;
-      const totalSendgridCostEst = (totalEmailCount * EMAIL_COST_PER_UNIT_CENTS) / 100;
-      const totalCosts = totalTwilioCostEst + totalSendgridCostEst;
+      const totalTelnyxCostEst = (totalSmsSeg * SMS_COST_PER_SEGMENT_CENTS) / 10000;
+      const totalEmailCostEst = (totalEmailCount * EMAIL_COST_PER_UNIT_CENTS) / 10000;
+      const totalCosts = totalTelnyxCostEst + totalEmailCostEst;
       const estimatedGrossMarginPct = mrr > 0 ? ((mrr - totalCosts) / mrr) * 100 : 0;
 
       res.json({
@@ -99,8 +99,8 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
         newMrrThisMonth, churnedMrrThisMonth, logoChurnPct,
         nrr: Math.round(nrr * 100) / 100,
         grr: Math.round(grr * 100) / 100,
-        totalTwilioCostEst: Math.round(totalTwilioCostEst * 100) / 100,
-        totalSendgridCostEst: Math.round(totalSendgridCostEst * 100) / 100,
+        totalTelnyxCostEst: Math.round(totalTelnyxCostEst * 100) / 100,
+        totalEmailCostEst: Math.round(totalEmailCostEst * 100) / 100,
         estimatedGrossMarginPct: Math.round(estimatedGrossMarginPct * 100) / 100,
       });
     } catch (err) {
@@ -187,7 +187,7 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
         const totalInvoices = totalInvoiceCountResult[0]?.cnt ?? 0;
         const paidInvoices = paidInvoiceCountResult[0]?.cnt ?? 0;
         const smsSeg30d = Number(smsResult[0]?.total ?? 0);
-        const smsCost30dCents = smsSeg30d * SMS_COST_PER_SEGMENT_CENTS;
+        const smsCost30dCents = Math.round(smsSeg30d * SMS_COST_PER_SEGMENT_CENTS / 100);
 
         const mrrCents = Math.round(getTierPrice(c.subscriptionTier) * 100);
         const accountWeight = getPlanWeight(c.subscriptionTier);
@@ -716,9 +716,9 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
         const [emailM] = await db.select({ total: count() })
           .from(emailsSent).where(and(gte(emailsSent.createdAt, d), lte(emailsSent.createdAt, mEnd)));
 
-        const twilioCost = (Number(smsM?.total ?? 0) * SMS_COST_PER_SEGMENT_CENTS) / 100;
-        const sendgridCost = (Number(emailM?.total ?? 0) * EMAIL_COST_PER_UNIT_CENTS) / 100;
-        const totalVariableCosts = stripeFees + twilioCost + sendgridCost;
+        const telnyxCost = (Number(smsM?.total ?? 0) * SMS_COST_PER_SEGMENT_CENTS) / 10000;
+        const emailCost = (Number(emailM?.total ?? 0) * EMAIL_COST_PER_UNIT_CENTS) / 10000;
+        const totalVariableCosts = stripeFees + telnyxCost + emailCost;
 
         const sc = saasCostMap[mKey];
         const fixedCosts = sc
@@ -742,8 +742,8 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
           month: mKey,
           revenueGross: Math.round(revenueGross * 100) / 100,
           stripeFees: Math.round(stripeFees * 100) / 100,
-          twilioCost: Math.round(twilioCost * 100) / 100,
-          sendgridCost: Math.round(sendgridCost * 100) / 100,
+          telnyxCost: Math.round(telnyxCost * 100) / 100,
+          emailCost: Math.round(emailCost * 100) / 100,
           totalVariableCosts: Math.round(totalVariableCosts * 100) / 100,
           fixedCosts: Math.round(fixedCosts * 100) / 100,
           totalActiveWeight,

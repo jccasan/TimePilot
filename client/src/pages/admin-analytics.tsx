@@ -87,8 +87,8 @@ function ExecutiveTab({ onDrillDown }: { onDrillDown: (tab: string) => void }) {
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <StatCard label="GRR" value={pct(data?.grr)} icon={Activity} onClick={() => onDrillDown("retention")} />
-        <StatCard label="Twilio Cost" value={fmt(data?.totalTwilioCostEst)} icon={Phone} onClick={() => onDrillDown("messaging")} />
-        <StatCard label="SendGrid Cost" value={fmt(data?.totalSendgridCostEst)} icon={Mail} onClick={() => onDrillDown("messaging")} />
+        <StatCard label="Telnyx Cost" value={fmt(data?.totalTelnyxCostEst)} icon={Phone} onClick={() => onDrillDown("messaging")} />
+        <StatCard label="Email Cost" value={fmt(data?.totalEmailCostEst)} icon={Mail} onClick={() => onDrillDown("messaging")} />
       </div>
     </div>
   );
@@ -527,8 +527,8 @@ function UnitEconomicsTab() {
                     <TableHead>Month</TableHead>
                     <TableHead className="text-right">Revenue</TableHead>
                     <TableHead className="text-right">Stripe</TableHead>
-                    <TableHead className="text-right">Twilio</TableHead>
-                    <TableHead className="text-right">SendGrid</TableHead>
+                    <TableHead className="text-right">Telnyx</TableHead>
+                    <TableHead className="text-right">Email</TableHead>
                     <TableHead className="text-right">Fixed</TableHead>
                     <TableHead className="text-right">Weight</TableHead>
                     <TableHead className="text-right">$/wt</TableHead>
@@ -542,8 +542,8 @@ function UnitEconomicsTab() {
                       <TableCell className="font-medium" data-testid={`text-economics-month-${m.month}`}>{m.month}</TableCell>
                       <TableCell className="text-right" data-testid={`text-economics-revenue-${m.month}`}>{fmt(m.revenueGross)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{fmt(m.stripeFees)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{fmt(m.twilioCost)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{fmt(m.sendgridCost)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{fmt(m.telnyxCost)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{fmt(m.emailCost)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{fmt(m.fixedCosts)}</TableCell>
                       <TableCell className="text-right text-muted-foreground" data-testid={`text-weight-${m.month}`}>{m.totalActiveWeight ?? 0}</TableCell>
                       <TableCell className="text-right text-muted-foreground" data-testid={`text-cost-per-weight-${m.month}`}>{fmt(m.costPerWeight)}</TableCell>
