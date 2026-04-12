@@ -360,7 +360,6 @@ export async function migrateCustomerToConnectedAccount(params: {
   for (const pm of platformMethods.data) {
     try {
       const cloned = await stripe.paymentMethods.create({
-        customer: newCustomer.id,
         payment_method: pm.id,
       }, { stripeAccount: params.stripeAccount });
       await stripe.paymentMethods.attach(cloned.id, {
@@ -371,6 +370,14 @@ export async function migrateCustomerToConnectedAccount(params: {
       failedMethods.push(pm.id);
       console.warn(`[Stripe Migration] Failed to clone payment method ${pm.id}: ${cloneErr.message}`);
     }
+  }
+
+  const destMethods = await stripe.paymentMethods.list({
+    customer: newCustomer.id,
+    type: "card",
+  }, { stripeAccount: params.stripeAccount });
+  if (destMethods.data.length !== migratedCount) {
+    console.warn(`[Stripe Migration] PM count mismatch for customer ${newCustomer.id}: expected ${migratedCount}, found ${destMethods.data.length}`);
   }
 
   const status = migratedCount === platformMethods.data.length ? "migrated" : (migratedCount > 0 ? "partial" : "no_methods");
