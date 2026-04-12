@@ -10188,6 +10188,8 @@ Return ONLY valid JSON, no markdown.`,
                 lastPaymentAttempt: new Date(),
               });
               notify(resolvedCompanyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}.`, `/invoices`);
+            } else {
+              console.warn(`[Stripe Webhook] payment_intent.payment_failed: tenant ${resolvedCompanyId} resolved but invoice ${invoiceId} not found (pi ${pi.id}).`);
             }
           } else {
             console.warn(`[Stripe Webhook] payment_intent.payment_failed: could not resolve tenant for invoice ${invoiceId} (pi ${pi.id}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`);
