@@ -38,18 +38,23 @@ function marginColor(n: number): string {
   return n >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400";
 }
 
-function StatCard({ label, value, icon: Icon, trend, subtitle }: {
-  label: string; value: string | number; icon: any; trend?: "up" | "down" | null; subtitle?: string;
+function StatCard({ label, value, icon: Icon, trend, subtitle, onClick }: {
+  label: string; value: string | number; icon: any; trend?: "up" | "down" | null; subtitle?: string; onClick?: () => void;
 }) {
   const testId = `text-stat-${label.toLowerCase().replace(/\s/g, "-")}`;
   return (
-    <Card data-testid={`card-stat-${label.toLowerCase().replace(/\s/g, "-")}`}>
+    <Card
+      data-testid={`card-stat-${label.toLowerCase().replace(/\s/g, "-")}`}
+      className={onClick ? "cursor-pointer hover-elevate transition-shadow" : ""}
+      onClick={onClick}
+    >
       <CardContent className="pt-4 pb-3 px-4">
         <div className="flex items-center gap-2 mb-1">
           <Icon className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">{label}</span>
           {trend === "up" && <ArrowUpRight className="h-3 w-3 text-green-700 dark:text-green-400" />}
           {trend === "down" && <ArrowDownRight className="h-3 w-3 text-red-700 dark:text-red-400" />}
+          {onClick && <ChevronRight className="h-3 w-3 text-muted-foreground ml-auto" />}
         </div>
         <p className="text-xl font-bold" data-testid={testId}>{value}</p>
         {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
@@ -58,7 +63,7 @@ function StatCard({ label, value, icon: Icon, trend, subtitle }: {
   );
 }
 
-function ExecutiveTab() {
+function ExecutiveTab({ onDrillDown }: { onDrillDown: (tab: string) => void }) {
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/analytics/executive"],
     queryFn: adminFetchFn("/api/admin/analytics/executive"),
@@ -69,21 +74,21 @@ function ExecutiveTab() {
   return (
     <div className="space-y-6" data-testid="tab-content-executive">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Active Accounts" value={data?.activeAccounts ?? 0} icon={Building2} subtitle={`${data?.totalAccounts ?? 0} total`} />
-        <StatCard label="MRR" value={fmt(data?.mrr)} icon={DollarSign} />
-        <StatCard label="ARR" value={fmt(data?.arr)} icon={TrendingUp} />
-        <StatCard label="Gross Margin" value={pct(data?.estimatedGrossMarginPct)} icon={Calculator} />
+        <StatCard label="Active Accounts" value={data?.activeAccounts ?? 0} icon={Building2} subtitle={`${data?.totalAccounts ?? 0} total`} onClick={() => onDrillDown("accounts")} />
+        <StatCard label="MRR" value={fmt(data?.mrr)} icon={DollarSign} onClick={() => onDrillDown("billing")} />
+        <StatCard label="ARR" value={fmt(data?.arr)} icon={TrendingUp} onClick={() => onDrillDown("billing")} />
+        <StatCard label="Gross Margin" value={pct(data?.estimatedGrossMarginPct)} icon={Calculator} onClick={() => onDrillDown("economics")} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="New MRR" value={fmt(data?.newMrrThisMonth)} icon={ArrowUpRight} subtitle="this month" />
-        <StatCard label="Churned MRR" value={fmt(data?.churnedMrrThisMonth)} icon={ArrowDownRight} subtitle="this month" />
-        <StatCard label="Logo Churn" value={pct(data?.logoChurnPct)} icon={AlertTriangle} />
-        <StatCard label="Net Revenue Retention" value={pct(data?.nrr)} icon={Repeat} />
+        <StatCard label="New MRR" value={fmt(data?.newMrrThisMonth)} icon={ArrowUpRight} subtitle="this month" onClick={() => onDrillDown("billing")} />
+        <StatCard label="Churned MRR" value={fmt(data?.churnedMrrThisMonth)} icon={ArrowDownRight} subtitle="this month" onClick={() => onDrillDown("retention")} />
+        <StatCard label="Logo Churn" value={pct(data?.logoChurnPct)} icon={AlertTriangle} onClick={() => onDrillDown("retention")} />
+        <StatCard label="Net Revenue Retention" value={pct(data?.nrr)} icon={Repeat} onClick={() => onDrillDown("retention")} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatCard label="GRR" value={pct(data?.grr)} icon={Activity} />
-        <StatCard label="Twilio Cost" value={fmt(data?.totalTwilioCostEst)} icon={Phone} />
-        <StatCard label="SendGrid Cost" value={fmt(data?.totalSendgridCostEst)} icon={Mail} />
+        <StatCard label="GRR" value={pct(data?.grr)} icon={Activity} onClick={() => onDrillDown("retention")} />
+        <StatCard label="Twilio Cost" value={fmt(data?.totalTwilioCostEst)} icon={Phone} onClick={() => onDrillDown("messaging")} />
+        <StatCard label="SendGrid Cost" value={fmt(data?.totalSendgridCostEst)} icon={Mail} onClick={() => onDrillDown("messaging")} />
       </div>
     </div>
   );
@@ -666,7 +671,7 @@ export default function AdminAnalytics() {
       </div>
 
       <div>
-        {activeTab === "executive" && <ExecutiveTab />}
+        {activeTab === "executive" && <ExecutiveTab onDrillDown={setActiveTab} />}
         {activeTab === "accounts" && <AccountsTab />}
         {activeTab === "billing" && <BillingTab />}
         {activeTab === "retention" && <RetentionTab />}
