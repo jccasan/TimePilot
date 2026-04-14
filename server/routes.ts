@@ -15138,11 +15138,14 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/public/check-zip/:slug/:zip", async (req: Request, res: Response) => {
     try {
       const { slug, zip } = req.params;
+      const normalizedZip = zip.trim().slice(0, 5);
+      if (!/^\d{5}$/.test(normalizedZip)) {
+        return res.status(400).json({ error: "Invalid ZIP code format" });
+      }
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
       const zones = await storage.getServiceZones(company.id);
-      const normalizedZip = zip.trim().slice(0, 5);
       const activeZones = zones.filter(z => z.isActive);
 
       if (activeZones.length === 0) {

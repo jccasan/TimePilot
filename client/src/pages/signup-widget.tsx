@@ -373,7 +373,6 @@ export default function SignupWidget() {
   const [currentStep, setCurrentStep] = useState(1);
   const [zipCode, setZipCode] = useState("");
   const [zipError, setZipError] = useState<string | null>(null);
-  const [zipChecked, setZipChecked] = useState(false);
 
   const [selectedFreq, setSelectedFreq] = useState("");
   const [selectedDogTier, setSelectedDogTier] = useState("");
