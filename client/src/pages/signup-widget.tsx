@@ -501,9 +501,7 @@ export default function SignupWidget() {
       const pricingItemId = currentTier?.pricingItemId || undefined;
       const lotAddonId = currentLot?.pricingItemId || undefined;
 
-      const lastCleanupLabel = LAST_CLEANUP_OPTIONS.find(o => o.value === lastCleanup)?.label || "";
       const noteParts: string[] = [];
-      if (lastCleanupLabel) noteParts.push(`Last cleanup: ${lastCleanupLabel}`);
       if (couponCode.trim()) noteParts.push(`Coupon code: ${couponCode.trim()}`);
 
       const res = await fetch(`/api/public/leads/${slug}`, {
@@ -518,6 +516,7 @@ export default function SignupWidget() {
           serviceDay: serviceDay || undefined,
           pricingItemId,
           lotAddonId,
+          lastCleanup: lastCleanup || undefined,
           notes: noteParts.length > 0 ? noteParts.join(". ") : undefined,
         }),
       });
@@ -537,12 +536,11 @@ export default function SignupWidget() {
   }, []);
 
   const hasLotAddons = parsed && parsed.lotAddons.length > 0;
-  const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!lastCleanup && (!hasLotAddons || !!selectedLot);
+  const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!lastCleanup;
   const isStep3Valid = formData.firstName.trim().length > 0 &&
     formData.streetAddress.trim().length > 0 &&
     formData.city.trim().length > 0 &&
-    formData.state.trim().length > 0 &&
-    smsOptIn;
+    formData.state.trim().length > 0;
 
   if (isLoading) {
     return (
@@ -830,7 +828,7 @@ export default function SignupWidget() {
 
                   {hasLotAddons && (
                     <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Estimated Yard Size *</Label>
+                      <Label className="text-sm font-semibold">Estimated Yard Size (optional)</Label>
                       <div className="space-y-1.5">
                         {parsed!.lotAddons.map(lot => (
                           <RadioOption

@@ -15560,6 +15560,7 @@ Return ONLY valid JSON, no markdown.`,
     serviceDay: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
     pricingItemId: z.string().uuid().optional(),
     lotAddonId: z.string().uuid().optional(),
+    lastCleanup: z.enum(["1_week", "2_weeks", "3_weeks", "1_month", "2_months", "3_4_months", "never"]).optional(),
     notes: z.string().max(2000).optional(),
   });
 
@@ -15585,7 +15586,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const parsed = publicLeadSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors });
-      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay, pricingItemId, lotAddonId, notes } = parsed.data;
+      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay, pricingItemId, lotAddonId, lastCleanup, notes } = parsed.data;
 
       const contact = await storage.createContact({
         companyId: company.id,
@@ -15601,7 +15602,10 @@ Return ONLY valid JSON, no markdown.`,
         yardSize,
         serviceFrequency,
         serviceDay: serviceDay || null,
-        notes: notes || null,
+        notes: [
+          lastCleanup ? `Last cleanup: ${lastCleanup}` : null,
+          notes || null,
+        ].filter(Boolean).join(". ") || null,
         status: "lead",
         leadSource: "website_widget",
       });
