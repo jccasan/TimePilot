@@ -1001,6 +1001,7 @@ export const emailStatusEnum = pgEnum("email_status", ["queued", "sent", "delive
 export const emailsSent = pgTable("emails_sent", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id"),
   category: varchar("category", { length: 100 }).default("general"),
   status: emailStatusEnum("email_log_status").notNull().default("sent"),
   toAddress: varchar("to_address", { length: 255 }).notNull(),

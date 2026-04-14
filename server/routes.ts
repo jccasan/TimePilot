@@ -15611,6 +15611,7 @@ Return ONLY valid JSON, no markdown.`,
     lotAddonId: z.string().uuid().optional(),
     lastCleanup: z.enum(["1_week", "2_weeks", "3_weeks", "1_month", "2_months", "3_4_months", "never"]).optional(),
     notes: z.string().max(2000).optional(),
+    smsOptIn: z.boolean().optional().default(false),
   });
 
   const publicLeadRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -15635,7 +15636,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const parsed = publicLeadSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors });
-      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay, pricingItemId, lotAddonId, lastCleanup, notes } = parsed.data;
+      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay, pricingItemId, lotAddonId, lastCleanup, notes, smsOptIn } = parsed.data;
 
       const contact = await storage.createContact({
         companyId: company.id,
@@ -15754,7 +15755,7 @@ Return ONLY valid JSON, no markdown.`,
             .replace(/\{companyName\}/g, companyName)
             .replace(/\{dogs\}/g, String(numberOfDogs));
 
-        if (phone) {
+        if (phone && smsOptIn) {
           (async () => {
             try {
               const smsConfigured = await isSmsConfiguredForCompany(company.id);
@@ -15777,10 +15778,18 @@ Return ONLY valid JSON, no markdown.`,
               const safeFirstName = escapeHtml(firstName);
               const subject = `Your Quote from ${companyName}`;
               const priceDisplay = callForQuote ? "Custom Quote" : `$${priceDollars}/visit`;
-              const text = mergeReplace(`Hi {firstName},\n\nThank you for requesting a quote from {companyName}!\n\nYour estimated price for {frequency} service with {dogs} dog(s) is ${priceDollars === "Call for Quote" ? "a custom quote — we'll be in touch!" : "$" + priceDollars + "/visit"}.\n\nWe'll follow up shortly to confirm your schedule.\n\nBest regards,\n{companyName}`);
+              const cleanupLabel = lastCleanup ? lastCleanup.replace(/_/g, " ") : null;
+              const initialCleanupNote = cleanupLabel
+                ? `<tr><td style="padding: 6px 0; color: #6b7280;">Initial Cleanup</td><td style="padding: 6px 0; text-align: right; font-weight: 600; color: #1f2937;">${escapeHtml(cleanupLabel)} since last service</td></tr>`
+                : "";
+              const logoHtml = company.logoUrl
+                ? `<img src="${escapeHtml(company.logoUrl)}" alt="${safeCompanyName}" style="max-height: 48px; max-width: 200px; margin-bottom: 8px;" /><br/>`
+                : "";
+              const text = mergeReplace(`Hi {firstName},\n\nThank you for requesting a quote from {companyName}!\n\nYour estimated price for {frequency} service with {dogs} dog(s) is ${priceDollars === "Call for Quote" ? "a custom quote — we'll be in touch!" : "$" + priceDollars + "/visit"}.${cleanupLabel ? `\nInitial cleanup: ${cleanupLabel} since last service.` : ""}\n\nWe'll follow up shortly to confirm your schedule.\n\nBest regards,\n{companyName}`);
               const html = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                   <div style="background-color: #2d8a5e; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+                    ${logoHtml}
                     <h1 style="color: white; margin: 0; font-size: 22px;">${safeCompanyName}</h1>
                   </div>
                   <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none;">
@@ -15796,6 +15805,7 @@ Return ONLY valid JSON, no markdown.`,
                           <td style="padding: 6px 0; color: #6b7280;">Number of Dogs</td>
                           <td style="padding: 6px 0; text-align: right; font-weight: 600; color: #1f2937;">${numberOfDogs}</td>
                         </tr>
+                        ${initialCleanupNote}
                         <tr style="border-top: 1px solid #d1fae5;">
                           <td style="padding: 10px 0 0; color: #6b7280; font-size: 15px;">Estimated Price</td>
                           <td style="padding: 10px 0 0; text-align: right; font-weight: 700; font-size: 20px; color: #16a34a;">${escapeHtml(priceDisplay)}</td>
@@ -15803,6 +15813,7 @@ Return ONLY valid JSON, no markdown.`,
                       </table>
                     </div>
                     <p style="margin: 0 0 8px; color: #4b5563;">We'll follow up shortly to confirm your schedule and get you started!</p>
+                    ${company.phone ? `<p style="margin: 0 0 16px;"><a href="tel:${escapeHtml(company.phone)}" style="display: inline-block; background-color: #16a34a; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600;">Contact Us</a></p>` : ""}
                     <p style="margin: 20px 0 0; color: #4b5563;">Best regards,<br/><strong>${safeCompanyName}</strong></p>
                   </div>
                   <div style="padding: 12px; text-align: center; font-size: 11px; color: #9ca3af;">
@@ -15811,7 +15822,7 @@ Return ONLY valid JSON, no markdown.`,
                 </div>`;
               const emailResult = await sendEmail({ to: email, subject, text, html, companyId: company.id, senderName: companyName, replyTo: company.email || undefined });
               if (emailResult.success) {
-                await logEmailSent(company.id, email, subject, "quote_follow_up", emailResult.messageId);
+                await logEmailSent(company.id, email, subject, "quote_follow_up", emailResult.messageId, contact.id);
               } else {
                 console.error("[quote-followup-email] Failed:", emailResult.error);
               }

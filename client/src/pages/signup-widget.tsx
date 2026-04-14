@@ -558,6 +558,7 @@ export default function SignupWidget() {
           lotAddonId,
           lastCleanup: lastCleanup || undefined,
           notes: noteParts.length > 0 ? noteParts.join(". ") : undefined,
+          smsOptIn,
         }),
       });
       if (!res.ok) {

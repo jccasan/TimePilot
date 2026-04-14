@@ -256,9 +256,10 @@ export function generateInvoiceEmailHtml(data: {
   return { subject, text, html };
 }
 
-export async function logEmailSent(companyId: string, toAddress: string, subject: string, category: string, sendgridMessageId?: string): Promise<void> {
+export async function logEmailSent(companyId: string, toAddress: string, subject: string, category: string, sendgridMessageId?: string, contactId?: string): Promise<void> {
   await db.insert(emailsSent).values({
     companyId,
+    contactId: contactId || null,
     toAddress,
     subject,
     category,
