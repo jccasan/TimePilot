@@ -410,7 +410,7 @@ export default function SignupWidget() {
     return searchParams.get("preview") === "true";
   }, []);
 
-  const { data: authUser } = useQuery<{ id: string } | null>({
+  const { data: authUser, isLoading: authLoading } = useQuery<{ id: string; role: string } | null>({
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
       const res = await fetch("/api/auth/user");
@@ -421,7 +421,8 @@ export default function SignupWidget() {
     retry: false,
   });
 
-  const isPreview = previewRequested && !!authUser;
+  const isPreview = previewRequested && !!authUser && (authUser.role === "owner" || authUser.role === "admin");
+  const previewResolving = previewRequested && authLoading;
 
   const track = useQuoteTracking(slug, isEmbed);
 
@@ -1040,7 +1041,7 @@ export default function SignupWidget() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (isPreview) return;
+                    if (isPreview || previewResolving) return;
                     if (isStep3Valid) {
                       submitMutation.mutate();
                     }
@@ -1193,7 +1194,7 @@ export default function SignupWidget() {
                       style={{ backgroundColor: isPreview ? "#9ca3af" : brandStyles.buttonBg }}
                       onMouseEnter={(e) => { if (!isPreview) e.currentTarget.style.backgroundColor = brandStyles.buttonHover; }}
                       onMouseLeave={(e) => { if (!isPreview) e.currentTarget.style.backgroundColor = brandStyles.buttonBg; }}
-                      disabled={isPreview || !isStep3Valid || submitMutation.isPending}
+                      disabled={isPreview || previewResolving || !isStep3Valid || submitMutation.isPending}
                       data-testid="button-get-quote"
                     >
                       {isPreview ? (
