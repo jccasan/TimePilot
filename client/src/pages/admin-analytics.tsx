@@ -970,6 +970,24 @@ function FunnelTab() {
         </CardContent>
       </Card>
 
+      {data?.topZipCodes?.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Top ZIP Codes by Submissions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {data.topZipCodes.map((z: any) => (
+                <div key={z.zipCode} className="flex items-center justify-between gap-2" data-testid={`row-zip-${z.zipCode}`}>
+                  <span className="text-sm font-mono" data-testid={`text-zip-code-${z.zipCode}`}>{z.zipCode}</span>
+                  <Badge variant="outline" data-testid={`badge-zip-count-${z.zipCode}`}>{z.submissions} submissions</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {data?.byCompany?.length > 0 && (
         <Card>
           <CardHeader className="pb-2">

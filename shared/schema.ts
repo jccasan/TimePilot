@@ -1809,9 +1809,7 @@ export const quoteFormEvents = pgTable("quote_form_events", {
   sessionId: varchar("session_id", { length: 64 }).notNull(),
   event: varchar("event", { length: 50 }).notNull(),
   step: integer("step"),
-  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
-  referrer: text("referrer"),
-  userAgent: text("user_agent"),
+  zipCode: varchar("zip_code", { length: 5 }),
   isEmbed: boolean("is_embed").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -1819,6 +1817,7 @@ export const quoteFormEvents = pgTable("quote_form_events", {
   index("idx_qfe_session").on(table.sessionId),
   index("idx_qfe_event").on(table.companyId, table.event),
   index("idx_qfe_created").on(table.companyId, table.createdAt),
+  index("idx_qfe_zip").on(table.companyId, table.zipCode),
 ]);
 
 export const insertQuoteFormEventSchema = createInsertSchema(quoteFormEvents).omit({ id: true, createdAt: true });

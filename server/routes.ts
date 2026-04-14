@@ -15552,13 +15552,7 @@ Return ONLY valid JSON, no markdown.`,
     sessionId: z.string().min(8).max(64),
     event: z.enum(["form_loaded", "zip_entered", "zip_passed", "zip_failed", "step2_completed", "step3_started", "submitted", "quote_shown"]),
     step: z.number().int().min(0).max(4).optional(),
-    metadata: z.record(z.string().max(500)).optional().transform(val => {
-      if (!val) return val;
-      const keys = Object.keys(val);
-      if (keys.length > 10) return Object.fromEntries(keys.slice(0, 10).map(k => [k, val[k]]));
-      return val;
-    }),
-    referrer: z.string().max(2000).optional(),
+    zipCode: z.string().regex(/^\d{5}$/).optional(),
     isEmbed: z.boolean().optional(),
   });
 
@@ -15585,15 +15579,13 @@ Return ONLY valid JSON, no markdown.`,
       const parsed = quoteTrackSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
 
-      const { sessionId, event, step, metadata, referrer, isEmbed } = parsed.data;
+      const { sessionId, event, step, zipCode, isEmbed } = parsed.data;
       await db.insert(quoteFormEvents).values({
         companyId: company.id,
         sessionId,
         event,
         step: step ?? null,
-        metadata: metadata ?? null,
-        referrer: referrer ?? null,
-        userAgent: req.get("user-agent") || null,
+        zipCode: zipCode ?? null,
         isEmbed: isEmbed ?? false,
       });
 

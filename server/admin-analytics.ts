@@ -1077,6 +1077,21 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
         (f as any).pct = loaded > 0 ? (f.sessions / loaded * 100) : 0;
       }
 
+      const topZips = await db
+        .select({
+          zipCode: quoteFormEvents.zipCode,
+          submissions: sql<number>`COUNT(DISTINCT ${quoteFormEvents.sessionId})`,
+        })
+        .from(quoteFormEvents)
+        .where(and(
+          ...conditions,
+          eq(quoteFormEvents.event, "submitted"),
+          sql`${quoteFormEvents.zipCode} IS NOT NULL`,
+        ))
+        .groupBy(quoteFormEvents.zipCode)
+        .orderBy(sql`COUNT(DISTINCT ${quoteFormEvents.sessionId}) DESC`)
+        .limit(15);
+
       res.json({
         days,
         totalSessions: Number(totalSessions[0]?.cnt || 0),
@@ -1085,6 +1100,7 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
         embedVsDirect: embedMap,
         daily: dailyMap,
         byCompany: byCompany.slice(0, 20),
+        topZipCodes: topZips.map(z => ({ zipCode: z.zipCode, submissions: Number(z.submissions) })),
         overallConversion: loaded > 0
           ? ((sessionMap.submitted || 0) / loaded * 100)
           : 0,

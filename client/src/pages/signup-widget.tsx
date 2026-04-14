@@ -23,18 +23,11 @@ function StepTracker({ track }: { track: (event: string, step?: number) => void 
   return null;
 }
 
-function generateSessionId(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "";
-  for (let i = 0; i < 16; i++) result += chars[Math.floor(Math.random() * chars.length)];
-  return result;
-}
-
 function useQuoteTracking(slug: string, isEmbed: boolean) {
-  const sessionId = useRef(generateSessionId());
+  const sessionId = useRef(crypto.randomUUID());
   const firedRef = useRef<Set<string>>(new Set());
 
-  const track = useCallback((event: string, step?: number, metadata?: Record<string, unknown>) => {
+  const track = useCallback((event: string, step?: number, zipCode?: string) => {
     if (firedRef.current.has(event)) return;
     firedRef.current.add(event);
     const body: Record<string, unknown> = {
@@ -43,8 +36,7 @@ function useQuoteTracking(slug: string, isEmbed: boolean) {
       isEmbed,
     };
     if (step !== undefined) body.step = step;
-    if (metadata) body.metadata = metadata;
-    try { body.referrer = document.referrer || undefined; } catch {}
+    if (zipCode) body.zipCode = zipCode;
     fetch(`/api/public/quote-events/${slug}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -508,7 +500,7 @@ export default function SignupWidget() {
       if (normalizedZip.length < 5 || !/^\d{5}$/.test(normalizedZip)) {
         throw new Error("Please enter a valid 5-digit ZIP code.");
       }
-      track("zip_entered", 1, { zip: normalizedZip });
+      track("zip_entered", 1, normalizedZip);
       const res = await fetch(`/api/public/check-zip/${slug}/${normalizedZip}`);
       if (!res.ok) throw new Error("Unable to check service area. Please try again.");
       return res.json() as Promise<ZipCheckResult>;
@@ -516,10 +508,10 @@ export default function SignupWidget() {
     onSuccess: (data) => {
       if (data.inServiceArea) {
         setZipError(null);
-        track("zip_passed", 1);
+        track("zip_passed", 1, zipCode.trim().slice(0, 5));
         setCurrentStep(2);
       } else {
-        track("zip_failed", 1);
+        track("zip_failed", 1, zipCode.trim().slice(0, 5));
         setZipError("Sorry, we don't currently service your area. Please check back soon!");
       }
     },
@@ -1021,7 +1013,7 @@ export default function SignupWidget() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (isStep3Valid) {
-                      track("submitted", 3);
+                      track("submitted", 3, zipCode.trim().slice(0, 5));
                       submitMutation.mutate();
                     }
                   }}
