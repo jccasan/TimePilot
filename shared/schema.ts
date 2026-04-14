@@ -1575,6 +1575,7 @@ export const serviceZones = pgTable("service_zones", {
   zipCode: varchar("zip_code", { length: 20 }).notNull(),
   dayOfWeek: dayOfWeekEnum("day_of_week").notNull().default("tbd"),
   label: varchar("label", { length: 100 }),
+  priceSurchargePercent: integer("price_surcharge_percent").notNull().default(0),
   latitude: decimal("latitude", { precision: 10, scale: 7 }),
   longitude: decimal("longitude", { precision: 10, scale: 7 }),
   isActive: boolean("is_active").notNull().default(true),

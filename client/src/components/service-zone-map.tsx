@@ -6,12 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Plus, Trash2, Loader2 } from "lucide-react";
+import { MapPin, Plus, Trash2, Loader2, Percent } from "lucide-react";
 
 export type ZoneEntry = {
   zipCode: string;
   dayOfWeek: string;
   label?: string;
+  priceSurchargePercent?: number;
   latitude?: number;
   longitude?: number;
   id?: string;
@@ -192,6 +193,11 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress, compact }
     onZonesChange(zones.map(z => z.zipCode === zipCode ? { ...z, dayOfWeek: day } : z));
   };
 
+  const handleSurchargeChange = (zipCode: string, value: string) => {
+    const num = Math.max(0, Math.min(200, Math.round(Number(value) || 0)));
+    onZonesChange(zones.map(z => z.zipCode === zipCode ? { ...z, priceSurchargePercent: num } : z));
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -254,6 +260,19 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress, compact }
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={200}
+                    value={zone.priceSurchargePercent ?? 0}
+                    onChange={(e) => handleSurchargeChange(zone.zipCode, e.target.value)}
+                    className="h-8 w-16 text-xs text-center"
+                    title="Price surcharge percentage for this zone"
+                    data-testid={`input-surcharge-${zone.zipCode}`}
+                  />
+                  <Percent className="h-3 w-3 text-muted-foreground shrink-0" />
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"

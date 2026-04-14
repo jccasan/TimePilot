@@ -2479,6 +2479,7 @@ function ServiceZonesPanel() {
         zipCode: z.zipCode,
         dayOfWeek: z.dayOfWeek,
         label: z.label,
+        priceSurchargePercent: z.priceSurchargePercent ?? 0,
         latitude: z.latitude ? parseFloat(z.latitude) : undefined,
         longitude: z.longitude ? parseFloat(z.longitude) : undefined,
       })));
@@ -2511,12 +2512,12 @@ function ServiceZonesPanel() {
         for (const zone of zones) {
           if (zone.id) {
             const existing = existingZones.find((e: any) => e.id === zone.id);
-            if (existing && existing.dayOfWeek !== zone.dayOfWeek) {
+            if (existing && (existing.dayOfWeek !== zone.dayOfWeek || (existing.priceSurchargePercent ?? 0) !== (zone.priceSurchargePercent ?? 0))) {
               await fetch(`/api/service-zones/${zone.id}`, {
                 method: "PATCH",
                 credentials: "include",
                 headers: authHeaders,
-                body: JSON.stringify({ dayOfWeek: zone.dayOfWeek }),
+                body: JSON.stringify({ dayOfWeek: zone.dayOfWeek, priceSurchargePercent: zone.priceSurchargePercent ?? 0 }),
               });
             }
           } else {
@@ -2554,7 +2555,7 @@ function ServiceZonesPanel() {
           <MapPin className="h-4 w-4" />
           Service Zones
         </CardTitle>
-        <CardDescription className="text-xs">Define which zip codes you service and what day you work each area</CardDescription>
+        <CardDescription className="text-xs">Define which zip codes you service, what day you work each area, and any price surcharge by zone</CardDescription>
       </CardHeader>
       <CardContent className="p-3 pt-0">
         {isLoading ? (

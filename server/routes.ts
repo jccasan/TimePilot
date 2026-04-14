@@ -4982,13 +4982,14 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/service-zones", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { zipCode, dayOfWeek, label, latitude, longitude } = req.body;
+      const { zipCode, dayOfWeek, label, latitude, longitude, priceSurchargePercent } = req.body;
       if (!zipCode) return res.status(400).json({ error: "zipCode is required" });
       const zone = await storage.createServiceZone({
         companyId,
         zipCode,
         dayOfWeek: dayOfWeek || "tbd",
         label: label || null,
+        priceSurchargePercent: Math.max(0, Math.min(200, Math.round(Number(priceSurchargePercent) || 0))),
         latitude: latitude || null,
         longitude: longitude || null,
       });
@@ -5009,6 +5010,7 @@ Return ONLY valid JSON, no markdown.`,
           zipCode: z.zipCode,
           dayOfWeek: z.dayOfWeek || "tbd",
           label: z.label || null,
+          priceSurchargePercent: Math.max(0, Math.min(200, Math.round(Number(z.priceSurchargePercent) || 0))),
           latitude: z.latitude || null,
           longitude: z.longitude || null,
         });
@@ -5024,11 +5026,15 @@ Return ONLY valid JSON, no markdown.`,
       const zones = await storage.getServiceZones(companyId);
       const existing = zones.find(z => z.id === req.params.id);
       if (!existing) return res.status(404).json({ error: "Service zone not found" });
-      const { dayOfWeek, label, isActive } = req.body;
+      const { dayOfWeek, label, isActive, priceSurchargePercent } = req.body;
       const updates: any = {};
       if (dayOfWeek !== undefined) updates.dayOfWeek = dayOfWeek;
       if (label !== undefined) updates.label = label;
       if (isActive !== undefined) updates.isActive = isActive;
+      if (priceSurchargePercent !== undefined) {
+        const pct = Math.max(0, Math.min(200, Math.round(Number(priceSurchargePercent) || 0)));
+        updates.priceSurchargePercent = pct;
+      }
       const zone = await storage.updateServiceZone(req.params.id, companyId, updates);
       res.json(zone);
     } catch (err) { handleError(res, err); }
@@ -15638,12 +15644,23 @@ Return ONLY valid JSON, no markdown.`,
         quotePriceCents = priceResult.recommendedPriceCents;
       }
 
+      let zoneSurchargePercent = 0;
+      if (zipCode && quotePriceCents !== null && !callForQuote) {
+        const zones = await storage.getServiceZones(company.id);
+        const matchingZone = zones.find(z => z.zipCode === zipCode && z.isActive);
+        if (matchingZone && matchingZone.priceSurchargePercent > 0) {
+          zoneSurchargePercent = matchingZone.priceSurchargePercent;
+          quotePriceCents = Math.round(quotePriceCents * (1 + zoneSurchargePercent / 100));
+        }
+      }
+
       res.status(201).json({
         contactId: contact.id,
         quote: {
           recommendedPriceCents: callForQuote ? 0 : (quotePriceCents || 0),
           frequency: serviceFrequency,
           callForQuote,
+          zoneSurchargePercent,
         },
       });
     } catch (err) { handleError(res, err); }
