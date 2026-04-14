@@ -1062,20 +1062,20 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
           : 0,
       })).sort((a, b) => b.loaded - a.loaded);
 
-      const funnel = [
-        { step: "Form Loaded", event: "form_loaded", sessions: sessionMap.form_loaded || 0 },
-        { step: "ZIP Entered", event: "zip_entered", sessions: sessionMap.zip_entered || 0 },
-        { step: "ZIP Passed", event: "zip_passed", sessions: sessionMap.zip_passed || 0 },
-        { step: "Service Details Done", event: "step2_completed", sessions: sessionMap.step2_completed || 0 },
-        { step: "Contact Started", event: "step3_started", sessions: sessionMap.step3_started || 0 },
-        { step: "Submitted", event: "submitted", sessions: sessionMap.submitted || 0 },
-        { step: "Quote Shown", event: "quote_shown", sessions: sessionMap.quote_shown || 0 },
-      ];
-
       const loaded = sessionMap.form_loaded || 0;
-      for (const f of funnel) {
-        (f as any).pct = loaded > 0 ? (f.sessions / loaded * 100) : 0;
-      }
+      const makeFunnelStep = (step: string, event: string) => {
+        const sessions = sessionMap[event] || 0;
+        return { step, event, sessions, pct: loaded > 0 ? (sessions / loaded * 100) : 0 };
+      };
+      const funnel = [
+        makeFunnelStep("Form Loaded", "form_loaded"),
+        makeFunnelStep("ZIP Entered", "zip_entered"),
+        makeFunnelStep("ZIP Passed", "zip_passed"),
+        makeFunnelStep("Service Details Done", "step2_completed"),
+        makeFunnelStep("Contact Started", "step3_started"),
+        makeFunnelStep("Submitted", "submitted"),
+        makeFunnelStep("Quote Shown", "quote_shown"),
+      ];
 
       const topZips = await db
         .select({

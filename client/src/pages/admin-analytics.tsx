@@ -877,17 +877,32 @@ function CustomerCostsTab() {
   );
 }
 
+type FunnelStep = { step: string; event: string; sessions: number; pct: number };
+type FunnelZip = { zipCode: string; submissions: number };
+type FunnelCompany = { companyId: string; companyName: string; loaded: number; zipPassed: number; submitted: number; quoteShown: number; conversionPct: number };
+type FunnelData = {
+  days: number;
+  totalSessions: number;
+  totalEvents: number;
+  funnel: FunnelStep[];
+  embedVsDirect: { embed?: number; direct?: number };
+  daily: Record<string, Record<string, number>>;
+  byCompany: FunnelCompany[];
+  topZipCodes: FunnelZip[];
+  overallConversion: number;
+};
+
 function FunnelTab() {
   const [days, setDays] = useState("30");
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading } = useQuery<FunnelData>({
     queryKey: ["/api/admin/analytics/quote-funnel", days],
     queryFn: adminFetchFn(`/api/admin/analytics/quote-funnel?days=${days}`),
   });
 
   if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;
 
-  const funnel: any[] = data?.funnel || [];
-  const topLoaded = funnel.find((f: any) => f.event === "form_loaded")?.sessions || 0;
+  const funnel: FunnelStep[] = data?.funnel || [];
+  const topLoaded = funnel.find((f) => f.event === "form_loaded")?.sessions || 0;
 
   return (
     <div className="space-y-6" data-testid="tab-content-funnel">
@@ -919,7 +934,7 @@ function FunnelTab() {
         />
         <StatCard
           label="Submitted"
-          value={funnel.find((f: any) => f.event === "submitted")?.sessions ?? 0}
+          value={funnel.find((f) => f.event === "submitted")?.sessions ?? 0}
           icon={ArrowUpRight}
         />
       </div>
@@ -931,7 +946,7 @@ function FunnelTab() {
         <CardContent>
           {funnel.length > 0 ? (
             <div className="space-y-3">
-              {funnel.map((f: any, idx: number) => {
+              {funnel.map((f, idx) => {
                 const widthPct = topLoaded > 0 ? Math.max((f.sessions / topLoaded) * 100, 4) : 0;
                 const prevSessions = idx > 0 ? funnel[idx - 1].sessions : f.sessions;
                 const dropoff = prevSessions > 0 ? ((prevSessions - f.sessions) / prevSessions * 100) : 0;
@@ -977,7 +992,7 @@ function FunnelTab() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {data.topZipCodes.map((z: any) => (
+              {data.topZipCodes.map((z) => (
                 <div key={z.zipCode} className="flex items-center justify-between gap-2" data-testid={`row-zip-${z.zipCode}`}>
                   <span className="text-sm font-mono" data-testid={`text-zip-code-${z.zipCode}`}>{z.zipCode}</span>
                   <Badge variant="outline" data-testid={`badge-zip-count-${z.zipCode}`}>{z.submissions} submissions</Badge>
@@ -1005,7 +1020,7 @@ function FunnelTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.byCompany.map((c: any) => (
+                {data.byCompany.map((c) => (
                   <TableRow key={c.companyId} data-testid={`row-funnel-company-${c.companyId}`}>
                     <TableCell className="font-medium truncate max-w-[200px]" data-testid={`text-funnel-company-${c.companyId}`}>{c.companyName}</TableCell>
                     <TableCell className="text-center">{c.loaded}</TableCell>

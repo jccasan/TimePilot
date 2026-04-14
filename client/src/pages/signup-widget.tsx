@@ -567,6 +567,7 @@ export default function SignupWidget() {
       return res.json() as Promise<QuoteResult>;
     },
     onSuccess: (data) => {
+      track("submitted", 3, zipCode.trim().slice(0, 5));
       setQuoteResult(data);
       track("quote_shown", 4);
     },
@@ -1013,7 +1014,6 @@ export default function SignupWidget() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (isStep3Valid) {
-                      track("submitted", 3, zipCode.trim().slice(0, 5));
                       submitMutation.mutate();
                     }
                   }}
