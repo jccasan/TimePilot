@@ -227,14 +227,6 @@ function parsePricingData(pricing: PricingItem[]) {
       pricingItemId: item.id,
     });
   }
-  if (lotAddons.length === 0) {
-    lotAddons.push(
-      { label: "Small yard (under 1/4 acre)", value: "small", surcharge: 0, callForQuote: false, pricingItemId: null },
-      { label: "Medium yard (1/4 - 1/2 acre)", value: "medium", surcharge: 0, callForQuote: false, pricingItemId: null },
-      { label: "Large yard (1/2 - 1 acre)", value: "large", surcharge: 0, callForQuote: false, pricingItemId: null },
-      { label: "Extra Large yard (1+ acre)", value: "extra-large", surcharge: 0, callForQuote: false, pricingItemId: null },
-    );
-  }
 
   return { freqGroups, availableFreqs, buildDogTiers, lotAddons };
 }
@@ -544,7 +536,8 @@ export default function SignupWidget() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   }, []);
 
-  const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!selectedLot && !!lastCleanup;
+  const hasLotAddons = parsed && parsed.lotAddons.length > 0;
+  const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!lastCleanup && (!hasLotAddons || !!selectedLot);
   const isStep3Valid = formData.firstName.trim().length > 0 &&
     formData.streetAddress.trim().length > 0 &&
     formData.city.trim().length > 0 &&
@@ -835,27 +828,24 @@ export default function SignupWidget() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold">Estimated Yard Size *</Label>
-                    <div className="space-y-1.5">
-                      {(parsed?.lotAddons || [
-                        { value: "small", label: "Small yard (under 1/4 acre)", surcharge: 0, callForQuote: false, pricingItemId: null },
-                        { value: "medium", label: "Medium yard (1/4 - 1/2 acre)", surcharge: 0, callForQuote: false, pricingItemId: null },
-                        { value: "large", label: "Large yard (1/2 - 1 acre)", surcharge: 0, callForQuote: false, pricingItemId: null },
-                        { value: "extra-large", label: "Extra Large yard (1+ acre)", surcharge: 0, callForQuote: false, pricingItemId: null },
-                      ]).map(lot => (
-                        <RadioOption
-                          key={lot.value}
-                          isSelected={selectedLot === lot.value}
-                          brandStyles={brandStyles}
-                          testId={`radio-lot-${lot.value}`}
-                          onClick={() => setSelectedLot(lot.value)}
-                        >
-                          <span className="text-sm flex-1">{lot.label}</span>
-                        </RadioOption>
-                      ))}
+                  {hasLotAddons && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Estimated Yard Size *</Label>
+                      <div className="space-y-1.5">
+                        {parsed!.lotAddons.map(lot => (
+                          <RadioOption
+                            key={lot.value}
+                            isSelected={selectedLot === lot.value}
+                            brandStyles={brandStyles}
+                            testId={`radio-lot-${lot.value}`}
+                            onClick={() => setSelectedLot(lot.value)}
+                          >
+                            <span className="text-sm flex-1">{lot.label}</span>
+                          </RadioOption>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Last Time Yard Was Cleaned *</Label>
