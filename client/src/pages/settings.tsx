@@ -35,7 +35,8 @@ import { useUpload } from "@/hooks/use-upload";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
-import { Globe, Copy, Check, Link2 } from "lucide-react";
+import { Globe, Copy, Check, Link2, Send, MessageSquare } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 
 const companyFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -61,6 +62,9 @@ type Company = {
   logoUrl: string | null;
   slug: string | null;
   leadWebhookSmsTemplate: string | null;
+  quoteAutoFollowUpEnabled: boolean;
+  quoteFollowUpSmsTemplate: string | null;
+  quoteFollowUpEmailEnabled: boolean;
   subscriptionTier: string;
   subscriptionStatus: string;
   autoVisitsEnabled: boolean;
@@ -101,6 +105,7 @@ const SETTINGS_BLOCK_DEFS: { id: string; label: string; defaultW: number; defaul
   { id: "signup_widget", label: "Signup Widget", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "webhook_lead", label: "Webhook Lead", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "sms_quote_template", label: "SMS Quote Template", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "quote_auto_follow_up", label: "Quote Auto-Follow-Up", defaultW: 6, defaultH: 5, minW: 4, minH: 3 },
   { id: "auto_visit_generation", label: "Auto Visit Generation", defaultW: 6, defaultH: 3, minW: 4, minH: 2 },
   { id: "lead_sources", label: "Lead Sources", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "audit_log", label: "Audit Log", defaultW: 12, defaultH: 5, minW: 6, minH: 4 },
@@ -114,7 +119,8 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "change_password", "voice_api_docs",
   "data_import_export", "signup_widget",
   "webhook_lead", "sms_quote_template",
-  "auto_visit_generation", "lead_sources",
+  "quote_auto_follow_up", "auto_visit_generation",
+  "lead_sources",
   "audit_log",
 ];
 
@@ -1717,6 +1723,155 @@ function SmsQuoteTemplateSection({ company }: { company: Company | null }) {
   );
 }
 
+function QuoteAutoFollowUpSection({ company }: { company: Company | null }) {
+  const { toast } = useToast();
+  const defaultSmsTemplate = "Thanks {firstName}! Your estimated quote from {companyName} is ${price}/visit for {frequency} service. We'll be in touch to confirm your schedule!";
+  const [smsTemplate, setSmsTemplate] = useState(company?.quoteFollowUpSmsTemplate || defaultSmsTemplate);
+
+  useEffect(() => {
+    if (company?.quoteFollowUpSmsTemplate) {
+      setSmsTemplate(company.quoteFollowUpSmsTemplate);
+    }
+  }, [company?.quoteFollowUpSmsTemplate]);
+
+  const toggleMutation = useMutation({
+    mutationFn: async (updates: Partial<{ quoteAutoFollowUpEnabled: boolean; quoteFollowUpEmailEnabled: boolean }>) => {
+      const res = await apiRequest("PATCH", "/api/company", updates);
+      if (!res.ok) throw new Error("Failed to update");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const saveTemplateMutation = useMutation({
+    mutationFn: async (tmpl: string) => {
+      const res = await apiRequest("PATCH", "/api/company", { quoteFollowUpSmsTemplate: tmpl });
+      if (!res.ok) throw new Error("Failed to save template");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Follow-up SMS template saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const previewText = smsTemplate
+    .replace(/\{firstName\}/g, "Jane")
+    .replace(/\{dogs\}/g, "2")
+    .replace(/\{frequency\}/g, "weekly")
+    .replace(/\{price\}/g, "29.00")
+    .replace(/\{companyName\}/g, company?.name || "Your Company");
+
+  const isEnabled = company?.quoteAutoFollowUpEnabled ?? false;
+  const emailEnabled = company?.quoteFollowUpEmailEnabled ?? false;
+
+  return (
+    <Card data-testid="card-quote-auto-follow-up">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5" />
+              Quote Form Auto-Follow-Up
+            </CardTitle>
+            <CardDescription>
+              Automatically send a confirmation message to prospects after they submit the quote form
+            </CardDescription>
+          </div>
+          <Switch
+            checked={isEnabled}
+            onCheckedChange={(checked) => toggleMutation.mutate({ quoteAutoFollowUpEnabled: checked })}
+            data-testid="switch-quote-follow-up-enabled"
+          />
+        </div>
+      </CardHeader>
+      {isEnabled && (
+        <CardContent className="space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              <Label className="font-medium">SMS Follow-Up</Label>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Sent immediately when a prospect provides a phone number. Requires SMS to be configured.
+            </p>
+            <div className="space-y-2">
+              <Label className="text-sm">Message Template</Label>
+              <Textarea
+                value={smsTemplate}
+                onChange={(e) => setSmsTemplate(e.target.value)}
+                rows={3}
+                className="font-mono text-sm"
+                data-testid="textarea-quote-followup-sms"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {["{firstName}", "{companyName}", "{price}", "{frequency}", "{dogs}"].map((field) => (
+                  <Badge key={field} variant="secondary" className="text-xs cursor-pointer" onClick={() => setSmsTemplate(t => t + field)} data-testid={`badge-followup-${field.replace(/[{}]/g, "")}`}>
+                    {field}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Preview</Label>
+              <div className="bg-muted rounded-md p-3 text-sm" data-testid="text-followup-sms-preview">
+                {previewText}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => saveTemplateMutation.mutate(smsTemplate)}
+                disabled={saveTemplateMutation.isPending || smsTemplate === (company?.quoteFollowUpSmsTemplate || defaultSmsTemplate)}
+                data-testid="button-save-followup-sms"
+              >
+                {saveTemplateMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Save Template
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSmsTemplate(defaultSmsTemplate)}
+                disabled={smsTemplate === defaultSmsTemplate}
+                data-testid="button-reset-followup-sms"
+              >
+                Reset
+              </Button>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <Label className="font-medium">Email Follow-Up</Label>
+              </div>
+              <Switch
+                checked={emailEnabled}
+                onCheckedChange={(checked) => toggleMutation.mutate({ quoteFollowUpEmailEnabled: checked })}
+                data-testid="switch-quote-followup-email"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Send a branded confirmation email with the estimate details when a prospect provides an email address. Uses your company name and green-branded template.
+            </p>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 type ReminderRule = {
   id: string;
   timing: "24h_before" | "2h_before" | "morning_of" | "custom";
@@ -3023,6 +3178,8 @@ export default function Settings() {
         return <div className="h-full overflow-auto"><WebhookLeadSection /></div>;
       case "sms_quote_template":
         return <div className="h-full overflow-auto"><SmsQuoteTemplateSection company={company ?? null} /></div>;
+      case "quote_auto_follow_up":
+        return <div className="h-full overflow-auto"><QuoteAutoFollowUpSection company={company ?? null} /></div>;
       case "auto_visit_generation":
         return (
           <Card className="h-full overflow-auto">

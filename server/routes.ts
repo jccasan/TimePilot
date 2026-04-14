@@ -13,7 +13,7 @@ import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
-import { sendEmail, sendAdminSignupNotification, generateEmailThreadId } from "./services/email";
+import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, logEmailSent } from "./services/email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
 import { sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "./services/sms";
 import {
@@ -1796,6 +1796,7 @@ Return ONLY valid JSON, no markdown.`,
       const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
         "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "settingsLayout", "dashboardNotes", "timezone",
         "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug", "leadWebhookSmsTemplate",
+        "quoteAutoFollowUpEnabled", "quoteFollowUpSmsTemplate", "quoteFollowUpEmailEnabled",
         "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle"];
       const updates: any = {};
       for (const key of allowed) {
@@ -15741,6 +15742,85 @@ Return ONLY valid JSON, no markdown.`,
           zoneSurchargePercent,
         },
       });
+
+      if (company.quoteAutoFollowUpEnabled) {
+        const priceDollars = callForQuote ? "Call for Quote" : ((quotePriceCents || 0) / 100).toFixed(2);
+        const companyName = company.name || "Our Company";
+        const mergeReplace = (tpl: string) =>
+          tpl
+            .replace(/\{firstName\}/g, firstName)
+            .replace(/\{price\}/g, priceDollars)
+            .replace(/\{frequency\}/g, serviceFrequency)
+            .replace(/\{companyName\}/g, companyName)
+            .replace(/\{dogs\}/g, String(numberOfDogs));
+
+        if (phone) {
+          (async () => {
+            try {
+              const smsConfigured = await isSmsConfiguredForCompany(company.id);
+              if (!smsConfigured) return;
+              const defaultSmsTpl = "Thanks {firstName}! Your estimated quote from {companyName} is ${price}/visit for {frequency} service. We'll be in touch to confirm your schedule!";
+              const smsTpl = company.quoteFollowUpSmsTemplate || defaultSmsTpl;
+              const smsBody = mergeReplace(smsTpl);
+              const result = await sendSmsForCompany({ to: phone, body: smsBody, companyId: company.id, contactId: contact.id });
+              if (!result.success) console.error(`[quote-followup-sms] Failed:`, result.error);
+            } catch (err) {
+              console.error("[quote-followup-sms] Error:", err);
+            }
+          })();
+        }
+
+        if (email && company.quoteFollowUpEmailEnabled) {
+          (async () => {
+            try {
+              const safeCompanyName = escapeHtml(companyName);
+              const safeFirstName = escapeHtml(firstName);
+              const subject = `Your Quote from ${companyName}`;
+              const priceDisplay = callForQuote ? "Custom Quote" : `$${priceDollars}/visit`;
+              const text = mergeReplace(`Hi {firstName},\n\nThank you for requesting a quote from {companyName}!\n\nYour estimated price for {frequency} service with {dogs} dog(s) is ${priceDollars === "Call for Quote" ? "a custom quote — we'll be in touch!" : "$" + priceDollars + "/visit"}.\n\nWe'll follow up shortly to confirm your schedule.\n\nBest regards,\n{companyName}`);
+              const html = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <div style="background-color: #2d8a5e; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+                    <h1 style="color: white; margin: 0; font-size: 22px;">${safeCompanyName}</h1>
+                  </div>
+                  <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none;">
+                    <p style="margin: 0 0 16px; font-size: 16px; color: #1f2937;">Hi ${safeFirstName},</p>
+                    <p style="margin: 0 0 16px; color: #4b5563;">Thank you for requesting a quote! Here are your estimated service details:</p>
+                    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin: 0 0 20px;">
+                      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                        <tr>
+                          <td style="padding: 6px 0; color: #6b7280;">Service Frequency</td>
+                          <td style="padding: 6px 0; text-align: right; font-weight: 600; color: #1f2937;">${escapeHtml(serviceFrequency)}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 6px 0; color: #6b7280;">Number of Dogs</td>
+                          <td style="padding: 6px 0; text-align: right; font-weight: 600; color: #1f2937;">${numberOfDogs}</td>
+                        </tr>
+                        <tr style="border-top: 1px solid #d1fae5;">
+                          <td style="padding: 10px 0 0; color: #6b7280; font-size: 15px;">Estimated Price</td>
+                          <td style="padding: 10px 0 0; text-align: right; font-weight: 700; font-size: 20px; color: #16a34a;">${escapeHtml(priceDisplay)}</td>
+                        </tr>
+                      </table>
+                    </div>
+                    <p style="margin: 0 0 8px; color: #4b5563;">We'll follow up shortly to confirm your schedule and get you started!</p>
+                    <p style="margin: 20px 0 0; color: #4b5563;">Best regards,<br/><strong>${safeCompanyName}</strong></p>
+                  </div>
+                  <div style="padding: 12px; text-align: center; font-size: 11px; color: #9ca3af;">
+                    ${safeCompanyName}
+                  </div>
+                </div>`;
+              const emailResult = await sendEmail({ to: email, subject, text, html, companyId: company.id, senderName: companyName, replyTo: company.email || undefined });
+              if (emailResult.success) {
+                await logEmailSent(company.id, email, subject, "quote_follow_up", emailResult.messageId);
+              } else {
+                console.error("[quote-followup-email] Failed:", emailResult.error);
+              }
+            } catch (err) {
+              console.error("[quote-followup-email] Error:", err);
+            }
+          })();
+        }
+      }
     } catch (err) { handleError(res, err); }
   });
 
