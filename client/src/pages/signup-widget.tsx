@@ -68,6 +68,7 @@ type CompanyInfo = {
   logoUrl: string | null;
   pricing: PricingItem[];
   primaryColor: string | null;
+  quoteFormLayout: "stepper" | "single";
 };
 
 type QuoteResult = {
@@ -429,6 +430,7 @@ export default function SignupWidget() {
   const [currentStep, setCurrentStep] = useState(1);
   const [zipCode, setZipCode] = useState("");
   const [zipError, setZipError] = useState<string | null>(null);
+  const [zipVerified, setZipVerified] = useState(false);
 
   const [selectedFreq, setSelectedFreq] = useState("");
   const [selectedDogTier, setSelectedDogTier] = useState("");
@@ -528,9 +530,11 @@ export default function SignupWidget() {
     onSuccess: (data) => {
       if (data.inServiceArea) {
         setZipError(null);
+        setZipVerified(true);
         track("zip_passed", 1, zipCode.trim().slice(0, 5));
-        setCurrentStep(2);
+        if (!isSingleLayout) setCurrentStep(2);
       } else {
+        setZipVerified(false);
         track("zip_failed", 1, zipCode.trim().slice(0, 5));
         setZipError("Sorry, we don't currently service your area. Please check back soon!");
       }
@@ -597,6 +601,8 @@ export default function SignupWidget() {
   const updateField = useCallback((field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   }, []);
+
+  const isSingleLayout = company?.quoteFormLayout === "single";
 
   const hasLotAddons = parsed && parsed.lotAddons.length > 0;
   const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!lastCleanup;
@@ -698,6 +704,344 @@ export default function SignupWidget() {
                 <p>A representative from <strong>{company.name}</strong> will reach out to you shortly to confirm your service and schedule.</p>
                 <p className="text-xs italic">* Exact pricing may vary based on property assessment. Sales tax may apply.</p>
               </div>
+            </CardContent>
+          </Card>
+          {!isEmbed && (
+            <div className="mt-6 text-center space-y-1">
+              <p className="text-xs text-muted-foreground font-medium" data-testid="text-powered-by">
+                Powered by <a href="https://servicd.app" target="_blank" rel="noopener noreferrer" className="underline font-semibold" style={{ color: brandStyles.accentText }}>Servicd</a>
+              </p>
+              <p className="text-xs text-muted-foreground" data-testid="text-copyright">
+                &copy; {new Date().getFullYear()} PetPilot LLC dba Servicd and ScooPilot
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (isSingleLayout) {
+    const singleFormValid = zipVerified && isStep2Valid && isStep3Valid;
+    return (
+      <div className={isEmbed ? "" : "min-h-screen flex items-center justify-center p-4"} style={isEmbed ? {} : { background: `linear-gradient(to bottom, ${brandStyles.gradientFrom}, white)` }}>
+        <div className={`w-full ${isEmbed ? "" : "max-w-lg"}`}>
+          <Card className={`overflow-hidden ${isEmbed ? "shadow-none border-0" : "shadow-xl"}`}>
+            <div className="p-6 text-center" style={{ backgroundColor: brandStyles.headerBg }}>
+              {company.logoUrl && (
+                <img src={company.logoUrl} alt={company.name} className="h-14 mx-auto mb-3 rounded-lg shadow-sm" data-testid="img-company-logo" />
+              )}
+              <h1 className="text-xl font-bold text-white" data-testid="text-company-name">{company.name}</h1>
+              <p className="text-sm mt-1 text-white/80">Get a Free Quote for Pet Waste Removal</p>
+            </div>
+
+            {isPreview && (
+              <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm font-medium" data-testid="banner-preview-mode">
+                <Eye className="h-4 w-4 flex-shrink-0" />
+                <span>Preview Mode — submissions are disabled</span>
+              </div>
+            )}
+
+            <CardContent className="p-6">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (isPreview || previewResolving) return;
+                  if (!zipVerified) {
+                    setZipError("Please verify your ZIP code first.");
+                    return;
+                  }
+                  if (singleFormValid) submitMutation.mutate();
+                }}
+                className="space-y-6"
+              >
+                <div className="space-y-4" data-testid="section-zip-single">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold text-white" style={{ backgroundColor: brandStyles.accentText }}>1</div>
+                    <h2 className="text-lg font-bold">Service Area</h2>
+                  </div>
+                  <div className="space-y-3">
+                    <Label htmlFor="zipCodeSingle" className="text-sm font-medium">ZIP Code *</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="zipCodeSingle"
+                        placeholder="Enter your ZIP code"
+                        value={zipCode}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 5);
+                          setZipCode(val);
+                          setZipError(null);
+                          setZipVerified(false);
+                        }}
+                        maxLength={5}
+                        className="text-lg h-12 flex-1"
+                        data-testid="input-zip-code"
+                      />
+                      <Button
+                        type="button"
+                        className="text-white h-12 px-4"
+                        style={{ backgroundColor: brandStyles.buttonBg }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonHover)}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonBg)}
+                        disabled={zipCode.length < 5 || checkZipMutation.isPending || zipVerified}
+                        onClick={() => checkZipMutation.mutate()}
+                        data-testid="button-check-zip"
+                      >
+                        {checkZipMutation.isPending ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : zipVerified ? (
+                          <CheckCircle2 className="h-5 w-5" />
+                        ) : (
+                          "Check"
+                        )}
+                      </Button>
+                    </div>
+                    {zipVerified && (
+                      <div className="flex items-center gap-2 text-sm font-medium" style={{ color: brandStyles.accentText }} data-testid="text-zip-verified">
+                        <CheckCircle2 className="h-4 w-4" /> We service your area!
+                      </div>
+                    )}
+                    {zipError && (
+                      <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200" data-testid="text-zip-error">
+                        <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-red-700">{zipError}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-t pt-6 space-y-4" data-testid="section-details-single">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold text-white" style={{ backgroundColor: brandStyles.accentText }}>2</div>
+                    <h2 className="text-lg font-bold">Service Details</h2>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">How Many Dogs? *</Label>
+                      <div className="space-y-1.5">
+                        {hasPricing && parsed ? (
+                          dogTiers.length > 0 ? dogTiers : parsed.buildDogTiers(parsed.freqGroups[parsed.availableFreqs[0]] || [])
+                        ).map(tier => (
+                          <RadioOption key={tier.value} isSelected={selectedDogTier === tier.value} brandStyles={brandStyles} testId={`radio-dogs-${tier.value}`} onClick={() => setSelectedDogTier(tier.value)}>
+                            <span className="text-sm flex-1">{tier.label}</span>
+                          </RadioOption>
+                        )) : (
+                          [
+                            { value: "1", label: "1-2 dogs" },
+                            { value: "3", label: "3-4 dogs" },
+                            { value: "5", label: "5-6 dogs" },
+                            { value: "7", label: "7+ dogs" },
+                          ].map(opt => (
+                            <RadioOption key={opt.value} isSelected={selectedDogTier === opt.value} brandStyles={brandStyles} testId={`radio-dogs-${opt.value}`} onClick={() => setSelectedDogTier(opt.value)}>
+                              <span className="text-sm flex-1">{opt.label}</span>
+                            </RadioOption>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Cleanup Frequency *</Label>
+                      <div className="space-y-1.5">
+                        {hasPricing && parsed ? (
+                          parsed.availableFreqs.map(freq => {
+                            const items = parsed.freqGroups[freq];
+                            let priceLabel = "";
+                            if (selectedDogTier) {
+                              const dogCount = parseInt(selectedDogTier);
+                              const matchedItem = items.find(i => i.dogCount === dogCount);
+                              if (matchedItem) {
+                                priceLabel = matchedItem.callForQuote ? "Call for Quote" : `$${(matchedItem.price / 100).toFixed(2)}/visit`;
+                              }
+                            }
+                            if (!priceLabel) {
+                              const baseItem = items.find(i => !i.callForQuote);
+                              priceLabel = baseItem ? `from $${(baseItem.price / 100).toFixed(2)}/visit` : "";
+                            }
+                            return (
+                              <RadioOption key={freq} isSelected={selectedFreq === freq} brandStyles={brandStyles} testId={`radio-freq-${freq}`} onClick={() => { setSelectedFreq(freq); if (selectedDogTier) { const newTiers = parsed.buildDogTiers(parsed.freqGroups[freq] || []); if (!newTiers.find(t => t.value === selectedDogTier)) setSelectedDogTier(""); } }}>
+                                <span className="flex-1 text-sm">{FREQ_DISPLAY[freq] || freq}</span>
+                                {priceLabel && <span className="text-xs text-muted-foreground font-medium">{priceLabel}</span>}
+                              </RadioOption>
+                            );
+                          })
+                        ) : (
+                          [
+                            { value: "weekly", label: "Once a Week" },
+                            { value: "biweekly", label: "Every Other Week" },
+                            { value: "onetime", label: "One-Time Cleaning" },
+                          ].map(opt => (
+                            <RadioOption key={opt.value} isSelected={selectedFreq === opt.value} brandStyles={brandStyles} testId={`radio-freq-${opt.value}`} onClick={() => setSelectedFreq(opt.value)}>
+                              <span className="flex-1 text-sm">{opt.label}</span>
+                            </RadioOption>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {hasLotAddons && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">Estimated Yard Size (optional)</Label>
+                        <div className="space-y-1.5">
+                          {parsed!.lotAddons.map(lot => (
+                            <RadioOption key={lot.value} isSelected={selectedLot === lot.value} brandStyles={brandStyles} testId={`radio-lot-${lot.value}`} onClick={() => setSelectedLot(lot.value)}>
+                              <span className="text-sm flex-1">{lot.label}</span>
+                            </RadioOption>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Last Time Yard Was Cleaned *</Label>
+                      <div className="space-y-1.5">
+                        {LAST_CLEANUP_OPTIONS.map(opt => (
+                          <RadioOption key={opt.value} isSelected={lastCleanup === opt.value} brandStyles={brandStyles} testId={`radio-cleanup-${opt.value}`} onClick={() => setLastCleanup(opt.value)}>
+                            <span className="text-sm flex-1">{opt.label}</span>
+                          </RadioOption>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="couponCodeSingle" className="text-sm font-semibold">Coupon Code (optional)</Label>
+                      <Input id="couponCodeSingle" placeholder="Enter coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} data-testid="input-coupon-code" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Preferred Service Day</Label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[
+                          { value: "monday", label: "Mon" },
+                          { value: "tuesday", label: "Tue" },
+                          { value: "wednesday", label: "Wed" },
+                          { value: "thursday", label: "Thu" },
+                          { value: "friday", label: "Fri" },
+                          { value: "saturday", label: "Sat" },
+                          { value: "sunday", label: "Sun" },
+                        ].map((d) => {
+                          const isSelected = serviceDay === d.value;
+                          return (
+                            <label
+                              key={d.value}
+                              className={`flex items-center justify-center p-2.5 rounded-lg border text-xs cursor-pointer transition-all duration-200 ${isSelected ? "border-2 bg-white shadow-sm font-semibold" : "border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
+                              style={isSelected ? { borderColor: brandStyles.accentText, color: brandStyles.accentText } : {}}
+                              data-testid={`radio-day-${d.value}`}
+                            >
+                              <input type="radio" name="serviceDay" value={d.value} checked={isSelected} onChange={() => setServiceDay(d.value)} className="sr-only" />
+                              {d.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {livePrice && (
+                    <div className="rounded-xl p-4 text-center" style={{ backgroundColor: brandStyles.lightBg, border: `1px solid ${brandStyles.lightBorder}` }}>
+                      {livePrice.callForQuote ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <Phone className="h-5 w-5" style={{ color: brandStyles.accentText }} />
+                          <span className="font-semibold" style={{ color: brandStyles.accentText }} data-testid="text-live-price">Call for Quote</span>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-xs text-muted-foreground mb-1">Estimated Price</p>
+                          <p className="text-3xl font-bold" style={{ color: brandStyles.accentText }} data-testid="text-live-price">${(livePrice.cents / 100).toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground mt-1">per visit</p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t pt-6 space-y-4" data-testid="section-contact-single">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold text-white" style={{ backgroundColor: brandStyles.accentText }}>3</div>
+                    <h2 className="text-lg font-bold">Contact Information</h2>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="firstNameSingle">First Name *</Label>
+                        <Input id="firstNameSingle" value={formData.firstName} onChange={(e) => updateField("firstName", e.target.value)} required data-testid="input-first-name" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="lastNameSingle">Last Name</Label>
+                        <Input id="lastNameSingle" value={formData.lastName} onChange={(e) => updateField("lastName", e.target.value)} data-testid="input-last-name" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="emailSingle">Email</Label>
+                        <Input id="emailSingle" type="email" value={formData.email} onChange={(e) => updateField("email", e.target.value)} data-testid="input-email" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="phoneSingle">Phone</Label>
+                        <Input id="phoneSingle" type="tel" value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} data-testid="input-phone" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="streetAddressSingle">Street Address *</Label>
+                      <Input id="streetAddressSingle" value={formData.streetAddress} onChange={(e) => updateField("streetAddress", e.target.value)} required data-testid="input-street-address" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="citySingle">City *</Label>
+                        <Input id="citySingle" value={formData.city} onChange={(e) => updateField("city", e.target.value)} required data-testid="input-city" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="stateSingle">State *</Label>
+                        <Input id="stateSingle" value={formData.state} onChange={(e) => updateField("state", e.target.value)} maxLength={2} required data-testid="input-state" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>ZIP Code</Label>
+                        <Input value={zipCode} disabled className="bg-muted" data-testid="input-zip-display" />
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <label className="flex items-start gap-2.5 cursor-pointer" data-testid="label-sms-opt-in">
+                        <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-gray-300" style={{ accentColor: brandStyles.accentText }} data-testid="checkbox-sms-opt-in" />
+                        <span className="text-xs text-muted-foreground leading-relaxed">
+                          I agree to receive recurring automated marketing and informational text messages
+                          (e.g., service alerts and project updates) from <strong>{company.name}</strong> at the
+                          phone number provided. Consent is not a condition of purchase. Msg &amp; data rates
+                          may apply. Msg frequency varies. Reply HELP for help and STOP to cancel.
+                          View our{" "}
+                          <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: brandStyles.accentText }}>Privacy Policy</a>
+                          {" "}and{" "}
+                          <a href="/sms-terms" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: brandStyles.accentText }}>SMS Terms</a>.
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {submitMutation.isError && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200" data-testid="text-submit-error">
+                    <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-700">{(submitMutation.error as Error).message || "Something went wrong. Please try again."}</p>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  className="w-full text-white h-12 text-base font-semibold"
+                  style={{ backgroundColor: isPreview ? "#9ca3af" : brandStyles.buttonBg }}
+                  onMouseEnter={(e) => { if (!isPreview) e.currentTarget.style.backgroundColor = brandStyles.buttonHover; }}
+                  onMouseLeave={(e) => { if (!isPreview) e.currentTarget.style.backgroundColor = brandStyles.buttonBg; }}
+                  disabled={isPreview || previewResolving || !singleFormValid || submitMutation.isPending}
+                  data-testid="button-get-quote"
+                >
+                  {isPreview ? (
+                    <><Eye className="h-5 w-5 mr-2" /> Preview Only</>
+                  ) : submitMutation.isPending ? (
+                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Submitting...</>
+                  ) : (
+                    <><CheckCircle2 className="h-5 w-5 mr-2" /> Get My Free Quote</>
+                  )}
+                </Button>
+              </form>
             </CardContent>
           </Card>
           {!isEmbed && (

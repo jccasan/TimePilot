@@ -1796,7 +1796,7 @@ Return ONLY valid JSON, no markdown.`,
       const allowed = ["name", "email", "phone", "address", "startAddress", "startLatitude", "startLongitude",
         "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "settingsLayout", "dashboardNotes", "timezone",
         "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug", "leadWebhookSmsTemplate",
-        "quoteAutoFollowUpEnabled", "quoteFollowUpSmsTemplate", "quoteFollowUpEmailEnabled", "quoteFollowUpEmailSubject", "quoteFollowUpEmailBody",
+        "quoteAutoFollowUpEnabled", "quoteFollowUpSmsTemplate", "quoteFollowUpEmailEnabled", "quoteFollowUpEmailSubject", "quoteFollowUpEmailBody", "quoteFormLayout",
         "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle"];
       const updates: any = {};
       for (const key of allowed) {
@@ -15132,6 +15132,7 @@ Return ONLY valid JSON, no markdown.`,
         logoUrl: company.logoUrl,
         pricing: activePricing,
         primaryColor,
+        quoteFormLayout: company.quoteFormLayout || "stepper",
       });
     } catch (err) { handleError(res, err); }
   });

@@ -67,6 +67,7 @@ type Company = {
   quoteFollowUpEmailEnabled: boolean;
   quoteFollowUpEmailSubject: string | null;
   quoteFollowUpEmailBody: string | null;
+  quoteFormLayout: string;
   subscriptionTier: string;
   subscriptionStatus: string;
   autoVisitsEnabled: boolean;
@@ -1227,7 +1228,7 @@ function AuditLogSection() {
   );
 }
 
-function SignupWidgetSection({ company }: { company: { slug: string | null; name: string } | null }) {
+function SignupWidgetSection({ company }: { company: { slug: string | null; name: string; quoteFormLayout: string } | null }) {
   const { toast } = useToast();
   const [slugInput, setSlugInput] = useState(company?.slug || "");
   const [copied, setCopied] = useState<string | null>(null);
@@ -1248,6 +1249,21 @@ function SignupWidgetSection({ company }: { company: { slug: string | null; name
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
       toast({ title: "Signup link updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const layoutMutation = useMutation({
+    mutationFn: async (layout: string) => {
+      const res = await apiRequest("PATCH", "/api/company", { quoteFormLayout: layout });
+      if (!res.ok) throw new Error("Failed to update layout");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Form layout updated" });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -1305,6 +1321,37 @@ function SignupWidgetSection({ company }: { company: { slug: string | null; name
           </div>
           <p className="text-xs text-muted-foreground">
             Use lowercase letters, numbers, and hyphens. Minimum 3 characters.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Form Layout</Label>
+          <div className="flex gap-2">
+            <Button
+              variant={company?.quoteFormLayout === "stepper" || !company?.quoteFormLayout ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => layoutMutation.mutate("stepper")}
+              disabled={layoutMutation.isPending}
+              data-testid="button-layout-stepper"
+            >
+              Step-by-Step
+            </Button>
+            <Button
+              variant={company?.quoteFormLayout === "single" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => layoutMutation.mutate("single")}
+              disabled={layoutMutation.isPending}
+              data-testid="button-layout-single"
+            >
+              All at Once
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {company?.quoteFormLayout === "single"
+              ? "All form sections are shown on a single page."
+              : "The form is divided into steps that prospects complete one at a time."}
           </p>
         </div>
 
@@ -3282,7 +3329,7 @@ export default function Settings() {
       case "voice_api_docs":
         return <div className="h-full overflow-auto"><VoiceApiDocsSection /></div>;
       case "signup_widget":
-        return <div className="h-full overflow-auto"><SignupWidgetSection company={company ? { slug: company.slug, name: company.name } : null} /></div>;
+        return <div className="h-full overflow-auto"><SignupWidgetSection company={company ? { slug: company.slug, name: company.name, quoteFormLayout: company.quoteFormLayout || "stepper" } : null} /></div>;
       case "webhook_lead":
         return <div className="h-full overflow-auto"><WebhookLeadSection /></div>;
       case "sms_quote_template":

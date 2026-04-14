@@ -193,6 +193,7 @@ export const companies = pgTable("companies", {
   quoteFollowUpEmailEnabled: boolean("quote_follow_up_email_enabled").notNull().default(false),
   quoteFollowUpEmailSubject: text("quote_follow_up_email_subject"),
   quoteFollowUpEmailBody: text("quote_follow_up_email_body"),
+  quoteFormLayout: varchar("quote_form_layout", { length: 20 }).notNull().default("stepper"),
   qboRealmId: varchar("qbo_realm_id", { length: 50 }),
   qboAccessToken: text("qbo_access_token"),
   qboRefreshToken: text("qbo_refresh_token"),
