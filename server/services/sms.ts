@@ -98,6 +98,7 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
     apiKey: resolvedApiKey,
     messagingProfileId: profileId,
     companyId: options.companyId,
+    contactId: options.contactId,
     mediaUrl: options.mediaUrl,
     mediaUrls: options.mediaUrls,
   });

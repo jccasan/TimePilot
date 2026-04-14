@@ -8,6 +8,7 @@ interface TelnyxSmsOptions {
   apiKey: string;
   messagingProfileId: string;
   companyId: string;
+  contactId?: string;
   mediaUrl?: string;
   mediaUrls?: string[];
 }
@@ -60,7 +61,7 @@ export async function sendTelnyxSms(options: TelnyxSmsOptions): Promise<SendSmsR
     const messageId = data?.data?.id;
     const parts = data?.data?.parts || 1;
 
-    logTelnyxSmsUsage(options.companyId, to, from, messageId, parts).catch(() => {});
+    logTelnyxSmsUsage(options.companyId, to, from, messageId, parts, options.contactId).catch(() => {});
 
     return { success: true, messageSid: messageId };
   } catch (err: unknown) {
@@ -70,9 +71,9 @@ export async function sendTelnyxSms(options: TelnyxSmsOptions): Promise<SendSmsR
   }
 }
 
-async function logTelnyxSmsUsage(companyId: string, to: string, from: string, telnyxId?: string, segments: number = 1): Promise<void> {
+async function logTelnyxSmsUsage(companyId: string, to: string, from: string, telnyxId?: string, segments: number = 1, contactId?: string): Promise<void> {
   try {
-    await db.insert(smsMessages).values({ companyId, toNumber: to, fromNumber: from, direction: "outbound", twilioSid: telnyxId, segments });
+    await db.insert(smsMessages).values({ companyId, contactId: contactId || null, toNumber: to, fromNumber: from, direction: "outbound", twilioSid: telnyxId, segments });
     await db.insert(usageEvents).values({ companyId, eventType: "sms_segment", quantity: segments, metadata: { provider: "telnyx", telnyxId, to, segments } });
     const { reportMeteredUsage } = await import("./stripe");
     const { storage } = await import("../storage");

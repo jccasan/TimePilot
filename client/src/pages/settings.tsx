@@ -65,6 +65,8 @@ type Company = {
   quoteAutoFollowUpEnabled: boolean;
   quoteFollowUpSmsTemplate: string | null;
   quoteFollowUpEmailEnabled: boolean;
+  quoteFollowUpEmailSubject: string | null;
+  quoteFollowUpEmailBody: string | null;
   subscriptionTier: string;
   subscriptionStatus: string;
   autoVisitsEnabled: boolean;
@@ -1723,6 +1725,112 @@ function SmsQuoteTemplateSection({ company }: { company: Company | null }) {
   );
 }
 
+function EmailTemplateEditor({ company }: { company: Company | null }) {
+  const { toast } = useToast();
+  const defaultSubject = "Your Quote from {companyName}";
+  const defaultBody = "Hi {firstName},\n\nThank you for requesting a quote from {companyName}!\n\nYour estimated price for {frequency} service with {dogs} dog(s) is ${price}/visit.\n\nWe'll follow up shortly to confirm your schedule.\n\nBest regards,\n{companyName}";
+
+  const [emailSubject, setEmailSubject] = useState(company?.quoteFollowUpEmailSubject || defaultSubject);
+  const [emailBody, setEmailBody] = useState(company?.quoteFollowUpEmailBody || defaultBody);
+
+  useEffect(() => {
+    if (company?.quoteFollowUpEmailSubject) setEmailSubject(company.quoteFollowUpEmailSubject);
+    if (company?.quoteFollowUpEmailBody) setEmailBody(company.quoteFollowUpEmailBody);
+  }, [company?.quoteFollowUpEmailSubject, company?.quoteFollowUpEmailBody]);
+
+  const saveEmailMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", "/api/company", { quoteFollowUpEmailSubject: emailSubject, quoteFollowUpEmailBody: emailBody });
+      if (!res.ok) throw new Error("Failed to save email template");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Email template saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const previewSubject = emailSubject
+    .replace(/\{firstName\}/g, "Jane")
+    .replace(/\{companyName\}/g, company?.name || "Your Company")
+    .replace(/\{price\}/g, "29.00")
+    .replace(/\{frequency\}/g, "weekly")
+    .replace(/\{dogs\}/g, "2");
+  const previewBody = emailBody
+    .replace(/\{firstName\}/g, "Jane")
+    .replace(/\{companyName\}/g, company?.name || "Your Company")
+    .replace(/\{price\}/g, "29.00")
+    .replace(/\{frequency\}/g, "weekly")
+    .replace(/\{dogs\}/g, "2");
+
+  const hasChanges = emailSubject !== (company?.quoteFollowUpEmailSubject || defaultSubject)
+    || emailBody !== (company?.quoteFollowUpEmailBody || defaultBody);
+
+  return (
+    <div className="space-y-3 pl-6 border-l-2 border-muted">
+      <div className="space-y-2">
+        <Label className="text-sm">Email Subject</Label>
+        <Input
+          value={emailSubject}
+          onChange={(e) => setEmailSubject(e.target.value)}
+          className="font-mono text-sm"
+          data-testid="input-followup-email-subject"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-sm">Email Body</Label>
+        <Textarea
+          value={emailBody}
+          onChange={(e) => setEmailBody(e.target.value)}
+          rows={6}
+          className="font-mono text-sm"
+          data-testid="textarea-followup-email-body"
+        />
+        <div className="flex flex-wrap gap-1.5">
+          {["{firstName}", "{companyName}", "{price}", "{frequency}", "{dogs}"].map((field) => (
+            <Badge key={field} variant="secondary" className="text-xs cursor-pointer" onClick={() => setEmailBody(t => t + field)} data-testid={`badge-email-${field.replace(/[{}]/g, "")}`}>
+              {field}
+            </Badge>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          The email body is wrapped in a branded HTML template with your company logo, estimate details table, and initial cleanup info.
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Preview</Label>
+        <div className="bg-muted rounded-md p-3 text-sm space-y-1" data-testid="text-followup-email-preview">
+          <p className="font-semibold text-xs text-muted-foreground">Subject: {previewSubject}</p>
+          <p className="whitespace-pre-wrap">{previewBody}</p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          onClick={() => saveEmailMutation.mutate()}
+          disabled={saveEmailMutation.isPending || !hasChanges}
+          data-testid="button-save-followup-email"
+        >
+          {saveEmailMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          Save Email Template
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => { setEmailSubject(defaultSubject); setEmailBody(defaultBody); }}
+          disabled={emailSubject === defaultSubject && emailBody === defaultBody}
+          data-testid="button-reset-followup-email"
+        >
+          Reset
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function QuoteAutoFollowUpSection({ company }: { company: Company | null }) {
   const { toast } = useToast();
   const defaultSmsTemplate = "Thanks {firstName}! Your estimated quote from {companyName} is ${price}/visit for {frequency} service. We'll be in touch to confirm your schedule!";
@@ -1850,7 +1958,7 @@ function QuoteAutoFollowUpSection({ company }: { company: Company | null }) {
 
           <Separator />
 
-          <div className="space-y-2">
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-muted-foreground" />
@@ -1863,8 +1971,9 @@ function QuoteAutoFollowUpSection({ company }: { company: Company | null }) {
               />
             </div>
             <p className="text-sm text-muted-foreground">
-              Send a branded confirmation email with the estimate details when a prospect provides an email address. Uses your company name and green-branded template.
+              Send a branded confirmation email with the estimate details when a prospect provides an email address. Includes your company logo and green-branded template.
             </p>
+            {emailEnabled && <EmailTemplateEditor company={company} />}
           </div>
         </CardContent>
       )}

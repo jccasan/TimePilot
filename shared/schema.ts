@@ -191,6 +191,8 @@ export const companies = pgTable("companies", {
   quoteAutoFollowUpEnabled: boolean("quote_auto_follow_up_enabled").notNull().default(false),
   quoteFollowUpSmsTemplate: text("quote_follow_up_sms_template"),
   quoteFollowUpEmailEnabled: boolean("quote_follow_up_email_enabled").notNull().default(false),
+  quoteFollowUpEmailSubject: text("quote_follow_up_email_subject"),
+  quoteFollowUpEmailBody: text("quote_follow_up_email_body"),
   qboRealmId: varchar("qbo_realm_id", { length: 50 }),
   qboAccessToken: text("qbo_access_token"),
   qboRefreshToken: text("qbo_refresh_token"),
@@ -983,6 +985,7 @@ export const smsStatusEnum = pgEnum("sms_status", ["queued", "sent", "delivered"
 export const smsMessages = pgTable("sms_messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id"),
   direction: smsDirectionEnum("direction").notNull(),
   segments: integer("segments").notNull().default(1),
   toNumber: varchar("to_number", { length: 50 }).notNull(),
