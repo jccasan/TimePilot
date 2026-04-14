@@ -15135,6 +15135,29 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/public/check-zip/:slug/:zip", async (req: Request, res: Response) => {
+    try {
+      const { slug, zip } = req.params;
+      const company = await storage.getCompanyBySlug(slug);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const zones = await storage.getServiceZones(company.id);
+      const normalizedZip = zip.trim().slice(0, 5);
+      const activeZones = zones.filter(z => z.isActive);
+
+      if (activeZones.length === 0) {
+        return res.json({ inServiceArea: true, hasZones: false });
+      }
+
+      const matchingZone = activeZones.find(z => z.zipCode.trim().slice(0, 5) === normalizedZip);
+      res.json({
+        inServiceArea: !!matchingZone,
+        hasZones: true,
+        zoneSurchargePercent: matchingZone?.priceSurchargePercent ?? 0,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
   const webhookLeadSchema = z.object({
     firstName: z.string().min(1).max(255),
     lastName: z.string().max(255).default(""),
@@ -15537,6 +15560,7 @@ Return ONLY valid JSON, no markdown.`,
     serviceDay: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
     pricingItemId: z.string().uuid().optional(),
     lotAddonId: z.string().uuid().optional(),
+    notes: z.string().max(2000).optional(),
   });
 
   const publicLeadRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -15561,7 +15585,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const parsed = publicLeadSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors });
-      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay, pricingItemId, lotAddonId } = parsed.data;
+      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay, pricingItemId, lotAddonId, notes } = parsed.data;
 
       const contact = await storage.createContact({
         companyId: company.id,
@@ -15577,6 +15601,7 @@ Return ONLY valid JSON, no markdown.`,
         yardSize,
         serviceFrequency,
         serviceDay: serviceDay || null,
+        notes: notes || null,
         status: "lead",
         leadSource: "website_widget",
       });
