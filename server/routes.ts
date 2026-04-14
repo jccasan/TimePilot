@@ -15747,10 +15747,11 @@ Return ONLY valid JSON, no markdown.`,
       if (company.quoteAutoFollowUpEnabled) {
         const priceDollars = callForQuote ? "Call for Quote" : ((quotePriceCents || 0) / 100).toFixed(2);
         const companyName = company.name || "Our Company";
+        const priceForMerge = callForQuote ? "a custom quote" : `$${priceDollars}/visit`;
         const mergeReplace = (tpl: string) =>
           tpl
             .replace(/\{firstName\}/g, firstName)
-            .replace(/\{price\}/g, priceDollars)
+            .replace(/\{price\}/g, priceForMerge)
             .replace(/\{frequency\}/g, serviceFrequency)
             .replace(/\{companyName\}/g, companyName)
             .replace(/\{dogs\}/g, String(numberOfDogs));
@@ -15760,7 +15761,7 @@ Return ONLY valid JSON, no markdown.`,
             try {
               const smsConfigured = await isSmsConfiguredForCompany(company.id);
               if (!smsConfigured) return;
-              const defaultSmsTpl = "Thanks {firstName}! Your estimated quote from {companyName} is ${price}/visit for {frequency} service. We'll be in touch to confirm your schedule!";
+              const defaultSmsTpl = "Thanks {firstName}! Your estimated quote from {companyName} is {price} for {frequency} service. We'll be in touch to confirm your schedule!";
               const smsTpl = company.quoteFollowUpSmsTemplate || defaultSmsTpl;
               const smsBody = mergeReplace(smsTpl);
               const result = await sendSmsForCompany({ to: phone, body: smsBody, companyId: company.id, contactId: contact.id });
@@ -15786,7 +15787,7 @@ Return ONLY valid JSON, no markdown.`,
               const logoHtml = company.logoUrl
                 ? `<img src="${escapeHtml(company.logoUrl)}" alt="${safeCompanyName}" style="max-height: 48px; max-width: 200px; margin-bottom: 8px;" /><br/>`
                 : "";
-              const defaultEmailBody = `Hi {firstName},\n\nThank you for requesting a quote from {companyName}!\n\nYour estimated price for {frequency} service with {dogs} dog(s) is $${priceDollars === "Call for Quote" ? "a custom quote — we'll be in touch!" : priceDollars + "/visit"}.${cleanupLabel ? `\nInitial cleanup: ${cleanupLabel} since last service.` : ""}\n\nWe'll follow up shortly to confirm your schedule.\n\nBest regards,\n{companyName}`;
+              const defaultEmailBody = `Hi {firstName},\n\nThank you for requesting a quote from {companyName}!\n\nYour estimated price for {frequency} service with {dogs} dog(s) is {price}.${cleanupLabel ? `\nInitial cleanup: ${cleanupLabel} since last service.` : ""}\n\nWe'll follow up shortly to confirm your schedule.\n\nBest regards,\n{companyName}`;
               const customBody = company.quoteFollowUpEmailBody;
               const text = mergeReplace(customBody || defaultEmailBody);
               const bodyHtml = escapeHtml(text).replace(/\n/g, "<br/>");

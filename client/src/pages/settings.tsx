@@ -1653,7 +1653,7 @@ function SmsQuoteTemplateSection({ company }: { company: Company | null }) {
     .replace(/\{firstName\}/g, "Jane")
     .replace(/\{dogs\}/g, "2")
     .replace(/\{frequency\}/g, "weekly")
-    .replace(/\{price\}/g, "29.00");
+    .replace(/\{price\}/g, "$29.00/visit");
 
   return (
     <Card data-testid="card-sms-quote-template">
@@ -1756,13 +1756,13 @@ function EmailTemplateEditor({ company }: { company: Company | null }) {
   const previewSubject = emailSubject
     .replace(/\{firstName\}/g, "Jane")
     .replace(/\{companyName\}/g, company?.name || "Your Company")
-    .replace(/\{price\}/g, "29.00")
+    .replace(/\{price\}/g, "$29.00/visit")
     .replace(/\{frequency\}/g, "weekly")
     .replace(/\{dogs\}/g, "2");
   const previewBody = emailBody
     .replace(/\{firstName\}/g, "Jane")
     .replace(/\{companyName\}/g, company?.name || "Your Company")
-    .replace(/\{price\}/g, "29.00")
+    .replace(/\{price\}/g, "$29.00/visit")
     .replace(/\{frequency\}/g, "weekly")
     .replace(/\{dogs\}/g, "2");
 
@@ -1833,7 +1833,7 @@ function EmailTemplateEditor({ company }: { company: Company | null }) {
 
 function QuoteAutoFollowUpSection({ company }: { company: Company | null }) {
   const { toast } = useToast();
-  const defaultSmsTemplate = "Thanks {firstName}! Your estimated quote from {companyName} is ${price}/visit for {frequency} service. We'll be in touch to confirm your schedule!";
+  const defaultSmsTemplate = "Thanks {firstName}! Your estimated quote from {companyName} is {price} for {frequency} service. We'll be in touch to confirm your schedule!";
   const [smsTemplate, setSmsTemplate] = useState(company?.quoteFollowUpSmsTemplate || defaultSmsTemplate);
 
   useEffect(() => {
@@ -1875,7 +1875,7 @@ function QuoteAutoFollowUpSection({ company }: { company: Company | null }) {
     .replace(/\{firstName\}/g, "Jane")
     .replace(/\{dogs\}/g, "2")
     .replace(/\{frequency\}/g, "weekly")
-    .replace(/\{price\}/g, "29.00")
+    .replace(/\{price\}/g, "$29.00/visit")
     .replace(/\{companyName\}/g, company?.name || "Your Company");
 
   const isEnabled = company?.quoteAutoFollowUpEnabled ?? false;
