@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, like, or, gte, lte, lt, inArray, count, isNull } from "drizzle-orm";
+import { eq, and, desc, asc, sql, like, ilike, or, gte, lte, lt, inArray, count, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   companies, companyUsers, contacts, tags, contactTags, leadSources,
@@ -550,10 +550,10 @@ export class DatabaseStorage implements IStorage {
     if (filters?.status) conditions.push(eq(contacts.status, filters.status as any));
     if (filters?.search) {
       conditions.push(or(
-        like(contacts.firstName, `%${filters.search}%`),
-        like(contacts.lastName, `%${filters.search}%`),
-        like(contacts.email, `%${filters.search}%`),
-        like(contacts.phone, `%${filters.search}%`),
+        ilike(contacts.firstName, `%${filters.search}%`),
+        ilike(contacts.lastName, `%${filters.search}%`),
+        ilike(contacts.email, `%${filters.search}%`),
+        ilike(contacts.phone, `%${filters.search}%`),
       )!);
     }
     return db.select().from(contacts).where(and(...conditions)).orderBy(asc(contacts.firstName), asc(contacts.lastName));

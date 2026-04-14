@@ -10950,22 +10950,32 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/portal/login", async (req: Request, res: Response) => {
     try {
-      const { email, password } = req.body;
-      if (!email || !password) {
+      const { email: rawEmail, password } = req.body;
+      if (!rawEmail || !password) {
         return res.status(400).json({ error: "Email and password are required" });
       }
+      const email = String(rawEmail).trim().toLowerCase();
 
       const allCompanies = await storage.listCompanies();
       let foundContact = null;
+      let hasAccessButNoPassword = false;
       for (const company of allCompanies) {
         const companyContacts = await storage.getContacts(company.id, { search: email });
         const match = companyContacts.find(
-          (c) => c.email?.toLowerCase() === email.toLowerCase() && c.hasPortalAccess && c.portalPasswordHash
+          (c) => c.email?.toLowerCase() === email && c.hasPortalAccess
         );
         if (match) {
-          foundContact = match;
-          break;
+          if (match.portalPasswordHash) {
+            foundContact = match;
+            break;
+          } else {
+            hasAccessButNoPassword = true;
+          }
         }
+      }
+
+      if (hasAccessButNoPassword) {
+        return res.status(401).json({ error: "Your account needs a password. Please use 'Forgot Password' to set one up." });
       }
 
       if (!foundContact || !foundContact.portalPasswordHash) {
@@ -11026,7 +11036,7 @@ Return ONLY valid JSON, no markdown.`,
       for (const company of allCompanies) {
         const companyContacts = await storage.getContacts(company.id, { search: normalizedEmail });
         const match = companyContacts.find(
-          (c) => c.email?.toLowerCase() === normalizedEmail && c.hasPortalAccess && c.portalPasswordHash
+          (c) => c.email?.toLowerCase() === normalizedEmail && c.hasPortalAccess
         );
         if (match) {
           foundContact = match;
