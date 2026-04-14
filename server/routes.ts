@@ -15646,8 +15646,9 @@ Return ONLY valid JSON, no markdown.`,
 
       let zoneSurchargePercent = 0;
       if (zipCode && quotePriceCents !== null && !callForQuote) {
+        const normalizedZip = zipCode.trim().slice(0, 5);
         const zones = await storage.getServiceZones(company.id);
-        const matchingZone = zones.find(z => z.zipCode === zipCode && z.isActive);
+        const matchingZone = zones.find(z => z.zipCode.trim().slice(0, 5) === normalizedZip && z.isActive);
         if (matchingZone && matchingZone.priceSurchargePercent > 0) {
           zoneSurchargePercent = matchingZone.priceSurchargePercent;
           quotePriceCents = Math.round(quotePriceCents * (1 + zoneSurchargePercent / 100));
