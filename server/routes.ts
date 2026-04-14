@@ -15789,6 +15789,7 @@ Return ONLY valid JSON, no markdown.`,
               const defaultEmailBody = `Hi {firstName},\n\nThank you for requesting a quote from {companyName}!\n\nYour estimated price for {frequency} service with {dogs} dog(s) is $${priceDollars === "Call for Quote" ? "a custom quote — we'll be in touch!" : priceDollars + "/visit"}.${cleanupLabel ? `\nInitial cleanup: ${cleanupLabel} since last service.` : ""}\n\nWe'll follow up shortly to confirm your schedule.\n\nBest regards,\n{companyName}`;
               const customBody = company.quoteFollowUpEmailBody;
               const text = mergeReplace(customBody || defaultEmailBody);
+              const bodyHtml = escapeHtml(text).replace(/\n/g, "<br/>");
               const html = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                   <div style="background-color: #2d8a5e; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
@@ -15796,8 +15797,7 @@ Return ONLY valid JSON, no markdown.`,
                     <h1 style="color: white; margin: 0; font-size: 22px;">${safeCompanyName}</h1>
                   </div>
                   <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none;">
-                    <p style="margin: 0 0 16px; font-size: 16px; color: #1f2937;">Hi ${safeFirstName},</p>
-                    <p style="margin: 0 0 16px; color: #4b5563;">Thank you for requesting a quote! Here are your estimated service details:</p>
+                    <div style="margin: 0 0 20px; color: #4b5563; font-size: 14px; line-height: 1.6;">${bodyHtml}</div>
                     <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin: 0 0 20px;">
                       <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
                         <tr>
@@ -15815,9 +15815,7 @@ Return ONLY valid JSON, no markdown.`,
                         </tr>
                       </table>
                     </div>
-                    <p style="margin: 0 0 8px; color: #4b5563;">We'll follow up shortly to confirm your schedule and get you started!</p>
                     ${company.phone ? `<p style="margin: 0 0 16px;"><a href="tel:${escapeHtml(company.phone)}" style="display: inline-block; background-color: #16a34a; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600;">Contact Us</a></p>` : ""}
-                    <p style="margin: 20px 0 0; color: #4b5563;">Best regards,<br/><strong>${safeCompanyName}</strong></p>
                   </div>
                   <div style="padding: 12px; text-align: center; font-size: 11px; color: #9ca3af;">
                     ${safeCompanyName}
