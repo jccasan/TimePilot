@@ -370,6 +370,11 @@ export default function SignupWidget() {
   const [, params] = useRoute("/signup/:slug");
   const slug = params?.slug || "";
 
+  const isEmbed = useMemo(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    return searchParams.get("embed") === "true";
+  }, []);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [zipCode, setZipCode] = useState("");
   const [zipError, setZipError] = useState<string | null>(null);
@@ -467,11 +472,9 @@ export default function SignupWidget() {
     onSuccess: (data) => {
       if (data.inServiceArea) {
         setZipError(null);
-        setZipChecked(true);
         setCurrentStep(2);
       } else {
         setZipError("Sorry, we don't currently service your area. Please check back soon!");
-        setZipChecked(false);
       }
     },
     onError: (err: Error) => {
@@ -543,8 +546,8 @@ export default function SignupWidget() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center p-4">
-        <Card className="w-full max-w-lg shadow-xl">
+      <div className={isEmbed ? "" : "min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center p-4"}>
+        <Card className={`w-full ${isEmbed ? "shadow-none border-0" : "max-w-lg shadow-xl"}`}>
           <CardContent className="p-8 space-y-4">
             <Skeleton className="h-8 w-48 mx-auto" />
             <Skeleton className="h-4 w-64 mx-auto" />
@@ -558,8 +561,8 @@ export default function SignupWidget() {
 
   if (error || !company) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center p-4">
-        <Card className="w-full max-w-lg shadow-xl">
+      <div className={isEmbed ? "" : "min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center p-4"}>
+        <Card className={`w-full ${isEmbed ? "shadow-none border-0" : "max-w-lg shadow-xl"}`}>
           <CardContent className="p-8 text-center">
             <Dog className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h2 className="text-xl font-semibold mb-2" data-testid="text-company-not-found">Company Not Found</h2>
@@ -576,9 +579,9 @@ export default function SignupWidget() {
     const freqLabel = selectedFreq ? (FREQ_DISPLAY[selectedFreq] || selectedFreq) : "visit";
 
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(to bottom, ${brandStyles.gradientFrom}, white)` }}>
-        <div className="w-full max-w-lg">
-          <Card className="shadow-xl overflow-hidden">
+      <div className={isEmbed ? "" : "min-h-screen flex items-center justify-center p-4"} style={isEmbed ? {} : { background: `linear-gradient(to bottom, ${brandStyles.gradientFrom}, white)` }}>
+        <div className={`w-full ${isEmbed ? "" : "max-w-lg"}`}>
+          <Card className={`overflow-hidden ${isEmbed ? "shadow-none border-0" : "shadow-xl"}`}>
             <div className="p-8 text-center" style={{ backgroundColor: brandStyles.headerBg }}>
               {company.logoUrl && (
                 <img src={company.logoUrl} alt={company.name} className="h-14 mx-auto mb-4 rounded-lg shadow-sm" data-testid="img-company-logo-result" />
@@ -636,23 +639,25 @@ export default function SignupWidget() {
               </div>
             </CardContent>
           </Card>
-          <div className="mt-6 text-center space-y-1">
-            <p className="text-xs text-muted-foreground font-medium" data-testid="text-powered-by">
-              Powered by <a href="https://servicd.app" target="_blank" rel="noopener noreferrer" className="underline font-semibold" style={{ color: brandStyles.accentText }}>Servicd</a>
-            </p>
-            <p className="text-xs text-muted-foreground" data-testid="text-copyright">
-              &copy; {new Date().getFullYear()} PetPilot LLC dba Servicd and ScooPilot
-            </p>
-          </div>
+          {!isEmbed && (
+            <div className="mt-6 text-center space-y-1">
+              <p className="text-xs text-muted-foreground font-medium" data-testid="text-powered-by">
+                Powered by <a href="https://servicd.app" target="_blank" rel="noopener noreferrer" className="underline font-semibold" style={{ color: brandStyles.accentText }}>Servicd</a>
+              </p>
+              <p className="text-xs text-muted-foreground" data-testid="text-copyright">
+                &copy; {new Date().getFullYear()} PetPilot LLC dba Servicd and ScooPilot
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(to bottom, ${brandStyles.gradientFrom}, white)` }}>
-      <div className="w-full max-w-lg">
-        <Card className="shadow-xl overflow-hidden">
+    <div className={isEmbed ? "" : "min-h-screen flex items-center justify-center p-4"} style={isEmbed ? {} : { background: `linear-gradient(to bottom, ${brandStyles.gradientFrom}, white)` }}>
+      <div className={`w-full ${isEmbed ? "" : "max-w-lg"}`}>
+        <Card className={`overflow-hidden ${isEmbed ? "shadow-none border-0" : "shadow-xl"}`}>
           <div className="p-6 text-center" style={{ backgroundColor: brandStyles.headerBg }}>
             {company.logoUrl && (
               <img src={company.logoUrl} alt={company.name} className="h-14 mx-auto mb-3 rounded-lg shadow-sm" data-testid="img-company-logo" />
@@ -1132,14 +1137,16 @@ export default function SignupWidget() {
             )}
           </CardContent>
         </Card>
-        <div className="mt-6 text-center space-y-1">
-          <p className="text-xs text-muted-foreground font-medium" data-testid="text-powered-by">
-            Powered by <a href="https://servicd.app" target="_blank" rel="noopener noreferrer" className="underline font-semibold" style={{ color: brandStyles.accentText }}>Servicd</a>
-          </p>
-          <p className="text-xs text-muted-foreground" data-testid="text-copyright">
-            &copy; {new Date().getFullYear()} PetPilot LLC dba Servicd and ScooPilot
-          </p>
-        </div>
+        {!isEmbed && (
+          <div className="mt-6 text-center space-y-1">
+            <p className="text-xs text-muted-foreground font-medium" data-testid="text-powered-by">
+              Powered by <a href="https://servicd.app" target="_blank" rel="noopener noreferrer" className="underline font-semibold" style={{ color: brandStyles.accentText }}>Servicd</a>
+            </p>
+            <p className="text-xs text-muted-foreground" data-testid="text-copyright">
+              &copy; {new Date().getFullYear()} PetPilot LLC dba Servicd and ScooPilot
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

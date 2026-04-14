@@ -1248,8 +1248,9 @@ function SignupWidgetSection({ company }: { company: { slug: string | null; name
 
   const baseUrl = window.location.origin;
   const signupUrl = company?.slug ? `${baseUrl}/signup/${company.slug}` : "";
+  const embedUrl = company?.slug ? `${baseUrl}/signup/${company.slug}?embed=true` : "";
   const iframeSnippet = company?.slug
-    ? `<iframe src="${signupUrl}" width="100%" height="700" frameborder="0" style="border:none;max-width:500px;"></iframe>`
+    ? `<div style="max-width:500px;margin:0 auto;"><iframe src="${embedUrl}" width="100%" height="700" frameborder="0" style="border:none;width:100%;min-height:700px;" allow="clipboard-write"></iframe></div>`
     : "";
 
   const copyToClipboard = (text: string, label: string) => {
@@ -1318,11 +1319,18 @@ function SignupWidgetSection({ company }: { company: { slug: string | null; name
 
             <div className="space-y-1.5">
               <Label>Embed Code</Label>
-              <div className="flex gap-2">
-                <Input value={iframeSnippet} readOnly className="text-sm font-mono" data-testid="input-embed-code" />
+              <div className="relative">
+                <textarea
+                  value={iframeSnippet}
+                  readOnly
+                  rows={3}
+                  className="w-full text-xs font-mono bg-muted/50 border rounded-md p-3 pr-12 resize-none"
+                  data-testid="input-embed-code"
+                />
                 <Button
                   variant="outline"
                   size="icon"
+                  className="absolute top-2 right-2 h-8 w-8"
                   onClick={() => copyToClipboard(iframeSnippet, "Embed code")}
                   data-testid="button-copy-embed-code"
                 >
@@ -1330,7 +1338,7 @@ function SignupWidgetSection({ company }: { company: { slug: string | null; name
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Paste this HTML into your website to embed the signup form.
+                Paste this HTML into your website (WordPress, Wix, Squarespace, etc.) to embed the quote form. The widget will adapt to your container width.
               </p>
             </div>
 
