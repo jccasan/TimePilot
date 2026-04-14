@@ -7,7 +7,7 @@ import multer from "multer";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, gte, isNotNull, like, or, inArray, desc } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable, stripeEvents, automationRules, automationEventLogs } from "@shared/schema";
+import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable, stripeEvents, automationRules, automationEventLogs, quoteFormEvents } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -15545,6 +15545,59 @@ Return ONLY valid JSON, no markdown.`,
         },
         source: leadSource,
       });
+    } catch (err) { handleError(res, err); }
+  });
+
+  const quoteTrackSchema = z.object({
+    sessionId: z.string().min(8).max(64),
+    event: z.enum(["form_loaded", "zip_entered", "zip_passed", "zip_failed", "step2_completed", "step3_started", "submitted", "quote_shown"]),
+    step: z.number().int().min(0).max(4).optional(),
+    metadata: z.record(z.string().max(500)).optional().transform(val => {
+      if (!val) return val;
+      const keys = Object.keys(val);
+      if (keys.length > 10) return Object.fromEntries(keys.slice(0, 10).map(k => [k, val[k]]));
+      return val;
+    }),
+    referrer: z.string().max(2000).optional(),
+    isEmbed: z.boolean().optional(),
+  });
+
+  const quoteTrackRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+  app.post("/api/public/quote-events/:slug", async (req: Request, res: Response) => {
+    try {
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const entry = quoteTrackRateLimit.get(clientIp);
+      if (entry && entry.resetAt > now) {
+        if (entry.count >= 100) {
+          return res.status(429).json({ error: "Too many requests" });
+        }
+        entry.count++;
+      } else {
+        quoteTrackRateLimit.set(clientIp, { count: 1, resetAt: now + 60 * 60 * 1000 });
+      }
+
+      const { slug } = req.params;
+      const company = await storage.getCompanyBySlug(slug);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const parsed = quoteTrackSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+
+      const { sessionId, event, step, metadata, referrer, isEmbed } = parsed.data;
+      await db.insert(quoteFormEvents).values({
+        companyId: company.id,
+        sessionId,
+        event,
+        step: step ?? null,
+        metadata: metadata ?? null,
+        referrer: referrer ?? null,
+        userAgent: req.get("user-agent") || null,
+        isEmbed: isEmbed ?? false,
+      });
+
+      res.json({ ok: true });
     } catch (err) { handleError(res, err); }
   });
 

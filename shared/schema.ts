@@ -1802,3 +1802,25 @@ export const stripeEvents = pgTable("stripe_events", {
 }, (table) => [
   index("idx_stripe_events_processed").on(table.processedAt),
 ]);
+
+export const quoteFormEvents = pgTable("quote_form_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id", { length: 64 }).notNull(),
+  event: varchar("event", { length: 50 }).notNull(),
+  step: integer("step"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  referrer: text("referrer"),
+  userAgent: text("user_agent"),
+  isEmbed: boolean("is_embed").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_qfe_company").on(table.companyId),
+  index("idx_qfe_session").on(table.sessionId),
+  index("idx_qfe_event").on(table.companyId, table.event),
+  index("idx_qfe_created").on(table.companyId, table.createdAt),
+]);
+
+export const insertQuoteFormEventSchema = createInsertSchema(quoteFormEvents).omit({ id: true, createdAt: true });
+export type QuoteFormEvent = typeof quoteFormEvents.$inferSelect;
+export type InsertQuoteFormEvent = z.infer<typeof insertQuoteFormEventSchema>;

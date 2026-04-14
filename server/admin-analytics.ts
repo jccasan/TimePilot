@@ -6,7 +6,7 @@ import {
   companies, companyUsers, contacts, servicePlans, invoices,
   visits, smsMessages, emailsSent, saasCostsMonthly,
   TIER_CONFIG, messages, messageAttachments, messageExceptions,
-  voiceCalls,
+  voiceCalls, quoteFormEvents,
 } from "@shared/schema";
 
 const SMS_COST_PER_SEGMENT_CENTS = 75;
@@ -952,6 +952,146 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
     } catch (err) {
       console.error("Fixed costs upsert error:", err);
       res.status(500).json({ error: "Failed to save fixed costs" });
+    }
+  });
+
+  app.get("/api/admin/analytics/quote-funnel", isAdmin as any, async (req: Request, res: Response) => {
+    try {
+      const days = Math.min(Number(req.query.days) || 30, 365);
+      const companyFilter = req.query.companyId as string | undefined;
+      const since = new Date(Date.now() - days * 86400000);
+
+      const conditions = [gte(quoteFormEvents.createdAt, since)];
+      if (companyFilter) conditions.push(eq(quoteFormEvents.companyId, companyFilter));
+
+      const eventCounts = await db
+        .select({
+          event: quoteFormEvents.event,
+          cnt: count(),
+        })
+        .from(quoteFormEvents)
+        .where(and(...conditions))
+        .groupBy(quoteFormEvents.event);
+
+      const funnelMap: Record<string, number> = {};
+      for (const r of eventCounts) funnelMap[r.event] = Number(r.cnt);
+
+      const sessionCounts = await db
+        .select({
+          event: quoteFormEvents.event,
+          sessions: sql<number>`COUNT(DISTINCT ${quoteFormEvents.sessionId})`,
+        })
+        .from(quoteFormEvents)
+        .where(and(...conditions))
+        .groupBy(quoteFormEvents.event);
+
+      const sessionMap: Record<string, number> = {};
+      for (const r of sessionCounts) sessionMap[r.event] = Number(r.sessions);
+
+      const totalSessions = await db
+        .select({ cnt: sql<number>`COUNT(DISTINCT ${quoteFormEvents.sessionId})` })
+        .from(quoteFormEvents)
+        .where(and(...conditions));
+
+      const embedVsDirect = await db
+        .select({
+          isEmbed: quoteFormEvents.isEmbed,
+          sessions: sql<number>`COUNT(DISTINCT ${quoteFormEvents.sessionId})`,
+        })
+        .from(quoteFormEvents)
+        .where(and(...conditions))
+        .groupBy(quoteFormEvents.isEmbed);
+
+      const embedMap: Record<string, number> = {};
+      for (const r of embedVsDirect) {
+        embedMap[r.isEmbed ? "embed" : "direct"] = Number(r.sessions);
+      }
+
+      const dailyRows = await db
+        .select({
+          day: sql<string>`TO_CHAR(${quoteFormEvents.createdAt}, 'YYYY-MM-DD')`,
+          event: quoteFormEvents.event,
+          cnt: sql<number>`COUNT(DISTINCT ${quoteFormEvents.sessionId})`,
+        })
+        .from(quoteFormEvents)
+        .where(and(...conditions))
+        .groupBy(sql`TO_CHAR(${quoteFormEvents.createdAt}, 'YYYY-MM-DD')`, quoteFormEvents.event)
+        .orderBy(sql`TO_CHAR(${quoteFormEvents.createdAt}, 'YYYY-MM-DD')`);
+
+      const dailyMap: Record<string, Record<string, number>> = {};
+      for (const r of dailyRows) {
+        if (!dailyMap[r.day]) dailyMap[r.day] = {};
+        dailyMap[r.day][r.event] = Number(r.cnt);
+      }
+
+      const byCompanyRows = await db
+        .select({
+          companyId: quoteFormEvents.companyId,
+          event: quoteFormEvents.event,
+          sessions: sql<number>`COUNT(DISTINCT ${quoteFormEvents.sessionId})`,
+        })
+        .from(quoteFormEvents)
+        .where(and(...conditions))
+        .groupBy(quoteFormEvents.companyId, quoteFormEvents.event);
+
+      const companyMap: Record<string, Record<string, number>> = {};
+      for (const r of byCompanyRows) {
+        if (!companyMap[r.companyId]) companyMap[r.companyId] = {};
+        companyMap[r.companyId][r.event] = Number(r.sessions);
+      }
+
+      const companyIds = Object.keys(companyMap);
+      const companyNames: Record<string, string> = {};
+      if (companyIds.length > 0) {
+        const names = await db
+          .select({ id: companies.id, name: companies.name })
+          .from(companies)
+          .where(sql`${companies.id} IN (${sql.join(companyIds.map(id => sql`${id}`), sql`, `)})`);
+        for (const c of names) companyNames[c.id] = c.name;
+      }
+
+      const byCompany = companyIds.map(id => ({
+        companyId: id,
+        companyName: companyNames[id] || id,
+        loaded: companyMap[id].form_loaded || 0,
+        zipPassed: companyMap[id].zip_passed || 0,
+        submitted: companyMap[id].submitted || 0,
+        quoteShown: companyMap[id].quote_shown || 0,
+        conversionPct: companyMap[id].form_loaded
+          ? ((companyMap[id].submitted || 0) / companyMap[id].form_loaded * 100)
+          : 0,
+      })).sort((a, b) => b.loaded - a.loaded);
+
+      const funnel = [
+        { step: "Form Loaded", event: "form_loaded", sessions: sessionMap.form_loaded || 0 },
+        { step: "ZIP Entered", event: "zip_entered", sessions: sessionMap.zip_entered || 0 },
+        { step: "ZIP Passed", event: "zip_passed", sessions: sessionMap.zip_passed || 0 },
+        { step: "Service Details Done", event: "step2_completed", sessions: sessionMap.step2_completed || 0 },
+        { step: "Contact Started", event: "step3_started", sessions: sessionMap.step3_started || 0 },
+        { step: "Submitted", event: "submitted", sessions: sessionMap.submitted || 0 },
+        { step: "Quote Shown", event: "quote_shown", sessions: sessionMap.quote_shown || 0 },
+      ];
+
+      const loaded = sessionMap.form_loaded || 0;
+      for (const f of funnel) {
+        (f as any).pct = loaded > 0 ? (f.sessions / loaded * 100) : 0;
+      }
+
+      res.json({
+        days,
+        totalSessions: Number(totalSessions[0]?.cnt || 0),
+        totalEvents: Object.values(funnelMap).reduce((a, b) => a + b, 0),
+        funnel,
+        embedVsDirect: embedMap,
+        daily: dailyMap,
+        byCompany: byCompany.slice(0, 20),
+        overallConversion: loaded > 0
+          ? ((sessionMap.submitted || 0) / loaded * 100)
+          : 0,
+      });
+    } catch (err) {
+      console.error("Quote funnel analytics error:", err);
+      res.status(500).json({ error: "Failed to load funnel data" });
     }
   });
 }

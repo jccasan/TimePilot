@@ -18,6 +18,7 @@ import {
   CreditCard, Repeat, Target, MessageSquare, Calculator, Search,
   ChevronRight, ArrowUpRight, ArrowDownRight, Activity,
   Mail, Phone, BarChart3, Wallet, ArrowUpDown, Plus, Pencil,
+  Filter,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState, useMemo } from "react";
@@ -876,6 +877,138 @@ function CustomerCostsTab() {
   );
 }
 
+function FunnelTab() {
+  const [days, setDays] = useState("30");
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/analytics/quote-funnel", days],
+    queryFn: adminFetchFn(`/api/admin/analytics/quote-funnel?days=${days}`),
+  });
+
+  if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;
+
+  const funnel: any[] = data?.funnel || [];
+  const topLoaded = funnel.find((f: any) => f.event === "form_loaded")?.sessions || 0;
+
+  return (
+    <div className="space-y-6" data-testid="tab-content-funnel">
+      <div className="flex items-center gap-3">
+        <Select value={days} onValueChange={setDays}>
+          <SelectTrigger className="w-36" data-testid="select-funnel-days">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7">Last 7 days</SelectItem>
+            <SelectItem value="14">Last 14 days</SelectItem>
+            <SelectItem value="30">Last 30 days</SelectItem>
+            <SelectItem value="90">Last 90 days</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="text-sm text-muted-foreground">
+          {data?.totalSessions ?? 0} unique sessions · {data?.totalEvents ?? 0} events
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Total Sessions" value={data?.totalSessions ?? 0} icon={BarChart3} />
+        <StatCard label="Conversion Rate" value={pct(data?.overallConversion)} icon={Target} />
+        <StatCard
+          label="Embed Sessions"
+          value={data?.embedVsDirect?.embed ?? 0}
+          icon={Activity}
+          subtitle={`${data?.embedVsDirect?.direct ?? 0} direct`}
+        />
+        <StatCard
+          label="Submitted"
+          value={funnel.find((f: any) => f.event === "submitted")?.sessions ?? 0}
+          icon={ArrowUpRight}
+        />
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Conversion Funnel</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {funnel.length > 0 ? (
+            <div className="space-y-3">
+              {funnel.map((f: any, idx: number) => {
+                const widthPct = topLoaded > 0 ? Math.max((f.sessions / topLoaded) * 100, 4) : 0;
+                const prevSessions = idx > 0 ? funnel[idx - 1].sessions : f.sessions;
+                const dropoff = prevSessions > 0 ? ((prevSessions - f.sessions) / prevSessions * 100) : 0;
+                return (
+                  <div key={f.event} data-testid={`row-funnel-${f.event}`}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span className="font-medium">{f.step}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="tabular-nums" data-testid={`text-funnel-count-${f.event}`}>{f.sessions}</span>
+                        <Badge variant="outline" data-testid={`badge-funnel-pct-${f.event}`}>{pct(f.pct)}</Badge>
+                        {idx > 0 && dropoff > 0 && (
+                          <span className="text-xs text-red-500" data-testid={`text-funnel-drop-${f.event}`}>
+                            -{dropoff.toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="h-6 bg-muted rounded-md overflow-hidden">
+                      <div
+                        className="h-full rounded-md transition-all duration-500"
+                        style={{
+                          width: `${widthPct}%`,
+                          backgroundColor: idx < 3 ? "hsl(var(--primary))" : idx < 5 ? "hsl(var(--primary) / 0.7)" : "hsl(142 60% 45%)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8" data-testid="text-no-funnel-data">
+              No funnel data yet. Events will appear once visitors use the quote form.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {data?.byCompany?.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">By Company</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Company</TableHead>
+                  <TableHead className="text-center">Loaded</TableHead>
+                  <TableHead className="text-center">ZIP Passed</TableHead>
+                  <TableHead className="text-center">Submitted</TableHead>
+                  <TableHead className="text-center">Conversion</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.byCompany.map((c: any) => (
+                  <TableRow key={c.companyId} data-testid={`row-funnel-company-${c.companyId}`}>
+                    <TableCell className="font-medium truncate max-w-[200px]" data-testid={`text-funnel-company-${c.companyId}`}>{c.companyName}</TableCell>
+                    <TableCell className="text-center">{c.loaded}</TableCell>
+                    <TableCell className="text-center">{c.zipPassed}</TableCell>
+                    <TableCell className="text-center">{c.submitted}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={c.conversionPct >= 10 ? "default" : "outline"} data-testid={`badge-funnel-conv-${c.companyId}`}>
+                        {pct(c.conversionPct)}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 const TABS = [
   { key: "executive", label: "Executive", icon: BarChart3 },
   { key: "accounts", label: "Accounts", icon: Building2 },
@@ -885,6 +1018,7 @@ const TABS = [
   { key: "activation", label: "Activation", icon: Target },
   { key: "messaging", label: "Messaging", icon: MessageSquare },
   { key: "economics", label: "Unit Economics", icon: Calculator },
+  { key: "funnel", label: "Quote Funnel", icon: Filter },
 ] as const;
 
 function InactiveUsersAlert() {
@@ -987,6 +1121,7 @@ export default function AdminAnalytics() {
         {activeTab === "activation" && <ActivationTab />}
         {activeTab === "messaging" && <MessagingTab />}
         {activeTab === "economics" && <UnitEconomicsTab />}
+        {activeTab === "funnel" && <FunnelTab />}
       </div>
     </div>
   );

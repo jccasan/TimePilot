@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useRoute } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,43 @@ import {
   AlertCircle,
   Sparkles,
 } from "lucide-react";
+
+function StepTracker({ track }: { track: (event: string, step?: number) => void }) {
+  useEffect(() => { track("step3_started", 3); }, [track]);
+  return null;
+}
+
+function generateSessionId(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  for (let i = 0; i < 16; i++) result += chars[Math.floor(Math.random() * chars.length)];
+  return result;
+}
+
+function useQuoteTracking(slug: string, isEmbed: boolean) {
+  const sessionId = useRef(generateSessionId());
+  const firedRef = useRef<Set<string>>(new Set());
+
+  const track = useCallback((event: string, step?: number, metadata?: Record<string, unknown>) => {
+    if (firedRef.current.has(event)) return;
+    firedRef.current.add(event);
+    const body: Record<string, unknown> = {
+      sessionId: sessionId.current,
+      event,
+      isEmbed,
+    };
+    if (step !== undefined) body.step = step;
+    if (metadata) body.metadata = metadata;
+    try { body.referrer = document.referrer || undefined; } catch {}
+    fetch(`/api/public/quote-events/${slug}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+  }, [slug, isEmbed]);
+
+  return track;
+}
 
 type PricingMetadata = {
   callForQuote?: boolean;
@@ -375,6 +412,8 @@ export default function SignupWidget() {
     return searchParams.get("embed") === "true";
   }, []);
 
+  const track = useQuoteTracking(slug, isEmbed);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [zipCode, setZipCode] = useState("");
   const [zipError, setZipError] = useState<string | null>(null);
@@ -407,6 +446,10 @@ export default function SignupWidget() {
     },
     enabled: !!slug,
   });
+
+  useEffect(() => {
+    if (company && slug) track("form_loaded", 1);
+  }, [company, slug, track]);
 
   const brandStyles = useMemo(() => getBrandStyles(company?.primaryColor || null), [company?.primaryColor]);
 
@@ -465,6 +508,7 @@ export default function SignupWidget() {
       if (normalizedZip.length < 5 || !/^\d{5}$/.test(normalizedZip)) {
         throw new Error("Please enter a valid 5-digit ZIP code.");
       }
+      track("zip_entered", 1, { zip: normalizedZip });
       const res = await fetch(`/api/public/check-zip/${slug}/${normalizedZip}`);
       if (!res.ok) throw new Error("Unable to check service area. Please try again.");
       return res.json() as Promise<ZipCheckResult>;
@@ -472,8 +516,10 @@ export default function SignupWidget() {
     onSuccess: (data) => {
       if (data.inServiceArea) {
         setZipError(null);
+        track("zip_passed", 1);
         setCurrentStep(2);
       } else {
+        track("zip_failed", 1);
         setZipError("Sorry, we don't currently service your area. Please check back soon!");
       }
     },
@@ -530,6 +576,7 @@ export default function SignupWidget() {
     },
     onSuccess: (data) => {
       setQuoteResult(data);
+      track("quote_shown", 4);
     },
   });
 
@@ -953,7 +1000,7 @@ export default function SignupWidget() {
                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonHover)}
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonBg)}
                     disabled={!isStep2Valid}
-                    onClick={() => setCurrentStep(3)}
+                    onClick={() => { track("step2_completed", 2); setCurrentStep(3); }}
                     data-testid="button-next-step3"
                   >
                     Continue <ArrowRight className="h-4 w-4 ml-2" />
@@ -964,6 +1011,7 @@ export default function SignupWidget() {
 
             {currentStep === 3 && (
               <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300" data-testid="step-3-contact">
+                <StepTracker track={track} />
                 <div className="text-center space-y-1">
                   <h2 className="text-xl font-bold">Contact Information</h2>
                   <p className="text-sm text-muted-foreground">Almost done! Tell us how to reach you</p>
@@ -972,7 +1020,10 @@ export default function SignupWidget() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (isStep3Valid) submitMutation.mutate();
+                    if (isStep3Valid) {
+                      track("submitted", 3);
+                      submitMutation.mutate();
+                    }
                   }}
                   className="space-y-4"
                 >
