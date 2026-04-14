@@ -405,10 +405,23 @@ export default function SignupWidget() {
     return searchParams.get("embed") === "true";
   }, []);
 
-  const isPreview = useMemo(() => {
+  const previewRequested = useMemo(() => {
     const searchParams = new URLSearchParams(window.location.search);
     return searchParams.get("preview") === "true";
   }, []);
+
+  const { data: authUser } = useQuery<{ id: string } | null>({
+    queryKey: ["/api/auth/user"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/user");
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: previewRequested,
+    retry: false,
+  });
+
+  const isPreview = previewRequested && !!authUser;
 
   const track = useQuoteTracking(slug, isEmbed);
 
