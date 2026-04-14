@@ -1351,9 +1351,9 @@ function SignupWidgetSection({ company }: { company: { slug: string | null; name
             </div>
 
             <Button variant="outline" size="sm" asChild data-testid="button-preview-signup">
-              <a href={signupUrl} target="_blank" rel="noopener noreferrer">
+              <a href={`${signupUrl}?preview=true`} target="_blank" rel="noopener noreferrer">
                 <Link2 className="h-4 w-4 mr-2" />
-                Preview Signup Page
+                Preview Quote Form
               </a>
             </Button>
           </div>

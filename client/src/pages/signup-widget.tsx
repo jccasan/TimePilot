@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   AlertCircle,
   Sparkles,
+  Eye,
 } from "lucide-react";
 
 function StepTracker({ track }: { track: (event: string, step?: number) => void }) {
@@ -404,6 +405,11 @@ export default function SignupWidget() {
     return searchParams.get("embed") === "true";
   }, []);
 
+  const isPreview = useMemo(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    return searchParams.get("preview") === "true";
+  }, []);
+
   const track = useQuoteTracking(slug, isEmbed);
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -706,6 +712,13 @@ export default function SignupWidget() {
             <h1 className="text-xl font-bold text-white" data-testid="text-company-name">{company.name}</h1>
             <p className="text-sm mt-1 text-white/80">Get a Free Quote for Pet Waste Removal</p>
           </div>
+
+          {isPreview && (
+            <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm font-medium" data-testid="banner-preview-mode">
+              <Eye className="h-4 w-4 flex-shrink-0" />
+              <span>Preview Mode — submissions are disabled</span>
+            </div>
+          )}
 
           <StepIndicator currentStep={currentStep} totalSteps={3} brandStyles={brandStyles} />
 
@@ -1014,6 +1027,7 @@ export default function SignupWidget() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
+                    if (isPreview) return;
                     if (isStep3Valid) {
                       submitMutation.mutate();
                     }
@@ -1163,13 +1177,15 @@ export default function SignupWidget() {
                     <Button
                       type="submit"
                       className="flex-[2] text-white h-12 text-base font-semibold"
-                      style={{ backgroundColor: brandStyles.buttonBg }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonHover)}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonBg)}
-                      disabled={!isStep3Valid || submitMutation.isPending}
+                      style={{ backgroundColor: isPreview ? "#9ca3af" : brandStyles.buttonBg }}
+                      onMouseEnter={(e) => { if (!isPreview) e.currentTarget.style.backgroundColor = brandStyles.buttonHover; }}
+                      onMouseLeave={(e) => { if (!isPreview) e.currentTarget.style.backgroundColor = brandStyles.buttonBg; }}
+                      disabled={isPreview || !isStep3Valid || submitMutation.isPending}
                       data-testid="button-get-quote"
                     >
-                      {submitMutation.isPending ? (
+                      {isPreview ? (
+                        <><Eye className="h-5 w-5 mr-2" /> Preview Only</>
+                      ) : submitMutation.isPending ? (
                         <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Submitting...</>
                       ) : (
                         <><CheckCircle2 className="h-5 w-5 mr-2" /> Get My Free Quote</>
