@@ -1328,32 +1328,17 @@ export default function RoutesPage() {
 
   const dayStopCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    const visitPlanIdsByDay: Record<string, Set<string>> = {};
-    for (const d of DAYS) visitPlanIdsByDay[d] = new Set();
+    for (const d of DAYS) counts[d] = 0;
+    const hiddenStatuses = new Set(["cancelled", "skipped"]);
     for (const v of weekVisits) {
-      if (!v.servicePlanId || !v.scheduledDate) continue;
+      if (!v.scheduledDate || hiddenStatuses.has(v.status)) continue;
       const vDate = new Date(v.scheduledDate + "T12:00:00");
       const dayIdx = (vDate.getDay() + 6) % 7;
       const dayKey = DAYS[dayIdx];
-      if (dayKey) visitPlanIdsByDay[dayKey].add(v.servicePlanId);
-    }
-    for (const d of DAYS) {
-      const dayRouteIds = new Set(allRoutes.filter(r => {
-        if (r.dayOfWeek !== d) return false;
-        if (r.date) {
-          const rd = new Date(r.date + "T12:00:00");
-          return rd >= currentWeekRange.start && rd <= currentWeekRange.end;
-        }
-        return true;
-      }).map(r => r.id));
-      const planIdsForDay = visitPlanIdsByDay[d];
-      counts[d] = visiblePlans.filter(sp => {
-        if (!sp.routeId || !dayRouteIds.has(sp.routeId)) return false;
-        return sp.frequency === "weekly" || planIdsForDay.has(sp.id);
-      }).length;
+      if (dayKey !== undefined) counts[dayKey] = (counts[dayKey] || 0) + 1;
     }
     return counts;
-  }, [allRoutes, visiblePlans, currentWeekRange, weekVisits]);
+  }, [weekVisits]);
 
   const createRouteMutation = useMutation({
     mutationFn: async (data: { name: string; dayOfWeek: string; technicianId: string | null; color: string }) => {
