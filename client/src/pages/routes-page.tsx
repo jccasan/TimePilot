@@ -975,8 +975,17 @@ export default function RoutesPage() {
         return;
       }
 
+      // Build a comprehensive stop count per route from ALL active service plans
+      // (not stopsByRoute, which is filtered to the currently-selected day)
+      const stopCountByRoute: Record<string, number> = {};
+      for (const sp of servicePlans) {
+        if (sp.routeId) {
+          stopCountByRoute[sp.routeId] = (stopCountByRoute[sp.routeId] || 0) + 1;
+        }
+      }
+
       const oversizedRoutes = allRoutes.filter(r => {
-        const count = (stopsByRoute[r.id] || []).length;
+        const count = stopCountByRoute[r.id] || 0;
         return count > maxStops;
       });
 
@@ -1005,16 +1014,21 @@ export default function RoutesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
 
-      if (errors.length > 0) {
+      if (errors.length > 0 && totalSplitRoutes === 0) {
         toast({
-          title: "Some routes could not be split",
+          title: "Could not split routes",
           description: `Failed: ${errors.join(", ")}`,
           variant: "destructive",
         });
-      } else {
-        const newTotal = totalRoutesCreated;
+      } else if (errors.length > 0) {
         toast({
-          title: `${totalSplitRoutes} route${totalSplitRoutes !== 1 ? "s" : ""} split into ${totalSplitRoutes + newTotal} sub-routes`,
+          title: `${totalSplitRoutes} route${totalSplitRoutes !== 1 ? "s" : ""} split into ${totalSplitRoutes + totalRoutesCreated} sub-routes`,
+          description: `Some routes could not be split: ${errors.join(", ")}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: `${totalSplitRoutes} route${totalSplitRoutes !== 1 ? "s" : ""} split into ${totalSplitRoutes + totalRoutesCreated} sub-routes`,
           description: `Each sub-route has been optimized and visits regenerated.`,
         });
       }
