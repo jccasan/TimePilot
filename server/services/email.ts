@@ -51,6 +51,11 @@ export function extractThreadIdFromAddress(address: string): string | null {
 }
 
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
+  if (process.env.DISABLE_EMAIL_SENDING === "true") {
+    console.log(`Email suppressed (DISABLE_EMAIL_SENDING=true): to=${options.to} subject="${options.subject}"`);
+    return { success: true, messageId: "suppressed" };
+  }
+
   if (!SENDGRID_API_KEY) {
     return { success: false, error: "SendGrid API key not configured" };
   }
