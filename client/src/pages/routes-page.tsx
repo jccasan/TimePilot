@@ -1007,7 +1007,10 @@ export default function RoutesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
 
-      if (errors.length > 0 && totalSplitRoutes === 0) {
+      if (totalSplitRoutes === 0 && errors.length === 0) {
+        // All returned noOp — routes were already within limit on the server side
+        toast({ title: `All routes are within the ${maxStops}-stop limit`, description: "No routes needed splitting." });
+      } else if (errors.length > 0 && totalSplitRoutes === 0) {
         toast({
           title: "Could not split routes",
           description: `Failed: ${errors.join(", ")}`,
