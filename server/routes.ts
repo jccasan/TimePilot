@@ -195,7 +195,7 @@ function notify(companyId: string, type: string, title: string, message: string,
         const ownerRows = await db.select({ email: users.email, firstName: users.firstName })
           .from(companyUsers)
           .innerJoin(users, eq(companyUsers.userId, users.id))
-          .where(and(eq(companyUsers.companyId, companyId), eq(companyUsers.role, "owner"), eq(companyUsers.isActive, true)));
+          .where(and(eq(companyUsers.companyId, companyId), or(eq(companyUsers.role, "owner"), eq(companyUsers.role, "admin")), eq(companyUsers.isActive, true)));
         const company = await storage.getCompany(companyId);
         const companyName = company?.name || "ScooPilot";
         const baseUrl = process.env.REPLIT_DEPLOYMENT_URL
