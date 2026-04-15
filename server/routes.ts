@@ -3870,6 +3870,21 @@ Return ONLY valid JSON, no markdown.`,
       const milesSaved = Math.max(0, Math.round((originalDistance - optimizedDistance) * 10) / 10);
       const minutesSaved = Math.max(0, Math.round(originalMinutes - optimizedMinutes));
 
+      try {
+        const affectedPlanIds = routePlans.map(p => p.id);
+        const tz = company?.timezone || "America/New_York";
+        const today = getCompanyToday(tz);
+        await storage.deleteFutureScheduledVisitsForPlans(affectedPlanIds, today);
+        const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+        const startDate = new Date(today + "T00:00:00Z");
+        startDate.setUTCDate(startDate.getUTCDate() + 1);
+        const endDate = new Date(today + "T00:00:00Z");
+        endDate.setUTCDate(endDate.getUTCDate() + 182);
+        await generateVisitsForPlans(companyId, affectedPlanIds, startDate.toISOString().split("T")[0], endDate.toISOString().split("T")[0]);
+      } catch (genErr) {
+        console.error("[route-optimize] Failed to regenerate visits after optimization:", genErr);
+      }
+
       res.json({
         optimized: true,
         totalDistance: Math.round(optimizedDistance * 10) / 10,
@@ -4148,6 +4163,7 @@ Return ONLY valid JSON, no markdown.`,
 
       let routesCreated = 0;
       let stopsUpdated = 0;
+      const updatedPlanIds: string[] = [];
 
       for (const dayPlan of daysToApply) {
         const day = dayPlan.day;
@@ -4186,6 +4202,7 @@ Return ONLY valid JSON, no markdown.`,
               dayOfWeek: day,
               stopOrder: sIdx + 1,
             });
+            updatedPlanIds.push(spId);
             stopsUpdated++;
           }
         }
@@ -4208,6 +4225,23 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       await storage.updateCompany(companyId, { routeCredits: currentCredits - totalRoutes });
+
+      try {
+        const tz = company?.timezone || "America/New_York";
+        const today = getCompanyToday(tz);
+        const affectedPlanIds = [...new Set(updatedPlanIds)];
+        if (affectedPlanIds.length > 0) {
+          await storage.deleteFutureScheduledVisitsForPlans(affectedPlanIds, today);
+          const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+          const startDate = new Date(today + "T00:00:00Z");
+          startDate.setUTCDate(startDate.getUTCDate() + 1);
+          const endDate = new Date(today + "T00:00:00Z");
+          endDate.setUTCDate(endDate.getUTCDate() + 182);
+          await generateVisitsForPlans(companyId, affectedPlanIds, startDate.toISOString().split("T")[0], endDate.toISOString().split("T")[0]);
+        }
+      } catch (genErr) {
+        console.error("[apply-weekly-plan] Failed to regenerate visits after optimization:", genErr);
+      }
 
       res.json({
         applied: true,

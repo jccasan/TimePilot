@@ -168,6 +168,7 @@ export interface IStorage {
   setServicePlanAddOns(servicePlanId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<ServicePlanAddOn[]>;
 
   cancelFutureVisitsForPlans(planIds: string[], fromDate: string): Promise<number>;
+  deleteFutureScheduledVisitsForPlans(planIds: string[], afterDate: string): Promise<number>;
 
   // Unassign all stops from a route
   unassignAllStops(routeId: string): Promise<number>;
@@ -907,6 +908,18 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         inArray(visits.servicePlanId, planIds),
         gte(visits.scheduledDate, fromDate),
+        eq(visits.status, "scheduled")
+      ))
+      .returning();
+    return result.length;
+  }
+
+  async deleteFutureScheduledVisitsForPlans(planIds: string[], afterDate: string): Promise<number> {
+    if (planIds.length === 0) return 0;
+    const result = await db.delete(visits)
+      .where(and(
+        inArray(visits.servicePlanId, planIds),
+        sql`${visits.scheduledDate} > ${afterDate}`,
         eq(visits.status, "scheduled")
       ))
       .returning();
