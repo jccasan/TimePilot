@@ -383,7 +383,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             className={isOverLimit && !isOverMax ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" : ""}
             data-testid={`badge-stop-counter-${route.id}`}
           >
-            {stopCount} of {stopCount <= 30 ? 30 : 60} stops
+            {stopCount} stops
           </Badge>
           {isOverMax && <span className="text-xs text-destructive">Max 60 stops</span>}
           {hasVisits && routeVisitCount > 0 && (
@@ -1310,12 +1310,10 @@ export default function RoutesPage() {
     for (const r of allRoutes) map[r.id] = [];
     for (const sp of visiblePlans) {
       if (!sp.routeId || !map[sp.routeId]) continue;
-      if (sp.frequency === "weekly" || dayPlanIds.has(sp.id)) {
-        map[sp.routeId].push(sp);
-      }
+      map[sp.routeId].push(sp);
     }
     return map;
-  }, [allRoutes, visiblePlans, dayPlanIds]);
+  }, [allRoutes, visiblePlans]);
 
   const fetchRouteMetrics = useCallback(async (routeId: string) => {
     try {
@@ -1381,17 +1379,21 @@ export default function RoutesPage() {
 
   const dayStopCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const d of DAYS) counts[d] = 0;
-    const hiddenStatuses = new Set(["cancelled", "skipped"]);
-    for (const v of weekVisits) {
-      if (!v.scheduledDate || hiddenStatuses.has(v.status)) continue;
-      const vDate = new Date(v.scheduledDate + "T12:00:00");
-      const dayIdx = (vDate.getDay() + 6) % 7;
-      const dayKey = DAYS[dayIdx];
-      if (dayKey !== undefined) counts[dayKey] = (counts[dayKey] || 0) + 1;
+    for (const d of DAYS) {
+      const routeIdsForDay = allRoutes
+        .filter(r => {
+          if (r.dayOfWeek !== d) return false;
+          if (r.date) {
+            const rd = new Date(r.date + "T12:00:00");
+            return rd >= currentWeekRange.start && rd <= currentWeekRange.end;
+          }
+          return true;
+        })
+        .map(r => r.id);
+      counts[d] = routeIdsForDay.reduce((sum, id) => sum + (stopsByRoute[id]?.length || 0), 0);
     }
     return counts;
-  }, [weekVisits]);
+  }, [allRoutes, stopsByRoute, currentWeekRange]);
 
   const createRouteMutation = useMutation({
     mutationFn: async (data: { name: string; dayOfWeek: string; technicianId: string | null; color: string }) => {
