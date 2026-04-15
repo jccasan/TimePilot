@@ -36,7 +36,7 @@ import {
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
   CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert, Lock, Unlock,
   Sparkles, ArrowRight, Check, X, ToggleLeft, ToggleRight, Calendar,
-  Camera, DoorClosed, Scissors
+  Camera, DoorClosed
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -293,8 +293,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
   onEdit, onDelete, onOptimize, onReverse, onDispatch, onUnassignAll, onLock, isOptimizing, isReversing, isDispatching, isUnassigning, isLocking,
-  visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick, onOnMyWay, onMyWaySendingId,
-  maxStopsPerRoute, onSplit, isSplitting }: {
+  visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick, onOnMyWay, onMyWaySendingId }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
@@ -313,9 +312,6 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
   onOnMyWay?: (visitId: string) => void;
   onMyWaySendingId?: string | null;
-  maxStopsPerRoute?: number | null;
-  onSplit?: (routeId: string) => void;
-  isSplitting?: boolean;
 }) {
   const tech = team.find(t => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
@@ -382,47 +378,21 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
           )}
         </div>
 
-        {(() => {
-          const isOverStopLimit = !!maxStopsPerRoute && stopCount > maxStopsPerRoute;
-          return (
-            <>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant={isOverMax ? "destructive" : isOverLimit ? "secondary" : "outline"}
-                  className={isOverLimit && !isOverMax ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" : ""}
-                  data-testid={`badge-stop-counter-${route.id}`}
-                >
-                  {stopCount} of {stopCount <= 30 ? 30 : 60} stops
-                </Badge>
-                {isOverMax && <span className="text-xs text-destructive">Max 60 stops</span>}
-                {isOverStopLimit && (
-                  <Badge variant="destructive" className="text-[10px]" data-testid={`badge-over-limit-${route.id}`}>
-                    <AlertCircle className="h-2.5 w-2.5 mr-0.5" />
-                    {stopCount} stops — over limit
-                  </Badge>
-                )}
-                {hasVisits && routeVisitCount > 0 && (
-                  <Badge variant="outline" className={`text-[10px] ${processedCount === routeVisitCount ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : ""}`} data-testid={`badge-completion-${route.id}`}>
-                    <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
-                    {processedCount} of {routeVisitCount} processed
-                  </Badge>
-                )}
-              </div>
-              {isOverStopLimit && onSplit && (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  className="w-full text-xs"
-                  onClick={() => onSplit(route.id)}
-                  disabled={isSplitting}
-                  data-testid={`button-split-route-${route.id}`}
-                >
-                  {isSplitting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Scissors className="h-3 w-3 mr-1" />}
-                  Split Route
-                </Button>
-              )}
-            </>
-          );
-        })()}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant={isOverMax ? "destructive" : isOverLimit ? "secondary" : "outline"}
+            className={isOverLimit && !isOverMax ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" : ""}
+            data-testid={`badge-stop-counter-${route.id}`}
+          >
+            {stopCount} of {stopCount <= 30 ? 30 : 60} stops
+          </Badge>
+          {isOverMax && <span className="text-xs text-destructive">Max 60 stops</span>}
+          {hasVisits && routeVisitCount > 0 && (
+            <Badge variant="outline" className={`text-[10px] ${processedCount === routeVisitCount ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : ""}`} data-testid={`badge-completion-${route.id}`}>
+              <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
+              {processedCount} of {routeVisitCount} processed
+            </Badge>
+          )}
+        </div>
 
         <div className="flex gap-1.5">
           <Button
@@ -978,7 +948,7 @@ export default function RoutesPage() {
   const credits = creditData?.credits ?? 0;
   const { data: company } = useQuery<{ name: string; maxStopsPerRoute?: number | null }>({ queryKey: ["/api/company"] });
   const [maxStopsInput, setMaxStopsInput] = useState<string>("");
-  const [splittingRouteId, setSplittingRouteId] = useState<string | null>(null);
+  const [isApplyingSplit, setIsApplyingSplit] = useState(false);
 
   useEffect(() => {
     if (company?.maxStopsPerRoute != null) {
@@ -986,49 +956,73 @@ export default function RoutesPage() {
     }
   }, [company?.maxStopsPerRoute]);
 
-  const updateMaxStopsMutation = useMutation({
-    mutationFn: async (maxStops: number | null) => {
-      const res = await apiRequest("PATCH", "/api/company", { maxStopsPerRoute: maxStops });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
-    },
-  });
+  const handleApplyMaxStops = async () => {
+    const val = maxStopsInput.trim();
+    const maxStops = val === "" ? null : parseInt(val, 10);
 
-  const splitRouteMutation = useMutation({
-    mutationFn: async ({ routeId, maxStops }: { routeId: string; maxStops: number }) => {
-      const res = await apiRequest("POST", `/api/routes/${routeId}/split`, { maxStops });
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setSplittingRouteId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
-      if (data.noOp) {
-        toast({ title: "Route is within limit", description: data.message });
-      } else {
-        const parts = data.newRoutes?.map((r: { name: string; stopCount: number }) => `${r.name} (${r.stopCount} stops)`) || [];
-        toast({
-          title: `Route split into ${data.routesCreated + 1} sub-routes`,
-          description: parts.length > 0 ? `New: ${parts.join(", ")}` : undefined,
-        });
-      }
-    },
-    onError: (err: any) => {
-      setSplittingRouteId(null);
-      toast({ title: "Split failed", description: err?.message || "Could not split route", variant: "destructive" });
-    },
-  });
-
-  const handleSplitRoute = (routeId: string) => {
-    const maxStops = parseInt(maxStopsInput, 10);
-    if (!maxStops || maxStops < 2) {
-      toast({ title: "Set a max stops limit first", description: "Enter a max stops value in the Route Builder header.", variant: "destructive" });
+    if (val !== "" && (isNaN(maxStops!) || maxStops! < 2)) {
+      toast({ title: "Invalid value", description: "Max stops must be 2 or greater.", variant: "destructive" });
       return;
     }
-    setSplittingRouteId(routeId);
-    splitRouteMutation.mutate({ routeId, maxStops });
+
+    setIsApplyingSplit(true);
+    try {
+      await apiRequest("PATCH", "/api/company", { maxStopsPerRoute: maxStops });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+
+      if (!maxStops) {
+        toast({ title: "Stop limit cleared", description: "Routes will no longer be checked against a max stops limit." });
+        return;
+      }
+
+      const oversizedRoutes = allRoutes.filter(r => {
+        const count = (stopsByRoute[r.id] || []).length;
+        return count > maxStops;
+      });
+
+      if (oversizedRoutes.length === 0) {
+        toast({ title: `All routes within the ${maxStops}-stop limit`, description: "No routes needed splitting." });
+        return;
+      }
+
+      let totalRoutesCreated = 0;
+      let totalSplitRoutes = 0;
+      const errors: string[] = [];
+
+      for (const route of oversizedRoutes) {
+        try {
+          const res = await apiRequest("POST", `/api/routes/${route.id}/split`, { maxStops });
+          const data = await res.json();
+          if (!data.noOp) {
+            totalSplitRoutes++;
+            totalRoutesCreated += data.routesCreated || 0;
+          }
+        } catch (err: any) {
+          errors.push(route.name);
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+
+      if (errors.length > 0) {
+        toast({
+          title: "Some routes could not be split",
+          description: `Failed: ${errors.join(", ")}`,
+          variant: "destructive",
+        });
+      } else {
+        const newTotal = totalRoutesCreated;
+        toast({
+          title: `${totalSplitRoutes} route${totalSplitRoutes !== 1 ? "s" : ""} split into ${totalSplitRoutes + newTotal} sub-routes`,
+          description: `Each sub-route has been optimized and visits regenerated.`,
+        });
+      }
+    } catch (err: any) {
+      toast({ title: "Failed to apply", description: err?.message || "Could not save settings.", variant: "destructive" });
+    } finally {
+      setIsApplyingSplit(false);
+    }
   };
 
   const selectedDayDate = useMemo(() => {
@@ -1642,7 +1636,7 @@ export default function RoutesPage() {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5" title="Maximum stops per route before showing a split warning">
+            <div className="flex items-center gap-1.5" title="Set a maximum stops per route and split all oversized routes at once">
               <Label htmlFor="max-stops-input" className="text-xs text-muted-foreground whitespace-nowrap">Max stops</Label>
               <Input
                 id="max-stops-input"
@@ -1651,21 +1645,21 @@ export default function RoutesPage() {
                 placeholder="—"
                 value={maxStopsInput}
                 onChange={e => setMaxStopsInput(e.target.value)}
-                onBlur={() => {
-                  const val = maxStopsInput.trim();
-                  const num = val === "" ? null : parseInt(val, 10);
-                  if (val === "" || (num !== null && num >= 2)) {
-                    updateMaxStopsMutation.mutate(num);
-                  }
-                }}
+                onKeyDown={e => { if (e.key === "Enter") handleApplyMaxStops(); }}
                 className="w-16 h-8 text-xs"
                 data-testid="input-max-stops"
+                disabled={isApplyingSplit}
               />
-              {company?.maxStopsPerRoute && (
-                <span className="text-xs text-muted-foreground whitespace-nowrap" data-testid="text-max-stops-limit">
-                  Limit: {company.maxStopsPerRoute}/route
-                </span>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs px-2"
+                onClick={handleApplyMaxStops}
+                disabled={isApplyingSplit}
+                data-testid="button-apply-max-stops"
+              >
+                {isApplyingSplit ? <Loader2 className="h-3 w-3 animate-spin" /> : "Apply"}
+              </Button>
             </div>
             <Button
               variant="outline"
@@ -1804,9 +1798,6 @@ export default function RoutesPage() {
                         onStopClick={handleStopClick}
                         onOnMyWay={handleOnMyWay}
                         onMyWaySendingId={onMyWaySending}
-                        maxStopsPerRoute={company?.maxStopsPerRoute}
-                        onSplit={handleSplitRoute}
-                        isSplitting={splittingRouteId === route.id}
                       />
                     ))}
                   </div>
