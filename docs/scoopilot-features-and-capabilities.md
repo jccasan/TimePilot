@@ -73,6 +73,9 @@ ScooPilot's scheduling system handles recurring service plans, one-time cleanups
 - **One-Time Services** — Schedule standalone cleanups, initial deep cleans, or special requests outside of recurring plans.
 - **Service Pause & Resume** — Pause a client's service for vacations or seasonal breaks without losing their plan settings. Resume with one click when they're ready.
 - **Stop-Only Visits** — Flag non-revenue stops (equipment checks, supply drops) so they appear on routes without affecting billing.
+- **Client Name Filter** — Search and filter the schedule view by client name to instantly find and focus on a specific customer's visits across any date range.
+- **Hidden Status Toggle** — Cancelled and skipped visits are hidden from the schedule by default to keep the view clean. A toggle reveals them when needed, along with a count of how many are hidden.
+- **Inline Visit Editing** — Edit visit details directly from the schedule without leaving the page. Change the scheduled date, route assignment, and technician notes from the visit detail panel.
 
 ---
 
@@ -130,7 +133,8 @@ Give your clients a professional, self-service experience with ScooPilot's brand
 - **Invoice History & Payments** — Clients see all their invoices in one place and can pay outstanding balances online with a credit card. Payment confirmation is instant.
 - **Dog Management** — Clients can update their dog information (count, breeds, notes) directly through the portal, keeping your records current without phone calls or emails.
 - **Quote Review & Acceptance** — When you send a proposal, clients receive a branded link to review pricing tiers, view yard measurement images, and accept their preferred plan — all through the portal.
-- **Service Requests** — Clients can request service changes, schedule one-time cleanups, or pause/resume their service directly through the portal. Requests appear in your dashboard for approval.
+- **Pause & Resume Service** — Clients can pause or resume their service directly from the portal. When paused, future visits are cancelled automatically; resuming reactivates their service plan.
+- **Service Requests** *(Coming soon)* — Clients will be able to request one-time cleanups or other service changes directly through the portal, with requests appearing in your dashboard for approval.
 - **In-App Messaging** — Two-way messaging between clients and your office. Conversations are threaded and stored for reference.
 - **Account Management** — Clients can update their contact information, manage payment methods, and view their complete service history.
 
@@ -178,21 +182,25 @@ ScooPilot integrates with Retell AI to provide an intelligent, always-available 
 ScooPilot's built-in communication tools keep your clients informed at every stage — from service reminders to payment confirmations — with two-way SMS and automated messaging.
 
 - **Two-Way SMS** — Send and receive text messages directly from ScooPilot. Conversations are threaded by contact so your team has full context for every interaction.
+- **MMS Image Support** — Send and receive images via MMS. Clients and technicians can attach up to 5 images per message (up to 5 MB each) — useful for sharing property photos, service confirmations, or gate access instructions.
 - **Multi-Provider Support** — Choose between Twilio (system default) or Telnyx as your SMS provider. Companies can configure their own Telnyx API keys and messaging profiles for custom sender IDs.
 - **Automated Service Reminders** — Send "service scheduled for tomorrow" reminders automatically. Configure timing and message content to match your brand voice.
 - **Invoice & Payment Reminders** — Automated text reminders for outstanding invoices. Set the timing and frequency of follow-ups.
 - **Customizable Templates** — Create reusable message templates with dynamic placeholders like {firstName}, {serviceDate}, {total}, and {companyName}. Templates ensure consistent, professional communication.
 - **Threaded Conversation Inbox** — View all SMS conversations in a unified inbox. See the full history with each contact, reply inline, and never lose track of a conversation.
 - **Quiet Hours** — Configure business hours for automated messages. Reminders and notifications are held until your designated sending window so you never text a client at 3 AM.
+- **Message Retention** — Conversations are retained for 30 days by default. Automated cleanup removes older messages and media attachments to keep storage costs predictable.
 - **SMS Usage Tracking** — Monitor your monthly SMS segment usage against your plan allowance. Usage is metered and billed through Stripe for transparent cost management.
 
 ---
 
 ## 12. Email Communications
 
-ScooPilot handles transactional email delivery through SendGrid, ensuring your business communications reach your clients' inboxes reliably.
+ScooPilot supports full two-way email communication — from automated transactional messages to threaded inbound conversations — all managed through the same inbox your team already uses for SMS.
 
-- **Transactional Emails** — Automated emails for invoice delivery, payment confirmations, quote proposals, service notifications, and account updates.
+- **Transactional Emails** — Automated emails for invoice delivery, payment confirmations, quote proposals, service notifications, and account updates. Delivered reliably through SendGrid.
+- **Two-Way Inbound Email** — Clients can reply to any email from ScooPilot and their responses land directly in your threaded conversation inbox — right alongside SMS messages. No separate email client or inbox needed.
+- **Conversation Threading** — Inbound email replies are matched to the originating contact and threaded chronologically, giving your team full context for every client conversation in one place.
 - **Notification Preferences** — Configure which events trigger email notifications and customize the content for your business.
 - **Branded Communications** — Emails include your company logo and branding for a professional, consistent client experience.
 
@@ -246,6 +254,7 @@ ScooPilot's automation engine lets you create "if this, then that" rules that el
 
 - **Event Triggers** — Kick off automations when specific events happen:
   - **Lead Created** — A new prospect is added (including from external webhooks)
+  - **Quote Created** — A new estimate or proposal is generated
   - **Service Completed** — A technician marks a visit as done
   - **Payment Failed** — A payment attempt is declined
   - **Invoice Created** — A new invoice is generated
@@ -337,6 +346,7 @@ For ScooPilot platform operators, a dedicated admin dashboard provides oversight
 - **Multi-Tenant Management** — View and manage all companies on the platform. See subscription status, user counts, usage metrics, and account health at a glance.
 - **Platform Analytics** — Executive-level dashboards showing total platform MRR, active tenants, growth trends, and churn rates.
 - **Subscription Tier Management** — Configure and manage the available subscription tiers, pricing, and feature limits.
+- **Admin Messaging Monitor** — A dedicated platform-admin dashboard at `/admin/messaging` for monitoring communications health across all tenants. Includes per-tenant message volume breakdowns by channel and direction, aggregate platform-wide messaging analytics, and an exception queue for managing failed or ambiguous message deliveries that require manual intervention.
 - **Security Controls** — Platform-wide security settings, user management, and access controls.
 
 ---
@@ -347,11 +357,25 @@ A public-facing signup and quote page that you can link from your website to cap
 
 - **Instant Pricing** — Prospects enter their address, number of dogs, and yard size to get an immediate price estimate — no phone call required.
 - **Automatic Lead Creation** — Every signup creates a contact and property record in your ScooPilot account, ready for follow-up.
+- **Auto-Follow-Up** — The moment a prospect submits the widget, ScooPilot automatically sends a personalized SMS and branded email to their contact information. Messages use merge fields — `{firstName}`, `{price}`, `{frequency}`, `{company}` — so every follow-up feels personal. Templates are fully customizable per company.
+- **Quote Funnel Analytics** — Track how prospects move through the signup flow (widget loaded → address entered → pricing shown → submitted). Conversion metrics are available in the admin analytics dashboard.
 - **Seamless Integration** — Link to the signup widget from your website, social media profiles, Google Business listing, or anywhere else you interact with prospects.
 
 ---
 
-## 22. Settings & Configuration
+## 22. Business Onboarding Wizard
+
+New ScooPilot accounts are guided through a structured 5-step onboarding wizard that sets up the key components of your business before you run your first route.
+
+- **Step 1 — Company Profile** — Enter your business name, address, contact information, and operating timezone. This information flows through to proposals, invoices, and client-facing communications.
+- **Step 2 — AI Website Scraping** — Provide your existing website URL and ScooPilot's AI automatically extracts your branding, service descriptions, service area, and business background. This pre-populates your company profile and trains the AI voice agent on your specific business.
+- **Step 3 — Pricing Configuration** — Set your base service rates, labor costs, and pricing tiers for different service frequencies. The pricing engine uses these inputs for the quote calculator, profitability analysis, and the client signup widget.
+- **Step 4 — Stripe Connect** — Link your Stripe account to start accepting credit card payments from clients. Funds are deposited directly to your bank account.
+- **Step 5 — Launch** — Review your setup and go live. Your ScooPilot account is activated with all settings in place and ready for your first client.
+
+---
+
+## 23. Settings & Configuration
 
 ScooPilot is deeply configurable to match how your specific business operates.
 
@@ -365,13 +389,13 @@ ScooPilot is deeply configurable to match how your specific business operates.
 
 ---
 
-## 23. Dark Mode
+## 24. Dark Mode
 
 ScooPilot supports full dark mode across the entire application. Toggle between light and dark themes based on your preference. The dark theme is carefully designed to maintain readability and visual hierarchy across all screens, maps, charts, and data tables.
 
 ---
 
-## 24. Security & Reliability
+## 25. Security & Reliability
 
 ScooPilot is built with enterprise-grade security practices to protect your business data and your clients' information.
 
@@ -385,7 +409,7 @@ ScooPilot is built with enterprise-grade security practices to protect your busi
 
 ---
 
-## 25. Technical Foundation
+## 26. Technical Foundation
 
 ScooPilot is built on a modern, scalable technology stack designed for reliability and performance.
 
