@@ -8,7 +8,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
-import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, ActivityLog, Invoice, Message } from "@shared/schema";
+import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, ActivityLog, Invoice, Message, Route } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -120,6 +120,10 @@ export default function ContactDetail() {
 
   const { data: leadSources = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["/api/lead-sources"],
+  });
+
+  const { data: allRoutes } = useQuery<Route[]>({
+    queryKey: ["/api/routes"],
   });
 
   const [editForm, setEditForm] = useState<Partial<Contact>>({});
@@ -867,6 +871,8 @@ export default function ContactDetail() {
           )}
         </CardContent>
       </Card>
+
+      <RouteAssignmentCard servicePlans={servicePlansForPricing} routes={allRoutes} />
 
       <ServicePlansCard contactId={id!} contact={contact} properties={properties || []} />
 
@@ -1853,6 +1859,68 @@ function InlinePriceSuggestion({
         </p>
       )}
     </div>
+  );
+}
+
+function RouteAssignmentCard({ servicePlans, routes }: { servicePlans: ServicePlan[] | undefined; routes: Route[] | undefined }) {
+  const routeMap = useMemo(() => {
+    const m = new Map<string, Route>();
+    for (const r of routes || []) m.set(r.id, r);
+    return m;
+  }, [routes]);
+
+  const assignedRoutes = useMemo(() => {
+    if (!servicePlans) return [];
+    const seen = new Map<string, { route: Route; plans: ServicePlan[] }>();
+    for (const sp of servicePlans) {
+      if (!sp.routeId) continue;
+      const route = routeMap.get(sp.routeId);
+      if (!route) continue;
+      if (!seen.has(route.id)) seen.set(route.id, { route, plans: [] });
+      seen.get(route.id)!.plans.push(sp);
+    }
+    return Array.from(seen.values());
+  }, [servicePlans, routeMap]);
+
+  const dayLabel = (d: string) => d === "tbd" ? "TBD" : d.charAt(0).toUpperCase() + d.slice(1) + "s";
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <MapPin className="h-4 w-4 text-muted-foreground" />
+          Route Assignment
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {assignedRoutes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Not assigned to any route.</p>
+        ) : (
+          <div className="space-y-3">
+            {assignedRoutes.map(({ route, plans }) => {
+              const stopOrders = plans.map(p => p.stopOrder).filter(s => s != null).sort((a, b) => (a ?? 0) - (b ?? 0));
+              return (
+                <div key={route.id} className="flex items-center gap-3" data-testid={`route-assignment-${route.id}`}>
+                  <div
+                    className="h-3 w-3 rounded-full flex-shrink-0 border border-black/10"
+                    style={{ backgroundColor: route.color || "#3b82f6" }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium leading-none truncate">{route.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{dayLabel(route.dayOfWeek)}</p>
+                  </div>
+                  {stopOrders.length > 0 && (
+                    <Badge variant="outline" className="text-xs font-normal shrink-0">
+                      Stop {stopOrders.map(s => `#${s}`).join(", ")}
+                    </Badge>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
