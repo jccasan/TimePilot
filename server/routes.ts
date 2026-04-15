@@ -1139,8 +1139,9 @@ export async function registerRoutes(
       if (!email) return res.status(400).json({ error: "Email is required" });
 
       const ip = req.ip || req.socket.remoteAddress || "unknown";
-      if (!checkResetRateLimit(`forgot:${ip}`, 5, 15 * 60 * 1000) ||
-          !checkResetRateLimit(`forgot:${email.toLowerCase()}`, 3, 15 * 60 * 1000)) {
+      const isProd = process.env.NODE_ENV === "production";
+      if (!checkResetRateLimit(`forgot:${ip}`, isProd ? 5 : 500, 15 * 60 * 1000) ||
+          !checkResetRateLimit(`forgot:${email.toLowerCase()}`, isProd ? 3 : 500, 15 * 60 * 1000)) {
         return res.json({ message: "If an account exists with that email, a password reset link has been sent." });
       }
 
@@ -1190,7 +1191,7 @@ export async function registerRoutes(
     try {
       const { token, password } = req.body;
       const ip = req.ip || req.socket.remoteAddress || "unknown";
-      if (!checkResetRateLimit(`reset:${ip}`, 10, 15 * 60 * 1000)) {
+      if (!checkResetRateLimit(`reset:${ip}`, process.env.NODE_ENV === "production" ? 10 : 500, 15 * 60 * 1000)) {
         return res.status(429).json({ error: "Too many attempts. Please try again later." });
       }
       const result = await resetPasswordWithToken(token, password);
@@ -14867,7 +14868,7 @@ Return ONLY valid JSON, no markdown.`,
   // ================ Public Signup Routes (no auth required) ================
   const signupLimiter = (await import("express-rate-limit")).default({
     windowMs: 15 * 60 * 1000,
-    max: 5,
+    max: process.env.NODE_ENV === "production" ? 5 : 500,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many signup attempts, please try again later" },

@@ -84,3 +84,26 @@ The core scheduling data model has been refactored from a single `service_plans`
 - **`JobWithAgreement`** type merges Job + Agreement fields and includes `isActive`/`pausedAt` compat fields for frontend backward compatibility.
 - The old `service_plans` table and its related types/storage methods remain for backward compatibility during the migration.
 - Migration runs idempotently at startup via `migrateServicePlansToAgreementsAndJobs()` in `server/index.ts`.
+
+## Testing & Validation Gates
+
+Two CI-style validation gates are registered:
+
+| Gate | Command | Status |
+|------|---------|--------|
+| `api-test` | `npx tsx tests/api.test.ts` | 129/129 pass, reliable across repeated runs |
+| `typecheck` | `npx tsc --noEmit` | Pre-existing errors in several UI files (not caused by Task #143) |
+
+**Test suite design notes** (`tests/api.test.ts`, ~1230 lines):
+- Setup block logs in as `demo@scoopilot.com` before any test to ensure a valid Bearer token exists regardless of auth rate-limit state.
+- Rate limiters are relaxed in non-production (`NODE_ENV !== "production"`): API limiter → 10,000/15 min; auth limiter → 500/15 min; signup limiter → 500/15 min; reset-password in-code limiter → 500/15 min. Production values remain tight.
+- Tests that depend on email delivery (public signup) gracefully skip when the service is unconfigured.
+- Covers: auth, auth middleware, admin auth, contacts, properties, routes, invoices, service plans, tags, lead sources, automation, reports, company, onboarding, Rover, portal, visits (range + PATCH), webhooks, edge cases, API key auth.
+
+**Known pre-existing typecheck issues** (not from Task #143):
+- `client/src/components/ObjectUploader.tsx` — missing `@uppy/core` type declarations
+- `client/src/components/business-onboarding.tsx` — Set iteration needs `--downlevelIteration`
+- `client/src/pages/admin-analytics.tsx` — possible undefined access
+- `client/src/pages/communications.tsx` — `string` assigned to `Date`
+- `client/src/pages/contact-detail.tsx` — `"latitude"/"longitude"` not in form field union
+- `client/src/pages/dashboard.tsx` — `isDraggable` prop not in grid layout types
