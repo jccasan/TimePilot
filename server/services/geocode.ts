@@ -2,7 +2,8 @@ export async function geocodeAddress(
   streetAddress: string,
   city?: string | null,
   state?: string | null,
-  zipCode?: string | null
+  zipCode?: string | null,
+  country?: string | null
 ): Promise<{ latitude: string; longitude: string } | null> {
   const tokens = [
     process.env.MAPBOX_PUBLIC_TOKEN,
@@ -13,12 +14,14 @@ export async function geocodeAddress(
   const parts = [streetAddress, city, state, zipCode].filter(Boolean).join(", ");
   if (!parts || parts.length < 5) return null;
 
+  const countryFilter = country === "ca" ? "ca" : "us";
+
   for (const token of tokens) {
     try {
       const params = new URLSearchParams({
         q: parts,
         access_token: token,
-        country: "us",
+        country: countryFilter,
         types: "address",
         limit: "1",
       });

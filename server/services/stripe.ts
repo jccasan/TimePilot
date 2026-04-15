@@ -139,6 +139,7 @@ export async function chargeInvoiceAutomatically(params: {
   invoiceNumber: string;
   stripeConnectAccountId?: string | null;
   tenantId?: string;
+  currency?: string;
 }): Promise<{
   paymentIntentId: string;
   status: string;
@@ -167,7 +168,7 @@ export async function chargeInvoiceAutomatically(params: {
     const piParams: Stripe.PaymentIntentCreateParams = {
       customer: params.customerId,
       amount: amountCents,
-      currency: "usd",
+      currency: params.currency || "usd",
       payment_method: methods.data[0].id,
       confirm: true,
       off_session: true,
@@ -214,6 +215,7 @@ export async function createCheckoutSession(params: {
   tipAmount?: string;
   stripeConnectAccountId?: string | null;
   tenantId?: string;
+  currency?: string;
 }): Promise<{ url: string; sessionId: string }> {
   const stripe = getStripe();
   const amountCents = Math.round(params.amount * 100);
@@ -224,7 +226,7 @@ export async function createCheckoutSession(params: {
     line_items: [
       {
         price_data: {
-          currency: "usd",
+          currency: params.currency || "usd",
           unit_amount: amountCents,
           product_data: {
             name: `Invoice ${params.invoiceNumber}`,

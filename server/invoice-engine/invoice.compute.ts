@@ -1,23 +1,35 @@
 // invoice.compute.ts
 // ==================
 // Computes invoice totals (subtotal, discount, tax, total, paid, balance)
-// and formats all currency values to $X,XXX.XX (USD).
+// and formats all currency values with the appropriate currency symbol/code.
 //
 // Usage:
-//   import { computeInvoice } from './invoice.compute';
-//   const computed = computeInvoice(invoiceData);
+//   import { computeInvoice, formatCurrency } from './invoice.compute';
+//   const computed = computeInvoice(invoiceData, { currency: 'usd' });
 //
 // Input: raw invoice data object with numeric values
 // Output: same object with totals.* fields computed and all money values formatted
 
 export function formatUSD(n: number | string): string {
-  const num = typeof n === "string" ? parseFloat(n) : n;
-  if (isNaN(num)) return "$0.00";
-  return "$" + num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return formatCurrency(n, "usd");
 }
 
-export function computeInvoice(data: any): any {
+export function formatCurrency(n: number | string, currency?: string): string {
+  const num = typeof n === "string" ? parseFloat(n) : n;
+  if (isNaN(num)) {
+    return currency === "cad" ? "CA$0.00" : "$0.00";
+  }
+  const formatted = num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (currency === "cad") {
+    return "CA$" + formatted;
+  }
+  return "$" + formatted;
+}
+
+export function computeInvoice(data: any, options?: { currency?: string }): any {
   const d = JSON.parse(JSON.stringify(data));
+  const currency = options?.currency || d.invoice?.currency || "usd";
+  const fmt = (n: number | string) => formatCurrency(n, currency);
 
   const items = d.line_items || [];
   items.forEach((li: any) => {
@@ -36,8 +48,8 @@ export function computeInvoice(data: any): any {
   const balance = total - paid;
 
   items.forEach((li: any) => {
-    li.unit_price = formatUSD(li.unit_price);
-    li.line_total = formatUSD(li.line_total);
+    li.unit_price = fmt(li.unit_price);
+    li.line_total = fmt(li.line_total);
   });
 
   const statusRaw = (d.invoice?.status || "draft").toLowerCase();
@@ -81,16 +93,16 @@ export function computeInvoice(data: any): any {
   }
 
   d.totals = {
-    subtotal: formatUSD(subtotal),
-    discount: formatUSD(discount),
+    subtotal: fmt(subtotal),
+    discount: fmt(discount),
     has_discount: discount > 0,
     tax_rate_display: (taxRate * 100).toFixed(1) + "%",
-    tax: formatUSD(tax),
+    tax: fmt(tax),
     has_tax: taxRate > 0,
-    total: formatUSD(total),
-    paid: formatUSD(paid),
+    total: fmt(total),
+    paid: fmt(paid),
     has_paid: paid > 0,
-    balance: formatUSD(balance),
+    balance: fmt(balance),
   };
 
   return d;

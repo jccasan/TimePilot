@@ -224,6 +224,9 @@ export const companies = pgTable("companies", {
   venmoHandle: varchar("venmo_handle", { length: 100 }),
   maxStopsPerRoute: integer("max_stops_per_route"),
   messageRetentionDays: integer("message_retention_days").notNull().default(30),
+  country: varchar("country", { length: 5 }).notNull().default("us"),
+  currency: varchar("currency", { length: 5 }).notNull().default("usd"),
+  taxRatePercent: decimal("tax_rate_percent", { precision: 5, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

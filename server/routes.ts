@@ -732,11 +732,18 @@ export async function registerRoutes(
       const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
       if (!token) return res.json([]);
 
+      let countryFilter = "us";
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const co = await storage.getCompany(companyId);
+        if (co?.country === "ca") countryFilter = "ca";
+      } catch {}
+
       const params = new URLSearchParams({
         q,
         access_token: token,
         autocomplete: "true",
-        country: "us",
+        country: countryFilter,
         types: "address",
         limit: "5",
       });
@@ -789,10 +796,17 @@ export async function registerRoutes(
       const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
       if (!token) return res.json(null);
 
+      let countryFilter = "us";
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const co = await storage.getCompany(companyId);
+        if (co?.country === "ca") countryFilter = "ca";
+      } catch {}
+
       const params = new URLSearchParams({
         q,
         access_token: token,
-        country: "us",
+        country: countryFilter,
         types: "address",
         limit: "1",
       });
@@ -1798,7 +1812,8 @@ Return ONLY valid JSON, no markdown.`,
         "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "settingsLayout", "dashboardNotes", "timezone",
         "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug", "leadWebhookSmsTemplate",
         "quoteAutoFollowUpEnabled", "quoteFollowUpSmsTemplate", "quoteFollowUpEmailEnabled", "quoteFollowUpEmailSubject", "quoteFollowUpEmailBody", "quoteFormLayout",
-        "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle", "maxStopsPerRoute"];
+        "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle", "maxStopsPerRoute",
+        "country", "currency", "taxRatePercent"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -1845,6 +1860,23 @@ Return ONLY valid JSON, no markdown.`,
         if (typeof s.maxReminders !== "number" || s.maxReminders < 1 || s.maxReminders > 100) {
           return res.status(400).json({ error: "maxReminders must be between 1 and 100" });
         }
+      }
+      if (updates.country !== undefined) {
+        if (!["us", "ca"].includes(String(updates.country))) {
+          return res.status(400).json({ error: "country must be 'us' or 'ca'" });
+        }
+      }
+      if (updates.currency !== undefined) {
+        if (!["usd", "cad"].includes(String(updates.currency))) {
+          return res.status(400).json({ error: "currency must be 'usd' or 'cad'" });
+        }
+      }
+      if (updates.taxRatePercent !== undefined && updates.taxRatePercent !== null) {
+        const rate = parseFloat(String(updates.taxRatePercent));
+        if (isNaN(rate) || rate < 0 || rate > 100) {
+          return res.status(400).json({ error: "taxRatePercent must be between 0 and 100" });
+        }
+        updates.taxRatePercent = rate.toFixed(2);
       }
       if (updates.venmoHandle !== undefined) {
         const raw = String(updates.venmoHandle).trim().replace(/^@+/, "").replace(/[^a-zA-Z0-9_.\-]/g, "");
@@ -9713,6 +9745,7 @@ Return ONLY valid JSON, no markdown.`,
         invoiceNumber: invoice.invoiceNumber,
         stripeConnectAccountId: connectAcct,
         tenantId: companyId,
+        currency: company?.currency || "usd",
       });
 
       const updateData: any = {
@@ -9777,6 +9810,7 @@ Return ONLY valid JSON, no markdown.`,
         cancelUrl: `${baseUrl}/invoices`,
         stripeConnectAccountId: connectAcct,
         tenantId: companyId,
+        currency: company?.currency || "usd",
       });
 
       res.json(result);
@@ -15475,6 +15509,7 @@ Return ONLY valid JSON, no markdown.`,
         pricing: activePricing,
         primaryColor,
         quoteFormLayout: company.quoteFormLayout || "stepper",
+        country: company.country || "us",
       });
     } catch (err) { handleError(res, err); }
   });
@@ -15482,12 +15517,25 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/public/check-zip/:slug/:zip", async (req: Request, res: Response) => {
     try {
       const { slug, zip } = req.params;
-      const normalizedZip = zip.trim().slice(0, 5);
-      if (!/^\d{5}$/.test(normalizedZip)) {
-        return res.status(400).json({ error: "Invalid ZIP code format" });
-      }
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const isCanadian = company.country === "ca";
+      const rawZip = zip.trim();
+
+      let normalizedZip: string;
+      if (isCanadian) {
+        const caPostal = rawZip.replace(/\s/g, "").toUpperCase();
+        if (!/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(caPostal)) {
+          return res.status(400).json({ error: "Invalid postal code format" });
+        }
+        normalizedZip = caPostal.slice(0, 3) + " " + caPostal.slice(3);
+      } else {
+        normalizedZip = rawZip.slice(0, 5);
+        if (!/^\d{5}$/.test(normalizedZip)) {
+          return res.status(400).json({ error: "Invalid ZIP code format" });
+        }
+      }
 
       const zones = await storage.getServiceZones(company.id);
       const activeZones = zones.filter(z => z.isActive);
@@ -15496,7 +15544,17 @@ Return ONLY valid JSON, no markdown.`,
         return res.json({ inServiceArea: true, hasZones: false });
       }
 
-      const matchingZone = activeZones.find(z => z.zipCode.trim().slice(0, 5) === normalizedZip);
+      let matchingZone: typeof activeZones[0] | undefined;
+      if (isCanadian) {
+        const prefix = normalizedZip.replace(/\s/g, "").slice(0, 3).toUpperCase();
+        matchingZone = activeZones.find(z => {
+          const zoneCode = z.zipCode.replace(/\s/g, "").toUpperCase();
+          return zoneCode === normalizedZip.replace(/\s/g, "") || zoneCode.startsWith(prefix);
+        });
+      } else {
+        matchingZone = activeZones.find(z => z.zipCode.trim().slice(0, 5) === normalizedZip);
+      }
+
       res.json({
         inServiceArea: !!matchingZone,
         hasZones: true,
