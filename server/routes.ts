@@ -4039,12 +4039,23 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/routes/apply-max-stops", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
-      const maxStops: number | null = req.body?.maxStops ?? null;
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
 
+      const rawMaxStops = req.body?.maxStops;
+      const isClearing = rawMaxStops === null || rawMaxStops === undefined;
+
+      if (!isClearing) {
+        const n = Number(rawMaxStops);
+        if (!Number.isInteger(n) || n < 2) {
+          return res.status(400).json({ error: "maxStops must be an integer of 2 or greater" });
+        }
+      }
+
+      const maxStops: number | null = isClearing ? null : Number(rawMaxStops);
       await storage.updateCompany(companyId, { maxStopsPerRoute: maxStops });
 
-      if (!maxStops || typeof maxStops !== "number" || maxStops < 2) {
+      if (isClearing) {
         return res.json({ cleared: true });
       }
 
