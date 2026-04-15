@@ -975,17 +975,10 @@ export default function RoutesPage() {
         return;
       }
 
-      // Build a comprehensive stop count per route from ALL active service plans
-      // (not stopsByRoute, which is filtered to the currently-selected day)
-      const stopCountByRoute: Record<string, number> = {};
-      for (const sp of servicePlans) {
-        if (sp.routeId) {
-          stopCountByRoute[sp.routeId] = (stopCountByRoute[sp.routeId] || 0) + 1;
-        }
-      }
-
+      // Use all-days stop map (same logic as Route Builder but not day-filtered)
+      // so routes on every day tab are evaluated, not just the selected day
       const oversizedRoutes = allRoutes.filter(r => {
-        const count = stopCountByRoute[r.id] || 0;
+        const count = (stopsByRouteAllDays[r.id] || []).length;
         return count > maxStops;
       });
 
@@ -1354,6 +1347,17 @@ export default function RoutesPage() {
     }
     return map;
   }, [allRoutes, visiblePlans, dayPlanIds]);
+
+  // All-days variant — same as stopsByRoute but without the day filter,
+  // used by Apply to evaluate oversized routes across every day tab
+  const stopsByRouteAllDays = useMemo(() => {
+    const map: Record<string, ServicePlan[]> = {};
+    for (const r of allRoutes) map[r.id] = [];
+    for (const sp of visiblePlans) {
+      if (sp.routeId && map[sp.routeId]) map[sp.routeId].push(sp);
+    }
+    return map;
+  }, [allRoutes, visiblePlans]);
 
   const fetchRouteMetrics = useCallback(async (routeId: string) => {
     try {
