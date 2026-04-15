@@ -91,7 +91,7 @@ Two CI-style validation gates are registered:
 
 | Gate | Command | Status |
 |------|---------|--------|
-| `api-test` | `npx tsx tests/api.test.ts` | 129/129 pass, reliable across repeated runs |
+| `api-test` | `npx tsx tests/api.test.ts` | 130/130 pass, reliable across repeated runs |
 | `typecheck` | `npx tsc --noEmit` | Pre-existing errors in several UI files (not caused by Task #143) |
 
 **Test suite design notes** (`tests/api.test.ts`, ~1230 lines):

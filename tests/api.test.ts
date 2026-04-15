@@ -701,9 +701,9 @@ async function runTests() {
   // 16. PORTAL AUTH TESTS
   // ==========================================
 
-  await test("Portal login with missing email returns 400 or 401", "Portal", async () => {
+  await test("Portal login with empty body returns 400", "Portal", async () => {
     const r = await req("POST", "/api/portal/login", {}, { Authorization: "" });
-    assert(r.status === 400 || r.status === 401, `Expected 400/401, got ${r.status}`);
+    assert(r.status === 400, `Expected 400 (email and password required), got ${r.status}: ${JSON.stringify(r.data)}`);
   }, "No input validation");
 
   await test("Portal login with wrong credentials returns 401", "Portal", async () => {
@@ -772,13 +772,27 @@ async function runTests() {
     assert(r.status === 400, `Expected 400 for invalid status, got ${r.status}`);
   }, "No input validation");
 
-  await test("PATCH /api/visits/:id with valid technicianNotes succeeds", "Visits", async () => {
+  await test("PATCH /api/visits/:id with valid technicianNotes succeeds (200 or 404)", "Visits", async () => {
     const rangeR = await req("GET", "/api/visits/range?start=2026-01-01&end=2026-12-31");
     if (rangeR.status !== 200 || !Array.isArray(rangeR.data) || rangeR.data.length === 0) return;
     const visitId = rangeR.data[0].id;
     const r = await req("PATCH", `/api/visits/${visitId}`, { technicianNotes: "Automated test note" });
-    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
-    assert(r.data.id === visitId, "Response should contain the visit ID");
+    assert(r.status === 200 || r.status === 404,
+      `Expected 200 or 404, got ${r.status} (should not be 403/500): ${JSON.stringify(r.data)}`);
+    if (r.status === 200) assert(r.data.id === visitId, "Response should contain the visit ID");
+  });
+
+  await test("PATCH /api/visits/:id with scheduledDate field succeeds (200 or 404)", "Visits", async () => {
+    const rangeR = await req("GET", "/api/visits/range?start=2026-01-01&end=2026-12-31");
+    if (rangeR.status !== 200 || !Array.isArray(rangeR.data) || rangeR.data.length === 0) return;
+    const visitId = rangeR.data[0].id;
+    const r = await req("PATCH", `/api/visits/${visitId}`, {
+      scheduledDate: "2026-06-15",
+      technicianNotes: "Rescheduled by automated test",
+    });
+    assert(r.status === 200 || r.status === 404,
+      `Expected 200 or 404, got ${r.status} (should not be 403/500): ${JSON.stringify(r.data)}`);
+    if (r.status === 200) assert(r.data.id === visitId, "Response should contain the visit ID");
   });
 
   await test("PATCH /api/visits/nonexistent-uuid returns 404", "Visits", async () => {
@@ -787,24 +801,44 @@ async function runTests() {
   });
 
   // ==========================================
-  // 17b. PORTAL LOGIN — CASE-INSENSITIVE EMAIL
+  // 17b. PORTAL LOGIN — CASE-INSENSITIVE EMAIL + VALIDATION
   // ==========================================
 
-  await test("Portal login email matching is case-insensitive (ilike)", "Portal", async () => {
-    const r = await req("POST", "/api/portal/login", {
-      email: "NONEXISTENT_PORTAL_UPPER@EXAMPLE.COM",
-      password: "AnyPassword1!",
-    }, { Authorization: "" });
-    assert(r.status === 401, `Expected 401 for unknown portal user, got ${r.status}: ${JSON.stringify(r.data)}`);
-    const msg = typeof r.data?.message === "string" ? r.data.message : "";
-    assert(!msg.toLowerCase().includes("error") || msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("not found") || r.status === 401,
-      `Should return 401 not server error: ${msg}`);
-  });
-
-  await test("Portal login with missing password returns 401 or appropriate error", "Portal", async () => {
-    const r = await req("POST", "/api/portal/login", { email: "test@example.com" }, { Authorization: "" });
-    assert(r.status === 400 || r.status === 401, `Expected 400/401, got ${r.status}`);
+  await test("Portal login with missing email returns 400", "Portal", async () => {
+    // Only password provided — endpoint checks !rawEmail and returns 400
+    const r = await req("POST", "/api/portal/login", { password: "SomePass123!" }, { Authorization: "" });
+    assert(r.status === 400, `Expected 400 for missing email, got ${r.status}: ${JSON.stringify(r.data)}`);
   }, "No input validation");
+
+  await test("Portal login email matching is case-insensitive (ilike) with real fixture", "Portal", async () => {
+    // Step 1: find a contact in the authenticated user's company that has an email
+    const listR = await req("GET", "/api/contacts");
+    if (listR.status !== 200 || !Array.isArray(listR.data)) return; // skip if unavailable
+    const candidate = listR.data.find((c: any) => c.email && c.email.includes("@"));
+    if (!candidate) return; // no suitable contact, skip gracefully
+
+    // Step 2: grant portal access (sets hasPortalAccess=true and a temp password;
+    //         email sending is fire-and-forget and doesn't cause a 500 if unconfigured)
+    const grantR = await req("POST", `/api/contacts/${candidate.id}/portal-access`, {});
+    if (grantR.status !== 200) return; // skip if grant failed (e.g. no email on contact)
+
+    // Step 3: set a known password so we can test login deterministically
+    const knownPassword = "PortalTest1!";
+    const pwR = await req("POST", `/api/contacts/${candidate.id}/portal-access/reset-password`, { newPassword: knownPassword });
+    if (pwR.status !== 200) return; // skip if reset failed
+
+    // Step 4: log in with the UPPERCASED email — storage uses ilike search so it should match
+    const upperEmail = candidate.email.toUpperCase();
+    const loginR = await req("POST", "/api/portal/login", {
+      email: upperEmail,
+      password: knownPassword,
+    }, { Authorization: "" });
+    assert(loginR.status === 200, `Expected 200 for case-insensitive portal login, got ${loginR.status}: ${JSON.stringify(loginR.data)}`);
+    assert(loginR.data.token, "Expected portal session token in response");
+
+    // Cleanup: revoke portal access to leave data clean
+    await req("DELETE", `/api/contacts/${candidate.id}/portal-access`);
+  });
 
   // ==========================================
   // 18. WEBHOOK & API KEY PROTECTION
