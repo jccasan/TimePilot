@@ -199,7 +199,7 @@ ScooPilot's built-in communication tools keep your clients informed at every sta
 ScooPilot supports full two-way email communication — from automated transactional messages to threaded inbound conversations — all managed through the same inbox your team already uses for SMS.
 
 - **Transactional Emails** — Automated emails for invoice delivery, payment confirmations, quote proposals, service notifications, and account updates. Delivered reliably through SendGrid.
-- **Two-Way Inbound Email** — Clients can reply to any email from ScooPilot and their responses land directly in your threaded conversation inbox — right alongside SMS messages. No separate email client or inbox needed.
+- **Two-Way Inbound Email** — Clients can reply to any email from ScooPilot and their responses land directly in your threaded conversation inbox — right alongside SMS messages. Powered by the SendGrid Inbound Parse webhook. No separate email client or inbox needed.
 - **Conversation Threading** — Inbound email replies are matched to the originating contact and threaded chronologically, giving your team full context for every client conversation in one place.
 - **Notification Preferences** — Configure which events trigger email notifications and customize the content for your business.
 - **Branded Communications** — Emails include your company logo and branding for a professional, consistent client experience.
@@ -230,7 +230,7 @@ ScooPilot offers flexible pricing tiers that grow with your business, from solo 
 | **Walk** | $49/month | 3 | Small teams |
 | **Run** | $99/month | 6 | Growing businesses |
 | **Grow** | $149/month | 12 | Multi-crew operations |
-| **Enterprise** | Custom | Unlimited | Large organizations |
+| **Enterprise** | Custom pricing — contact us | Unlimited | Large organizations |
 
 - **Additional Users** — Add team members beyond your plan limit for $7/user/month.
 - **14-Day Free Trial** — Every new account starts with a full-featured, no-commitment trial. No credit card required to start.
