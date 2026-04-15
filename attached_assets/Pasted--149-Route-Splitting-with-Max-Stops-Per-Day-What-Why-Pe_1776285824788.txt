@@ -1,0 +1,44 @@
+#149 - Route Splitting with Max Stops Per Day
+What & Why
+Pet waste removal routes can grow too large for a single technician. This feature lets owners set a maximum number of stops per route. When a route exceeds the limit, the system splits it into geographically compact sub-routes using K-Means clustering, optimizes each one, and regenerates visits — all from within the Route Builder.
+
+Done looks like
+A "Max stops per route" numeric input appears in the Route Builder header (persisted to the company record)
+RouteCards that exceed the limit show a visible warning badge (e.g. "28 stops — over limit")
+Each oversized RouteCard has a "Split Route" button that splits it into sub-routes, auto-optimizes each one, and regenerates visits
+New sub-routes are named automatically (e.g. "Monday AM" → "Monday AM-B", "Monday AM-C")
+Toasts confirm how many sub-routes were created and how many stops each has
+If a route is at or under the limit, the warning and split button are not shown
+Out of scope
+Splitting routes across different days (splits stay on the same day)
+Changing the weekly optimizer to respect max stops (only the per-route split button is in scope)
+Merging routes that are too small
+Tasks
+Schema + migration — Add maxStopsPerRoute integer (nullable) column to the companies table via the startup migration block in server/index.ts (using ALTER TABLE companies ADD COLUMN IF NOT EXISTS max_stops_per_route INTEGER;). Add the field to the Drizzle schema in shared/schema.ts. The existing PATCH /api/company endpoint already calls storage.updateCompany, so it will pick up the new field automatically once it's in the schema — no new route is needed for saving/reading the setting.
+
+Backend split endpoint — Add POST /api/routes/:id/split to server/routes.ts. It should:
+
+Accept maxStops in the request body (falls back to the company's maxStopsPerRoute)
+Fetch all active service plans on the route with their property lat/lng
+Return 200 with no-op message if stop count ≤ maxStops
+Calculate K = ceil(stopCount / maxStops)
+Use the existing kMeansClustering function from server/services/weekly-optimizer.ts (export it if not already exported) to divide stops into K geographic groups
+Create K-1 new routes (same dayOfWeek, technicianId, color as the original; names like <original>-B, <original>-C)
+Update service_plans records for each cluster with the new routeId and stopOrder (1-based, ordered by nearest-neighbor)
+Run optimizeRoute from server/services/route-optimizer.ts on each cluster to set final stop orders
+Call deleteFutureScheduledVisitsForPlans + generateVisitsForPlans for all affected plan IDs (using the same pattern as apply-weekly-plan)
+Return { routesCreated: number, newRoutes: { id, name, stopCount }[] }
+Frontend — max stops input — In the Route Builder header (near the "Optimize Week" button), add a small "Max stops" numeric input with a label. On blur/change, PATCH the value to /api/company. Use useQuery(["/api/company"]) for the initial value. Show a small route-limit indicator ("Limit: 20/route") that disappears when the field is empty (no limit set).
+
+Frontend — RouteCard warnings and Split button — In the RouteCard component, when a maxStopsPerRoute value is set and the route's stop count exceeds it, show a red/amber warning badge on the card header showing the count vs. limit. Add a "Split Route" button (visible only on oversized cards) that calls the POST /api/routes/:id/split endpoint, then invalidates /api/routes and /api/service-plans?isActive=true query caches. Show a loading state on the button while splitting. On success, display a toast listing the new sub-route names and their stop counts.
+
+Relevant files
+server/index.ts:269-420 (startup migration block pattern)
+shared/schema.ts:153-175 (companies table, TIER_CONFIG area)
+server/routes.ts:3860-3910 (route optimization endpoint area — POST /api/routes/:id/optimize)
+server/routes.ts:4100-4240 (apply-weekly-plan endpoint — visit regeneration pattern to reuse)
+server/services/weekly-optimizer.ts:93-139 (kMeansClustering function)
+server/services/route-optimizer.ts:35-100 (nearestNeighbor and optimizeRoute)
+client/src/pages/routes-page.tsx:294-446 (RouteCard component)
+client/src/pages/routes-page.tsx:1548-1594 (Route Builder header)
+client/src/pages/routes-page.tsx:2072-2448 (WeeklyOptimizerPanel)

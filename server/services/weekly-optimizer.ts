@@ -90,7 +90,7 @@ function assignToNearestCentroid(
   return best;
 }
 
-function kMeansClustering(
+export function kMeansClustering(
   stops: WeeklyStop[],
   k: number,
   maxIter: number = 20

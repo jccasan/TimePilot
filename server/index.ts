@@ -437,6 +437,19 @@ async function ensureMmsSchema() {
   }
 }
 
+async function ensureMaxStopsSchema() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS max_stops_per_route INTEGER;`);
+    console.log("[Migration] max_stops_per_route column verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure max_stops_per_route:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function migrateServicePlansToAgreementsAndJobs() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -1374,6 +1387,7 @@ async function repairServicePlanDayOfWeek() {
   await ensureCompanyColumns();
   await dropConnectedAccountsTable();
   await ensureMmsSchema();
+  await ensureMaxStopsSchema();
   await migrateServicePlansToAgreementsAndJobs();
   await repairServicePlanDayOfWeek();
   await syncSubscriptionTiers();

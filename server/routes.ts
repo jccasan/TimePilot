@@ -3902,6 +3902,141 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/routes/:id/split", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const route = await storage.getRoute(req.params.id, companyId);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const maxStops: number = req.body?.maxStops ?? company.maxStopsPerRoute ?? null;
+      if (!maxStops || maxStops < 2) {
+        return res.status(400).json({ error: "maxStops must be at least 2" });
+      }
+
+      const plans = await storage.getServicePlans(companyId, { isActive: true });
+      const routePlans = plans.filter(sp => sp.routeId === route.id);
+
+      if (routePlans.length <= maxStops) {
+        return res.json({ noOp: true, message: `Route has ${routePlans.length} stops, at or under the limit of ${maxStops}` });
+      }
+
+      const allProperties = await storage.getProperties(companyId);
+      const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+
+      const { kMeansClustering } = await import("./services/weekly-optimizer");
+      const { optimizeRoute: optimizeCluster } = await import("./services/route-optimizer");
+
+      const weeklyStops = routePlans
+        .map(sp => {
+          const prop = propertyMap.get(sp.propertyId);
+          if (!prop || !prop.latitude || !prop.longitude) return null;
+          return {
+            id: sp.id,
+            servicePlanId: sp.id,
+            contactId: sp.contactId,
+            contactName: "",
+            propertyId: sp.propertyId,
+            address: prop.streetAddress || "",
+            latitude: parseFloat(String(prop.latitude)),
+            longitude: parseFloat(String(prop.longitude)),
+            currentDay: route.dayOfWeek || "tbd",
+            currentRouteId: route.id,
+            currentStopOrder: sp.stopOrder,
+            zipCode: prop.zipCode || null,
+          };
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null);
+
+      if (weeklyStops.length < 2) {
+        return res.status(400).json({ error: "Not enough geocoded stops to split" });
+      }
+
+      const k = Math.ceil(weeklyStops.length / maxStops);
+      const clusters = kMeansClustering(weeklyStops, k);
+
+      const suffixLetters = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
+      const splitColors = ["#ef4444", "#22c55e", "#f59e0b", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16", "#f97316"];
+
+      let startPoint: { latitude: number; longitude: number } | undefined;
+      if (company.startLatitude && company.startLongitude) {
+        startPoint = {
+          latitude: parseFloat(String(company.startLatitude)),
+          longitude: parseFloat(String(company.startLongitude)),
+        };
+      }
+
+      const newRoutes: { id: string; name: string; stopCount: number }[] = [];
+      const allAffectedPlanIds: string[] = [];
+
+      for (let ci = 0; ci < clusters.length; ci++) {
+        const cluster = clusters[ci];
+        let targetRouteId: string;
+
+        if (ci === 0) {
+          targetRouteId = route.id;
+        } else {
+          const suffix = suffixLetters[ci - 1] || String(ci + 1);
+          const newName = `${route.name}-${suffix}`;
+          const newRoute = await storage.createRoute({
+            companyId,
+            name: newName,
+            dayOfWeek: route.dayOfWeek || undefined,
+            technicianId: route.technicianId || undefined,
+            color: splitColors[(ci - 1) % splitColors.length],
+          });
+          targetRouteId = newRoute.id;
+          newRoutes.push({ id: newRoute.id, name: newRoute.name, stopCount: cluster.length });
+        }
+
+        const clusterStops = cluster.map(s => ({ id: s.id, latitude: s.latitude, longitude: s.longitude }));
+        const result = optimizeCluster(clusterStops, startPoint);
+
+        for (let si = 0; si < result.orderedIds.length; si++) {
+          await storage.updateServicePlan(result.orderedIds[si], companyId, {
+            routeId: targetRouteId,
+            stopOrder: si + 1,
+          });
+          allAffectedPlanIds.push(result.orderedIds[si]);
+        }
+
+        const unordered = cluster.filter(s => !result.orderedIds.includes(s.id));
+        for (let si = 0; si < unordered.length; si++) {
+          await storage.updateServicePlan(unordered[si].id, companyId, {
+            routeId: targetRouteId,
+            stopOrder: result.orderedIds.length + si + 1,
+          });
+          allAffectedPlanIds.push(unordered[si].id);
+        }
+      }
+
+      try {
+        const tz = company.timezone || "America/New_York";
+        const today = getCompanyToday(tz);
+        const uniquePlanIds = [...new Set(allAffectedPlanIds)];
+        if (uniquePlanIds.length > 0) {
+          await storage.deleteFutureScheduledVisitsForPlans(uniquePlanIds, today);
+          const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+          const startDate = new Date(today + "T00:00:00Z");
+          startDate.setUTCDate(startDate.getUTCDate() + 1);
+          const endDate = new Date(today + "T00:00:00Z");
+          endDate.setUTCDate(endDate.getUTCDate() + 182);
+          await generateVisitsForPlans(companyId, uniquePlanIds, startDate.toISOString().split("T")[0], endDate.toISOString().split("T")[0]);
+        }
+      } catch (genErr) {
+        console.error("[route-split] Failed to regenerate visits after split:", genErr);
+      }
+
+      res.json({
+        routesCreated: newRoutes.length,
+        newRoutes,
+        originalRoute: { id: route.id, name: route.name, stopCount: clusters[0]?.length ?? routePlans.length },
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/routes/optimize-weekly", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
