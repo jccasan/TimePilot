@@ -1798,7 +1798,7 @@ Return ONLY valid JSON, no markdown.`,
         "logoUrl", "chargeTiming", "invoiceTheme", "remindersEnabled", "autoVisitsEnabled", "dashboardLayout", "settingsLayout", "dashboardNotes", "timezone",
         "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug", "leadWebhookSmsTemplate",
         "quoteAutoFollowUpEnabled", "quoteFollowUpSmsTemplate", "quoteFollowUpEmailEnabled", "quoteFollowUpEmailSubject", "quoteFollowUpEmailBody", "quoteFormLayout",
-        "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle"];
+        "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle", "maxStopsPerRoute"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -4034,6 +4034,157 @@ Return ONLY valid JSON, no markdown.`,
         newRoutes,
         originalRoute: { id: route.id, name: route.name, stopCount: clusters[0]?.length ?? routePlans.length },
       });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/routes/apply-max-stops", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const maxStops: number | null = req.body?.maxStops ?? null;
+
+      await storage.updateCompany(companyId, { maxStopsPerRoute: maxStops });
+
+      if (!maxStops || typeof maxStops !== "number" || maxStops < 2) {
+        return res.json({ cleared: true });
+      }
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const routes = await storage.getRoutes(companyId);
+      const plans = await storage.getServicePlans(companyId, { isActive: true });
+
+      const plansByRoute = new Map<string, typeof plans>();
+      for (const route of routes) plansByRoute.set(route.id, []);
+      for (const plan of plans) {
+        if (plan.routeId && plansByRoute.has(plan.routeId)) {
+          plansByRoute.get(plan.routeId)!.push(plan);
+        }
+      }
+
+      const oversized = routes.filter(r => (plansByRoute.get(r.id) || []).length > maxStops);
+
+      if (oversized.length === 0) {
+        return res.json({ routesSplit: 0, subRoutesCreated: 0, skipped: routes.length, errors: [] });
+      }
+
+      const { kMeansClustering } = await import("./services/weekly-optimizer");
+      const { optimizeRoute: optimizeCluster } = await import("./services/route-optimizer");
+      const allProperties = await storage.getProperties(companyId);
+      const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+
+      let startPoint: { latitude: number; longitude: number } | undefined;
+      if (company.startLatitude && company.startLongitude) {
+        startPoint = {
+          latitude: parseFloat(String(company.startLatitude)),
+          longitude: parseFloat(String(company.startLongitude)),
+        };
+      }
+
+      const suffixLetters = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
+      const splitColors = ["#ef4444", "#22c55e", "#f59e0b", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16", "#f97316"];
+      const tz = company.timezone || "America/New_York";
+      const today = getCompanyToday(tz);
+
+      let routesSplit = 0;
+      let subRoutesCreated = 0;
+      const errors: string[] = [];
+      const allAffectedPlanIds: string[] = [];
+
+      for (const route of oversized) {
+        try {
+          const routePlans = plansByRoute.get(route.id) || [];
+
+          const weeklyStops = routePlans
+            .map(sp => {
+              const prop = propertyMap.get(sp.propertyId);
+              if (!prop || !prop.latitude || !prop.longitude) return null;
+              return {
+                id: sp.id,
+                servicePlanId: sp.id,
+                contactId: sp.contactId,
+                contactName: "",
+                propertyId: sp.propertyId,
+                address: prop.streetAddress || "",
+                latitude: parseFloat(String(prop.latitude)),
+                longitude: parseFloat(String(prop.longitude)),
+                currentDay: route.dayOfWeek || "tbd",
+                currentRouteId: route.id,
+                currentStopOrder: sp.stopOrder,
+                zipCode: prop.zipCode || null,
+              };
+            })
+            .filter((s): s is NonNullable<typeof s> => s !== null);
+
+          if (weeklyStops.length < 2) {
+            errors.push(`${route.name}: not enough geocoded stops`);
+            continue;
+          }
+
+          const k = Math.ceil(weeklyStops.length / maxStops);
+          const clusters = kMeansClustering(weeklyStops, k);
+
+          for (let ci = 0; ci < clusters.length; ci++) {
+            const cluster = clusters[ci];
+            let targetRouteId: string;
+
+            if (ci === 0) {
+              targetRouteId = route.id;
+            } else {
+              const suffix = suffixLetters[ci - 1] || String(ci + 1);
+              const newRoute = await storage.createRoute({
+                companyId,
+                name: `${route.name}-${suffix}`,
+                dayOfWeek: route.dayOfWeek || undefined,
+                technicianId: route.technicianId || undefined,
+                color: splitColors[(ci - 1) % splitColors.length],
+              });
+              targetRouteId = newRoute.id;
+              subRoutesCreated++;
+            }
+
+            const clusterStops = cluster.map(s => ({ id: s.id, latitude: s.latitude, longitude: s.longitude }));
+            const result = optimizeCluster(clusterStops, startPoint);
+
+            for (let si = 0; si < result.orderedIds.length; si++) {
+              await storage.updateServicePlan(result.orderedIds[si], companyId, {
+                routeId: targetRouteId,
+                stopOrder: si + 1,
+              });
+              allAffectedPlanIds.push(result.orderedIds[si]);
+            }
+            const unordered = cluster.filter(s => !result.orderedIds.includes(s.id));
+            for (let si = 0; si < unordered.length; si++) {
+              await storage.updateServicePlan(unordered[si].id, companyId, {
+                routeId: targetRouteId,
+                stopOrder: result.orderedIds.length + si + 1,
+              });
+              allAffectedPlanIds.push(unordered[si].id);
+            }
+          }
+          routesSplit++;
+        } catch (splitErr: any) {
+          console.error(`[apply-max-stops] Failed to split route ${route.name}:`, splitErr);
+          errors.push(route.name);
+        }
+      }
+
+      try {
+        const uniquePlanIds = [...new Set(allAffectedPlanIds)];
+        if (uniquePlanIds.length > 0) {
+          await storage.deleteFutureScheduledVisitsForPlans(uniquePlanIds, today);
+          const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+          const startDate = new Date(today + "T00:00:00Z");
+          startDate.setUTCDate(startDate.getUTCDate() + 1);
+          const endDate = new Date(today + "T00:00:00Z");
+          endDate.setUTCDate(endDate.getUTCDate() + 182);
+          await generateVisitsForPlans(companyId, uniquePlanIds, startDate.toISOString().split("T")[0], endDate.toISOString().split("T")[0]);
+        }
+      } catch (genErr) {
+        console.error("[apply-max-stops] Failed to regenerate visits:", genErr);
+      }
+
+      res.json({ routesSplit, subRoutesCreated, skipped: routes.length - oversized.length, errors });
     } catch (err) { handleError(res, err); }
   });
 

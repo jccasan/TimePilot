@@ -967,65 +967,31 @@ export default function RoutesPage() {
 
     setIsApplyingSplit(true);
     try {
-      await apiRequest("PATCH", "/api/company", { maxStopsPerRoute: maxStops });
-      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      const res = await apiRequest("POST", "/api/routes/apply-max-stops", { maxStops: maxStops ?? null });
+      const data = await res.json();
 
-      if (!maxStops) {
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["/api/routes"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/service-plans?isActive=true"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/company"] }),
+      ]);
+
+      if (data.cleared) {
         toast({ title: "Stop limit cleared", description: "Routes will no longer be checked against a max stops limit." });
-        return;
-      }
-
-      // Use all-days stop map (same logic as Route Builder but not day-filtered)
-      // so routes on every day tab are evaluated, not just the selected day
-      const oversizedRoutes = allRoutes.filter(r => {
-        const count = (stopsByRouteAllDays[r.id] || []).length;
-        return count > maxStops;
-      });
-
-      if (oversizedRoutes.length === 0) {
+      } else if (data.routesSplit === 0 && (data.errors?.length || 0) === 0) {
         toast({ title: `All routes within the ${maxStops}-stop limit`, description: "No routes needed splitting." });
-        return;
-      }
-
-      let totalRoutesCreated = 0;
-      let totalSplitRoutes = 0;
-      const errors: string[] = [];
-
-      for (const route of oversizedRoutes) {
-        try {
-          const res = await apiRequest("POST", `/api/routes/${route.id}/split`, { maxStops });
-          const data = await res.json();
-          if (!data.noOp) {
-            totalSplitRoutes++;
-            totalRoutesCreated += data.routesCreated || 0;
-          }
-        } catch (err: any) {
-          errors.push(route.name);
-        }
-      }
-
-      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
-
-      if (totalSplitRoutes === 0 && errors.length === 0) {
-        // All returned noOp — routes were already within limit on the server side
-        toast({ title: `All routes are within the ${maxStops}-stop limit`, description: "No routes needed splitting." });
-      } else if (errors.length > 0 && totalSplitRoutes === 0) {
+      } else if ((data.errors?.length || 0) > 0 && data.routesSplit === 0) {
+        toast({ title: "Could not split routes", description: `Failed: ${data.errors.join(", ")}`, variant: "destructive" });
+      } else if ((data.errors?.length || 0) > 0) {
         toast({
-          title: "Could not split routes",
-          description: `Failed: ${errors.join(", ")}`,
-          variant: "destructive",
-        });
-      } else if (errors.length > 0) {
-        toast({
-          title: `${totalSplitRoutes} route${totalSplitRoutes !== 1 ? "s" : ""} split into ${totalSplitRoutes + totalRoutesCreated} sub-routes`,
-          description: `Some routes could not be split: ${errors.join(", ")}`,
+          title: `${data.routesSplit} route${data.routesSplit !== 1 ? "s" : ""} split into ${data.routesSplit + data.subRoutesCreated} sub-routes`,
+          description: `Some routes could not be split: ${data.errors.join(", ")}`,
           variant: "destructive",
         });
       } else {
         toast({
-          title: `${totalSplitRoutes} route${totalSplitRoutes !== 1 ? "s" : ""} split into ${totalSplitRoutes + totalRoutesCreated} sub-routes`,
-          description: `Each sub-route has been optimized and visits regenerated.`,
+          title: `${data.routesSplit} route${data.routesSplit !== 1 ? "s" : ""} split into ${data.routesSplit + data.subRoutesCreated} sub-routes`,
+          description: "Each sub-route has been optimized and visits regenerated.",
         });
       }
     } catch (err: any) {
@@ -1350,17 +1316,6 @@ export default function RoutesPage() {
     }
     return map;
   }, [allRoutes, visiblePlans, dayPlanIds]);
-
-  // All-days variant — same as stopsByRoute but without the day filter,
-  // used by Apply to evaluate oversized routes across every day tab
-  const stopsByRouteAllDays = useMemo(() => {
-    const map: Record<string, ServicePlan[]> = {};
-    for (const r of allRoutes) map[r.id] = [];
-    for (const sp of visiblePlans) {
-      if (sp.routeId && map[sp.routeId]) map[sp.routeId].push(sp);
-    }
-    return map;
-  }, [allRoutes, visiblePlans]);
 
   const fetchRouteMetrics = useCallback(async (routeId: string) => {
     try {
