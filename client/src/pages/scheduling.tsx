@@ -179,6 +179,7 @@ function ScheduleJobForm({
   const [frequency, setFrequency] = useState("weekly");
   const [dayOfWeek, setDayOfWeek] = useState("");
   const [pricePerVisit, setPricePerVisit] = useState("");
+  const [manualServiceName, setManualServiceName] = useState("");
   const [startDate, setStartDate] = useState(toLocalDateString(new Date(), tz));
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -204,9 +205,9 @@ function ScheduleJobForm({
   }, [selectedServices, pricePerVisit]);
 
   const combinedServiceName = useMemo(() => {
-    if (selectedServices.length === 0) return null;
+    if (selectedServices.length === 0) return manualServiceName || null;
     return selectedServices.map(s => s.name).join(" + ");
-  }, [selectedServices]);
+  }, [selectedServices, manualServiceName]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,11 +303,14 @@ function ScheduleJobForm({
             </Button>
           </div>
         ) : (
-          <Input value={pricePerVisit} onChange={e => setPricePerVisit(e.target.value)} placeholder="Price per visit" data-testid="input-job-price-manual" />
+          <div className="space-y-2">
+            <Input value={manualServiceName} onChange={e => setManualServiceName(e.target.value)} placeholder="Service name (e.g. Waste Removal)" data-testid="input-job-service-name" />
+            <Input type="number" min="0" step="0.01" value={pricePerVisit} onChange={e => setPricePerVisit(e.target.value)} placeholder="Price per visit (e.g. 35.00)" data-testid="input-job-price-manual" />
+          </div>
         )}
         <div className="flex items-center justify-between pt-1">
           <Label className="text-sm">Total per Visit</Label>
-          <span className="text-sm font-semibold" data-testid="text-total-price">${parseFloat(totalPrice || "0").toFixed(2)}</span>
+          <span className="text-sm font-semibold" data-testid="text-total-price">${(parseFloat(totalPrice) || 0).toFixed(2)}</span>
         </div>
       </div>
 

@@ -133,6 +133,10 @@ function JobForm({
   const [frequency, setFrequency] = useState(initial?.frequency || "weekly");
   const [dayOfWeek, setDayOfWeek] = useState(initial?.dayOfWeek || "");
   const [pricePerVisit, setPricePerVisit] = useState(initial?.pricePerVisit || "");
+  const [manualServiceName, setManualServiceName] = useState<string>(() => {
+    if (initial?.serviceName && (!initial.serviceName.includes(" + "))) return initial.serviceName;
+    return "";
+  });
   const [startDate, setStartDate] = useState(initial?.startDate || toLocalDateString(new Date(), tz));
   const [startTime, setStartTime] = useState(initial?.startTime || "");
   const [endTime, setEndTime] = useState(initial?.endTime || "");
@@ -160,9 +164,9 @@ function JobForm({
   }, [selectedServices, pricePerVisit]);
 
   const combinedServiceName = useMemo(() => {
-    if (selectedServices.length === 0) return null;
+    if (selectedServices.length === 0) return manualServiceName || null;
     return selectedServices.map(s => s.name).join(" + ");
-  }, [selectedServices]);
+  }, [selectedServices, manualServiceName]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -327,16 +331,28 @@ function JobForm({
             </Button>
           </div>
         ) : (
-          <Input
-            value={pricePerVisit}
-            onChange={e => setPricePerVisit(e.target.value)}
-            placeholder="Service name"
-            data-testid="input-job-service-name"
-          />
+          <div className="space-y-2">
+            <Input
+              value={manualServiceName}
+              onChange={e => setManualServiceName(e.target.value)}
+              placeholder="Service name (e.g. Waste Removal)"
+              data-testid="input-job-service-name"
+            />
+            <Input
+              id="job-price"
+              type="number"
+              min="0"
+              step="0.01"
+              value={pricePerVisit}
+              onChange={e => setPricePerVisit(e.target.value)}
+              placeholder="Price per visit (e.g. 35.00)"
+              data-testid="input-job-price-manual"
+            />
+          </div>
         )}
         <div className="flex items-center justify-between pt-1">
           <Label htmlFor="job-price" className="text-sm">Total per Visit</Label>
-          <span className="text-sm font-semibold" data-testid="text-total-price">${parseFloat(totalPrice || "0").toFixed(2)}</span>
+          <span className="text-sm font-semibold" data-testid="text-total-price">${(parseFloat(totalPrice) || 0).toFixed(2)}</span>
         </div>
       </div>
 

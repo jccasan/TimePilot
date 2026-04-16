@@ -5227,12 +5227,15 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
+      const rawPrice = parseFloat(body.pricePerVisit);
+      const safePrice = isNaN(rawPrice) ? "0.00" : rawPrice.toFixed(2);
+
       const sp = await storage.createServicePlan({
         companyId,
         contactId: body.contactId,
         propertyId: body.propertyId,
         frequency: body.frequency || "weekly",
-        pricePerVisit: body.pricePerVisit || "0",
+        pricePerVisit: safePrice,
         isActive,
         startDate: body.startDate || new Date().toISOString().split("T")[0],
         endDate: body.endDate || null,
