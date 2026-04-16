@@ -3958,8 +3958,19 @@ Return ONLY valid JSON, no markdown.`,
       const plans = await storage.getServicePlans(companyId, { isActive: true });
       const routePlans = plans.filter(sp => sp.routeId === route.id);
 
-      if (routePlans.length <= maxStops) {
-        return res.json({ noOp: true, message: `Route has ${routePlans.length} stops, at or under the limit of ${maxStops}` });
+      // Use this week's visit count to determine oversized status and split factor
+      const splitTz = company.timezone || "America/New_York";
+      const splitWeekStart = getCompanyWeekStart(splitTz);
+      const splitWeekStartObj = new Date(splitWeekStart + "T12:00:00Z");
+      const splitWeekEndObj = new Date(splitWeekStartObj);
+      splitWeekEndObj.setUTCDate(splitWeekEndObj.getUTCDate() + 6);
+      const splitWeekEnd = splitWeekEndObj.toISOString().split("T")[0];
+      const routeWeekVisits = await storage.getVisitsForDateRange(companyId, splitWeekStart, splitWeekEnd);
+      const visitCountForRoute = routeWeekVisits.filter(v => v.routeId === route.id && v.status !== "cancelled").length;
+      const effectiveCount = visitCountForRoute > 0 ? visitCountForRoute : routePlans.length;
+
+      if (effectiveCount <= maxStops) {
+        return res.json({ noOp: true, message: `Route has ${effectiveCount} appointments this week, at or under the limit of ${maxStops}` });
       }
 
       const allProperties = await storage.getProperties(companyId);
@@ -3993,7 +4004,7 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "Not enough geocoded stops to split" });
       }
 
-      const k = Math.ceil(weeklyStops.length / maxStops);
+      const k = Math.ceil(effectiveCount / maxStops);
       const clusters = kMeansClustering(weeklyStops, k);
 
       const suffixLetters = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -4112,7 +4123,26 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      const oversized = routes.filter(r => (plansByRoute.get(r.id) || []).length > maxStops);
+      // Determine effective stop count per route using this week's visit counts
+      const bulkTz = company.timezone || "America/New_York";
+      const bulkWeekStart = getCompanyWeekStart(bulkTz);
+      const bulkWeekStartObj = new Date(bulkWeekStart + "T12:00:00Z");
+      const bulkWeekEndObj = new Date(bulkWeekStartObj);
+      bulkWeekEndObj.setUTCDate(bulkWeekEndObj.getUTCDate() + 6);
+      const bulkWeekEnd = bulkWeekEndObj.toISOString().split("T")[0];
+      const bulkWeekVisits = await storage.getVisitsForDateRange(companyId, bulkWeekStart, bulkWeekEnd);
+      const visitCountByRoute = new Map<string, number>();
+      for (const v of bulkWeekVisits) {
+        if (v.routeId && v.status !== "cancelled") {
+          visitCountByRoute.set(v.routeId, (visitCountByRoute.get(v.routeId) || 0) + 1);
+        }
+      }
+
+      const oversized = routes.filter(r => {
+        const visitCount = visitCountByRoute.get(r.id);
+        const effectiveCount = visitCount !== undefined && visitCount > 0 ? visitCount : (plansByRoute.get(r.id) || []).length;
+        return effectiveCount > maxStops;
+      });
 
       if (oversized.length === 0) {
         return res.json({ routesSplit: 0, subRoutesCreated: 0, skipped: routes.length, errors: [] });
@@ -4171,7 +4201,9 @@ Return ONLY valid JSON, no markdown.`,
             continue;
           }
 
-          const k = Math.ceil(weeklyStops.length / maxStops);
+          const routeVisitCount = visitCountByRoute.get(route.id);
+          const routeEffectiveCount = routeVisitCount !== undefined && routeVisitCount > 0 ? routeVisitCount : weeklyStops.length;
+          const k = Math.ceil(routeEffectiveCount / maxStops);
           const clusters = kMeansClustering(weeklyStops, k);
 
           for (let ci = 0; ci < clusters.length; ci++) {
@@ -4241,26 +4273,47 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/routes/optimize-weekly", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { respectZones = false, includeSaturday = false } = req.body || {};
+      const { respectZones = false, includeSaturday = false, weekStart } = req.body || {};
 
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
-      const plans = await storage.getServicePlans(companyId, { isActive: true });
-      const activePlans = plans.filter(sp => sp.frequency !== "onetime" && sp.jobStatus === "active");
+      const tz = company.timezone || "America/New_York";
 
-      if (activePlans.length < 3) {
-        return res.status(400).json({ error: "Need at least 3 active recurring stops to optimize weekly schedule" });
+      // Determine the week range to analyse — defaults to current week
+      const weekStartDate: string = (typeof weekStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(weekStart))
+        ? weekStart
+        : getCompanyWeekStart(tz);
+      const weekStartObj = new Date(weekStartDate + "T12:00:00Z");
+      const weekEndObj = new Date(weekStartObj);
+      weekEndObj.setUTCDate(weekEndObj.getUTCDate() + 6);
+      const weekEndDate = weekEndObj.toISOString().split("T")[0];
+
+      // Fetch actual visits for this week — these are the appointments we will optimize
+      const weekVisitsAll = await storage.getVisitsForDateRange(companyId, weekStartDate, weekEndDate);
+      const activeWeekVisits = weekVisitsAll.filter(v => v.status !== "cancelled" && v.servicePlanId);
+
+      if (activeWeekVisits.length < 3) {
+        return res.status(400).json({ error: "Need at least 3 active appointments this week to optimize. Generate visits for this week first or select a different week." });
       }
+
+      // Build plan + property maps for geographic data
+      const uniquePlanIds = [...new Set(activeWeekVisits.map(v => v.servicePlanId!))];
+      const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+      const planMap = new Map(allPlans.map(p => [p.id, p]));
 
       const allProperties = await storage.getProperties(companyId);
       let propertyMap = new Map(allProperties.map(p => [p.id, p]));
 
-      const needsGeocode = activePlans.filter(sp => {
-        const prop = propertyMap.get(sp.propertyId);
-        return prop && prop.streetAddress && (!prop.latitude || !prop.longitude);
-      });
-      for (const sp of needsGeocode) {
+      // Geocode any missing properties referenced by this week's visits
+      const plansNeedingGeocode = uniquePlanIds
+        .map(id => planMap.get(id))
+        .filter((sp): sp is NonNullable<typeof sp> => {
+          if (!sp) return false;
+          const prop = propertyMap.get(sp.propertyId);
+          return !!(prop && prop.streetAddress && (!prop.latitude || !prop.longitude));
+        });
+      for (const sp of plansNeedingGeocode) {
         const prop = propertyMap.get(sp.propertyId)!;
         const coords = await geocodeAddress(prop.streetAddress!, prop.city, prop.state, prop.zipCode);
         if (coords) {
@@ -4274,11 +4327,16 @@ Return ONLY valid JSON, no markdown.`,
 
       const { analyzeWeeklySchedule } = await import("./services/weekly-optimizer");
 
-      const weeklyStops = activePlans
-        .map(sp => {
+      // Map each visit to a WeeklyStop — currentDay comes from the visit's actual scheduled date
+      const DAYS_OF_WEEK = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const weeklyStops = activeWeekVisits
+        .map(visit => {
+          const sp = visit.servicePlanId ? planMap.get(visit.servicePlanId) : undefined;
+          if (!sp) return null;
           const prop = propertyMap.get(sp.propertyId);
           const contact = contactMap.get(sp.contactId);
           if (!prop || !prop.latitude || !prop.longitude) return null;
+          const visitDow = new Date(visit.scheduledDate + "T12:00:00Z").getUTCDay();
           return {
             id: sp.id,
             servicePlanId: sp.id,
@@ -4288,7 +4346,7 @@ Return ONLY valid JSON, no markdown.`,
             address: `${prop.streetAddress || ""}${prop.city ? `, ${prop.city}` : ""}`,
             latitude: parseFloat(String(prop.latitude)),
             longitude: parseFloat(String(prop.longitude)),
-            currentDay: sp.dayOfWeek || "monday",
+            currentDay: DAYS_OF_WEEK[visitDow] || "monday",
             currentRouteId: sp.routeId,
             currentStopOrder: sp.stopOrder,
             zipCode: prop.zipCode || null,
@@ -4297,7 +4355,7 @@ Return ONLY valid JSON, no markdown.`,
         .filter((s): s is NonNullable<typeof s> => s !== null);
 
       if (weeklyStops.length < 3) {
-        return res.status(400).json({ error: "Not enough geocoded stops to optimize. Ensure property addresses are complete." });
+        return res.status(400).json({ error: "Not enough geocoded appointments to optimize. Ensure property addresses are complete." });
       }
 
       let startPoint: { latitude: number; longitude: number } | undefined;

@@ -1442,21 +1442,16 @@ export default function RoutesPage() {
 
   const dayStopCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const d of DAYS) {
-      const routeIdsForDay = allRoutes
-        .filter(r => {
-          if (r.dayOfWeek !== d) return false;
-          if (r.date) {
-            const rd = new Date(r.date + "T12:00:00");
-            return rd >= currentWeekRange.start && rd <= currentWeekRange.end;
-          }
-          return true;
-        })
-        .map(r => r.id);
-      counts[d] = routeIdsForDay.reduce((sum, id) => sum + (stopsByRoute[id]?.length || 0), 0);
+    for (const d of DAYS) counts[d] = 0;
+    for (const visit of weekVisits) {
+      if (!visit.scheduledDate) continue;
+      const visitDate = new Date(visit.scheduledDate + "T12:00:00");
+      const dayIdx = (visitDate.getDay() + 6) % 7;
+      const day = DAYS[dayIdx];
+      if (day !== undefined) counts[day] = (counts[day] || 0) + 1;
     }
     return counts;
-  }, [allRoutes, stopsByRoute, currentWeekRange]);
+  }, [weekVisits]);
 
   const createRouteMutation = useMutation({
     mutationFn: async (data: { name: string; dayOfWeek: string; technicianId: string | null; color: string }) => {
@@ -2177,6 +2172,7 @@ export default function RoutesPage() {
           onOpenChange={setShowWeeklyOptimizer}
           credits={credits}
           onNeedCredits={() => setShowPurchase(true)}
+          weekStart={weekStartStr}
         />
       )}
 
@@ -2424,11 +2420,12 @@ type WeeklyOptResult = {
   creditsRequired: number;
 };
 
-function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits }: {
+function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits, weekStart }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   credits: number;
   onNeedCredits: () => void;
+  weekStart?: string;
 }) {
   const { toast } = useToast();
   const [respectZones, setRespectZones] = useState(false);
@@ -2443,6 +2440,7 @@ function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits }: {
       const res = await apiRequest("POST", "/api/routes/optimize-weekly", {
         respectZones,
         includeSaturday,
+        ...(weekStart ? { weekStart } : {}),
       });
       return res.json() as Promise<WeeklyOptResult>;
     },
