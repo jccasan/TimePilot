@@ -1382,6 +1382,102 @@ async function repairServicePlanDayOfWeek() {
   }
 }
 
+async function seedPoopScoopDemoData() {
+  const COMPANY_NAME = "Poop Scoop Pet Waste Solutions LTD";
+  const TIMEZONE = "America/Los_Angeles";
+  const TOTAL = 250;
+
+  const FIRST_NAMES = ["James","Mary","John","Patricia","Robert","Jennifer","Michael","Linda","William","Barbara","David","Elizabeth","Richard","Susan","Joseph","Jessica","Thomas","Sarah","Charles","Karen","Christopher","Lisa","Daniel","Nancy","Matthew","Betty","Anthony","Margaret","Mark","Sandra","Donald","Ashley","Steven","Dorothy","Paul","Kimberly","Andrew","Emily","Joshua","Donna","Kenneth","Michelle","Kevin","Carol","Brian","Amanda","George","Melissa","Timothy","Deborah","Ronald","Stephanie","Edward","Rebecca","Jason","Sharon","Jeffrey","Laura","Ryan","Cynthia","Jacob","Kathleen","Gary","Amy","Nicholas","Angela","Eric","Shirley","Jonathan","Anna","Stephen","Brenda","Larry","Pamela","Justin","Emma","Scott","Nicole","Brandon","Helen","Benjamin","Samantha","Samuel","Katherine","Raymond","Christine","Gregory","Debra","Frank","Rachel","Alexander","Carolyn","Patrick","Janet","Jack","Catherine","Dennis","Maria","Jerry","Heather","Tyler","Diane","Aaron","Julie"];
+  const LAST_NAMES = ["Smith","Johnson","Williams","Brown","Jones","Garcia","Miller","Davis","Rodriguez","Martinez","Hernandez","Lopez","Gonzalez","Wilson","Anderson","Thomas","Taylor","Moore","Jackson","Martin","Lee","Perez","Thompson","White","Harris","Sanchez","Clark","Ramirez","Lewis","Robinson","Walker","Young","Allen","King","Wright","Scott","Torres","Nguyen","Hill","Flores","Green","Adams","Nelson","Baker","Hall","Rivera","Campbell","Mitchell","Carter","Roberts","Gomez","Phillips","Evans","Turner","Diaz","Parker","Cruz","Edwards","Collins","Reyes","Stewart","Morris","Morales","Murphy","Cook","Rogers","Gutierrez","Ortiz","Morgan","Cooper","Peterson","Bailey","Reed","Kelly","Howard","Ramos","Kim","Cox","Ward","Richardson","Watson","Brooks","Chavez","Wood","James","Bennett","Gray","Mendoza","Ruiz","Hughes","Price","Alvarez","Castillo","Sanders","Patel","Myers","Long","Ross","Foster","Jimenez","Powell","Jenkins","Perry","Russell"];
+  const STREETS = ["Meridian St","Lakeway Dr","Alabama St","King St","Cornwall Ave","Railroad Ave","Ellis St","Holly St","Magnolia Ave","Douglas Ave","Sunset Dr","Lincoln St","Grant St","Monroe St","State St","Bay St","Maple St","Oak St","Cedar St","Pine St","Birch St","Elm St","Walnut Ave","Chestnut Ave","Alder St","Iowa St","Kentucky St","Virginia St","Michigan St","Indiana St","Ohio St","Wisconsin St","Missouri St","Illinois St","Texas St","Cable St","Bill McDonald Pkwy","James St","Champion St","Stuart Rd","Donovan Ave","Connelly Ave","Yew St","Fir St","Spruce St","Garden St","Forest St","Valley Dr","Ridge Dr","Hill Dr","Park Ave","Lake Dr","Shore Dr","Bay Dr","Crest Dr","View Dr","Summit Dr","Meadow Ln","Woodland Dr","Hillcrest Dr"];
+  const ZIP_CODES = ["98225","98226","98229"];
+  const ZIP_WEIGHTS = [0.4, 0.35, 0.25];
+  const YARD_SIZES = ["small","medium","large"];
+  const YARD_DIFFICULTIES = ["flat","moderate","difficult"];
+  const FREQUENCIES = ["weekly","biweekly","monthly"];
+  const FREQ_WEIGHTS = [0.50, 0.35, 0.15];
+  const DAYS = ["monday","tuesday","wednesday","thursday","friday","saturday"];
+  const DOMAINS = ["gmail.com","yahoo.com","hotmail.com","outlook.com","icloud.com","comcast.net"];
+
+  const pick = <T>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+  const wpick = <T>(items: T[], weights: number[]) => {
+    let r = Math.random(), c = 0;
+    for (let i = 0; i < items.length; i++) { c += weights[i]; if (r < c) return items[i]; }
+    return items[items.length - 1];
+  };
+  const rInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+  const rPhone = () => `(${rInt(200,999)}) ${rInt(200,999)}-${rInt(1000,9999)}`;
+  const rEmail = (f: string, l: string, i: number) => {
+    const d = pick(DOMAINS);
+    return pick([`${f.toLowerCase()}.${l.toLowerCase()}${i}@${d}`,`${f.toLowerCase()}${l.toLowerCase().charAt(0)}${i}@${d}`,`${f.toLowerCase().charAt(0)}${l.toLowerCase()}${i}@${d}`]);
+  };
+  const rStatus = () => { const r = Math.random(); return r < 0.80 ? "active" : r < 0.90 ? "paused" : "cancelled"; };
+  const rPrice = (freq: string, dogs: number) => {
+    const base: Record<string,number> = { weekly: 18, biweekly: 28, monthly: 42 };
+    return Math.max(15, Math.min(55, (base[freq] ?? 25) + (dogs - 1) * 5 + rInt(-2, 5)));
+  };
+  const rStartDate = () => {
+    const d = new Date(); d.setMonth(d.getMonth() - rInt(6, 18)); d.setDate(rInt(1, 28));
+    return d.toISOString().split("T")[0];
+  };
+
+  try {
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+    let companyRes = await pool.query(`SELECT id FROM companies WHERE name = $1 LIMIT 1`, [COMPANY_NAME]);
+    let companyId: string;
+    if (companyRes.rows.length === 0) {
+      const ins = await pool.query(
+        `INSERT INTO companies (name, timezone, subscription_tier, subscription_status) VALUES ($1,$2,$3,$4) RETURNING id`,
+        [COMPANY_NAME, TIMEZONE, "tier_6_10", "active"]
+      );
+      companyId = ins.rows[0].id;
+      console.log(`[Migration] Poop Scoop company created: ${companyId}`);
+    } else {
+      companyId = companyRes.rows[0].id;
+    }
+
+    const countRes = await pool.query(`SELECT COUNT(*) AS cnt FROM contacts WHERE company_id = $1`, [companyId]);
+    if (parseInt(countRes.rows[0].cnt, 10) > 10) {
+      console.log("[Migration] Poop Scoop already seeded — skipping");
+      await pool.end();
+      return;
+    }
+
+    console.log(`[Migration] Seeding ${TOTAL} Poop Scoop contacts...`);
+    for (let i = 0; i < TOTAL; i++) {
+      const firstName = pick(FIRST_NAMES), lastName = pick(LAST_NAMES);
+      const dogs = rInt(1, 4);
+      const freq = wpick(FREQUENCIES, FREQ_WEIGHTS);
+      const cRes = await pool.query(
+        `INSERT INTO contacts (company_id,first_name,last_name,email,phone,street_address,city,state,zip_code,number_of_dogs,yard_size,service_frequency,service_day,status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+        [companyId, firstName, lastName, rEmail(firstName, lastName, i), rPhone(),
+         `${rInt(100,9999)} ${pick(STREETS)}`, "Bellingham", "WA", wpick(ZIP_CODES, ZIP_WEIGHTS),
+         dogs, pick(YARD_SIZES), freq, pick(DAYS), rStatus()]
+      );
+      const contactId = cRes.rows[0].id;
+      const pRes = await pool.query(
+        `INSERT INTO properties (company_id,contact_id,street_address,city,state,zip_code,number_of_dogs,yard_size,yard_difficulty)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        [companyId, contactId, `${rInt(100,9999)} ${pick(STREETS)}`, "Bellingham", "WA",
+         wpick(ZIP_CODES, ZIP_WEIGHTS), dogs, pick(YARD_SIZES), pick(YARD_DIFFICULTIES)]
+      );
+      await pool.query(
+        `INSERT INTO service_plans (company_id,contact_id,property_id,frequency,day_of_week,price_per_visit,is_active,job_status,start_date,job_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [companyId, contactId, pRes.rows[0].id, freq, pick(DAYS),
+         rPrice(freq, dogs).toFixed(2), true, "active", rStartDate(), "recurring"]
+      );
+    }
+    console.log(`[Migration] Poop Scoop seeded: ${TOTAL} contacts, properties, and service plans`);
+    await pool.end();
+  } catch (err) {
+    console.error("[Migration] Poop Scoop seed failed:", err);
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
@@ -1392,6 +1488,7 @@ async function repairServicePlanDayOfWeek() {
   await repairServicePlanDayOfWeek();
   await syncSubscriptionTiers();
   await seedDemoCompany();
+  await seedPoopScoopDemoData();
   setupSession(app);
   await registerRoutes(httpServer, app);
 
