@@ -1141,6 +1141,7 @@ async function seedDemoCompany() {
           await storage.seedDefaultPricing(demoCoId);
           console.log("[Migration] Demo company service pricing seeded");
         }
+        await pool.query("UPDATE companies SET subscription_tier = 'tier_1_3' WHERE id = $1 AND subscription_tier != 'tier_1_3'", [demoCoId]);
         const contactCount = await pool.query("SELECT COUNT(*) FROM contacts WHERE company_id = $1", [demoCoId]);
         const cc = parseInt(contactCount.rows[0].count);
         if (cc < 90) {
@@ -1150,7 +1151,7 @@ async function seedDemoCompany() {
           await seedScatteredDemoContacts(pool, demoCoId);
         }
       }
-      console.log("[Migration] Demo company already exists");
+      console.log("[Migration] Demo company already exists (subscription_tier ensured tier_1_3)");
       await pool.end();
       return;
     }
@@ -1165,7 +1166,7 @@ async function seedDemoCompany() {
 
     const compRes = await pool.query(
       `INSERT INTO companies (name, slug, timezone, subscription_tier, subscription_status, charge_timing, mrr_cents, route_credits, reminders_enabled, auto_visits_enabled, ai_import_mapping_enabled, rover_ai_enabled, sms_provider)
-       VALUES ('Clean Paws Fredericksburg', 'clean-paws-fredericksburg', 'America/New_York', 'tier_1', 'active', 'day_before', 0, 10, true, true, true, true, 'telnyx')
+       VALUES ('Clean Paws Fredericksburg', 'clean-paws-fredericksburg', 'America/New_York', 'tier_1_3', 'active', 'day_before', 0, 10, true, true, true, true, 'telnyx')
        RETURNING id`
     );
     const companyId = compRes.rows[0].id;
