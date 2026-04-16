@@ -1444,7 +1444,7 @@ export default function RoutesPage() {
     const counts: Record<string, number> = {};
     for (const d of DAYS) counts[d] = 0;
     for (const visit of weekVisits) {
-      if (!visit.scheduledDate) continue;
+      if (!visit.scheduledDate || visit.status === "cancelled") continue;
       const visitDate = new Date(visit.scheduledDate + "T12:00:00");
       const dayIdx = (visitDate.getDay() + 6) % 7;
       const day = DAYS[dayIdx];

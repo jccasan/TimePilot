@@ -3967,10 +3967,9 @@ Return ONLY valid JSON, no markdown.`,
       const splitWeekEnd = splitWeekEndObj.toISOString().split("T")[0];
       const routeWeekVisits = await storage.getVisitsForDateRange(companyId, splitWeekStart, splitWeekEnd);
       const visitCountForRoute = routeWeekVisits.filter(v => v.routeId === route.id && v.status !== "cancelled").length;
-      const effectiveCount = visitCountForRoute > 0 ? visitCountForRoute : routePlans.length;
 
-      if (effectiveCount <= maxStops) {
-        return res.json({ noOp: true, message: `Route has ${effectiveCount} appointments this week, at or under the limit of ${maxStops}` });
+      if (visitCountForRoute <= maxStops) {
+        return res.json({ noOp: true, message: `Route has ${visitCountForRoute} scheduled appointments this week, at or under the limit of ${maxStops}` });
       }
 
       const allProperties = await storage.getProperties(companyId);
@@ -4004,7 +4003,7 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "Not enough geocoded stops to split" });
       }
 
-      const k = Math.ceil(effectiveCount / maxStops);
+      const k = Math.ceil(visitCountForRoute / maxStops);
       const clusters = kMeansClustering(weeklyStops, k);
 
       const suffixLetters = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -4138,11 +4137,7 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      const oversized = routes.filter(r => {
-        const visitCount = visitCountByRoute.get(r.id);
-        const effectiveCount = visitCount !== undefined && visitCount > 0 ? visitCount : (plansByRoute.get(r.id) || []).length;
-        return effectiveCount > maxStops;
-      });
+      const oversized = routes.filter(r => (visitCountByRoute.get(r.id) || 0) > maxStops);
 
       if (oversized.length === 0) {
         return res.json({ routesSplit: 0, subRoutesCreated: 0, skipped: routes.length, errors: [] });
@@ -4201,9 +4196,8 @@ Return ONLY valid JSON, no markdown.`,
             continue;
           }
 
-          const routeVisitCount = visitCountByRoute.get(route.id);
-          const routeEffectiveCount = routeVisitCount !== undefined && routeVisitCount > 0 ? routeVisitCount : weeklyStops.length;
-          const k = Math.ceil(routeEffectiveCount / maxStops);
+          const routeVisitCount = visitCountByRoute.get(route.id) || 0;
+          const k = Math.ceil(routeVisitCount / maxStops);
           const clusters = kMeansClustering(weeklyStops, k);
 
           for (let ci = 0; ci < clusters.length; ci++) {
