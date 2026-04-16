@@ -1439,10 +1439,9 @@ async function seedPoopScoopDemoData() {
     return d.toISOString().split("T")[0];
   };
 
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    const { Pool } = await import("pg");
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-
     let companyRes = await pool.query(`SELECT id FROM companies WHERE name = $1 LIMIT 1`, [COMPANY_NAME]);
     let companyId: string;
     if (companyRes.rows.length === 0) {
@@ -1459,7 +1458,6 @@ async function seedPoopScoopDemoData() {
     const countRes = await pool.query(`SELECT COUNT(*) AS cnt FROM contacts WHERE company_id = $1`, [companyId]);
     if (parseInt(countRes.rows[0].cnt, 10) > 10) {
       console.log("[Migration] Poop Scoop already seeded — skipping");
-      await pool.end();
       return;
     }
 
@@ -1490,9 +1488,10 @@ async function seedPoopScoopDemoData() {
       );
     }
     console.log(`[Migration] Poop Scoop seeded: ${TOTAL} contacts, properties, and service plans`);
-    await pool.end();
   } catch (err) {
     console.error("[Migration] Poop Scoop seed failed:", err);
+  } finally {
+    await pool.end();
   }
 }
 
