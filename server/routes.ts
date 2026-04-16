@@ -15314,7 +15314,6 @@ Return ONLY valid JSON, no markdown.`,
 
       try {
         await sendEmail({
-          companyId: companyId,
           to: email,
           subject: "Verify your email to start your ScooPilot free trial",
           text: `Hi ${firstName},\n\nThanks for signing up for ScooPilot! Please verify your email to activate your free trial:\n\n${verifyUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't sign up for ScooPilot, you can safely ignore this email.`,
