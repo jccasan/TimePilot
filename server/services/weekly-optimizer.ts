@@ -228,9 +228,10 @@ export function analyzeWeeklySchedule(
     respectZones?: boolean;
     zones?: ZoneMapping[];
     includeSaturday?: boolean;
+    maxStopsPerDay?: number;
   } = {}
 ): WeeklyOptimizationResult {
-  const { respectZones = false, zones = [], includeSaturday = false } = options;
+  const { respectZones = false, zones = [], includeSaturday = false, maxStopsPerDay } = options;
   const activeDays = includeSaturday ? ALL_DAYS : WORK_DAYS;
 
   const currentByDay = new Map<string, WeeklyStop[]>();
@@ -267,7 +268,7 @@ export function analyzeWeeklySchedule(
   if (respectZones && zones.length > 0) {
     proposedByDay = assignByZones(stops, zones, activeDays);
   } else {
-    proposedByDay = assignByGeoClustering(stops, activeDays, startPoint);
+    proposedByDay = assignByGeoClustering(stops, activeDays, startPoint, maxStopsPerDay);
   }
 
   const proposedDays: DayProposal[] = [];
@@ -378,7 +379,8 @@ function assignByZones(
 function assignByGeoClustering(
   stops: WeeklyStop[],
   activeDays: string[],
-  startPoint?: StartPoint
+  startPoint?: StartPoint,
+  maxStopsPerDay?: number
 ): Map<string, WeeklyStop[]> {
   const result = new Map<string, WeeklyStop[]>();
   for (const day of activeDays) {
@@ -387,7 +389,8 @@ function assignByGeoClustering(
 
   if (stops.length === 0) return result;
 
-  const numDays = Math.min(activeDays.length, Math.max(1, Math.ceil(stops.length / MIN_STOPS_FOR_OWN_DAY)));
+  const divisor = maxStopsPerDay && maxStopsPerDay > 0 ? maxStopsPerDay : MIN_STOPS_FOR_OWN_DAY;
+  const numDays = Math.min(activeDays.length, Math.max(1, Math.ceil(stops.length / divisor)));
   const usedDays = activeDays.slice(0, numDays);
 
   const clusters = kMeansClustering(stops, numDays);

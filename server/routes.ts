@@ -4316,10 +4316,15 @@ Return ONLY valid JSON, no markdown.`,
           .map(z => ({ zipCode: z.zipCode, dayOfWeek: z.dayOfWeek }));
       }
 
+      const maxStopsPerDay = company.maxStopsPerRoute && company.maxStopsPerRoute > 0
+        ? company.maxStopsPerRoute
+        : undefined;
+
       const result = analyzeWeeklySchedule(weeklyStops, startPoint, {
         respectZones,
         zones,
         includeSaturday,
+        maxStopsPerDay,
       });
 
       const { calculateAllCustomerProfitability } = await import("./services/profitability-calculator");
