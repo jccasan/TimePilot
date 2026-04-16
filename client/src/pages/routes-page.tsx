@@ -2418,6 +2418,7 @@ type WeeklyOptResult = {
   minutesSaved: number;
   movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[];
   creditsRequired: number;
+  excludedWeekendCount?: number;
 };
 
 function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits, weekStart }: {
@@ -2619,10 +2620,17 @@ function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits, week
 
               <TabsContent value="summary" className="mt-3">
                 <div className="space-y-2">
+                  {(result.excludedWeekendCount ?? 0) > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/60 border text-xs text-muted-foreground" data-testid="banner-excluded-weekend">
+                      <span className="font-medium">{result.excludedWeekendCount} Saturday stops kept as scheduled.</span>
+                      <span>Enable "Include Saturday" to optimize them.</span>
+                    </div>
+                  )}
                   {result.proposed.days.map(day => {
                     const currentDay = result.current.days.find(d => d.day === day.day);
                     const hasStops = day.totalStops > 0;
                     const isAccepted = acceptedDays.has(day.day);
+                    const delta = currentDay ? day.totalStops - currentDay.totalStops : 0;
                     return (
                       <div
                         key={day.day}
@@ -2644,7 +2652,13 @@ function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits, week
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium capitalize">{day.day}</p>
                           <p className="text-xs text-muted-foreground">
-                            {day.routes.length} {day.routes.length === 1 ? "route" : "routes"} &middot; {day.totalStops} stops
+                            {day.routes.length} {day.routes.length === 1 ? "route" : "routes"} &middot;{" "}
+                            {day.totalStops} stops
+                            {delta !== 0 && (
+                              <span className={`ml-1 font-medium ${delta > 0 ? "text-amber-600 dark:text-amber-400" : "text-primary"}`}>
+                                ({delta > 0 ? "+" : ""}{delta})
+                              </span>
+                            )}
                           </p>
                         </div>
                         <div className="text-right text-xs">

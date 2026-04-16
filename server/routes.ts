@@ -4323,7 +4323,24 @@ Return ONLY valid JSON, no markdown.`,
 
       // Map each visit to a WeeklyStop — currentDay comes from the visit's actual scheduled date
       const DAYS_OF_WEEK = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-      const weeklyStops = activeWeekVisits
+      const ACTIVE_DAYS_SET = includeSaturday
+        ? new Set(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"])
+        : new Set(["monday", "tuesday", "wednesday", "thursday", "friday"]);
+
+      // Filter to only visits on active days — prevents Saturday visits from being silently
+      // reassigned to Monday inside the optimizer when includeSaturday is false
+      let excludedWeekendCount = 0;
+      const activeWeekVisitsFiltered = activeWeekVisits.filter(visit => {
+        const dow = new Date(visit.scheduledDate + "T12:00:00Z").getUTCDay();
+        const dayName = DAYS_OF_WEEK[dow];
+        if (!ACTIVE_DAYS_SET.has(dayName)) {
+          excludedWeekendCount++;
+          return false;
+        }
+        return true;
+      });
+
+      const weeklyStops = activeWeekVisitsFiltered
         .map(visit => {
           const sp = visit.servicePlanId ? planMap.get(visit.servicePlanId) : undefined;
           if (!sp) return null;
@@ -4349,7 +4366,8 @@ Return ONLY valid JSON, no markdown.`,
         .filter((s): s is NonNullable<typeof s> => s !== null);
 
       if (weeklyStops.length < 3) {
-        return res.status(400).json({ error: "Not enough geocoded appointments to optimize. Ensure property addresses are complete." });
+        const note = excludedWeekendCount > 0 ? ` (${excludedWeekendCount} weekend stops excluded — enable "Include Saturday" to optimize them)` : "";
+        return res.status(400).json({ error: `Not enough geocoded appointments to optimize${note}. Ensure property addresses are complete.` });
       }
 
       let startPoint: { latitude: number; longitude: number } | undefined;
@@ -4454,6 +4472,7 @@ Return ONLY valid JSON, no markdown.`,
 
       res.json({
         ...result,
+        excludedWeekendCount,
         laborCost: {
           centsPerMinute: Math.round(laborCentsPerMinute * 10) / 10,
           hourlyRateCents: pricingConfig.techHourlyWageCents,
