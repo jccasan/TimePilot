@@ -450,6 +450,24 @@ async function ensureMaxStopsSchema() {
   }
 }
 
+async function ensureCanadaMarketColumns() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      ALTER TABLE companies
+        ADD COLUMN IF NOT EXISTS country VARCHAR(5) NOT NULL DEFAULT 'us',
+        ADD COLUMN IF NOT EXISTS currency VARCHAR(5) NOT NULL DEFAULT 'usd',
+        ADD COLUMN IF NOT EXISTS tax_rate_percent DECIMAL(5,2);
+    `);
+    console.log("[Migration] Canada market columns (country, currency, tax_rate_percent) verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure Canada market columns:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function migrateServicePlansToAgreementsAndJobs() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -1484,6 +1502,7 @@ async function seedPoopScoopDemoData() {
   await dropConnectedAccountsTable();
   await ensureMmsSchema();
   await ensureMaxStopsSchema();
+  await ensureCanadaMarketColumns();
   await migrateServicePlansToAgreementsAndJobs();
   await repairServicePlanDayOfWeek();
   await syncSubscriptionTiers();
