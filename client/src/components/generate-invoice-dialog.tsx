@@ -356,7 +356,7 @@ export function GenerateInvoiceDialog({
                           )}
                         </div>
                         <span className="text-sm font-medium tabular-nums" data-testid={`text-visit-price-${visit.id}`}>
-                          ${parseFloat(visit.pricePerVisit).toFixed(2)}
+                          ${(parseFloat(visit.pricePerVisit) || 0).toFixed(2)}
                         </span>
                       </label>
                     ))}

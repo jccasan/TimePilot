@@ -253,7 +253,7 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
             {contact?.numberOfDogs != null && contact.numberOfDogs > 0 && (
               <span className="flex items-center gap-0.5"><Dog className="h-3 w-3" />{contact.numberOfDogs}</span>
             )}
-            <span>${Number(stop.pricePerVisit).toFixed(2)}</span>
+            <span>${(Number(stop.pricePerVisit) || 0).toFixed(2)}</span>
           </div>
         </div>
       </div>

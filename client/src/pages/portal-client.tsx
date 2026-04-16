@@ -1104,7 +1104,7 @@ export default function PortalClient() {
                 icon={Calendar}
                 label="Your Job"
                 value={activePlan ? (frequencyLabels[activePlan.frequency] || activePlan.frequency) : "No active plan"}
-                sublabel={activePlan ? `${activePlan.dayOfWeek ? activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1) + "s" : ""} - $${Number(activePlan.pricePerVisit).toFixed(2)}/visit` : undefined}
+                sublabel={activePlan ? `${activePlan.dayOfWeek ? activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1) + "s" : ""} - $${(Number(activePlan.pricePerVisit) || 0).toFixed(2)}/visit` : undefined}
                 accent="bg-primary/10 text-primary"
               />
             </div>
@@ -1152,7 +1152,7 @@ export default function PortalClient() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium">${Number(plan.pricePerVisit).toFixed(2)}/visit</span>
+                        <span className="text-sm font-medium">${(Number(plan.pricePerVisit) || 0).toFixed(2)}/visit</span>
                         <Badge variant="secondary" className={plan.isActive ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"}>
                           {plan.isActive ? "Active" : "Paused"}
                         </Badge>
@@ -1256,7 +1256,7 @@ export default function PortalClient() {
                           <div>
                             <p className="font-semibold">{frequencyLabels[plan.frequency] || plan.frequency}</p>
                             {plan.dayOfWeek && <p className="text-sm text-muted-foreground capitalize mt-0.5">{plan.dayOfWeek}s</p>}
-                            <p className="text-lg font-bold text-primary mt-2">${Number(plan.pricePerVisit).toFixed(2)}<span className="text-xs font-normal text-muted-foreground">/visit</span></p>
+                            <p className="text-lg font-bold text-primary mt-2">${(Number(plan.pricePerVisit) || 0).toFixed(2)}<span className="text-xs font-normal text-muted-foreground">/visit</span></p>
                           </div>
                           <Badge variant="secondary" className={plan.isActive ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"}>
                             {plan.isActive ? "Active" : "Paused"}

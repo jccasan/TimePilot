@@ -3558,7 +3558,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
                       <span className="text-xs text-muted-foreground truncate">{v.servicePlanName}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium tabular-nums">${parseFloat(v.pricePerVisit).toFixed(2)}</span>
+                      <span className="font-medium tabular-nums">${(parseFloat(v.pricePerVisit) || 0).toFixed(2)}</span>
                       <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>

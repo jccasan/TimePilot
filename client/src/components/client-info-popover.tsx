@@ -171,7 +171,7 @@ function PopoverBody({ contactId }: { contactId: string }) {
                           <span>({dayLabels[plan.dayOfWeek] || plan.dayOfWeek})</span>
                         )}
                       </span>
-                      <span className="font-medium shrink-0">${Number(plan.pricePerVisit).toFixed(2)}</span>
+                      <span className="font-medium shrink-0">${(Number(plan.pricePerVisit) || 0).toFixed(2)}</span>
                     </div>
                     {prop && (
                       <p className="text-[10px] text-muted-foreground truncate pl-4">{prop.streetAddress}</p>

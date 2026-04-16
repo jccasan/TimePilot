@@ -173,6 +173,11 @@ function handleError(res: Response, err: any) {
   return res.status(500).json({ error: "Internal server error" });
 }
 
+function sanitizeDecimal(value: any): string {
+  const n = parseFloat(value);
+  return isNaN(n) ? "0.00" : n.toFixed(2);
+}
+
 function auditLog(companyId: string, userId: string | null, entityType: string, entityId: string, action: string, changes?: any, ipAddress?: string) {
   storage.createAuditEntry({ companyId, userId: userId || null, entityType, entityId, action, changes: changes || {}, ipAddress: ipAddress || null }).catch(console.error);
 }
@@ -3574,7 +3579,7 @@ Return ONLY valid JSON, no markdown.`,
         frequency,
         dayOfWeek: dayOfWeek || null,
         startDate,
-        pricePerVisit,
+        pricePerVisit: sanitizeDecimal(pricePerVisit),
         discount: discount || null,
         serviceName: serviceName || null,
         isActive: true,
@@ -5076,6 +5081,7 @@ Return ONLY valid JSON, no markdown.`,
         if (req.body[key] !== undefined) body[key] = req.body[key];
       }
       if (body.routeId === "") body.routeId = null;
+      if (body.pricePerVisit !== undefined) body.pricePerVisit = sanitizeDecimal(body.pricePerVisit);
 
       const dayChanged = body.dayOfWeek && body.dayOfWeek !== existing.dayOfWeek;
       if (dayChanged && !body.routeId) {
@@ -7065,7 +7071,9 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const parsed = insertServicePricingSchema.parse({ ...req.body, companyId });
+      const body = { ...req.body, companyId };
+      if (body.basePrice !== undefined) body.basePrice = sanitizeDecimal(body.basePrice);
+      const parsed = insertServicePricingSchema.parse(body);
       const item = await storage.createServicePricingItem(parsed);
       res.status(201).json(item);
     } catch (err) { handleError(res, err); }
@@ -7075,7 +7083,9 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const parsed = insertServicePricingSchema.partial().parse(req.body);
+      const body = { ...req.body };
+      if (body.basePrice !== undefined) body.basePrice = sanitizeDecimal(body.basePrice);
+      const parsed = insertServicePricingSchema.partial().parse(body);
       const item = await storage.updateServicePricingItem(req.params.id, companyId, parsed);
       res.json(item);
     } catch (err) { handleError(res, err); }

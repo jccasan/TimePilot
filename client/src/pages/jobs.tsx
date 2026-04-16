@@ -838,7 +838,7 @@ export default function Jobs() {
                             {job.dayOfWeek ? ` on ${dayLabels[job.dayOfWeek] || job.dayOfWeek}` : ""}
                           </span>
                         )}
-                        <span className="text-xs text-muted-foreground">${Number(job.pricePerVisit).toFixed(2)}/visit</span>
+                        <span className="text-xs text-muted-foreground">${(Number(job.pricePerVisit) || 0).toFixed(2)}/visit</span>
                       </div>
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-muted-foreground">
                         {assignedName && (
