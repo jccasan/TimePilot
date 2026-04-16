@@ -223,6 +223,7 @@ export const companies = pgTable("companies", {
   retellKnowledgeBaseId: varchar("retell_knowledge_base_id", { length: 255 }),
   venmoHandle: varchar("venmo_handle", { length: 100 }),
   maxStopsPerRoute: integer("max_stops_per_route"),
+  customMaxUsers: integer("custom_max_users"),
   messageRetentionDays: integer("message_retention_days").notNull().default(30),
   country: varchar("country", { length: 5 }).notNull().default("us"),
   currency: varchar("currency", { length: 5 }).notNull().default("usd"),

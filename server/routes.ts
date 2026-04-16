@@ -529,7 +529,7 @@ export async function registerRoutes(
           activeUsers,
         },
         allowances: {
-          maxUsers: tierConfig?.maxUsers ?? 1,
+          maxUsers: company?.customMaxUsers ?? tierConfig?.maxUsers ?? 1,
           smsSegmentsIncluded: 500,
           voiceMinutesIncluded: voiceMinutesAllowance,
         },
@@ -562,7 +562,8 @@ export async function registerRoutes(
         tierName: tierConfig?.name || "Unknown",
         status: company.subscriptionStatus,
         price: displayPrice,
-        maxUsers: tierConfig?.maxUsers || 1,
+        maxUsers: company.customMaxUsers ?? tierConfig?.maxUsers ?? 1,
+        customMaxUsers: company.customMaxUsers,
         activeUsers,
         frozenAt: company.frozenAt,
         trialEndsAt: company.trialEndsAt,
@@ -1675,7 +1676,8 @@ Return ONLY valid JSON, no markdown.`,
       const activeCount = companyUsersList.filter(cu => cu.isActive).length;
       const tier = company?.subscriptionTier || "tier_1";
       const tierConfig = (await import("@shared/schema")).TIER_CONFIG;
-      const maxUsers = tierConfig[tier as keyof typeof tierConfig]?.maxUsers || 1;
+      const tierMaxUsers = tierConfig[tier as keyof typeof tierConfig]?.maxUsers || 1;
+      const maxUsers = company?.customMaxUsers ?? tierMaxUsers;
       if (activeCount >= maxUsers) {
         return res.status(400).json({ error: `Seat limit reached (${activeCount}/${maxUsers}). Upgrade your plan to add more team members.` });
       }
@@ -13664,7 +13666,8 @@ Return ONLY valid JSON, no markdown.`,
           .where(and(eq(usageEvents.companyId, c.id), eq(usageEvents.eventType, "voice_minute"), gte(usageEvents.recordedAt, periodStart)));
 
         const tierKey = c.subscriptionTier as keyof typeof tierCfg;
-        const maxUsers = tierCfg[tierKey]?.maxUsers || 1;
+        const tierMaxUsers = tierCfg[tierKey]?.maxUsers || 1;
+        const maxUsers = (c as any).customMaxUsers ?? tierMaxUsers;
         const nearLimit = activeUserCount >= Math.ceil(maxUsers * 0.8);
 
         return {
@@ -13882,11 +13885,19 @@ Return ONLY valid JSON, no markdown.`,
 
   app.patch("/api/admin/companies/:id/subscription", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { tier } = req.body;
+      const { tier, subscriptionStatus, trialEndsAt, customMaxUsers } = req.body;
       const validTiers = ["free_trial", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
       if (!tier || !validTiers.includes(tier)) return res.status(400).json({ error: "Invalid tier" });
-      const updated = await storage.updateCompanySubscription(req.params.id, tier);
-      await logAdminAudit(req, "change_subscription", "company", req.params.id, { tier });
+      const validStatuses = ["active", "trialing", "past_due", "cancelled", "suspended"];
+      if (subscriptionStatus !== undefined && !validStatuses.includes(subscriptionStatus)) {
+        return res.status(400).json({ error: "Invalid subscription status" });
+      }
+      const opts: { subscriptionStatus?: string; trialEndsAt?: Date | null; customMaxUsers?: number | null } = {};
+      if (subscriptionStatus !== undefined) opts.subscriptionStatus = subscriptionStatus;
+      if (trialEndsAt !== undefined) opts.trialEndsAt = trialEndsAt ? new Date(trialEndsAt) : null;
+      if (customMaxUsers !== undefined) opts.customMaxUsers = customMaxUsers === null ? null : parseInt(customMaxUsers);
+      const updated = await storage.updateCompanySubscription(req.params.id, tier, opts);
+      await logAdminAudit(req, "change_subscription", "company", req.params.id, { tier, subscriptionStatus, trialEndsAt, customMaxUsers });
       res.json(updated);
     } catch (err) { handleError(res, err); }
   });
@@ -14186,7 +14197,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const { TIER_CONFIG: tierCfg } = await import("@shared/schema");
       const tierKey = company.subscriptionTier as keyof typeof tierCfg;
-      const maxUsers = tierCfg[tierKey]?.maxUsers || 1;
+      const maxUsers = company.customMaxUsers ?? tierCfg[tierKey]?.maxUsers ?? 1;
 
       const apiCallResult = await db.select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
         .from(usageEvents)

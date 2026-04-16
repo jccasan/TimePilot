@@ -282,7 +282,7 @@ export interface IStorage {
   getAdminNotes(companyId: string): Promise<AdminNote[]>;
   createAdminNote(data: InsertAdminNote): Promise<AdminNote>;
   deleteAdminNote(id: string): Promise<void>;
-  updateCompanySubscription(companyId: string, tier: string): Promise<Company>;
+  updateCompanySubscription(companyId: string, tier: string, opts?: { subscriptionStatus?: string; trialEndsAt?: Date | null; customMaxUsers?: number | null }): Promise<Company>;
   getPlatformStats(): Promise<{ totalCompanies: number; totalUsers: number; totalContacts: number; totalVisits: number; mrr: number }>;
 
   // SMS Messages
@@ -1713,9 +1713,13 @@ export class DatabaseStorage implements IStorage {
     await db.delete(adminNotes).where(eq(adminNotes.id, id));
   }
 
-  async updateCompanySubscription(companyId: string, tier: string): Promise<Company> {
+  async updateCompanySubscription(companyId: string, tier: string, opts?: { subscriptionStatus?: string; trialEndsAt?: Date | null; customMaxUsers?: number | null }): Promise<Company> {
+    const setData: Record<string, any> = { subscriptionTier: tier as any };
+    if (opts?.subscriptionStatus !== undefined) setData.subscriptionStatus = opts.subscriptionStatus as any;
+    if (opts?.trialEndsAt !== undefined) setData.trialEndsAt = opts.trialEndsAt;
+    if (opts?.customMaxUsers !== undefined) setData.customMaxUsers = opts.customMaxUsers;
     const [updated] = await db.update(companies)
-      .set({ subscriptionTier: tier as any })
+      .set(setData)
       .where(eq(companies.id, companyId))
       .returning();
     return updated;

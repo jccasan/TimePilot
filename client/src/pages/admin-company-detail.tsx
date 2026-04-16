@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X, MessageSquare, Phone, Activity, Download, Clock, Filter, Database } from "lucide-react";
+import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X, MessageSquare, Phone, Activity, Download, Clock, Filter, Database, FlaskConical } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
@@ -86,6 +86,19 @@ export default function AdminCompanyDetail() {
 
   const [activeTab, setActiveTab] = useState<"overview" | "audit">("overview");
 
+  const [customTrialOpen, setCustomTrialOpen] = useState(false);
+  const defaultTrialDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split("T")[0];
+  };
+  const [trialForm, setTrialForm] = useState({
+    tier: "tier_10_plus",
+    subscriptionStatus: "trialing",
+    trialEndsAt: defaultTrialDate(),
+    customMaxUsers: "3",
+  });
+
   const { data: company, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/companies", id],
     queryFn: adminFetchFn(`/api/admin/companies/${id}`),
@@ -119,6 +132,26 @@ export default function AdminCompanyDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       toast({ title: "Subscription updated" });
     },
+  });
+
+  const customTrialMutation = useMutation({
+    mutationFn: async (form: typeof trialForm) => {
+      const seats = parseInt(form.customMaxUsers);
+      return adminRequest("PATCH", `/api/admin/companies/${id}/subscription`, {
+        tier: form.tier,
+        subscriptionStatus: form.subscriptionStatus,
+        trialEndsAt: form.trialEndsAt ? new Date(form.trialEndsAt).toISOString() : null,
+        customMaxUsers: isNaN(seats) ? null : seats,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setCustomTrialOpen(false);
+      toast({ title: "Custom trial plan applied" });
+    },
+    onError: () => toast({ title: "Failed to apply trial plan", variant: "destructive" }),
   });
 
   const addNoteMutation = useMutation({
@@ -557,6 +590,42 @@ export default function AdminCompanyDetail() {
                       <span className="text-sm text-muted-foreground">Status</span>
                       <Badge variant="outline" data-testid="badge-subscription-status">{company.subscriptionStatus}</Badge>
                     </div>
+                    {company.trialEndsAt && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-muted-foreground">Trial Ends</span>
+                        <span className="text-sm" data-testid="text-trial-ends-at">
+                          {new Date(company.trialEndsAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+                    {company.customMaxUsers != null && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-muted-foreground">Seat Limit</span>
+                        <Badge variant="secondary" data-testid="badge-custom-max-users">Custom: {company.customMaxUsers} users</Badge>
+                      </div>
+                    )}
+                    <div className="pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-1.5 text-xs"
+                        data-testid="button-custom-trial-plan"
+                        onClick={() => {
+                          setTrialForm({
+                            tier: company.subscriptionTier || "tier_10_plus",
+                            subscriptionStatus: company.subscriptionStatus === "trialing" ? "trialing" : "trialing",
+                            trialEndsAt: company.trialEndsAt
+                              ? new Date(company.trialEndsAt).toISOString().split("T")[0]
+                              : defaultTrialDate(),
+                            customMaxUsers: company.customMaxUsers != null ? String(company.customMaxUsers) : "3",
+                          });
+                          setCustomTrialOpen(true);
+                        }}
+                      >
+                        <FlaskConical className="h-3.5 w-3.5" />
+                        Custom Trial Plan
+                      </Button>
+                    </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm text-muted-foreground">Created</span>
                       <span className="text-sm">{new Date(company.createdAt).toLocaleDateString()}</span>
@@ -862,6 +931,81 @@ export default function AdminCompanyDetail() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={customTrialOpen} onOpenChange={setCustomTrialOpen}>
+        <DialogContent data-testid="dialog-custom-trial">
+          <DialogHeader>
+            <DialogTitle>Custom Trial Plan</DialogTitle>
+            <DialogDescription>
+              Configure a tailored trial with specific tier, seat limit, and end date.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-sm">Plan Tier</Label>
+              <Select value={trialForm.tier} onValueChange={(v) => setTrialForm({ ...trialForm, tier: v })}>
+                <SelectTrigger data-testid="select-trial-tier">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TIER_CONFIG).map(([key, cfg]) => (
+                    <SelectItem key={key} value={key}>
+                      {cfg.name} {cfg.price > 0 ? `($${cfg.price}/mo)` : "(Free)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Status</Label>
+              <Select value={trialForm.subscriptionStatus} onValueChange={(v) => setTrialForm({ ...trialForm, subscriptionStatus: v })}>
+                <SelectTrigger data-testid="select-trial-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="trialing">Trialing</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="suspended">Suspended</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Trial End Date</Label>
+              <Input
+                type="date"
+                value={trialForm.trialEndsAt}
+                onChange={(e) => setTrialForm({ ...trialForm, trialEndsAt: e.target.value })}
+                data-testid="input-trial-ends-at"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">User Seat Limit <span className="text-muted-foreground">(overrides tier default)</span></Label>
+              <Input
+                type="number"
+                min="1"
+                max="999"
+                value={trialForm.customMaxUsers}
+                onChange={(e) => setTrialForm({ ...trialForm, customMaxUsers: e.target.value })}
+                placeholder="Leave blank to use tier default"
+                data-testid="input-custom-max-users"
+              />
+              <p className="text-xs text-muted-foreground">
+                {TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG]?.name ?? trialForm.tier} default: {TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG]?.maxUsers ?? "—"} users
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCustomTrialOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => customTrialMutation.mutate(trialForm)}
+              disabled={customTrialMutation.isPending}
+              data-testid="button-apply-custom-trial"
+            >
+              {customTrialMutation.isPending ? "Applying…" : "Apply Trial Plan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={resetOpen} onOpenChange={(open) => { if (!open) handleCloseResetDialog(); else setResetOpen(open); }}>
         <DialogContent data-testid="dialog-reset-password">

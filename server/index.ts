@@ -458,9 +458,10 @@ async function ensureCanadaMarketColumns() {
       ALTER TABLE companies
         ADD COLUMN IF NOT EXISTS country VARCHAR(5) NOT NULL DEFAULT 'us',
         ADD COLUMN IF NOT EXISTS currency VARCHAR(5) NOT NULL DEFAULT 'usd',
-        ADD COLUMN IF NOT EXISTS tax_rate_percent DECIMAL(5,2);
+        ADD COLUMN IF NOT EXISTS tax_rate_percent DECIMAL(5,2),
+        ADD COLUMN IF NOT EXISTS custom_max_users INTEGER;
     `);
-    console.log("[Migration] Canada market columns (country, currency, tax_rate_percent) verified");
+    console.log("[Migration] Canada market columns (country, currency, tax_rate_percent, custom_max_users) verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure Canada market columns:", err);
   } finally {
