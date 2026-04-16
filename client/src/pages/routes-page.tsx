@@ -36,7 +36,7 @@ import {
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
   CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert, Lock, Unlock,
   Sparkles, ArrowRight, Check, X, ToggleLeft, ToggleRight, Calendar,
-  Camera, DoorClosed
+  Camera, DoorClosed, ChevronLeft, ChevronRight, Info
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -923,6 +923,7 @@ export default function RoutesPage() {
   const [showZones, setShowZones] = useState(false);
   const [showWeeklyOptimizer, setShowWeeklyOptimizer] = useState(false);
   const [ghostStopsExpanded, setGhostStopsExpanded] = useState(true);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [reassignVisitId, setReassignVisitId] = useState<string | null>(null);
   const [reassignTargetRouteId, setReassignTargetRouteId] = useState<string>("");
 
@@ -1007,12 +1008,14 @@ export default function RoutesPage() {
   const selectedDayDate = useMemo(() => {
     const now = new Date();
     const todayIdx = (now.getDay() + 6) % 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - todayIdx + weekOffset * 7);
+    monday.setHours(0, 0, 0, 0);
     const targetIdx = DAYS.indexOf(selectedDay);
-    const diff = targetIdx - todayIdx;
-    const target = new Date(now);
-    target.setDate(now.getDate() + diff);
+    const target = new Date(monday);
+    target.setDate(monday.getDate() + targetIdx);
     return toLocalDateString(target, tz);
-  }, [selectedDay, tz]);
+  }, [selectedDay, weekOffset, tz]);
 
   const { data: dayVisits = [] } = useQuery<Visit[]>({
     queryKey: ["/api/visits/range", selectedDayDate],
@@ -1242,13 +1245,13 @@ export default function RoutesPage() {
     const now = new Date();
     const dayIdx = (now.getDay() + 6) % 7;
     const monday = new Date(now);
-    monday.setDate(now.getDate() - dayIdx);
+    monday.setDate(now.getDate() - dayIdx + weekOffset * 7);
     monday.setHours(0, 0, 0, 0);
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
     sunday.setHours(23, 59, 59, 999);
     return { start: monday, end: sunday };
-  }, []);
+  }, [weekOffset]);
 
   const routesForDay = useMemo(() => allRoutes.filter(r => {
     if (r.dayOfWeek !== selectedDay) return false;
@@ -1274,6 +1277,15 @@ export default function RoutesPage() {
 
   const weekStartStr = useMemo(() => toLocalDateString(currentWeekRange.start, tz), [currentWeekRange, tz]);
   const weekEndStr = useMemo(() => toLocalDateString(currentWeekRange.end, tz), [currentWeekRange, tz]);
+
+  const weekRangeLabel = useMemo(() => {
+    const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const start = fmt(currentWeekRange.start);
+    const endFull = currentWeekRange.end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const startYear = currentWeekRange.start.getFullYear();
+    const endYear = currentWeekRange.end.getFullYear();
+    return startYear === endYear ? `${start} – ${endFull}` : `${start}, ${startYear} – ${endFull}`;
+  }, [currentWeekRange]);
 
   const { data: weekVisits = [] } = useQuery<Visit[]>({
     queryKey: ["/api/visits/range", weekStartStr, weekEndStr],
@@ -1306,8 +1318,8 @@ export default function RoutesPage() {
       const d = new Date(sp.startDate + "T12:00:00");
       return d >= currentWeekRange.start && d <= currentWeekRange.end;
     }
-    return weekPlanIds.has(sp.id) || sp.routeId != null;
-  }), [servicePlans, weekPlanIds, dayPlanIds, currentWeekRange]);
+    return false;
+  }), [servicePlans, dayPlanIds, currentWeekRange]);
 
   const stopsByRoute = useMemo(() => {
     const map: Record<string, ServicePlan[]> = {};
@@ -1747,6 +1759,41 @@ export default function RoutesPage() {
           </div>
         </div>
 
+        <div className="flex items-center gap-1 mb-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setWeekOffset(o => o - 1)}
+            data-testid="button-prev-week"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium tabular-nums text-muted-foreground min-w-[160px] text-center" data-testid="text-week-range">
+            {weekRangeLabel}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setWeekOffset(o => o + 1)}
+            data-testid="button-next-week"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          {weekOffset !== 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-primary ml-1"
+              onClick={() => setWeekOffset(0)}
+              data-testid="button-today-week"
+            >
+              Today
+            </Button>
+          )}
+        </div>
+
         <div className="flex gap-1 overflow-x-auto pb-1">
           {DAYS.map((day, idx) => {
             const mondayDate = new Date(currentWeekRange.start);
@@ -1804,6 +1851,13 @@ export default function RoutesPage() {
                     {routesForDay.length} {routesForDay.length === 1 ? "route" : "routes"}
                   </span>
                 </div>
+
+                {weekOffset > 0 && dayVisits.length === 0 && routesForDay.length > 0 && (
+                  <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 px-3 py-2 mb-3 text-sm text-blue-700 dark:text-blue-300" data-testid="banner-no-visits-yet">
+                    <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>Visits for this week haven't been generated yet — check back later or adjust your auto-visit window.</span>
+                  </div>
+                )}
 
                 {routesForDay.length === 0 ? (
                   <Card className="border-dashed">
