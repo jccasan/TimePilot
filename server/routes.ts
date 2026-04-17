@@ -972,6 +972,138 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: fetch all today's visit data + billing summary
+  app.get("/api/admin/command-center-stats", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const today = new Date().toISOString().split("T")[0];
+
+      const visitsList = await storage.getVisits(companyId, { date: today });
+      const companyRoutes = await storage.getRoutes(companyId);
+      const routeMap = new Map(companyRoutes.map(r => [r.id, r]));
+
+      // Resolve technician names for each route
+      const techIds = [...new Set(companyRoutes.map(r => r.technicianId).filter(Boolean))] as string[];
+      const techUsers = techIds.length > 0
+        ? await db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
+            .from(users).where(inArray(users.id, techIds))
+        : [];
+      const techMap = new Map(techUsers.map(u => [u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim()]));
+
+      const enriched = await Promise.all(visitsList.map(async (v) => {
+        const plan = v.servicePlanId ? await storage.getServicePlan(v.servicePlanId, companyId) : null;
+        const prop = await storage.getProperty(v.propertyId, companyId);
+        const contact = plan ? await storage.getContact(plan.contactId, companyId) : null;
+        const route = v.routeId ? routeMap.get(v.routeId) : null;
+        const techName = route?.technicianId ? (techMap.get(route.technicianId) ?? null) : null;
+        return {
+          ...v,
+          stopOrder: plan?.stopOrder ?? 999,
+          routeName: route?.name ?? null,
+          routeColor: route?.color ?? null,
+          servicePlanName: plan?.serviceName || (plan?.frequency ? `${plan.frequency} service` : null),
+          pricePerVisit: plan?.pricePerVisit ?? "0",
+          techName,
+          property: prop ? {
+            streetAddress: prop.streetAddress,
+            city: prop.city,
+            state: prop.state,
+          } : null,
+          contact: contact ? {
+            id: contact.id,
+            firstName: contact.firstName,
+            lastName: contact.lastName,
+          } : null,
+        };
+      }));
+
+      // Sort by scheduledTime ascending
+      enriched.sort((a, b) => {
+        const tA = (a as any).scheduledTime ?? "00:00";
+        const tB = (b as any).scheduledTime ?? "00:00";
+        return tA.localeCompare(tB);
+      });
+
+      const stats = {
+        totalToday: enriched.length,
+        inProgress: enriched.filter(v => v.status === "in_progress").length,
+        completed: enriched.filter(v => v.status === "completed").length,
+        upcoming: enriched.filter(v => v.status === "scheduled").length,
+      };
+
+      const sumPrices = (vs: typeof enriched) =>
+        vs.reduce((s, v) => s + parseFloat((v as any).pricePerVisit || "0"), 0);
+
+      const nonCancelled = enriched.filter(v => v.status !== "cancelled");
+      const completedVisits = enriched.filter(v => v.status === "completed");
+      const pendingVisits = enriched.filter(v => v.status === "scheduled" || v.status === "in_progress");
+
+      // Today's invoices
+      const todayStart = new Date(today + "T00:00:00.000Z");
+      const tomorrowStart = new Date(new Date(todayStart).getTime() + 86400000);
+      const todayInvoices = await db.select({ status: invoices.status, total: invoices.total })
+        .from(invoices)
+        .where(and(eq(invoices.companyId, companyId), gte(invoices.createdAt, todayStart), lt(invoices.createdAt, tomorrowStart)));
+
+      const billing = {
+        expectedRevenue: sumPrices(nonCancelled),
+        completedRevenue: sumPrices(completedVisits),
+        pendingRevenue: sumPrices(pendingVisits),
+        invoicesCreatedToday: todayInvoices.length,
+        totalInvoiced: todayInvoices.reduce((s, inv) => s + parseFloat(inv.total || "0"), 0),
+        totalPaid: todayInvoices.filter(inv => inv.status === "paid").reduce((s, inv) => s + parseFloat(inv.total || "0"), 0),
+      };
+
+      res.json({ visits: enriched, stats, billing });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // Admin: proxy Google Maps Static API image for all today's stops
+  app.get("/api/admin/daily-map", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) return res.status(503).json({ error: "Maps not configured" });
+
+      const { companyId } = await getCompanyContext(req);
+      const today = new Date().toISOString().split("T")[0];
+      const visitsList = await storage.getVisits(companyId, { date: today });
+
+      const addresses: string[] = [];
+      for (const v of visitsList) {
+        const prop = await storage.getProperty(v.propertyId, companyId);
+        if (prop?.streetAddress) {
+          const addr = [prop.streetAddress, prop.city, prop.state].filter(Boolean).join(", ");
+          addresses.push(addr);
+        }
+      }
+
+      if (addresses.length === 0) return res.status(204).end();
+
+      const params = new URLSearchParams({
+        size: "640x400",
+        maptype: "roadmap",
+        scale: "2",
+        key: apiKey,
+        style: "feature:poi|visibility:off",
+      });
+
+      const LABELS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      addresses.slice(0, 25).forEach((addr, i) => {
+        const label = i < LABELS.length ? LABELS[i] : String(i + 1);
+        params.append("markers", `label:${label}|color:0x2d8a5e|${addr}`);
+      });
+
+      const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
+      const response = await fetch(url);
+      if (!response.ok) return res.status(502).json({ error: "Map request failed" });
+
+      res.set("Content-Type", response.headers.get("content-type") || "image/png");
+      res.set("Cache-Control", "public, max-age=300");
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.send(buffer);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/mapbox-static-image", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;

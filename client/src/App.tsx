@@ -60,6 +60,7 @@ import RouteProfitMaps from "@/pages/route-profit-maps";
 import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
 import OverheadCosts from "@/pages/overhead-costs";
 import MigrationPage from "@/pages/migration-page";
+import CommandCenter from "@/pages/command-center";
 import ResetPassword from "@/pages/reset-password";
 import SignupWidget from "@/pages/signup-widget";
 import VoiceSignup from "@/pages/voice-signup";
@@ -109,6 +110,7 @@ function Router() {
       <Route path="/portal" component={Portal} />
       <Route path="/settings" component={Settings} />
       <Route path="/migration" component={MigrationPage} />
+      <Route path="/command-center" component={CommandCenter} />
       <Route component={NotFound} />
     </Switch>
   );

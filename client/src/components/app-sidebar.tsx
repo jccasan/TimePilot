@@ -56,6 +56,7 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { GlobalSearch } from "@/components/global-search";
+import { useAuth } from "@/hooks/use-auth";
 import { getAvailableTours } from "@/components/feature-tour";
 import { AddContactDialog } from "@/components/add-contact-dialog";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
@@ -82,6 +83,7 @@ const menuSections = [
     label: "Operations",
     key: "operations",
     items: [
+      { title: "Command Center", url: "/command-center", icon: LayoutDashboard, adminOnly: true },
       { title: "Scheduling", url: "/scheduling", icon: Calendar },
       { title: "Routes", url: "/routes", icon: MapPin },
       { title: "Invoices", url: "/invoices", icon: FileText },
@@ -138,6 +140,8 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
   const [generateInvoiceOpen, setGenerateInvoiceOpen] = useState(false);
   const { isMobile, setOpenMobile } = useSidebar();
   const { collapsed, toggle } = useSectionCollapse();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
 
   const { data: company } = useQuery<{ logoUrl: string | null; name: string }>({
     queryKey: ["/api/company"],
@@ -234,7 +238,7 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
               {!isCollapsed && (
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {section.items.map((item) => {
+                    {section.items.filter(item => !(item as any).adminOnly || isAdmin).map((item) => {
                       const isActive = item.url === "/"
                         ? location === "/"
                         : location === item.url || location.startsWith(item.url + "/") || location.startsWith(item.url + "?");
