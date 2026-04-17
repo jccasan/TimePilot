@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Calendar,
   MapPin,
-  Smartphone,
   FileText,
   CreditCard,
   DollarSign,
@@ -35,6 +34,7 @@ import {
   Webhook,
   Database,
   Radio,
+  HelpCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -64,13 +64,6 @@ import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 
 const menuSections = [
   {
-    label: null,
-    key: "main",
-    items: [
-      { title: "Dashboard", url: "/", icon: LayoutDashboard },
-    ],
-  },
-  {
     label: "CRM",
     key: "crm",
     items: [
@@ -84,13 +77,13 @@ const menuSections = [
     label: "Operations",
     key: "operations",
     items: [
-      { title: "Command Center", url: "/command-center", icon: LayoutDashboard, adminOnly: true },
+      { title: "Dashboard", url: "/", icon: LayoutDashboard },
+      { title: "Command Center", url: "/command-center", icon: Radio, adminOnly: true },
       { title: "Scheduling", url: "/scheduling", icon: Calendar },
       { title: "Routes", url: "/routes", icon: MapPin },
-      { title: "Live Field Map", url: "/field-view", icon: Radio },
+      { title: "Live Field Map", url: "/field-view", icon: Map },
       { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Reports & Analytics", url: "/reports", icon: BarChart3 },
-      { title: "Field View", url: "/m/today", icon: Smartphone },
     ],
   },
   {
@@ -111,6 +104,9 @@ const menuSections = [
       { title: "Automation", url: "/automation", icon: Zap },
       { title: "Pricing Plans", url: "/pricing", icon: DollarSign },
       { title: "Subscription", url: "/billing", icon: CreditCard },
+      { title: "API Keys", url: "/api-keys", icon: KeyRound },
+      { title: "Webhooks", url: "/webhooks", icon: Webhook },
+      { title: "Data Migration", url: "/migration", icon: Database },
     ],
   },
 ];
@@ -287,42 +283,16 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuButton data-testid="button-footer-more">
-                  <Settings />
-                  <span>More</span>
+                <SidebarMenuButton data-testid="button-footer-help">
+                  <HelpCircle />
+                  <span>Help</span>
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-56">
-                <DropdownMenuLabel>Advanced</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/settings" onClick={handleNavClick} data-testid="link-more-settings">
-                    <Settings className="h-4 w-4 mr-2" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/api-keys" onClick={handleNavClick} data-testid="link-more-api-keys">
-                    <KeyRound className="h-4 w-4 mr-2" />
-                    API Keys
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/webhooks" onClick={handleNavClick} data-testid="link-more-webhooks">
-                    <Webhook className="h-4 w-4 mr-2" />
-                    Webhooks
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/migration" onClick={handleNavClick} data-testid="link-more-migration">
-                    <Database className="h-4 w-4 mr-2" />
-                    Data Migration
-                  </Link>
-                </DropdownMenuItem>
                 {onStartTour && (
                   <>
+                    <DropdownMenuLabel>Guided Tours</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel>Help</DropdownMenuLabel>
                     <DropdownMenuItem onClick={() => onStartTour("welcome")} data-testid="button-tour-welcome">
                       <Compass className="h-4 w-4 mr-2" />
                       Welcome Tour
