@@ -5621,6 +5621,8 @@ Return ONLY valid JSON, no markdown.`,
             numberOfDogs: prop.numberOfDogs,
             hasDangerousDog: prop.hasDangerousDog,
             dangerousDogNotes: prop.dangerousDogNotes,
+            latitude: prop.latitude ? parseFloat(prop.latitude) : null,
+            longitude: prop.longitude ? parseFloat(prop.longitude) : null,
           } : null,
           contact: contact ? {
             id: contact.id,

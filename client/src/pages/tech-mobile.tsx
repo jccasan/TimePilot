@@ -47,6 +47,8 @@ type TodayVisit = {
     numberOfDogs: number | null;
     hasDangerousDog: boolean | null;
     dangerousDogNotes: string | null;
+    latitude: number | null;
+    longitude: number | null;
   };
   contact?: {
     firstName: string;
@@ -61,6 +63,20 @@ type PropertyGroup = {
   contact: TodayVisit["contact"];
   property: TodayVisit["property"];
 };
+
+function haversineDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 3958.8;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 const visitStatusColors: Record<string, string> = {
   scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -1318,6 +1334,18 @@ export default function TechMobile() {
             {allVisitsFlat.map((visit, i) => {
               const isDone = visit.status === "completed" || visit.status === "skipped" || visit.status === "cancelled";
               const isActive = visit.status === "in_progress";
+              const distanceMiles =
+                !isDone &&
+                techPosition &&
+                visit.property?.latitude != null &&
+                visit.property?.longitude != null
+                  ? haversineDistanceMiles(
+                      techPosition.lat,
+                      techPosition.lng,
+                      visit.property.latitude,
+                      visit.property.longitude
+                    )
+                  : null;
               return (
                 <div
                   key={visit.id}
@@ -1333,7 +1361,14 @@ export default function TechMobile() {
                       {visit.contact ? `${visit.contact.firstName} ${visit.contact.lastName}` : ""}
                     </p>
                   </div>
-                  {isActive && <Badge variant="secondary" className="text-xs shrink-0 bg-primary/10 text-primary">Active</Badge>}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {distanceMiles !== null && (
+                      <span className="text-xs text-muted-foreground" data-testid={`distance-stop-${visit.id}`}>
+                        {distanceMiles < 0.1 ? "<0.1 mi" : `${distanceMiles.toFixed(1)} mi`}
+                      </span>
+                    )}
+                    {isActive && <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">Active</Badge>}
+                  </div>
                 </div>
               );
             })}
