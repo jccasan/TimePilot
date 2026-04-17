@@ -50,6 +50,7 @@ import {
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { ClientInfoPopover } from "@/components/client-info-popover";
+import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, TouchSensor,
   useSensor, useSensors, useDroppable, useDraggable,
@@ -510,6 +511,12 @@ export default function Scheduling() {
   const { data: team } = useQuery<TeamMember[]>({ queryKey: ["/api/company/team"] });
 
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  const [invoiceDialogContactId, setInvoiceDialogContactId] = useState<string | undefined>(undefined);
+  const handleShowInvoiceDialog = useCallback((contactId?: string) => {
+    setInvoiceDialogContactId(contactId);
+    setShowInvoiceDialog(true);
+  }, []);
 
   useEffect(() => {
     if (pendingVisitId && visits) {
@@ -947,6 +954,12 @@ export default function Scheduling() {
         endStr={endStr}
         canEdit={isAdminOrOwner}
         team={team}
+        onShowInvoiceDialog={handleShowInvoiceDialog}
+      />
+      <GenerateInvoiceDialog
+        open={showInvoiceDialog}
+        onOpenChange={setShowInvoiceDialog}
+        contactId={invoiceDialogContactId}
       />
 
       <Dialog open={!!quickAddDate} onOpenChange={(open) => { if (!open) { setQuickAddDate(null); setQuickAddPlanId(""); setQuickAddRouteId(""); } }}>
@@ -1022,6 +1035,7 @@ function VisitDetailSheet({
   endStr,
   canEdit,
   team,
+  onShowInvoiceDialog,
 }: {
   visit: Visit | null;
   open: boolean;
@@ -1034,6 +1048,7 @@ function VisitDetailSheet({
   endStr: string;
   canEdit?: boolean;
   team?: TeamMember[];
+  onShowInvoiceDialog?: (contactId?: string) => void;
 }) {
   const { toast } = useToast();
   const { data: sheetAuthUser } = useQuery<{ role?: string } | null>({
@@ -1068,14 +1083,22 @@ function VisitDetailSheet({
       }
       await apiRequest("PATCH", `/api/visits/${visitId}`, body);
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
-      toast({ title: "Visit updated" });
-      onOpenChange(false);
+      if (variables.status === "completed" && !visit?.invoiceId && onShowInvoiceDialog) {
+        const completedPlan = servicePlans?.find(sp => sp.id === visit?.servicePlanId);
+        const completedContactId = completedPlan?.contactId;
+        toast({ title: "Visit marked complete", description: "Open the invoice dialog to bill for this visit." });
+        onOpenChange(false);
+        onShowInvoiceDialog(completedContactId);
+      } else {
+        toast({ title: "Visit updated" });
+        onOpenChange(false);
+      }
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -1210,6 +1233,38 @@ function VisitDetailSheet({
               </Badge>
             )}
           </div>
+
+          {visit.status === "completed" && !visit.invoiceId && (
+            <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg p-3 space-y-2" data-testid="section-needs-invoice">
+              <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                <DollarSign className="h-4 w-4 shrink-0" />
+                <span className="text-sm font-medium">This visit hasn't been invoiced yet</span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {onShowInvoiceDialog && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      onOpenChange(false);
+                      const planForBanner = servicePlans?.find(sp => sp.id === visit.servicePlanId);
+                      onShowInvoiceDialog(planForBanner?.contactId);
+                    }}
+                    data-testid="button-generate-invoice-from-visit"
+                  >
+                    <DollarSign className="h-3.5 w-3.5 mr-1" />
+                    Generate Invoice
+                  </Button>
+                )}
+                {contact && (
+                  <Link href={`/contacts/${contact.id}`}>
+                    <Button size="sm" variant="outline" onClick={() => onOpenChange(false)} data-testid="button-view-contact-billing">
+                      View Contact →
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
 
           <Separator />
 
