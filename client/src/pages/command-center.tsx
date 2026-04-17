@@ -277,6 +277,10 @@ export default function CommandCenter() {
     refetchInterval: isToday ? 30000 : false,
   });
 
+  const visits = data?.visits ?? [];
+  const stats = data?.stats;
+  const billing = data?.billing;
+
   // Build Mapbox stops from visits with valid coordinates
   const validVisitsForMap = useMemo(
     () => visits.filter(v => v.property?.latitude && v.property?.longitude),
@@ -314,10 +318,6 @@ export default function CommandCenter() {
   }, [groupByTech]);
 
   const [filterTech, setFilterTech] = useState<string>("all");
-
-  const visits = data?.visits ?? [];
-  const stats = data?.stats;
-  const billing = data?.billing;
 
   const techNames = useMemo(() => {
     const names = new Set<string>();
