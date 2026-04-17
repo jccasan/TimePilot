@@ -3895,15 +3895,18 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId } = await getCompanyContext(req);
       const parsed = insertPropertySchema.parse({ ...req.body, companyId });
+      let geocodeFailed = false;
       if (!parsed.latitude && !parsed.longitude && parsed.streetAddress) {
         const coords = await geocodeAddress(parsed.streetAddress, parsed.city, parsed.state, parsed.zipCode);
         if (coords) {
           (parsed as any).latitude = coords.latitude;
           (parsed as any).longitude = coords.longitude;
+        } else {
+          geocodeFailed = true;
         }
       }
       const property = await storage.createProperty(parsed);
-      res.status(201).json(property);
+      res.status(201).json({ ...property, geocodeFailed });
     } catch (err) { handleError(res, err); }
   });
 
@@ -3918,6 +3921,7 @@ Return ONLY valid JSON, no markdown.`,
         (req.body.state !== undefined && req.body.state !== existing.state) ||
         (req.body.zipCode !== undefined && req.body.zipCode !== existing.zipCode);
       const updateData = { ...req.body };
+      let geocodeFailed = false;
       if (addressChanged) {
         const merged = {
           streetAddress: req.body.streetAddress ?? existing.streetAddress,
@@ -3930,11 +3934,13 @@ Return ONLY valid JSON, no markdown.`,
           if (coords) {
             updateData.latitude = coords.latitude;
             updateData.longitude = coords.longitude;
+          } else {
+            geocodeFailed = true;
           }
         }
       }
       const property = await storage.updateProperty(req.params.id, companyId, updateData);
-      res.json(property);
+      res.json({ ...property, geocodeFailed });
     } catch (err) { handleError(res, err); }
   });
 

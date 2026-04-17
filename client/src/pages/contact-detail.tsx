@@ -179,12 +179,21 @@ export default function ContactDetail() {
 
   const createPropertyMutation = useMutation({
     mutationFn: async (data: z.infer<typeof propertyFormSchema>) => {
-      await apiRequest("POST", "/api/properties", { ...data, contactId: id });
+      const res = await apiRequest("POST", "/api/properties", { ...data, contactId: id });
+      return res.json() as Promise<{ geocodeFailed?: boolean }>;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${id}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
-      toast({ title: "Property added", description: "New property added." });
+      if (result?.geocodeFailed) {
+        toast({
+          title: "Property added",
+          description: "Property saved, but we couldn't locate this address—distance will not appear for this property. Check the address and try again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Property added", description: "New property added." });
+      }
       setPropertyDialogOpen(false);
       propertyForm.reset();
     },
