@@ -923,6 +923,49 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/tech/route-map", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) return res.status(503).json({ error: "Maps not configured" });
+
+      let addresses: string[] = [];
+      if (Array.isArray(req.query.address)) {
+        addresses = req.query.address as string[];
+      } else if (req.query.address) {
+        addresses = [req.query.address as string];
+      }
+      if (addresses.length === 0) return res.status(400).json({ error: "No addresses provided" });
+
+      const allowedSizes = ["640x240", "640x300", "640x400"];
+      const safeSize = allowedSizes.includes(req.query.size as string) ? (req.query.size as string) : "640x300";
+
+      const params = new URLSearchParams({
+        size: safeSize,
+        maptype: "roadmap",
+        scale: "2",
+        key: apiKey,
+        style: "feature:poi|visibility:off",
+      });
+
+      const LABELS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      addresses.slice(0, 25).forEach((addr, i) => {
+        const label = i < LABELS.length ? LABELS[i] : String(i + 1);
+        params.append("markers", `label:${label}|color:0x2d8a5e|${addr}`);
+      });
+
+      const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
+      const response = await fetch(url);
+      if (!response.ok) return res.status(502).json({ error: "Route map request failed" });
+
+      res.set("Content-Type", response.headers.get("content-type") || "image/png");
+      res.set("Cache-Control", "public, max-age=300");
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.send(buffer);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/mapbox-static-image", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;

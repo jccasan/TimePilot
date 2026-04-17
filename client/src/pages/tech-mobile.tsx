@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed, Navigation, ShieldAlert, Dog } from "lucide-react";
+import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed, Navigation, ShieldAlert, Dog, Map, MapPin, Clock, ArrowRight, Flag, BarChart2 } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
@@ -146,6 +146,8 @@ type RouteGroup = {
 export default function TechMobile() {
   const { toast } = useToast();
   const offline = useOffline();
+  const [viewMode, setViewMode] = useState<"start-day" | "route">("start-day");
+  const [showMapOverlay, setShowMapOverlay] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [uploadingVisitId, setUploadingVisitId] = useState<string | null>(null);
@@ -268,6 +270,51 @@ export default function TechMobile() {
   }, [visits]);
 
   const allVisitsFlat = useMemo(() => visits || [], [visits]);
+
+  const totalVisitCount = allVisitsFlat.length;
+  const completedVisitCount = allVisitsFlat.filter(v => v.status === "completed" || v.status === "skipped" || v.status === "cancelled").length;
+  const remainingCount = totalVisitCount - completedVisitCount;
+  const estMinutesRemaining = remainingCount * 20;
+
+  const routeMapUrl = useMemo(() => {
+    if (!visits || visits.length === 0) return null;
+    const addrs = visits
+      .filter(v => v.property?.streetAddress)
+      .map(v => `${v.property!.streetAddress}, ${v.property!.city}, ${v.property!.state}`);
+    if (addrs.length === 0) return null;
+    const params = new URLSearchParams();
+    addrs.slice(0, 25).forEach(a => params.append("address", a));
+    return `/api/tech/route-map?${params.toString()}`;
+  }, [visits]);
+
+  useEffect(() => {
+    if (visits && visits.some(v => v.status === "in_progress")) {
+      setViewMode("route");
+    }
+  }, [visits]);
+
+  const handleStartRoute = () => {
+    setViewMode("route");
+    const firstStop = allVisitsFlat.find(v => v.status === "scheduled" || v.status === "in_progress");
+    if (firstStop) {
+      const key = firstStop.propertyId || firstStop.id;
+      setExpandedId(key);
+    }
+  };
+
+  const googleMapsDirectionsUrl = useMemo(() => {
+    if (!visits || visits.length === 0) return null;
+    const addrs = visits
+      .filter(v => v.property?.streetAddress)
+      .map(v => `${v.property!.streetAddress}, ${v.property!.city}, ${v.property!.state}`);
+    if (addrs.length === 0) return null;
+    if (addrs.length === 1) {
+      return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addrs[0])}`;
+    }
+    const dest = encodeURIComponent(addrs[addrs.length - 1]);
+    const waypoints = addrs.slice(0, -1).map(a => encodeURIComponent(a)).join("|");
+    return `https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${waypoints}&travelmode=driving`;
+  }, [visits]);
 
   useEffect(() => {
     if (pendingAdvanceAfter && visits) {
@@ -599,7 +646,120 @@ export default function TechMobile() {
     : "";
 
   return (
-    <div className="p-4 space-y-4 overflow-auto h-full max-w-lg mx-auto">
+    <div className="flex flex-col h-full">
+    {/* Start Day Overview Screen */}
+    {viewMode === "start-day" && !isLoading && visits && visits.length > 0 && (
+      <div className="flex-1 overflow-auto p-4 space-y-4 max-w-lg mx-auto w-full" data-testid="screen-start-day">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold" data-testid="text-start-day-heading">Today's Route</h1>
+            <p className="text-sm text-muted-foreground">{company?.name}</p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-primary" data-testid="text-stop-count">{totalVisitCount}</div>
+            <div className="text-xs text-muted-foreground">stops</div>
+          </div>
+        </div>
+
+        {/* Route stats */}
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="p-3">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-primary shrink-0" />
+              <div>
+                <div className="text-lg font-bold" data-testid="text-stats-stops">{totalVisitCount}</div>
+                <div className="text-xs text-muted-foreground">Stops</div>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary shrink-0" />
+              <div>
+                <div className="text-lg font-bold" data-testid="text-stats-time">
+                  {totalVisitCount < 4 ? `~${totalVisitCount * 20}m` : `~${Math.floor(totalVisitCount * 20 / 60)}h ${(totalVisitCount * 20) % 60}m`}
+                </div>
+                <div className="text-xs text-muted-foreground">Est. total</div>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Route map image */}
+        {routeMapUrl && (
+          <div className="rounded-lg overflow-hidden border" data-testid="container-route-map">
+            <img
+              src={routeMapUrl}
+              alt="Route map overview"
+              className="w-full h-48 object-cover"
+              data-testid="img-route-map"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          </div>
+        )}
+
+        {/* Ordered stop list */}
+        <div className="space-y-2" data-testid="list-start-day-stops">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Stops in Order</h2>
+          {allVisitsFlat.map((visit, i) => (
+            <div
+              key={visit.id}
+              className="flex items-center gap-3 p-3 bg-card border rounded-lg"
+              data-testid={`stop-item-${visit.id}`}
+            >
+              <div className="h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0" data-testid={`stop-number-${visit.id}`}>
+                {i + 1}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate" data-testid={`stop-address-${visit.id}`}>
+                  {visit.property?.streetAddress || "Unknown address"}
+                </p>
+                <p className="text-xs text-muted-foreground truncate" data-testid={`stop-client-${visit.id}`}>
+                  {visit.contact ? `${visit.contact.firstName} ${visit.contact.lastName}` : "Unknown"}
+                  {visit.servicePlanName ? ` · ${visit.servicePlanName}` : ""}
+                </p>
+              </div>
+              {visit.property?.hasDangerousDog && (
+                <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
+              )}
+              <Badge variant="secondary" className={`text-xs shrink-0 ${visitStatusColors[visit.status] || ""}`}>
+                {visitStatusLabels[visit.status] || visit.status}
+              </Badge>
+            </div>
+          ))}
+        </div>
+
+        {/* Action buttons */}
+        <div className="space-y-2 pb-4">
+          <Button
+            className="w-full h-12 text-base gap-2"
+            onClick={handleStartRoute}
+            data-testid="button-start-route"
+          >
+            <Flag className="h-5 w-5" />
+            Start Route
+            <ArrowRight className="h-5 w-5" />
+          </Button>
+          {googleMapsDirectionsUrl && (
+            <Button
+              variant="outline"
+              className="w-full h-10 gap-2"
+              asChild
+              data-testid="button-open-google-maps"
+            >
+              <a href={googleMapsDirectionsUrl} target="_blank" rel="noopener noreferrer">
+                <Map className="h-4 w-4" />
+                Open in Google Maps
+              </a>
+            </Button>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* No visits / loading / route view */}
+    {(viewMode === "route" || (viewMode === "start-day" && (!visits || visits.length === 0))) && (
+    <div className="flex-1 overflow-auto p-4 space-y-4 max-w-lg mx-auto w-full">
       <OfflineStatusBar
         isOnline={offline.isOnline}
         pendingCount={offline.pendingCount}
@@ -607,9 +767,23 @@ export default function TechMobile() {
         lastSyncResult={offline.lastSyncResult}
         onRetrySync={offline.performSync}
       />
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-tech-heading">Active Service</h1>
-        <p className="text-sm text-muted-foreground">Complete visits and capture proof of service</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-tech-heading">Active Service</h1>
+          <p className="text-sm text-muted-foreground">Complete visits and capture proof of service</p>
+        </div>
+        {visits && visits.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={() => setShowMapOverlay(true)}
+            data-testid="button-map-toggle"
+          >
+            <Map className="h-4 w-4" />
+            Map
+          </Button>
+        )}
       </div>
 
       <input
@@ -992,6 +1166,108 @@ export default function TechMobile() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Persistent route progress bar */}
+      {totalVisitCount > 0 && completedVisitCount > 0 && (
+        <div
+          className="sticky bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-4 py-2.5 flex items-center gap-3"
+          data-testid="bar-route-progress"
+        >
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <BarChart2 className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-sm font-medium" data-testid="text-progress-count">
+                {completedVisitCount} of {totalVisitCount} done
+              </span>
+              {remainingCount > 0 && (
+                <span className="text-xs text-muted-foreground" data-testid="text-progress-eta">
+                  · ~{estMinutesRemaining < 60 ? `${estMinutesRemaining}m` : `${Math.floor(estMinutesRemaining / 60)}h ${estMinutesRemaining % 60}m`} left
+                </span>
+              )}
+            </div>
+            <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden" data-testid="progress-bar-track">
+              <div
+                className="h-full bg-primary transition-all duration-500"
+                style={{ width: `${Math.round((completedVisitCount / totalVisitCount) * 100)}%` }}
+                data-testid="progress-bar-fill"
+              />
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={() => setShowMapOverlay(true)}
+            data-testid="button-progress-map"
+          >
+            <Map className="h-4 w-4" />
+            Map
+          </Button>
+        </div>
+      )}
+    </div>
+    )}
+
+    {/* Map overview dialog */}
+    <Dialog open={showMapOverlay} onOpenChange={setShowMapOverlay}>
+      <DialogContent className="sm:max-w-md" data-testid="dialog-map-overlay">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Map className="h-5 w-5" />
+            Route Overview
+          </DialogTitle>
+          <DialogDescription>
+            {completedVisitCount} of {totalVisitCount} stops completed
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          {routeMapUrl && (
+            <div className="rounded-lg overflow-hidden border" data-testid="container-map-overlay-img">
+              <img
+                src={routeMapUrl}
+                alt="Route map"
+                className="w-full h-52 object-cover"
+                data-testid="img-map-overlay"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            </div>
+          )}
+          <div className="space-y-1.5 max-h-48 overflow-y-auto" data-testid="list-overlay-stops">
+            {allVisitsFlat.map((visit, i) => {
+              const isDone = visit.status === "completed" || visit.status === "skipped" || visit.status === "cancelled";
+              const isActive = visit.status === "in_progress";
+              return (
+                <div
+                  key={visit.id}
+                  className={`flex items-center gap-3 p-2 rounded-md text-sm ${isDone ? "opacity-50" : isActive ? "bg-primary/10 border border-primary/20" : "bg-muted/40"}`}
+                  data-testid={`overlay-stop-${visit.id}`}
+                >
+                  <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isDone ? "bg-muted text-muted-foreground" : isActive ? "bg-primary text-primary-foreground animate-pulse" : "bg-primary text-primary-foreground"}`}>
+                    {isDone ? <CheckCircle className="h-3.5 w-3.5" /> : i + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`font-medium truncate ${isDone ? "line-through" : ""}`}>{visit.property?.streetAddress || "Unknown"}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {visit.contact ? `${visit.contact.firstName} ${visit.contact.lastName}` : ""}
+                    </p>
+                  </div>
+                  {isActive && <Badge variant="secondary" className="text-xs shrink-0 bg-primary/10 text-primary">Active</Badge>}
+                </div>
+              );
+            })}
+          </div>
+          {googleMapsDirectionsUrl && (
+            <Button variant="outline" className="w-full gap-2" asChild data-testid="button-overlay-google-maps">
+              <a href={googleMapsDirectionsUrl} target="_blank" rel="noopener noreferrer">
+                <Navigation className="h-4 w-4" />
+                Open in Google Maps
+              </a>
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+
     </div>
   );
 }
