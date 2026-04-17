@@ -35,7 +35,7 @@ import {
   Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
   CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert, Lock, Unlock,
-  Sparkles, ArrowRight, Check, X, ToggleLeft, ToggleRight, Calendar,
+  Sparkles, ArrowRight, Check, X, ToggleLeft, Calendar,
   Camera, DoorClosed, ChevronLeft, ChevronRight, Info
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -922,10 +922,7 @@ export default function RoutesPage() {
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [showZones, setShowZones] = useState(false);
   const [showWeeklyOptimizer, setShowWeeklyOptimizer] = useState(false);
-  const [ghostStopsExpanded, setGhostStopsExpanded] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [reassignVisitId, setReassignVisitId] = useState<string | null>(null);
-  const [reassignTargetRouteId, setReassignTargetRouteId] = useState<string>("");
 
   const [completeDialogVisitId, setCompleteDialogVisitId] = useState<string | null>(null);
   const [completeDialogContactName, setCompleteDialogContactName] = useState<string>("");
@@ -1366,53 +1363,6 @@ export default function RoutesPage() {
     });
   }, [visiblePlans, unassignedSearch, contacts, properties]);
 
-  type OrphanedVisit = {
-    visit: Visit;
-    plan: ServicePlan | null;
-    reason: 'inactive' | 'wrong_route' | 'unrouted';
-    contactName: string;
-    address: string;
-  };
-
-  const orphanedVisits = useMemo((): OrphanedVisit[] => {
-    const routeForDayIds = new Set(routesForDay.map(r => r.id));
-    const activePlanById: Record<string, ServicePlan> = {};
-    for (const sp of servicePlans) activePlanById[sp.id] = sp;
-    const visibleInRoutesForDay = new Set<string>();
-    for (const r of routesForDay) {
-      for (const sp of (stopsByRoute[r.id] || [])) {
-        visibleInRoutesForDay.add(sp.id);
-      }
-    }
-    const unassignedPlanIds = new Set(visiblePlans.filter(sp => !sp.routeId).map(sp => sp.id));
-
-    const result: OrphanedVisit[] = [];
-    for (const v of dayVisits) {
-      if (v.status === 'cancelled') continue;
-      if (!v.servicePlanId) continue;
-      if (visibleInRoutesForDay.has(v.servicePlanId)) continue;
-      if (unassignedPlanIds.has(v.servicePlanId)) continue;
-
-      const plan = activePlanById[v.servicePlanId] || null;
-      const property = properties.find(p => p.id === (plan?.propertyId ?? v.propertyId));
-      const contact = contacts.find(c => c.id === plan?.contactId);
-      const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown Customer";
-      const address = property ? `${property.streetAddress || ""}${property.city ? `, ${property.city}` : ""}`.trim() : "Unknown Address";
-
-      let reason: OrphanedVisit['reason'];
-      if (!plan) {
-        reason = 'inactive';
-      } else if (plan.routeId && !routeForDayIds.has(plan.routeId)) {
-        reason = 'wrong_route';
-      } else {
-        reason = 'unrouted';
-      }
-
-      result.push({ visit: v, plan, reason, contactName, address });
-    }
-    return result;
-  }, [dayVisits, servicePlans, routesForDay, stopsByRoute, visiblePlans, contacts, properties]);
-
   const activeDragStop = useMemo(() => {
     if (!activeDragId) return null;
     return servicePlans.find(sp => sp.id === activeDragId) || null;
@@ -1600,29 +1550,6 @@ export default function RoutesPage() {
     },
   });
 
-  const reactivatePlanMutation = useMutation({
-    mutationFn: async (planId: string) => {
-      const res = await apiRequest("PATCH", `/api/service-plans/${planId}`, { isActive: true });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
-      toast({ title: "Plan reactivated", description: "The service plan is now active again." });
-    },
-    onError: (err: Error) => toast({ title: "Error reactivating plan", description: err.message, variant: "destructive" }),
-  });
-
-  const cancelOrphanVisitMutation = useMutation({
-    mutationFn: async (visitId: string) => {
-      await apiRequest("PATCH", `/api/visits/${visitId}`, { status: "cancelled" });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/visits/range", selectedDayDate] });
-      toast({ title: "Visit cancelled" });
-    },
-    onError: (err: Error) => toast({ title: "Error cancelling visit", description: err.message, variant: "destructive" }),
-  });
-
   const resolveDropTarget = useCallback((overId: string): string | null => {
     if (overId === UNASSIGNED_DROP) return UNASSIGNED_DROP;
     if (overId.startsWith("route-")) return overId;
@@ -1804,11 +1731,6 @@ export default function RoutesPage() {
                 <span className="text-xs">{DAY_SHORT[day]}</span>
                 <span className="text-lg font-bold leading-tight">{dateNum}</span>
                 <span className="text-[10px] opacity-70">{dayStopCounts[day] || 0} stops</span>
-                {selectedDay === day && orphanedVisits.length > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white" data-testid={`badge-ghost-day-${day}`}>
-                    {orphanedVisits.length}
-                  </span>
-                )}
               </Button>
             );
           })}
@@ -1909,97 +1831,6 @@ export default function RoutesPage() {
                   </div>
                 )}
 
-                {orphanedVisits.length > 0 && (
-                  <div className="mt-4" data-testid="section-ghost-stops">
-                    <button
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900 transition-colors"
-                      onClick={() => setGhostStopsExpanded(e => !e)}
-                      data-testid="button-toggle-ghost-stops"
-                    >
-                      <span className="flex items-center gap-2 text-sm font-semibold">
-                        <ShieldAlert className="h-4 w-4 shrink-0" />
-                        Ghost Stops — Scheduled but not visible in any route
-                        <Badge className="bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 hover:bg-amber-200" data-testid="badge-ghost-stop-count">
-                          {orphanedVisits.length}
-                        </Badge>
-                      </span>
-                      {ghostStopsExpanded ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
-                    </button>
-
-                    {ghostStopsExpanded && (
-                      <div className="mt-2 space-y-2" data-testid="list-ghost-stops">
-                        {orphanedVisits.map(({ visit, plan, reason, contactName, address }) => (
-                          <div
-                            key={visit.id}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/60"
-                            data-testid={`card-ghost-stop-${visit.id}`}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-sm font-medium text-foreground" data-testid={`text-ghost-name-${visit.id}`}>{contactName}</span>
-                                <Badge
-                                  variant="outline"
-                                  className={
-                                    reason === 'inactive'
-                                      ? "text-xs border-red-300 text-red-700 dark:border-red-700 dark:text-red-300"
-                                      : reason === 'wrong_route'
-                                      ? "text-xs border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300"
-                                      : "text-xs border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-400"
-                                  }
-                                  data-testid={`badge-ghost-reason-${visit.id}`}
-                                >
-                                  {reason === 'inactive' ? 'Plan inactive' : reason === 'wrong_route' ? 'Assigned to different route' : 'Unrouted'}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5 truncate" data-testid={`text-ghost-address-${visit.id}`}>{address}</p>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                              {reason === 'inactive' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs"
-                                  onClick={() => reactivatePlanMutation.mutate(visit.servicePlanId!)}
-                                  disabled={reactivatePlanMutation.isPending}
-                                  data-testid={`button-reactivate-${visit.id}`}
-                                >
-                                  {reactivatePlanMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ToggleRight className="h-3 w-3 mr-1" />}
-                                  Reactivate
-                                </Button>
-                              )}
-                              {(reason === 'wrong_route' || reason === 'unrouted') && plan && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs"
-                                  onClick={() => {
-                                    setReassignVisitId(visit.id);
-                                    setReassignTargetRouteId(routesForDay[0]?.id ?? "");
-                                  }}
-                                  data-testid={`button-reassign-${visit.id}`}
-                                >
-                                  <ArrowRight className="h-3 w-3 mr-1" />
-                                  Reassign
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-xs text-red-600 hover:text-red-700 border-red-200 hover:border-red-300 dark:text-red-400 dark:border-red-800"
-                                onClick={() => cancelOrphanVisitMutation.mutate(visit.id)}
-                                disabled={cancelOrphanVisitMutation.isPending}
-                                data-testid={`button-cancel-visit-${visit.id}`}
-                              >
-                                {cancelOrphanVisitMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <X className="h-3 w-3 mr-1" />}
-                                Cancel Visit
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
               <div className="lg:w-80 xl:w-96 shrink-0">
@@ -2048,56 +1879,6 @@ export default function RoutesPage() {
       <RouteFormDialog open={dialogOpen} onOpenChange={setDialogOpen}
         editingRoute={editingRoute} team={team} onSubmit={handleRouteFormSubmit}
         isSubmitting={createRouteMutation.isPending || updateRouteMutation.isPending} />
-
-      <Dialog open={!!reassignVisitId} onOpenChange={(open) => { if (!open) setReassignVisitId(null); }}>
-        <DialogContent className="sm:max-w-sm" data-testid="dialog-reassign-ghost-stop">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ArrowRight className="h-4 w-4" />
-              Reassign Stop to Route
-            </DialogTitle>
-            <DialogDescription>
-              Choose a route for {DAY_LABELS[selectedDay]} to assign this stop.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Label htmlFor="reassign-route-select">Route</Label>
-            {routesForDay.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No routes available for {DAY_LABELS[selectedDay]}. Create a route first.</p>
-            ) : (
-              <Select value={reassignTargetRouteId} onValueChange={setReassignTargetRouteId}>
-                <SelectTrigger id="reassign-route-select" data-testid="select-reassign-route">
-                  <SelectValue placeholder="Select a route" />
-                </SelectTrigger>
-                <SelectContent>
-                  {routesForDay.map(r => (
-                    <SelectItem key={r.id} value={r.id} data-testid={`option-route-${r.id}`}>{r.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReassignVisitId(null)} data-testid="button-cancel-reassign">Cancel</Button>
-            <Button
-              disabled={!reassignTargetRouteId || routesForDay.length === 0 || assignStopMutation.isPending}
-              onClick={() => {
-                const orphan = orphanedVisits.find(o => o.visit.id === reassignVisitId);
-                if (!orphan?.plan || !reassignTargetRouteId) return;
-                const targetRoute = routesForDay.find(r => r.id === reassignTargetRouteId);
-                assignStopMutation.mutate(
-                  { stopId: orphan.plan.id, routeId: reassignTargetRouteId, dayOfWeek: targetRoute?.dayOfWeek ?? undefined },
-                  { onSuccess: () => setReassignVisitId(null) }
-                );
-              }}
-              data-testid="button-confirm-reassign"
-            >
-              {assignStopMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Reassign
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog open={!!confirmOptimize} onOpenChange={(open) => { if (!open) setConfirmOptimize(null); }}>
         <AlertDialogContent data-testid="dialog-confirm-optimize">
