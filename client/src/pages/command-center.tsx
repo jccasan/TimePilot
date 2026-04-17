@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useSearch } from "wouter";
 import { format } from "date-fns";
@@ -39,7 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import RouteMapView from "@/components/route-map-view";
-import FieldView from "@/pages/field-view";
+const FieldView = lazy(() => import("@/pages/field-view"));
 
 interface CommandCenterVisit {
   id: string;
@@ -877,7 +877,9 @@ export default function CommandCenter() {
         {/* Live Field Map Tab */}
         <TabsContent value="live-map" className="mt-4">
           <div className="rounded-lg overflow-hidden border" style={{ height: 680 }} data-testid="container-live-field-map">
-            <FieldView />
+            <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading map...</div>}>
+              <FieldView />
+            </Suspense>
           </div>
         </TabsContent>
       </Tabs>
