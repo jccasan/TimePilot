@@ -13,61 +13,70 @@ import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard, Loader2, MessageSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Component, useEffect, useState } from "react";
+import { Component, lazy, Suspense, useEffect, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import RoverChatbot from "@/components/rover-chatbot";
 import BusinessOnboarding from "@/components/business-onboarding";
-import NotFound from "@/pages/not-found";
-import AuthPage from "@/pages/auth-page";
-import Dashboard from "@/pages/dashboard";
-import Contacts from "@/pages/contacts";
-import ContactDetail from "@/pages/contact-detail";
-import Scheduling from "@/pages/scheduling";
-import RoutesPage from "@/pages/routes-page";
-import TechMobile from "@/pages/tech-mobile";
-import TechRoutes from "@/pages/tech-routes";
-import TechClients from "@/pages/tech-clients";
-import Invoices from "@/pages/invoices";
-import Quotes from "@/pages/quotes";
-import Billing from "@/pages/billing";
-import Automation from "@/pages/automation";
-import ApiKeysPage from "@/pages/api-keys";
-import WebhooksPage from "@/pages/webhooks-page";
-import Portal from "@/pages/portal";
-import PortalLogin from "@/pages/portal-login";
-import PortalResetPassword from "@/pages/portal-reset-password";
-import PortalVerifyEmail from "@/pages/portal-verify-email";
-import PortalClient from "@/pages/portal-client";
-import PortalQuoteView from "@/pages/portal-quote-view";
-import Pricing from "@/pages/pricing";
-import Communications from "@/pages/communications";
-import Reports from "@/pages/reports";
-import Analytics from "@/pages/analytics";
-import AdminDashboard from "@/pages/admin-dashboard";
-import AdminTenants from "@/pages/admin-tenants";
-import AdminCompanyDetail from "@/pages/admin-company-detail";
-import AdminAnalytics from "@/pages/admin-analytics";
-import AdminLogin from "@/pages/admin-login";
-import AdminChangePassword from "@/pages/admin-change-password";
-import AdminSecurity from "@/pages/admin-security";
-import AdminSubscriptionPricing from "@/pages/admin-subscription-pricing";
-import AdminMessaging from "@/pages/admin-messaging";
-import Settings from "@/pages/settings";
-import PricingCalculator from "@/pages/pricing-calculator";
-import Profitability from "@/pages/profitability";
-import ProfitabilityDetail from "@/pages/profitability-detail";
-import RouteProfitMaps from "@/pages/route-profit-maps";
-import FieldView from "@/pages/field-view";
-import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
-import OverheadCosts from "@/pages/overhead-costs";
-import MigrationPage from "@/pages/migration-page";
-import CommandCenter from "@/pages/command-center";
-import ResetPassword from "@/pages/reset-password";
-import SignupWidget from "@/pages/signup-widget";
-import VoiceSignup from "@/pages/voice-signup";
-import PrivacyPolicy from "@/pages/privacy-policy";
-import SmsTerms from "@/pages/sms-terms";
-import Pipeline from "@/pages/pipeline";
+
+const NotFound = lazy(() => import("@/pages/not-found"));
+const AuthPage = lazy(() => import("@/pages/auth-page"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Contacts = lazy(() => import("@/pages/contacts"));
+const ContactDetail = lazy(() => import("@/pages/contact-detail"));
+const Scheduling = lazy(() => import("@/pages/scheduling"));
+const RoutesPage = lazy(() => import("@/pages/routes-page"));
+const TechMobile = lazy(() => import("@/pages/tech-mobile"));
+const TechRoutes = lazy(() => import("@/pages/tech-routes"));
+const TechClients = lazy(() => import("@/pages/tech-clients"));
+const Invoices = lazy(() => import("@/pages/invoices"));
+const Quotes = lazy(() => import("@/pages/quotes"));
+const Billing = lazy(() => import("@/pages/billing"));
+const Automation = lazy(() => import("@/pages/automation"));
+const ApiKeysPage = lazy(() => import("@/pages/api-keys"));
+const WebhooksPage = lazy(() => import("@/pages/webhooks-page"));
+const Portal = lazy(() => import("@/pages/portal"));
+const PortalLogin = lazy(() => import("@/pages/portal-login"));
+const PortalResetPassword = lazy(() => import("@/pages/portal-reset-password"));
+const PortalVerifyEmail = lazy(() => import("@/pages/portal-verify-email"));
+const PortalClient = lazy(() => import("@/pages/portal-client"));
+const PortalQuoteView = lazy(() => import("@/pages/portal-quote-view"));
+const Pricing = lazy(() => import("@/pages/pricing"));
+const Communications = lazy(() => import("@/pages/communications"));
+const Reports = lazy(() => import("@/pages/reports"));
+const Analytics = lazy(() => import("@/pages/analytics"));
+const AdminDashboard = lazy(() => import("@/pages/admin-dashboard"));
+const AdminTenants = lazy(() => import("@/pages/admin-tenants"));
+const AdminCompanyDetail = lazy(() => import("@/pages/admin-company-detail"));
+const AdminAnalytics = lazy(() => import("@/pages/admin-analytics"));
+const AdminLogin = lazy(() => import("@/pages/admin-login"));
+const AdminChangePassword = lazy(() => import("@/pages/admin-change-password"));
+const AdminSecurity = lazy(() => import("@/pages/admin-security"));
+const AdminSubscriptionPricing = lazy(() => import("@/pages/admin-subscription-pricing"));
+const AdminMessaging = lazy(() => import("@/pages/admin-messaging"));
+const Settings = lazy(() => import("@/pages/settings"));
+const PricingCalculator = lazy(() => import("@/pages/pricing-calculator"));
+const Profitability = lazy(() => import("@/pages/profitability"));
+const ProfitabilityDetail = lazy(() => import("@/pages/profitability-detail"));
+const RouteProfitMaps = lazy(() => import("@/pages/route-profit-maps"));
+const FieldView = lazy(() => import("@/pages/field-view"));
+const AIPricingOptimizer = lazy(() => import("@/pages/ai-pricing-optimizer"));
+const OverheadCosts = lazy(() => import("@/pages/overhead-costs"));
+const MigrationPage = lazy(() => import("@/pages/migration-page"));
+const CommandCenter = lazy(() => import("@/pages/command-center"));
+const ResetPassword = lazy(() => import("@/pages/reset-password"));
+const SignupWidget = lazy(() => import("@/pages/signup-widget"));
+const VoiceSignup = lazy(() => import("@/pages/voice-signup"));
+const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
+const SmsTerms = lazy(() => import("@/pages/sms-terms"));
+const Pipeline = lazy(() => import("@/pages/pipeline"));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-full min-h-[200px]">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
 import { NotificationBell } from "@/components/notification-bell";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
@@ -83,38 +92,40 @@ function ThemeToggle() {
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/contacts" component={Contacts} />
-      <Route path="/contacts/:id" component={ContactDetail} />
-      <Route path="/scheduling" component={Scheduling} />
-      <Route path="/routes" component={RoutesPage} />
-      <Route path="/jobs"><Redirect to="/scheduling" /></Route>
-      <Route path="/pipeline" component={Pipeline} />
-      <Route path="/m/today" component={TechMobile} />
-      <Route path="/quotes" component={Quotes} />
-      <Route path="/invoices" component={Invoices} />
-      <Route path="/billing" component={Billing} />
-      <Route path="/automation" component={Automation} />
-      <Route path="/api-keys" component={ApiKeysPage} />
-      <Route path="/webhooks" component={WebhooksPage} />
-      <Route path="/pricing" component={Pricing} />
-      <Route path="/pricing-calculator" component={PricingCalculator} />
-      <Route path="/profitability" component={Profitability} />
-      <Route path="/profitability/:contactId" component={ProfitabilityDetail} />
-      <Route path="/route-profit-maps" component={RouteProfitMaps} />
-      <Route path="/field-view" component={FieldView} />
-      <Route path="/ai-pricing-optimizer"><Redirect to="/pricing-calculator?tab=simulator" /></Route>
-      <Route path="/overhead-costs" component={OverheadCosts} />
-      <Route path="/communications" component={Communications} />
-      <Route path="/reports" component={Reports} />
-      <Route path="/analytics"><Redirect to="/reports?tab=analytics" /></Route>
-      <Route path="/portal" component={Portal} />
-      <Route path="/settings" component={Settings} />
-      <Route path="/migration" component={MigrationPage} />
-      <Route path="/command-center" component={CommandCenter} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/contacts" component={Contacts} />
+        <Route path="/contacts/:id" component={ContactDetail} />
+        <Route path="/scheduling" component={Scheduling} />
+        <Route path="/routes" component={RoutesPage} />
+        <Route path="/jobs"><Redirect to="/scheduling" /></Route>
+        <Route path="/pipeline" component={Pipeline} />
+        <Route path="/m/today" component={TechMobile} />
+        <Route path="/quotes" component={Quotes} />
+        <Route path="/invoices" component={Invoices} />
+        <Route path="/billing" component={Billing} />
+        <Route path="/automation" component={Automation} />
+        <Route path="/api-keys" component={ApiKeysPage} />
+        <Route path="/webhooks" component={WebhooksPage} />
+        <Route path="/pricing" component={Pricing} />
+        <Route path="/pricing-calculator" component={PricingCalculator} />
+        <Route path="/profitability" component={Profitability} />
+        <Route path="/profitability/:contactId" component={ProfitabilityDetail} />
+        <Route path="/route-profit-maps" component={RouteProfitMaps} />
+        <Route path="/field-view" component={FieldView} />
+        <Route path="/ai-pricing-optimizer"><Redirect to="/pricing-calculator?tab=simulator" /></Route>
+        <Route path="/overhead-costs" component={OverheadCosts} />
+        <Route path="/communications" component={Communications} />
+        <Route path="/reports" component={Reports} />
+        <Route path="/analytics"><Redirect to="/reports?tab=analytics" /></Route>
+        <Route path="/portal" component={Portal} />
+        <Route path="/settings" component={Settings} />
+        <Route path="/migration" component={MigrationPage} />
+        <Route path="/command-center" component={CommandCenter} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 
@@ -340,11 +351,13 @@ function TechnicianLayout() {
         </div>
       </header>
       <main className="flex-1 overflow-hidden">
-        <Switch>
-          <Route path="/" component={TechRoutes} />
-          <Route path="/clients" component={TechClients} />
-          <Route component={NotFound} />
-        </Switch>
+        <Suspense fallback={<PageLoader />}>
+          <Switch>
+            <Route path="/" component={TechRoutes} />
+            <Route path="/clients" component={TechClients} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
       </main>
     </div>
   );
@@ -456,17 +469,19 @@ function AdminLayout() {
           </div>
         </header>
         <main className="flex-1 overflow-auto">
-          <Switch>
-            <Route path="/admin" component={AdminDashboard} />
-            <Route path="/admin/tenants" component={AdminTenants} />
-            <Route path="/admin/analytics" component={AdminAnalytics} />
-            <Route path="/admin/security" component={AdminSecurity} />
-            <Route path="/admin/pricing" component={AdminSubscriptionPricing} />
-            <Route path="/admin/messaging" component={AdminMessaging} />
-            <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
-            <Route path="/admin/login">{() => { window.location.href = "/admin"; return null; }}</Route>
-            <Route component={NotFound} />
-          </Switch>
+          <Suspense fallback={<PageLoader />}>
+            <Switch>
+              <Route path="/admin" component={AdminDashboard} />
+              <Route path="/admin/tenants" component={AdminTenants} />
+              <Route path="/admin/analytics" component={AdminAnalytics} />
+              <Route path="/admin/security" component={AdminSecurity} />
+              <Route path="/admin/pricing" component={AdminSubscriptionPricing} />
+              <Route path="/admin/messaging" component={AdminMessaging} />
+              <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
+              <Route path="/admin/login">{() => { window.location.href = "/admin"; return null; }}</Route>
+              <Route component={NotFound} />
+            </Switch>
+          </Suspense>
         </main>
       </div>
     </div>
@@ -475,16 +490,18 @@ function AdminLayout() {
 
 function PortalRouter() {
   return (
-    <Switch>
-      <Route path="/portal/login" component={PortalLogin} />
-      <Route path="/portal/reset-password" component={PortalResetPassword} />
-      <Route path="/portal/verify-email" component={PortalVerifyEmail} />
-      <Route path="/portal/client" component={PortalClient} />
-      <Route path="/portal/:slug/quotes/:quoteId">
-        {(params: any) => <PortalQuoteView quoteId={params.quoteId} />}
-      </Route>
-      <Route>{() => { window.location.href = "/portal/login"; return null; }}</Route>
-    </Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/portal/login" component={PortalLogin} />
+        <Route path="/portal/reset-password" component={PortalResetPassword} />
+        <Route path="/portal/verify-email" component={PortalVerifyEmail} />
+        <Route path="/portal/client" component={PortalClient} />
+        <Route path="/portal/:slug/quotes/:quoteId">
+          {(params: any) => <PortalQuoteView quoteId={params.quoteId} />}
+        </Route>
+        <Route>{() => { window.location.href = "/portal/login"; return null; }}</Route>
+      </Switch>
+    </Suspense>
   );
 }
 
@@ -510,23 +527,23 @@ function AppContent() {
     window.location.pathname === "/sms-terms";
 
   if (isPrivacyPolicyPath) {
-    return <PrivacyPolicy />;
+    return <Suspense fallback={<PageLoader />}><PrivacyPolicy /></Suspense>;
   }
 
   if (isSmsTermsPath) {
-    return <SmsTerms />;
+    return <Suspense fallback={<PageLoader />}><SmsTerms /></Suspense>;
   }
 
   if (isResetPasswordPath) {
-    return <ResetPassword />;
+    return <Suspense fallback={<PageLoader />}><ResetPassword /></Suspense>;
   }
 
   if (isSignupPath) {
-    return <SignupWidget />;
+    return <Suspense fallback={<PageLoader />}><SignupWidget /></Suspense>;
   }
 
   if (isVoiceSignupPath) {
-    return <VoiceSignup />;
+    return <Suspense fallback={<PageLoader />}><VoiceSignup /></Suspense>;
   }
 
   if (isPortalPath) {
@@ -550,11 +567,11 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
-    return <AuthPage />;
+    return <Suspense fallback={<PageLoader />}><AuthPage /></Suspense>;
   }
 
   if (user?.mustChangePassword) {
-    return <AuthPage />;
+    return <Suspense fallback={<PageLoader />}><AuthPage /></Suspense>;
   }
 
   if (user?.role === "tech") {
