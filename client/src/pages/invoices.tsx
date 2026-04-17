@@ -1335,7 +1335,7 @@ export default function Invoices() {
                 <div>
                   <Label className="text-xs">Font Family</Label>
                   <Select
-                    value={editTheme.fontFamily.includes("Inter") ? "inter" : editTheme.fontFamily.includes("Georgia") ? "georgia" : editTheme.fontFamily.includes("Roboto") ? "roboto" : "custom"}
+                    value={editTheme.fontFamily.includes("Georgia") ? "georgia" : editTheme.fontFamily.includes("Roboto") ? "roboto" : "inter"}
                     onValueChange={(val) => {
                       const fonts: Record<string, string> = {
                         inter: "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
@@ -1350,7 +1350,6 @@ export default function Invoices() {
                       <SelectItem value="inter">Inter (Default)</SelectItem>
                       <SelectItem value="roboto">Roboto</SelectItem>
                       <SelectItem value="georgia">Georgia (Serif)</SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
                     </SelectContent>
                   </Select>
                   <Input
