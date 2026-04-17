@@ -2634,6 +2634,26 @@ export default function Settings() {
     },
   });
 
+  const geocodeAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/properties/geocode-all");
+      return res.json() as Promise<{ total: number; needsGeocode: number; geocoded: number }>;
+    },
+    onSuccess: (data) => {
+      if (data.needsGeocode === 0) {
+        toast({ title: "All addresses already geocoded", description: "No properties were missing coordinates." });
+      } else {
+        toast({
+          title: "Geocoding complete",
+          description: `Successfully geocoded ${data.geocoded} of ${data.needsGeocode} properties missing coordinates.`,
+        });
+      }
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to re-geocode addresses.", variant: "destructive" });
+    },
+  });
+
   const inviteMutation = useMutation({
     mutationFn: async (data: { email: string; firstName: string; lastName: string; role: string }) => {
       const res = await apiRequest("POST", "/api/company/invite", data);
@@ -3461,6 +3481,33 @@ export default function Settings() {
                   </div>
                 </Link>
               ))}
+              {(currentUser?.role === "owner" || currentUser?.role === "admin") && (
+                <div className="flex items-center justify-between p-3 rounded-lg border">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center shrink-0">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium leading-none">Re-geocode Missing Addresses</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Retry geocoding for properties that could not be located</p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => geocodeAllMutation.mutate()}
+                    disabled={geocodeAllMutation.isPending}
+                    data-testid="button-regeocode-addresses"
+                  >
+                    {geocodeAllMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    <span className="ml-1.5">{geocodeAllMutation.isPending ? "Running..." : "Run"}</span>
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         );
