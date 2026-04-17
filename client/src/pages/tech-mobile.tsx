@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -76,6 +76,17 @@ function haversineDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: 
       Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const chord = sinLat * sinLat + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinLng * sinLng;
+  return R * 2 * Math.atan2(Math.sqrt(chord), Math.sqrt(1 - chord));
 }
 
 const visitStatusColors: Record<string, string> = {
@@ -174,6 +185,9 @@ export default function TechMobile() {
   const afterFileInputRef = useRef<HTMLInputElement>(null);
   const pendingVisitIdRef = useRef<string | null>(null);
   const pendingUploadTypeRef = useRef<PhotoUploadType | null>(null);
+  const techPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastDriveFetchPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const allVisitsFlatRef = useRef<TodayVisit[]>([]);
   const [pendingAdvanceAfter, setPendingAdvanceAfter] = useState<string | null>(null);
   const [cachedVisits, setCachedVisits] = useState<TodayVisit[] | null>(null);
 
@@ -289,6 +303,9 @@ export default function TechMobile() {
 
   const allVisitsFlat = useMemo(() => visits || [], [visits]);
 
+  useEffect(() => { techPositionRef.current = techPosition; }, [techPosition]);
+  useEffect(() => { allVisitsFlatRef.current = allVisitsFlat; }, [allVisitsFlat]);
+
   const nextUncompletedVisit = useMemo(() =>
     allVisitsFlat.find(
       v => v.status !== "completed" && v.status !== "cancelled" && v.status !== "skipped" && v.property?.streetAddress
@@ -332,9 +349,8 @@ export default function TechMobile() {
     };
   }, [showMapOverlay]);
 
-  useEffect(() => {
-    if (!showMapOverlay || !techPosition) return;
-    const upcomingVisits = allVisitsFlat.filter(
+  const fetchDriveTimes = useCallback((position: { lat: number; lng: number }) => {
+    const upcomingVisits = allVisitsFlatRef.current.filter(
       v =>
         v.status !== "completed" &&
         v.status !== "skipped" &&
@@ -343,11 +359,10 @@ export default function TechMobile() {
         v.property?.longitude != null
     );
     if (upcomingVisits.length === 0) return;
-
     const destinations = upcomingVisits.map(v => ({ lat: v.property!.latitude!, lng: v.property!.longitude! }));
     apiRequest("POST", "/api/tech/distances", {
-      originLat: techPosition.lat,
-      originLng: techPosition.lng,
+      originLat: position.lat,
+      originLng: position.lng,
       destinations,
     })
       .then(res => res.json())
@@ -358,11 +373,39 @@ export default function TechMobile() {
           map.set(v.id, data.results![i] ?? null);
         });
         setDriveInfo(map);
+        lastDriveFetchPositionRef.current = position;
       })
       .catch(() => {
         // silently fall back to haversine
       });
-  }, [showMapOverlay, techPosition, allVisitsFlat]);
+  }, []);
+
+  useEffect(() => {
+    if (!showMapOverlay) {
+      lastDriveFetchPositionRef.current = null;
+      return;
+    }
+    const pos = techPositionRef.current;
+    if (pos) {
+      fetchDriveTimes(pos);
+    }
+    const intervalId = setInterval(() => {
+      const currentPos = techPositionRef.current;
+      if (!currentPos) return;
+      const lastPos = lastDriveFetchPositionRef.current;
+      if (lastPos && haversineMeters(lastPos, currentPos) < 500) return;
+      fetchDriveTimes(currentPos);
+    }, 2 * 60 * 1000);
+    return () => {
+      clearInterval(intervalId);
+      lastDriveFetchPositionRef.current = null;
+    };
+  }, [showMapOverlay, fetchDriveTimes]);
+
+  useEffect(() => {
+    if (!showMapOverlay || !techPosition || lastDriveFetchPositionRef.current) return;
+    fetchDriveTimes(techPosition);
+  }, [showMapOverlay, techPosition, fetchDriveTimes]);
 
 
   useEffect(() => {
