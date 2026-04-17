@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed, Navigation, ShieldAlert, Dog, Map, MapPin, Clock, ArrowRight, Flag, BarChart2 } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
+import RouteMapView from "@/components/route-map-view";
 import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
 import { useOffline } from "@/hooks/use-offline";
@@ -317,20 +318,18 @@ export default function TechMobile() {
   const remainingCount = totalVisitCount - completedVisitCount;
   const estMinutesRemaining = remainingCount * 20;
 
-  const routeMapUrl = useMemo(() => {
-    if (!visits || visits.length === 0) return null;
-    const addrs = visits
-      .filter(v => v.property?.streetAddress)
-      .map(v => `${v.property!.streetAddress}, ${v.property!.city}, ${v.property!.state}`);
-    if (addrs.length === 0) return null;
-    const params = new URLSearchParams();
-    addrs.slice(0, 25).forEach(a => params.append("address", a));
-    if (techPosition) {
-      params.set("techLat", techPosition.lat.toString());
-      params.set("techLng", techPosition.lng.toString());
-    }
-    return `/api/tech/route-map?${params.toString()}`;
-  }, [visits, techPosition]);
+  const techMapStops = useMemo(() => {
+    if (!allVisitsFlat || allVisitsFlat.length === 0) return [];
+    return allVisitsFlat
+      .filter(v => v.property?.latitude != null && v.property?.longitude != null)
+      .map((v, idx) => ({
+        stopNumber: idx + 1,
+        contactName: v.contact ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() : "Unknown",
+        streetAddress: v.property?.streetAddress || "Unknown",
+        latitude: v.property!.latitude!,
+        longitude: v.property!.longitude!,
+      }));
+  }, [allVisitsFlat]);
 
   useEffect(() => {
     if (!showMapOverlay && viewMode !== "route") return;
@@ -822,16 +821,10 @@ export default function TechMobile() {
           </Card>
         </div>
 
-        {/* Route map image */}
-        {routeMapUrl && (
-          <div className="rounded-lg overflow-hidden border" data-testid="container-route-map">
-            <img
-              src={routeMapUrl}
-              alt="Route map overview"
-              className="w-full h-48 object-cover"
-              data-testid="img-route-map"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
+        {/* Route map */}
+        {techMapStops.length > 0 && (
+          <div className="rounded-lg overflow-hidden border bg-muted" style={{ height: 220 }} data-testid="container-route-map">
+            <RouteMapView stops={techMapStops} routeName="My Route" />
           </div>
         )}
 
@@ -1428,15 +1421,9 @@ export default function TechMobile() {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          {routeMapUrl && (
-            <div className="rounded-lg overflow-hidden border" data-testid="container-map-overlay-img">
-              <img
-                src={routeMapUrl}
-                alt="Route map"
-                className="w-full h-52 object-cover"
-                data-testid="img-map-overlay"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
+          {techMapStops.length > 0 && (
+            <div className="rounded-lg overflow-hidden border bg-muted" style={{ height: 220 }} data-testid="container-map-overlay-img">
+              <RouteMapView stops={techMapStops} routeName="My Route" />
             </div>
           )}
           <div className="space-y-1.5 max-h-48 overflow-y-auto" data-testid="list-overlay-stops">

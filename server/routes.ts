@@ -1010,6 +1010,8 @@ export async function registerRoutes(
             streetAddress: prop.streetAddress,
             city: prop.city,
             state: prop.state,
+            latitude: prop.latitude,
+            longitude: prop.longitude,
           } : null,
           contact: contact ? {
             id: contact.id,

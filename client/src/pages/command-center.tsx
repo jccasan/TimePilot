@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import RouteMapView from "@/components/route-map-view";
 
 interface CommandCenterVisit {
   id: string;
@@ -53,6 +54,8 @@ interface CommandCenterVisit {
     streetAddress?: string | null;
     city?: string | null;
     state?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
   } | null;
   contact?: {
     id: string;
@@ -271,16 +274,22 @@ export default function CommandCenter() {
     refetchInterval: isToday ? 30000 : false,
   });
 
-  // Map tab: auto-refresh tick every 60s (only for today)
-  const [mapTick, setMapTick] = useState(0);
-  useEffect(() => {
-    if (!isToday) return;
-    const id = setInterval(() => setMapTick(t => t + 1), 60000);
-    return () => clearInterval(id);
-  }, [isToday]);
+  // Build Mapbox stops from visits with valid coordinates
+  const validVisitsForMap = useMemo(
+    () => visits.filter(v => v.property?.latitude && v.property?.longitude),
+    [visits]
+  );
+  const mapStops = useMemo(
+    () => validVisitsForMap.map((v, idx) => ({
+      stopNumber: idx + 1,
+      contactName: `${v.contact?.firstName ?? ""} ${v.contact?.lastName ?? ""}`.trim() || "—",
+      streetAddress: v.property?.streetAddress || "Unknown",
+      latitude: v.property!.latitude!,
+      longitude: v.property!.longitude!,
+    })),
+    [validVisitsForMap]
+  );
 
-  // Reset map loaded state when date changes
-  const [mapLoaded, setMapLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     try { return localStorage.getItem("scoopilot_cc_active_tab") ?? "overview"; } catch { return "overview"; }
   });
@@ -292,9 +301,6 @@ export default function CommandCenter() {
     }
   });
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    setMapLoaded(false);
-  }, [selectedDateString]);
 
   useEffect(() => {
     try { localStorage.setItem("scoopilot_cc_active_tab", activeTab); } catch {}
@@ -352,8 +358,6 @@ export default function CommandCenter() {
     const waypoints = addrs.slice(0, -1).map(encodeURIComponent).join("|");
     return `https://www.google.com/maps/dir/?api=1&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ""}`;
   }, [visits]);
-
-  const mapSrc = `/api/admin/daily-map?date=${selectedDateString}&t=${mapTick}`;
 
   return (
     <div className="p-6 space-y-6 max-w-screen-xl mx-auto">
@@ -805,19 +809,14 @@ export default function CommandCenter() {
                 </div>
               ) : (
                 <>
-                  <div className="relative rounded-lg overflow-hidden bg-muted min-h-[300px]">
-                    {!mapLoaded && (
-                      <Skeleton className="absolute inset-0 rounded-lg" />
-                    )}
-                    <img
-                      key={`${selectedDateString}-${mapTick}`}
-                      src={mapSrc}
-                      alt="Route map"
-                      className="w-full rounded-lg object-cover"
-                      style={{ display: mapLoaded ? "block" : "none" }}
-                      onLoad={() => setMapLoaded(true)}
-                      onError={() => setMapLoaded(true)}
-                      data-testid="img-daily-map"
+                  <div className="rounded-lg overflow-hidden border bg-muted" style={{ height: 400 }} data-testid="container-daily-map">
+                    <RouteMapView
+                      stops={mapStops}
+                      routeName={isToday ? "Today's Route" : format(selectedDate, "MMM d")}
+                      onStopClick={(stopNumber) => {
+                        const v = validVisitsForMap[stopNumber - 1];
+                        if (v) navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`);
+                      }}
                     />
                   </div>
                   <TechLegend visits={visits} />

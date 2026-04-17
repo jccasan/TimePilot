@@ -14,11 +14,12 @@ export type RouteStop = {
 type RouteMapViewProps = {
   stops: RouteStop[];
   routeName: string;
+  onStopClick?: (stopNumber: number) => void;
 };
 
 const GREEN_MARKER = "#22c55e";
 
-export default function RouteMapView({ stops, routeName }: RouteMapViewProps) {
+export default function RouteMapView({ stops, routeName, onStopClick }: RouteMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -80,6 +81,9 @@ export default function RouteMapView({ stops, routeName }: RouteMapViewProps) {
           el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
           el.style.cursor = "pointer";
           el.textContent = String(stop.stopNumber);
+          if (onStopClick) {
+            el.addEventListener("click", () => onStopClick(stop.stopNumber));
+          }
 
           const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
             `<div data-testid="popup-stop-${stop.stopNumber}" style="padding:4px;">
