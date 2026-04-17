@@ -295,15 +295,18 @@ export default function TechMobile() {
   useEffect(() => {
     if (!showMapOverlay) return;
     if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
+    const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setTechPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
       () => {
         // Permission denied or unavailable — proceed without position dot
       },
-      { timeout: 8000, maximumAge: 60000 }
+      { timeout: 8000, maximumAge: 30000, enableHighAccuracy: true }
     );
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
   }, [showMapOverlay]);
 
   useEffect(() => {
