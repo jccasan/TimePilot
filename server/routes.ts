@@ -11431,12 +11431,15 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      if (hasAccessButNoPassword) {
-        return res.status(401).json({ error: "Your account needs a password. Please use 'Forgot Password' to set one up." });
+      if (!foundContact) {
+        if (hasAccessButNoPassword) {
+          return res.status(401).json({ error: "Your account needs a password. Please use 'Forgot Password' to set one up." });
+        }
+        return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      if (!foundContact || !foundContact.portalPasswordHash) {
-        return res.status(401).json({ error: "Invalid email or password" });
+      if (!foundContact.portalPasswordHash) {
+        return res.status(401).json({ error: "Your account needs a password. Please use 'Forgot Password' to set one up." });
       }
 
       const [salt, hash] = foundContact.portalPasswordHash.split(":");
