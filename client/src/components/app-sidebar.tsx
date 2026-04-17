@@ -147,6 +147,12 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
     refetchInterval: 30000,
   });
   const unreadSmsCount = unreadSmsData?.count || 0;
+
+  const { data: uninvoicedData } = useQuery<{ count: number; totalDollars: number }>({
+    queryKey: ["/api/company/uninvoiced-summary"],
+    refetchInterval: 60000,
+  });
+  const uninvoicedCount = uninvoicedData?.count || 0;
   const tours = getAvailableTours();
 
   const handleNavClick = () => {
@@ -250,6 +256,11 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
                               {item.title === "Messages" && unreadSmsCount > 0 && (
                                 <Badge variant="default" className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px]" data-testid="badge-sidebar-unread-sms">
                                   {unreadSmsCount > 99 ? "99+" : unreadSmsCount}
+                                </Badge>
+                              )}
+                              {item.title === "Invoices" && uninvoicedCount > 0 && (
+                                <Badge variant="secondary" className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300" data-testid="badge-sidebar-uninvoiced">
+                                  {uninvoicedCount > 99 ? "99+" : uninvoicedCount}
                                 </Badge>
                               )}
                             </Link>
