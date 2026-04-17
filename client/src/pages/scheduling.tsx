@@ -434,12 +434,17 @@ export default function Scheduling() {
   const tz = useCompanyTimezone();
   const { toast } = useToast();
   const { user: authUser } = useAuth();
-  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const saved = localStorage.getItem("scoopilot_sched_view_mode");
+    return (saved === "week" || saved === "day" || saved === "month") ? saved : "week";
+  });
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [prefilledContactId, setPrefilledContactId] = useState<string | null>(null);
   const [clientFilter, setClientFilter] = useState("");
-  const [showHiddenStatuses, setShowHiddenStatuses] = useState(false);
+  const [showHiddenStatuses, setShowHiddenStatuses] = useState(() =>
+    localStorage.getItem("scoopilot_sched_show_hidden") === "true"
+  );
   const [pendingVisitId, setPendingVisitId] = useState<string | null>(null);
   const isAdminOrOwner = authUser?.role === "owner" || authUser?.role === "admin";
 
@@ -465,6 +470,14 @@ export default function Scheduling() {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("scoopilot_sched_view_mode", viewMode); } catch {}
+  }, [viewMode]);
+
+  useEffect(() => {
+    try { localStorage.setItem("scoopilot_sched_show_hidden", String(showHiddenStatuses)); } catch {}
+  }, [showHiddenStatuses]);
 
   const dateRange = useMemo(() => {
     const d = new Date(currentDate);

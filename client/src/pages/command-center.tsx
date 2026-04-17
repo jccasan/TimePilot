@@ -236,6 +236,9 @@ export default function CommandCenter() {
 
   // Reset map loaded state when date changes
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState(() => {
+    try { return localStorage.getItem("scoopilot_cc_active_tab") ?? "overview"; } catch { return "overview"; }
+  });
   const [groupByTech, setGroupByTech] = useState<boolean>(() => {
     try {
       return localStorage.getItem("commandCenter.groupByTech") === "true";
@@ -243,17 +246,18 @@ export default function CommandCenter() {
       return false;
     }
   });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("commandCenter.groupByTech", String(groupByTech));
-    } catch {
-    }
-  }, [groupByTech]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   useEffect(() => {
     setMapLoaded(false);
   }, [selectedDateString]);
+
+  useEffect(() => {
+    try { localStorage.setItem("scoopilot_cc_active_tab", activeTab); } catch {}
+  }, [activeTab]);
+
+  useEffect(() => {
+    try { localStorage.setItem("commandCenter.groupByTech", String(groupByTech)); } catch {}
+  }, [groupByTech]);
 
   const visits = data?.visits ?? [];
   const stats = data?.stats;
@@ -391,7 +395,7 @@ export default function CommandCenter() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList data-testid="tabs-command-center">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="map" data-testid="tab-map">Route Map</TabsTrigger>

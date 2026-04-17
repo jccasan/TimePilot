@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -169,13 +169,20 @@ function SortButton({ field, currentField, currentDir, onSort }: {
 export default function Profitability() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  const [viewMode, setViewMode] = useState<ViewMode>("customers");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const saved = localStorage.getItem("scoopilot_profit_view_mode");
+    return (saved === "customers" || saved === "routes") ? saved : "customers";
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortField, setSortField] = useState<SortField>("profit");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try { localStorage.setItem("scoopilot_profit_view_mode", viewMode); } catch {}
+  }, [viewMode]);
 
   const { data: customers, isLoading } = useQuery<CustomerProfitability[]>({
     queryKey: ["/api/profitability/summary"],

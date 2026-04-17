@@ -179,7 +179,7 @@ function PaymentHistorySection({ invoiceId, invoiceTotal }: { invoiceId: string;
 
 function getInitialTab(): string {
   const params = new URLSearchParams(window.location.search);
-  return params.get("tab") || "all";
+  return params.get("tab") || localStorage.getItem("scoopilot_inv_status_filter") || "all";
 }
 
 export default function Invoices() {
@@ -216,8 +216,27 @@ export default function Invoices() {
 
   type SortField = "invoiceNumber" | "contact" | "dueDate" | "total" | "status" | "createdAt";
   type SortDir = "asc" | "desc";
-  const [sortField, setSortField] = useState<SortField>("createdAt");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortField, setSortField] = useState<SortField>(() => {
+    const saved = localStorage.getItem("scoopilot_inv_sort_field");
+    const valid: SortField[] = ["invoiceNumber", "contact", "dueDate", "total", "status", "createdAt"];
+    return (valid.includes(saved as SortField) ? saved as SortField : "createdAt");
+  });
+  const [sortDir, setSortDir] = useState<SortDir>(() =>
+    (localStorage.getItem("scoopilot_inv_sort_dir") as SortDir) || "desc"
+  );
+
+  useEffect(() => {
+    try { localStorage.setItem("scoopilot_inv_status_filter", statusFilter); } catch {}
+  }, [statusFilter]);
+
+  useEffect(() => {
+    try { localStorage.setItem("scoopilot_inv_sort_field", sortField); } catch {}
+  }, [sortField]);
+
+  useEffect(() => {
+    try { localStorage.setItem("scoopilot_inv_sort_dir", sortDir); } catch {}
+  }, [sortDir]);
+
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir(d => d === "asc" ? "desc" : "asc");
