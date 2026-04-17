@@ -440,6 +440,7 @@ export default function Scheduling() {
   const [prefilledContactId, setPrefilledContactId] = useState<string | null>(null);
   const [clientFilter, setClientFilter] = useState("");
   const [showHiddenStatuses, setShowHiddenStatuses] = useState(false);
+  const [pendingVisitId, setPendingVisitId] = useState<string | null>(null);
   const isAdminOrOwner = authUser?.role === "owner" || authUser?.role === "admin";
 
   useEffect(() => {
@@ -448,6 +449,19 @@ export default function Scheduling() {
       const cid = params.get("contactId") || null;
       setPrefilledContactId(cid);
       setDialogOpen(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    const vid = params.get("visitId");
+    const dateParam = params.get("date");
+    if (vid) {
+      setPendingVisitId(vid);
+      if (dateParam) {
+        const parsed = new Date(dateParam + "T12:00:00");
+        if (!isNaN(parsed.getTime())) {
+          setCurrentDate(parsed);
+          setViewMode("day");
+        }
+      }
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -483,6 +497,17 @@ export default function Scheduling() {
   const { data: team } = useQuery<TeamMember[]>({ queryKey: ["/api/company/team"] });
 
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
+
+  useEffect(() => {
+    if (pendingVisitId && visits) {
+      const found = visits.find(v => v.id === pendingVisitId);
+      if (found) {
+        setSelectedVisit(found);
+        setPendingVisitId(null);
+      }
+    }
+  }, [pendingVisitId, visits]);
+
   const [quickAddDate, setQuickAddDate] = useState<string | null>(null);
   const [quickAddPlanId, setQuickAddPlanId] = useState("");
   const [quickAddRouteId, setQuickAddRouteId] = useState("");

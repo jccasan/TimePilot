@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { format } from "date-fns";
 import {
   Calendar,
@@ -158,6 +158,7 @@ function TechLegend({ visits }: { visits: CommandCenterVisit[] }) {
 }
 
 export default function CommandCenter() {
+  const [, navigate] = useLocation();
   const today = new Date();
   const todayLabel = format(today, "EEEE, MMMM d");
 
@@ -304,7 +305,8 @@ export default function CommandCenter() {
                             <TableRow
                               key={v.id}
                               data-testid={`row-visit-${v.id}`}
-                              className={v.status === "completed" ? "opacity-60" : ""}
+                              className={`cursor-pointer hover:bg-muted/50 transition-colors${v.status === "completed" ? " opacity-60" : ""}`}
+                              onClick={() => navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`)}
                             >
                               <TableCell className="text-sm font-medium whitespace-nowrap">
                                 {formatTime(v.scheduledTime)}
