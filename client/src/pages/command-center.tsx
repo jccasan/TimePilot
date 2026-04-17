@@ -28,6 +28,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarUI } from "@/components/ui/calendar";
 
 interface CommandCenterVisit {
   id: string;
@@ -79,6 +81,13 @@ function formatTime(time?: string | null) {
   const ampm = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function toLocalDateString(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -196,21 +205,35 @@ function buildTechGroups(visits: CommandCenterVisit[]): TechGroup[] {
 
 export default function CommandCenter() {
   const [, navigate] = useLocation();
-  const today = new Date();
-  const todayLabel = format(today, "EEEE, MMMM d");
+  const todayDate = new Date();
+  const todayString = toLocalDateString(todayDate);
+
+  const [selectedDate, setSelectedDate] = useState<Date>(todayDate);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
+  const selectedDateString = toLocalDateString(selectedDate);
+  const isToday = selectedDateString === todayString;
+  const dateLabel = format(selectedDate, "EEEE, MMMM d");
 
   const { data, isLoading } = useQuery<CommandCenterStats>({
-    queryKey: ["/api/admin/command-center-stats"],
-    refetchInterval: 30000,
+    queryKey: ["/api/admin/command-center-stats", selectedDateString],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/command-center-stats?date=${selectedDateString}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    refetchInterval: isToday ? 30000 : false,
   });
 
-  // Map tab: auto-refresh tick every 60s
+  // Map tab: auto-refresh tick every 60s (only for today)
   const [mapTick, setMapTick] = useState(0);
   useEffect(() => {
+    if (!isToday) return;
     const id = setInterval(() => setMapTick(t => t + 1), 60000);
     return () => clearInterval(id);
-  }, []);
+  }, [isToday]);
 
+  // Reset map loaded state when date changes
   const [mapLoaded, setMapLoaded] = useState(false);
   const [groupByTech, setGroupByTech] = useState<boolean>(() => {
     try {
@@ -227,6 +250,9 @@ export default function CommandCenter() {
     }
   }, [groupByTech]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setMapLoaded(false);
+  }, [selectedDateString]);
 
   const visits = data?.visits ?? [];
   const stats = data?.stats;
@@ -258,26 +284,73 @@ export default function CommandCenter() {
     return `https://www.google.com/maps/dir/?api=1&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ""}`;
   }, [visits]);
 
+  const mapSrc = `/api/admin/daily-map?date=${selectedDateString}&t=${mapTick}`;
+
   return (
     <div className="p-6 space-y-6 max-w-screen-xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="heading-command-center">
             Command Center
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Company-wide view for {todayLabel}
+            Company-wide view for {dateLabel}
           </p>
         </div>
-        <Link href="/scheduling">
-          <a
-            className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-            data-testid="link-open-schedule"
-          >
-            Open Schedule <ArrowRight className="h-4 w-4" />
-          </a>
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date Picker */}
+          <div className="flex items-center gap-2">
+            {!isToday && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 text-sm"
+                onClick={() => setSelectedDate(todayDate)}
+                data-testid="button-today"
+              >
+                Today
+              </Button>
+            )}
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-2 text-sm font-normal min-w-[160px] justify-between"
+                  data-testid="button-date-picker"
+                >
+                  <span className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    {format(selectedDate, "MMM d, yyyy")}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end" data-testid="popover-calendar">
+                <CalendarUI
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(d) => {
+                    if (d) {
+                      setSelectedDate(d);
+                      setCalendarOpen(false);
+                    }
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+          <Link href="/scheduling">
+            <a
+              className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline h-9 px-1"
+              data-testid="link-open-schedule"
+            >
+              Open Schedule <ArrowRight className="h-4 w-4" />
+            </a>
+          </Link>
+        </div>
       </div>
 
       {/* Stat Cards */}
@@ -368,7 +441,7 @@ export default function CommandCenter() {
                     </div>
                   ) : visits.length === 0 ? (
                     <div className="py-12 text-center text-muted-foreground text-sm">
-                      No appointments scheduled for today
+                      No appointments scheduled for {isToday ? "today" : format(selectedDate, "MMM d")}
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
@@ -501,7 +574,9 @@ export default function CommandCenter() {
               {/* Today's Billing */}
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold">Today's Billing</CardTitle>
+                  <CardTitle className="text-base font-semibold">
+                    {isToday ? "Today's" : format(selectedDate, "MMM d") + "'s"} Billing
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {isLoading ? (
@@ -613,12 +688,14 @@ export default function CommandCenter() {
             <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base font-semibold flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                Today's Route Map
+                {isToday ? "Today's" : format(selectedDate, "MMM d") + "'s"} Route Map
               </CardTitle>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  Auto-refreshes every minute
-                </span>
+                {isToday && (
+                  <span className="text-xs text-muted-foreground">
+                    Auto-refreshes every minute
+                  </span>
+                )}
                 {googleMapsUrl && (
                   <Button
                     variant="outline"
@@ -638,7 +715,7 @@ export default function CommandCenter() {
             <CardContent className="p-4 pt-0">
               {visits.length === 0 && !isLoading ? (
                 <div className="py-16 text-center text-muted-foreground text-sm">
-                  No stops to show on the map today
+                  No stops to show on the map {isToday ? "today" : `for ${format(selectedDate, "MMM d")}`}
                 </div>
               ) : (
                 <>
@@ -647,9 +724,9 @@ export default function CommandCenter() {
                       <Skeleton className="absolute inset-0 rounded-lg" />
                     )}
                     <img
-                      key={mapTick}
-                      src={`/api/admin/daily-map?t=${mapTick}`}
-                      alt="Today's route map"
+                      key={`${selectedDateString}-${mapTick}`}
+                      src={mapSrc}
+                      alt="Route map"
                       className="w-full rounded-lg object-cover"
                       style={{ display: mapLoaded ? "block" : "none" }}
                       onLoad={() => setMapLoaded(true)}

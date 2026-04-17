@@ -976,7 +976,9 @@ export async function registerRoutes(
   app.get("/api/admin/command-center-stats", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const today = new Date().toISOString().split("T")[0];
+      const today = (typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date))
+        ? req.query.date
+        : new Date().toISOString().split("T")[0];
 
       const visitsList = await storage.getVisits(companyId, { date: today });
       const companyRoutes = await storage.getRoutes(companyId);
@@ -1065,7 +1067,9 @@ export async function registerRoutes(
       if (!apiKey) return res.status(503).json({ error: "Maps not configured" });
 
       const { companyId } = await getCompanyContext(req);
-      const today = new Date().toISOString().split("T")[0];
+      const today = (typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date))
+        ? req.query.date
+        : new Date().toISOString().split("T")[0];
       const visitsList = await storage.getVisits(companyId, { date: today });
 
       const addresses: string[] = [];
