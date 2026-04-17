@@ -96,6 +96,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
       text: options.text,
       html: options.html || options.text,
       replyTo,
+      trackingSettings: {
+        clickTracking: { enable: false, enableText: false },
+        openTracking: { enable: false },
+      },
     };
 
     if (Object.keys(headers).length > 0) {
