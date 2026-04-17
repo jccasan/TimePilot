@@ -953,6 +953,12 @@ export async function registerRoutes(
         params.append("markers", `label:${label}|color:0x2d8a5e|${addr}`);
       });
 
+      const techLat = req.query.techLat ? parseFloat(req.query.techLat as string) : null;
+      const techLng = req.query.techLng ? parseFloat(req.query.techLng as string) : null;
+      if (techLat !== null && techLng !== null && !isNaN(techLat) && !isNaN(techLng)) {
+        params.append("markers", `icon:https://maps.google.com/mapfiles/ms/icons/blue-dot.png|${techLat},${techLng}`);
+      }
+
       const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
       const response = await fetch(url);
       if (!response.ok) return res.status(502).json({ error: "Route map request failed" });

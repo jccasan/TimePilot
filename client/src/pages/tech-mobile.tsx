@@ -148,6 +148,7 @@ export default function TechMobile() {
   const offline = useOffline();
   const [viewMode, setViewMode] = useState<"start-day" | "route">("start-day");
   const [showMapOverlay, setShowMapOverlay] = useState(false);
+  const [techPosition, setTechPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [uploadingVisitId, setUploadingVisitId] = useState<string | null>(null);
@@ -284,8 +285,26 @@ export default function TechMobile() {
     if (addrs.length === 0) return null;
     const params = new URLSearchParams();
     addrs.slice(0, 25).forEach(a => params.append("address", a));
+    if (techPosition) {
+      params.set("techLat", techPosition.lat.toString());
+      params.set("techLng", techPosition.lng.toString());
+    }
     return `/api/tech/route-map?${params.toString()}`;
-  }, [visits]);
+  }, [visits, techPosition]);
+
+  useEffect(() => {
+    if (!showMapOverlay) return;
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setTechPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {
+        // Permission denied or unavailable — proceed without position dot
+      },
+      { timeout: 8000, maximumAge: 60000 }
+    );
+  }, [showMapOverlay]);
 
   useEffect(() => {
     if (visits && visits.some(v => v.status === "in_progress")) {
