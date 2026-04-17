@@ -272,6 +272,12 @@ export default function TechMobile() {
 
   const allVisitsFlat = useMemo(() => visits || [], [visits]);
 
+  const nextUncompletedVisit = useMemo(() =>
+    allVisitsFlat.find(
+      v => v.status !== "completed" && v.status !== "cancelled" && v.status !== "skipped" && v.property?.streetAddress
+    ) ?? null
+  , [allVisitsFlat]);
+
   const totalVisitCount = allVisitsFlat.length;
   const completedVisitCount = allVisitsFlat.filter(v => v.status === "completed" || v.status === "skipped" || v.status === "cancelled").length;
   const remainingCount = totalVisitCount - completedVisitCount;
@@ -322,6 +328,19 @@ export default function TechMobile() {
       const key = firstStop.propertyId || firstStop.id;
       setExpandedId(key);
     }
+  };
+
+  const getNavigateUrl = (streetAddress: string, city: string, state: string) => {
+    const address = `${streetAddress}, ${city}, ${state}`;
+    const encoded = encodeURIComponent(address);
+    const ua = navigator.userAgent;
+    if (/iPad|iPhone|iPod/.test(ua)) {
+      return `maps://maps.apple.com/?daddr=${encoded}`;
+    }
+    if (/Android/.test(ua)) {
+      return `geo:0,0?q=${encoded}`;
+    }
+    return `https://www.google.com/maps/dir/?api=1&destination=${encoded}`;
   };
 
   const googleMapsDirectionsUrl = useMemo(() => {
@@ -762,6 +781,27 @@ export default function TechMobile() {
             Start Route
             <ArrowRight className="h-5 w-5" />
           </Button>
+          {nextUncompletedVisit?.property && (
+            <Button
+              variant="outline"
+              className="w-full h-10 gap-2"
+              asChild
+              data-testid="button-navigate-first-stop"
+            >
+              <a
+                href={getNavigateUrl(
+                  nextUncompletedVisit.property.streetAddress,
+                  nextUncompletedVisit.property.city,
+                  nextUncompletedVisit.property.state
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Navigation className="h-4 w-4" />
+                Navigate to First Stop
+              </a>
+            </Button>
+          )}
           {googleMapsDirectionsUrl && (
             <Button
               variant="outline"
@@ -982,6 +1022,26 @@ export default function TechMobile() {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                      {nextUncompletedVisit?.property && (
+                        <Button
+                          variant="outline"
+                          className="min-h-[44px]"
+                          asChild
+                          data-testid={`button-navigate-${primaryVisit.id}`}
+                        >
+                          <a
+                            href={getNavigateUrl(
+                              nextUncompletedVisit.property.streetAddress,
+                              nextUncompletedVisit.property.city,
+                              nextUncompletedVisit.property.state
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Navigation className="mr-1 h-4 w-4" /> Navigate
+                          </a>
+                        </Button>
+                      )}
                       {primaryVisit.status !== "completed" && primaryVisit.status !== "cancelled" && (
                         <Button
                           variant="outline"
