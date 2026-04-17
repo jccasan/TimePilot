@@ -38,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import RouteMapView from "@/components/route-map-view";
+const RouteMapView = lazy(() => import("@/components/route-map-view"));
 const FieldView = lazy(() => import("@/pages/field-view"));
 
 interface CommandCenterVisit {
@@ -812,14 +812,16 @@ export default function CommandCenter() {
               ) : (
                 <>
                   <div className="rounded-lg overflow-hidden border bg-muted" style={{ height: 400 }} data-testid="container-daily-map">
-                    <RouteMapView
-                      stops={mapStops}
-                      routeName={isToday ? "Today's Route" : format(selectedDate, "MMM d")}
-                      onStopClick={(stopNumber) => {
-                        const v = validVisitsForMap[stopNumber - 1];
-                        if (v) navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`);
-                      }}
-                    />
+                    <Suspense fallback={<Skeleton className="h-full w-full" />}>
+                      <RouteMapView
+                        stops={mapStops}
+                        routeName={isToday ? "Today's Route" : format(selectedDate, "MMM d")}
+                        onStopClick={(stopNumber) => {
+                          const v = validVisitsForMap[stopNumber - 1];
+                          if (v) navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`);
+                        }}
+                      />
+                    </Suspense>
                   </div>
                   <TechLegend visits={visits} />
                   {/* Clickable stop list — labels match the numbered markers on the map */}

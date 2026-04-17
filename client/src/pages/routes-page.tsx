@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
@@ -45,8 +45,10 @@ import { Link } from "wouter";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
-import RouteMapView, { type RouteStop } from "@/components/route-map-view";
-import { ServiceZoneMap, type ZoneEntry } from "@/components/service-zone-map";
+import type { RouteStop } from "@/components/route-map-view";
+import type { ZoneEntry } from "@/components/service-zone-map";
+const RouteMapView = lazy(() => import("@/components/route-map-view"));
+const ServiceZoneMap = lazy(() => import("@/components/service-zone-map"));
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, TouchSensor,
   useSensor, useSensors, useDroppable, useDraggable,
@@ -1747,10 +1749,12 @@ export default function RoutesPage() {
         </div>
       ) : viewMode === "map" ? (
         <div className="flex-1 overflow-hidden" data-testid="route-map-view-wrapper">
-          <RouteMapView
-            stops={mapStops}
-            routeName={`${DAY_LABELS[selectedDay]} Routes`}
-          />
+          <Suspense fallback={<Skeleton className="h-full w-full" />}>
+            <RouteMapView
+              stops={mapStops}
+              routeName={`${DAY_LABELS[selectedDay]} Routes`}
+            />
+          </Suspense>
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter}
@@ -2695,11 +2699,13 @@ function ServiceZonesPanel() {
           <Skeleton className="h-[200px] w-full" />
         ) : (
           <>
-            <ServiceZoneMap
-              zones={zones}
-              onZonesChange={handleZonesChange}
-              compact
-            />
+            <Suspense fallback={<Skeleton className="h-[200px] w-full" />}>
+              <ServiceZoneMap
+                zones={zones}
+                onZonesChange={handleZonesChange}
+                compact
+              />
+            </Suspense>
             {hasChanges && (
               <Button
                 className="w-full mt-3"

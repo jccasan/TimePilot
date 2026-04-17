@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed, Navigation, ShieldAlert, Dog, Map, MapPin, Clock, ArrowRight, Flag, BarChart2 } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
-import RouteMapView from "@/components/route-map-view";
+const RouteMapView = lazy(() => import("@/components/route-map-view"));
 import { SatelliteImage } from "@/components/satellite-image";
 import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
 import { useOffline } from "@/hooks/use-offline";
@@ -840,7 +840,9 @@ export default function TechMobile() {
         {/* Route map */}
         {techMapStops.length > 0 && (
           <div className="rounded-lg overflow-hidden border bg-muted" style={{ height: 220 }} data-testid="container-route-map">
-            <RouteMapView stops={techMapStops} routeName="My Route" />
+            <Suspense fallback={<div className="h-full bg-muted animate-pulse" />}>
+              <RouteMapView stops={techMapStops} routeName="My Route" />
+            </Suspense>
           </div>
         )}
 
@@ -1465,7 +1467,9 @@ export default function TechMobile() {
         <div className="space-y-3">
           {techMapStops.length > 0 && (
             <div className="rounded-lg overflow-hidden border bg-muted" style={{ height: 220 }} data-testid="container-map-overlay-img">
-              <RouteMapView stops={techMapStops} routeName="My Route" />
+              <Suspense fallback={<div className="h-full bg-muted animate-pulse" />}>
+                <RouteMapView stops={techMapStops} routeName="My Route" />
+              </Suspense>
             </div>
           )}
           <div className="space-y-1.5 max-h-48 overflow-y-auto" data-testid="list-overlay-stops">
