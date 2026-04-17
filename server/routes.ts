@@ -923,55 +923,6 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/tech/route-map", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) return res.status(503).json({ error: "Maps not configured" });
-
-      let addresses: string[] = [];
-      if (Array.isArray(req.query.address)) {
-        addresses = req.query.address as string[];
-      } else if (req.query.address) {
-        addresses = [req.query.address as string];
-      }
-      if (addresses.length === 0) return res.status(400).json({ error: "No addresses provided" });
-
-      const allowedSizes = ["640x240", "640x300", "640x400"];
-      const safeSize = allowedSizes.includes(req.query.size as string) ? (req.query.size as string) : "640x300";
-
-      const params = new URLSearchParams({
-        size: safeSize,
-        maptype: "roadmap",
-        scale: "2",
-        key: apiKey,
-        style: "feature:poi|visibility:off",
-      });
-
-      const LABELS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-      addresses.slice(0, 25).forEach((addr, i) => {
-        const label = i < LABELS.length ? LABELS[i] : String(i + 1);
-        params.append("markers", `label:${label}|color:0x2d8a5e|${addr}`);
-      });
-
-      const techLat = req.query.techLat ? parseFloat(req.query.techLat as string) : null;
-      const techLng = req.query.techLng ? parseFloat(req.query.techLng as string) : null;
-      if (techLat !== null && techLng !== null && !isNaN(techLat) && !isNaN(techLng)) {
-        params.append("markers", `icon:https://maps.google.com/mapfiles/ms/icons/blue-dot.png|${techLat},${techLng}`);
-      }
-
-      const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
-      const response = await fetch(url);
-      if (!response.ok) return res.status(502).json({ error: "Route map request failed" });
-
-      res.set("Content-Type", response.headers.get("content-type") || "image/png");
-      res.set("Cache-Control", "public, max-age=300");
-      const buffer = Buffer.from(await response.arrayBuffer());
-      res.send(buffer);
-    } catch (err) {
-      handleError(res, err);
-    }
-  });
-
   // Admin: fetch all today's visit data + billing summary
   app.get("/api/admin/command-center-stats", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -1059,54 +1010,6 @@ export async function registerRoutes(
       };
 
       res.json({ visits: enriched, stats, billing });
-    } catch (err) { handleError(res, err); }
-  });
-
-  // Admin: proxy Google Maps Static API image for all today's stops
-  app.get("/api/admin/daily-map", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) return res.status(503).json({ error: "Maps not configured" });
-
-      const { companyId } = await getCompanyContext(req);
-      const today = (typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date))
-        ? req.query.date
-        : new Date().toISOString().split("T")[0];
-      const visitsList = await storage.getVisits(companyId, { date: today });
-
-      const addresses: string[] = [];
-      for (const v of visitsList) {
-        const prop = await storage.getProperty(v.propertyId, companyId);
-        if (prop?.streetAddress) {
-          const addr = [prop.streetAddress, prop.city, prop.state].filter(Boolean).join(", ");
-          addresses.push(addr);
-        }
-      }
-
-      if (addresses.length === 0) return res.status(204).end();
-
-      const params = new URLSearchParams({
-        size: "640x400",
-        maptype: "roadmap",
-        scale: "2",
-        key: apiKey,
-        style: "feature:poi|visibility:off",
-      });
-
-      const LABELS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-      addresses.slice(0, 25).forEach((addr, i) => {
-        const label = i < LABELS.length ? LABELS[i] : String(i + 1);
-        params.append("markers", `label:${label}|color:0x2d8a5e|${addr}`);
-      });
-
-      const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
-      const response = await fetch(url);
-      if (!response.ok) return res.status(502).json({ error: "Map request failed" });
-
-      res.set("Content-Type", response.headers.get("content-type") || "image/png");
-      res.set("Cache-Control", "public, max-age=300");
-      const buffer = Buffer.from(await response.arrayBuffer());
-      res.send(buffer);
     } catch (err) { handleError(res, err); }
   });
 
