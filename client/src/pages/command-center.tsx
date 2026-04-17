@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock,
   ArrowRight,
+  ExternalLink,
   MapPin,
   Users,
   Navigation,
@@ -735,6 +736,52 @@ export default function CommandCenter() {
                     />
                   </div>
                   <TechLegend visits={visits} />
+                  {/* Clickable stop list — labels match the numbered markers on the map */}
+                  {visits.filter(v => v.property?.streetAddress).length > 0 && (
+                    <div className="mt-4 space-y-1">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                        Stops — click to open details
+                      </p>
+                      {visits
+                        .filter(v => v.property?.streetAddress)
+                        .map((v, idx) => {
+                          const label = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[idx] ?? String(idx + 1);
+                          const customerName = v.contact
+                            ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() || "—"
+                            : "—";
+                          const address = [v.property?.streetAddress, v.property?.city]
+                            .filter(Boolean)
+                            .join(", ");
+                          return (
+                            <button
+                              key={v.id}
+                              data-testid={`map-stop-${v.id}`}
+                              onClick={() => navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`)}
+                              className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-left hover:bg-muted/60 transition-colors group"
+                            >
+                              <span className="flex-shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                                {label}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <span className="text-sm font-medium group-hover:text-primary transition-colors">
+                                  {customerName}
+                                </span>
+                                {address && (
+                                  <span className="text-xs text-muted-foreground ml-2">{address}</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <StatusBadge status={v.status} />
+                                {v.scheduledTime && (
+                                  <span className="text-xs text-muted-foreground">{formatTime(v.scheduledTime)}</span>
+                                )}
+                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  )}
                 </>
               )}
             </CardContent>
