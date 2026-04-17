@@ -162,6 +162,7 @@ function ScheduleJobForm({
   properties,
   team,
   services,
+  initialContactId,
 }: {
   onSubmit: (data: JobFormPayload) => void;
   isPending: boolean;
@@ -169,10 +170,11 @@ function ScheduleJobForm({
   properties: Property[];
   team: TeamMember[];
   services: ServicePricingItem[];
+  initialContactId?: string | null;
 }) {
   const tz = useCompanyTimezone();
   const [jobType, setJobType] = useState<string>("recurring");
-  const [contactId, setContactId] = useState("");
+  const [contactId, setContactId] = useState(initialContactId || "");
   const [propertyId, setPropertyId] = useState("");
   const [selectedServices, setSelectedServices] = useState<Array<{ id: string; name: string; price: string }>>([]);
   const [addServiceId, setAddServiceId] = useState("");
@@ -435,6 +437,7 @@ export default function Scheduling() {
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [prefilledContactId, setPrefilledContactId] = useState<string | null>(null);
   const [clientFilter, setClientFilter] = useState("");
   const [showHiddenStatuses, setShowHiddenStatuses] = useState(false);
   const isAdminOrOwner = authUser?.role === "owner" || authUser?.role === "admin";
@@ -442,6 +445,8 @@ export default function Scheduling() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("addJob") === "1") {
+      const cid = params.get("contactId") || null;
+      setPrefilledContactId(cid);
       setDialogOpen(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -661,19 +666,21 @@ export default function Scheduling() {
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold" data-testid="text-scheduling-heading">Scheduling</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setPrefilledContactId(null); }}>
           <DialogTrigger asChild>
             <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Add Job</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Add Job</DialogTitle></DialogHeader>
             <ScheduleJobForm
+              key={prefilledContactId || "none"}
               onSubmit={(data) => createMutation.mutate(data)}
               isPending={createMutation.isPending}
               contacts={contacts || []}
               properties={properties || []}
               team={team || []}
               services={pricingItems || []}
+              initialContactId={prefilledContactId}
             />
           </DialogContent>
         </Dialog>

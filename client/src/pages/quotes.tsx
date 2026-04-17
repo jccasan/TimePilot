@@ -117,6 +117,7 @@ export default function Quotes() {
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
+  const [prefilledContactId, setPrefilledContactId] = useState<string | null>(null);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const searchString = useSearch();
 
@@ -124,6 +125,8 @@ export default function Quotes() {
     const params = new URLSearchParams(searchString);
     if (params.get("create") === "true") {
       setEditingQuote(null);
+      const cid = params.get("contactId") || null;
+      setPrefilledContactId(cid);
       setDialogOpen(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -460,9 +463,13 @@ export default function Quotes() {
 
       <CreateEditQuoteDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) setPrefilledContactId(null);
+        }}
         quote={editingQuote}
         contacts={contacts}
+        prefilledContactId={prefilledContactId}
       />
 
       <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
@@ -528,11 +535,12 @@ export default function Quotes() {
   );
 }
 
-function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
+function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts, prefilledContactId }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   quote: Quote | null;
   contacts: Contact[];
+  prefilledContactId?: string | null;
 }) {
   const tz = useCompanyTimezone();
   const { toast } = useToast();
@@ -625,7 +633,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       }
     } else {
       setQuoteType("residential");
-      setContactId("");
+      setContactId(prefilledContactId || "");
       setPropertyId("");
       setContactName("");
       setContactEmail("");
@@ -708,6 +716,17 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
     }
   };
 
+  useEffect(() => {
+    if (!quote && prefilledContactId && contacts.length > 0) {
+      const contact = contacts.find(c => c.id === prefilledContactId);
+      if (contact) {
+        setContactName(`${contact.firstName} ${contact.lastName}`.trim());
+        setContactEmail(contact.email || "");
+        setContactPhone(contact.phone || "");
+      }
+    }
+  }, [prefilledContactId, contacts, quote]);
+
   const handlePropertySelect = (id: string) => {
     setPropertyId(id);
     const prop = contactProperties?.find(p => p.id === id);
@@ -786,10 +805,31 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts }: {
       const res = await apiRequest("POST", "/api/quotes", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: async (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      if (!isEdit) {
+        const cId = variables.contactId as string | null;
+        if (cId) {
+          const contact = contacts.find(c => c.id === cId);
+          if (contact?.status === "lead") {
+            try {
+              await apiRequest("PATCH", `/api/contacts/${cId}`, { status: "estimate" });
+              queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+              toast({ title: "Quote created", description: `${contact.firstName}'s status updated to Estimate.` });
+            } catch {
+              toast({ title: "Quote created" });
+            }
+          } else {
+            toast({ title: "Quote created" });
+          }
+        } else {
+          toast({ title: "Quote created" });
+        }
+      } else {
+        toast({ title: "Quote updated" });
+      }
       onOpenChange(false);
-      toast({ title: isEdit ? "Quote updated" : "Quote created" });
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
