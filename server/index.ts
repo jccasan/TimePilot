@@ -1497,6 +1497,61 @@ async function seedPoopScoopDemoData() {
   }
 }
 
+async function backfillPropertyCoordinates() {
+  const { Pool } = await import("pg");
+  const { geocodeAddress } = await import("./services/geocode");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    // Use an advisory lock so only one instance runs the backfill at a time.
+    // hashtext produces a stable 32-bit int from the string key.
+    const lockResult = await pool.query<{ acquired: boolean }>(
+      `SELECT pg_try_advisory_lock(hashtext('property_geocode_backfill')) AS acquired`
+    );
+    if (!lockResult.rows[0]?.acquired) {
+      console.log("[Geocode Backfill] Another instance is running backfill — skipping");
+      return;
+    }
+    try {
+      const { rows } = await pool.query<{
+        id: string;
+        street_address: string;
+        city: string | null;
+        state: string | null;
+        zip_code: string | null;
+      }>(
+        `SELECT id, street_address, city, state, zip_code FROM properties WHERE street_address IS NOT NULL AND street_address <> '' AND (latitude IS NULL OR longitude IS NULL)`
+      );
+      if (rows.length === 0) {
+        console.log("[Geocode Backfill] No properties missing coordinates");
+        return;
+      }
+      console.log(`[Geocode Backfill] Found ${rows.length} properties missing coordinates, geocoding now...`);
+      let geocoded = 0;
+      for (const row of rows) {
+        try {
+          const coords = await geocodeAddress(row.street_address, row.city, row.state, row.zip_code);
+          if (coords) {
+            await pool.query(
+              `UPDATE properties SET latitude = $1, longitude = $2, updated_at = NOW() WHERE id = $3`,
+              [coords.latitude, coords.longitude, row.id]
+            );
+            geocoded++;
+          }
+        } catch {
+          // Skip individual failures silently
+        }
+      }
+      console.log(`[Geocode Backfill] Geocoded ${geocoded} of ${rows.length} properties`);
+    } finally {
+      await pool.query(`SELECT pg_advisory_unlock(hashtext('property_geocode_backfill'))`);
+    }
+  } catch (err) {
+    console.error("[Geocode Backfill] Failed:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
@@ -1549,6 +1604,10 @@ async function seedPoopScoopDemoData() {
           console.log("[QBO CDC] QBO not configured, skipping CDC polling");
         }
       }).catch(err => console.error("[QBO CDC] Failed to initialize CDC polling:", err));
+
+      backfillPropertyCoordinates().catch(err =>
+        console.error("[Geocode Backfill] Unexpected error:", err)
+      );
     },
   );
 })();

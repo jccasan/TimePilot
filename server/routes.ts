@@ -3859,7 +3859,28 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getProperty(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Property not found" });
-      const property = await storage.updateProperty(req.params.id, companyId, req.body);
+      const addressChanged =
+        (req.body.streetAddress !== undefined && req.body.streetAddress !== existing.streetAddress) ||
+        (req.body.city !== undefined && req.body.city !== existing.city) ||
+        (req.body.state !== undefined && req.body.state !== existing.state) ||
+        (req.body.zipCode !== undefined && req.body.zipCode !== existing.zipCode);
+      const updateData = { ...req.body };
+      if (addressChanged) {
+        const merged = {
+          streetAddress: req.body.streetAddress ?? existing.streetAddress,
+          city: req.body.city ?? existing.city,
+          state: req.body.state ?? existing.state,
+          zipCode: req.body.zipCode ?? existing.zipCode,
+        };
+        if (merged.streetAddress) {
+          const coords = await geocodeAddress(merged.streetAddress, merged.city, merged.state, merged.zipCode);
+          if (coords) {
+            updateData.latitude = coords.latitude;
+            updateData.longitude = coords.longitude;
+          }
+        }
+      }
+      const property = await storage.updateProperty(req.params.id, companyId, updateData);
       res.json(property);
     } catch (err) { handleError(res, err); }
   });
