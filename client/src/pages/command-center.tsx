@@ -8,10 +8,12 @@ import {
   CheckCircle2,
   Clock,
   ArrowRight,
-  ExternalLink,
   MapPin,
   Users,
   Navigation,
+  ChevronDown,
+  ChevronRight,
+  List,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -157,6 +159,41 @@ function TechLegend({ visits }: { visits: CommandCenterVisit[] }) {
   );
 }
 
+interface TechGroup {
+  techName: string;
+  visits: CommandCenterVisit[];
+  totalRevenue: number;
+}
+
+function buildTechGroups(visits: CommandCenterVisit[]): TechGroup[] {
+  const map = new Map<string, CommandCenterVisit[]>();
+  visits.forEach(v => {
+    const key = v.techName ?? "Unassigned";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(v);
+  });
+  const groups: TechGroup[] = [];
+  Array.from(map.entries()).forEach(([techName, techVisits]) => {
+    if (techName !== "Unassigned") {
+      groups.push({
+        techName,
+        visits: techVisits,
+        totalRevenue: techVisits.reduce((sum: number, v: CommandCenterVisit) => sum + parseFloat(v.pricePerVisit || "0"), 0),
+      });
+    }
+  });
+  groups.sort((a, b) => a.techName.localeCompare(b.techName));
+  if (map.has("Unassigned")) {
+    const uVisits = map.get("Unassigned")!;
+    groups.push({
+      techName: "Unassigned",
+      visits: uVisits,
+      totalRevenue: uVisits.reduce((sum: number, v: CommandCenterVisit) => sum + parseFloat(v.pricePerVisit || "0"), 0),
+    });
+  }
+  return groups;
+}
+
 export default function CommandCenter() {
   const [, navigate] = useLocation();
   const today = new Date();
@@ -175,10 +212,23 @@ export default function CommandCenter() {
   }, []);
 
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [groupByTech, setGroupByTech] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const visits = data?.visits ?? [];
   const stats = data?.stats;
   const billing = data?.billing;
+
+  const techGroups = useMemo(() => buildTechGroups(visits), [visits]);
+
+  function toggleGroup(techName: string) {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(techName)) next.delete(techName);
+      else next.add(techName);
+      return next;
+    });
+  }
 
   const upcomingVisits = useMemo(
     () => visits.filter(v => v.status === "scheduled").slice(0, 3),
@@ -267,14 +317,34 @@ export default function CommandCenter() {
             <div className="flex-1 min-w-0">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    All Appointments
-                    {!isLoading && (
-                      <Badge variant="secondary" className="text-xs font-normal">
-                        {visits.length}
-                      </Badge>
-                    )}
-                  </CardTitle>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      All Appointments
+                      {!isLoading && (
+                        <Badge variant="secondary" className="text-xs font-normal">
+                          {visits.length}
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <div className="flex items-center rounded-md border overflow-hidden text-xs font-medium">
+                      <button
+                        className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${!groupByTech ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"}`}
+                        onClick={() => setGroupByTech(false)}
+                        data-testid="toggle-flat-list"
+                      >
+                        <List className="h-3.5 w-3.5" />
+                        Flat list
+                      </button>
+                      <button
+                        className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${groupByTech ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"}`}
+                        onClick={() => setGroupByTech(true)}
+                        data-testid="toggle-by-technician"
+                      >
+                        <Users className="h-3.5 w-3.5" />
+                        By technician
+                      </button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   {isLoading ? (
@@ -295,49 +365,116 @@ export default function CommandCenter() {
                             <TableHead className="w-20">Time</TableHead>
                             <TableHead>Customer</TableHead>
                             <TableHead className="hidden md:table-cell">Service</TableHead>
-                            <TableHead className="hidden md:table-cell">Technician</TableHead>
+                            {!groupByTech && (
+                              <TableHead className="hidden md:table-cell">Technician</TableHead>
+                            )}
                             <TableHead>Status</TableHead>
                             <TableHead className="hidden sm:table-cell text-right">Amount</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {visits.map(v => (
-                            <TableRow
-                              key={v.id}
-                              data-testid={`row-visit-${v.id}`}
-                              className={`cursor-pointer hover:bg-muted/50 transition-colors${v.status === "completed" ? " opacity-60" : ""}`}
-                              onClick={() => navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`)}
-                            >
-                              <TableCell className="text-sm font-medium whitespace-nowrap">
-                                {formatTime(v.scheduledTime)}
-                              </TableCell>
-                              <TableCell>
-                                <div className="font-medium text-sm leading-tight">
-                                  {v.contact
-                                    ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() || "—"
-                                    : "—"}
-                                </div>
-                                {v.property?.streetAddress && (
-                                  <div className="text-xs text-muted-foreground truncate max-w-[180px]">
-                                    {v.property.streetAddress}
-                                    {v.property.city ? `, ${v.property.city}` : ""}
+                          {groupByTech ? (
+                            techGroups.map(group => {
+                              const isCollapsed = collapsedGroups.has(group.techName);
+                              return (
+                                <>
+                                  <TableRow
+                                    key={`group-${group.techName}`}
+                                    className="bg-muted/60 dark:bg-muted/30 hover:bg-muted/80 dark:hover:bg-muted/50 cursor-pointer select-none"
+                                    onClick={() => toggleGroup(group.techName)}
+                                    data-testid={`group-header-${group.techName.toLowerCase().replace(/\s+/g, "-")}`}
+                                  >
+                                    <TableCell colSpan={5} className="py-2.5 font-semibold text-sm">
+                                      <div className="flex items-center gap-2">
+                                        {isCollapsed
+                                          ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                                          : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                                        }
+                                        <span>{group.techName}</span>
+                                        <span className="font-normal text-muted-foreground text-xs">
+                                          · {group.visits.length} stop{group.visits.length !== 1 ? "s" : ""}
+                                          {" · "}
+                                          {formatCurrency(group.totalRevenue)}
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                  {!isCollapsed && group.visits.map(v => (
+                                    <TableRow
+                                      key={v.id}
+                                      data-testid={`row-visit-${v.id}`}
+                                      className={`cursor-pointer hover:bg-muted/50 transition-colors${v.status === "completed" ? " opacity-60" : ""}`}
+                                      onClick={() => navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`)}
+                                    >
+                                      <TableCell className="text-sm font-medium whitespace-nowrap">
+                                        {formatTime(v.scheduledTime)}
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="font-medium text-sm leading-tight">
+                                          {v.contact
+                                            ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() || "—"
+                                            : "—"}
+                                        </div>
+                                        {v.property?.streetAddress && (
+                                          <div className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                            {v.property.streetAddress}
+                                            {v.property.city ? `, ${v.property.city}` : ""}
+                                          </div>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                                        {v.servicePlanName ?? "—"}
+                                      </TableCell>
+                                      <TableCell>
+                                        <StatusBadge status={v.status} />
+                                      </TableCell>
+                                      <TableCell className="hidden sm:table-cell text-right text-sm font-medium">
+                                        {formatCurrency(parseFloat(v.pricePerVisit || "0"))}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </>
+                              );
+                            })
+                          ) : (
+                            visits.map(v => (
+                              <TableRow
+                                key={v.id}
+                                data-testid={`row-visit-${v.id}`}
+                                className={`cursor-pointer hover:bg-muted/50 transition-colors${v.status === "completed" ? " opacity-60" : ""}`}
+                                onClick={() => navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`)}
+                              >
+                                <TableCell className="text-sm font-medium whitespace-nowrap">
+                                  {formatTime(v.scheduledTime)}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="font-medium text-sm leading-tight">
+                                    {v.contact
+                                      ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() || "—"
+                                      : "—"}
                                   </div>
-                                )}
-                              </TableCell>
-                              <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                                {v.servicePlanName ?? "—"}
-                              </TableCell>
-                              <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                                {v.techName ?? <span className="italic">Unassigned</span>}
-                              </TableCell>
-                              <TableCell>
-                                <StatusBadge status={v.status} />
-                              </TableCell>
-                              <TableCell className="hidden sm:table-cell text-right text-sm font-medium">
-                                {formatCurrency(parseFloat(v.pricePerVisit || "0"))}
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                                  {v.property?.streetAddress && (
+                                    <div className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                      {v.property.streetAddress}
+                                      {v.property.city ? `, ${v.property.city}` : ""}
+                                    </div>
+                                  )}
+                                </TableCell>
+                                <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                                  {v.servicePlanName ?? "—"}
+                                </TableCell>
+                                <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                                  {v.techName ?? <span className="italic">Unassigned</span>}
+                                </TableCell>
+                                <TableCell>
+                                  <StatusBadge status={v.status} />
+                                </TableCell>
+                                <TableCell className="hidden sm:table-cell text-right text-sm font-medium">
+                                  {formatCurrency(parseFloat(v.pricePerVisit || "0"))}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
                         </TableBody>
                       </Table>
                     </div>
