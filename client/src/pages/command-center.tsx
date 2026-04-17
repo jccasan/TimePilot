@@ -30,7 +30,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarUI } from "@/components/ui/calendar";
+const CalendarUI = lazy(() =>
+  import("@/components/ui/calendar").then((m) => ({ default: m.Calendar }))
+);
 import {
   Select,
   SelectContent,
@@ -402,17 +404,19 @@ export default function CommandCenter() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end" data-testid="popover-calendar">
-                <CalendarUI
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={(d) => {
-                    if (d) {
-                      setSelectedDate(d);
-                      setCalendarOpen(false);
-                    }
-                  }}
-                  initialFocus
-                />
+                <Suspense fallback={<Skeleton className="h-[280px] w-[280px]" />}>
+                  <CalendarUI
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(d) => {
+                      if (d) {
+                        setSelectedDate(d);
+                        setCalendarOpen(false);
+                      }
+                    }}
+                    initialFocus
+                  />
+                </Suspense>
               </PopoverContent>
             </Popover>
           </div>
