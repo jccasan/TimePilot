@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import RouteMapView from "@/components/route-map-view";
+import FieldView from "@/pages/field-view";
 
 interface CommandCenterVisit {
   id: string;
@@ -467,6 +468,7 @@ export default function CommandCenter() {
         <TabsList data-testid="tabs-command-center">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="map" data-testid="tab-map">Route Map</TabsTrigger>
+          <TabsTrigger value="live-map" data-testid="tab-live-map">Live Field Map</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -870,6 +872,13 @@ export default function CommandCenter() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Live Field Map Tab */}
+        <TabsContent value="live-map" className="mt-4">
+          <div className="rounded-lg overflow-hidden border" style={{ height: 680 }} data-testid="container-live-field-map">
+            <FieldView />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
