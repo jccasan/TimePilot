@@ -177,6 +177,7 @@ export default function TechMobile() {
   const [showMapOverlay, setShowMapOverlay] = useState(false);
   const [techPosition, setTechPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [driveInfo, setDriveInfo] = useState<Map<string, { durationText: string; distanceText: string } | null>>(new Map());
+  const [nextStopDriveInfo, setNextStopDriveInfo] = useState<{ visitId: string; durationText: string; distanceText: string } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [uploadingVisitId, setUploadingVisitId] = useState<string | null>(null);
@@ -333,7 +334,7 @@ export default function TechMobile() {
   }, [visits, techPosition]);
 
   useEffect(() => {
-    if (!showMapOverlay) return;
+    if (!showMapOverlay && viewMode !== "route") return;
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -347,7 +348,45 @@ export default function TechMobile() {
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [showMapOverlay]);
+  }, [showMapOverlay, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "route" || !techPosition) return;
+    // Identify next incomplete stop by status only — do NOT skip based on missing coords.
+    // If that stop lacks coordinates, fall back gracefully for that stop rather than
+    // showing drive time for a different (later) stop.
+    const nextVisit = allVisitsFlat.find(
+      v =>
+        v.status !== "completed" &&
+        v.status !== "skipped" &&
+        v.status !== "cancelled"
+    );
+    if (!nextVisit) {
+      setNextStopDriveInfo(null);
+      return;
+    }
+    // Graceful fallback: next stop has no geocoded coordinates — nothing to show.
+    if (nextVisit.property?.latitude == null || nextVisit.property?.longitude == null) {
+      setNextStopDriveInfo(null);
+      return;
+    }
+    apiRequest("POST", "/api/tech/distances", {
+      originLat: techPosition.lat,
+      originLng: techPosition.lng,
+      destinations: [{ lat: nextVisit.property!.latitude!, lng: nextVisit.property!.longitude! }],
+    })
+      .then(res => res.json())
+      .then((data: { results?: (null | { durationText: string; distanceText: string })[], fallback?: boolean }) => {
+        if (data.results?.[0]) {
+          setNextStopDriveInfo({ visitId: nextVisit.id, ...data.results[0] });
+        } else {
+          setNextStopDriveInfo(null);
+        }
+      })
+      .catch(() => {
+        setNextStopDriveInfo(null);
+      });
+  }, [viewMode, techPosition, allVisitsFlat]);
 
   const fetchDriveTimes = useCallback((position: { lat: number; lng: number }) => {
     const upcomingVisits = allVisitsFlatRef.current.filter(
@@ -1049,6 +1088,12 @@ export default function TechMobile() {
                 </CardHeader>
                 {isExpanded && (
                   <CardContent className="p-4 pt-0 space-y-3">
+                    {nextStopDriveInfo && group.visits.some(v => v.id === nextStopDriveInfo.visitId) && (
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground" data-testid={`drive-time-next-stop-${primaryVisit.id}`}>
+                        <Clock className="h-4 w-4 shrink-0" />
+                        <span>{nextStopDriveInfo.durationText} away · {nextStopDriveInfo.distanceText}</span>
+                      </div>
+                    )}
                     {primaryVisit.property && (
                       <PropertyImageSection visit={primaryVisit} />
                     )}
