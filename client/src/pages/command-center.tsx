@@ -31,6 +31,13 @@ import {
 } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarUI } from "@/components/ui/calendar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CommandCenterVisit {
   id: string;
@@ -297,11 +304,30 @@ export default function CommandCenter() {
     try { localStorage.setItem("commandCenter.groupByTech", String(groupByTech)); } catch {}
   }, [groupByTech]);
 
+  const [filterTech, setFilterTech] = useState<string>("all");
+
   const visits = data?.visits ?? [];
   const stats = data?.stats;
   const billing = data?.billing;
 
-  const techGroups = useMemo(() => buildTechGroups(visits), [visits]);
+  const techNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const v of visits) {
+      names.add(v.techName ?? "Unassigned");
+    }
+    return [...names].sort((a, b) => {
+      if (a === "Unassigned") return 1;
+      if (b === "Unassigned") return -1;
+      return a.localeCompare(b);
+    });
+  }, [visits]);
+
+  const filteredVisits = useMemo(
+    () => filterTech === "all" ? visits : visits.filter(v => (v.techName ?? "Unassigned") === filterTech),
+    [visits, filterTech]
+  );
+
+  const techGroups = useMemo(() => buildTechGroups(filteredVisits), [filteredVisits]);
 
   function toggleGroup(techName: string) {
     setCollapsedGroups(prev => {
@@ -451,10 +477,24 @@ export default function CommandCenter() {
                       All Appointments
                       {!isLoading && (
                         <Badge variant="secondary" className="text-xs font-normal">
-                          {visits.length}
+                          {filteredVisits.length}
                         </Badge>
                       )}
                     </CardTitle>
+                    <div className="flex items-center gap-2 flex-wrap">
+                    {techNames.length > 0 && (
+                      <Select value={filterTech} onValueChange={setFilterTech}>
+                        <SelectTrigger className="h-8 text-xs w-44" data-testid="select-filter-technician">
+                          <SelectValue placeholder="All technicians" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All technicians</SelectItem>
+                          {techNames.map(name => (
+                            <SelectItem key={name} value={name}>{name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     <div className="flex items-center rounded-md border overflow-hidden text-xs font-medium">
                       <button
                         className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${!groupByTech ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"}`}
@@ -473,6 +513,7 @@ export default function CommandCenter() {
                         By technician
                       </button>
                     </div>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -482,9 +523,11 @@ export default function CommandCenter() {
                         <Skeleton key={i} className="h-12 w-full" />
                       ))}
                     </div>
-                  ) : visits.length === 0 ? (
+                  ) : filteredVisits.length === 0 ? (
                     <div className="py-12 text-center text-muted-foreground text-sm">
-                      No appointments scheduled for {isToday ? "today" : format(selectedDate, "MMM d")}
+                      {filterTech === "all" 
+                        ? `No appointments scheduled for ${isToday ? "today" : format(selectedDate, "MMM d")}`
+                        : `No appointments for ${filterTech} on ${isToday ? "today" : format(selectedDate, "MMM d")}`}
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
@@ -566,7 +609,7 @@ export default function CommandCenter() {
                               );
                             })
                           ) : (
-                            visits.map(v => (
+                            filteredVisits.map(v => (
                               <TableRow
                                 key={v.id}
                                 data-testid={`row-visit-${v.id}`}
