@@ -46,7 +46,6 @@ If a secret is leaked (found in source code, logs, or git history):
 |--------|---------|----------------|
 | SESSION_SECRET | Express sessions | Change in Replit Secrets, restart app |
 | SENDGRID_API_KEY | SendGrid emails | Regenerate in SendGrid dashboard |
-| GOOGLE_MAPS_API_KEY | Google Maps | Regenerate in Google Cloud Console |
 | ADMIN_INITIAL_PASSWORD | App admin | Change via app UI or database |
 | MAPBOX_PUBLIC_TOKEN | Mapbox geocoding | Regenerate in Mapbox dashboard |
 | MAPBOX_SECRET_TOKEN | Mapbox routing | Regenerate in Mapbox dashboard |

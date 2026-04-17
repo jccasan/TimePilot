@@ -1032,16 +1032,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: "originLat, originLng, and destinations[] required" });
       }
 
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) {
-        return res.status(503).json({ error: "Google Maps not configured", fallback: true });
+      const mapboxToken = process.env.MAPBOX_SECRET_TOKEN || process.env.MAPBOX_PUBLIC_TOKEN;
+      if (!mapboxToken) {
+        return res.status(503).json({ error: "Mapbox not configured", fallback: true });
       }
 
-      const destParam = destinations
-        .map((d: { lat: number; lng: number }) => `${d.lat},${d.lng}`)
-        .join("|");
+      const coordsParam = [
+        `${originLng},${originLat}`,
+        ...destinations.map((d: { lat: number; lng: number }) => `${d.lng},${d.lat}`),
+      ].join(";");
 
-      const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originLat},${originLng}&destinations=${encodeURIComponent(destParam)}&mode=driving&units=imperial&key=${apiKey}`;
+      const url = `https://api.mapbox.com/directions-matrix/v1/mapbox/driving/${coordsParam}?access_token=${mapboxToken}&annotations=duration,distance&sources=0`;
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -1049,21 +1050,38 @@ export async function registerRoutes(
       }
 
       const data = await response.json() as {
-        status: string;
-        rows: Array<{ elements: Array<{ status: string; duration: { text: string; value: number }; distance: { text: string; value: number } }> }>;
+        code: string;
+        durations: number[][];
+        distances: number[][];
       };
 
-      if (data.status !== "OK" || !data.rows?.[0]?.elements) {
+      if (data.code !== "Ok" || !data.durations?.[0] || !data.distances?.[0]) {
         return res.status(502).json({ error: "Distance Matrix returned error", fallback: true });
       }
 
-      const results = data.rows[0].elements.map((el) => {
-        if (el.status !== "OK") return null;
+      const formatDuration = (seconds: number): string => {
+        if (seconds < 60) return "1 min";
+        const mins = Math.round(seconds / 60);
+        if (mins < 60) return `${mins} min`;
+        const hrs = Math.floor(mins / 60);
+        const rem = mins % 60;
+        return rem > 0 ? `${hrs} hr ${rem} min` : `${hrs} hr`;
+      };
+
+      const formatDistance = (meters: number): string => {
+        const miles = meters / 1609.344;
+        return `${miles.toFixed(1)} mi`;
+      };
+
+      const results = destinations.map((_: unknown, i: number) => {
+        const durationSeconds = data.durations[0][i + 1];
+        const distanceMeters = data.distances[0][i + 1];
+        if (durationSeconds == null || distanceMeters == null) return null;
         return {
-          durationText: el.duration.text,
-          durationSeconds: el.duration.value,
-          distanceText: el.distance.text,
-          distanceMeters: el.distance.value,
+          durationText: formatDuration(durationSeconds),
+          durationSeconds: Math.round(durationSeconds),
+          distanceText: formatDistance(distanceMeters),
+          distanceMeters: Math.round(distanceMeters),
         };
       });
 
