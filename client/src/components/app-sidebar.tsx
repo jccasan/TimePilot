@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,6 @@ import {
   Building2,
   Map,
   Columns,
-  HelpCircle,
   Compass,
   Sparkles,
   ClipboardCheck,
@@ -32,6 +31,9 @@ import {
   ChevronDown,
   ChevronRight,
   Briefcase,
+  KeyRound,
+  Webhook,
+  Database,
 } from "lucide-react";
 import {
   Sidebar,
@@ -95,8 +97,6 @@ const menuSections = [
       { title: "Route Profit Maps", url: "/route-profit-maps", icon: Map },
       { title: "Expenses", url: "/overhead-costs", icon: DollarSign },
       { title: "Pricing Tools", url: "/pricing-calculator", icon: Calculator },
-      { title: "Pricing Plans", url: "/pricing", icon: DollarSign },
-      { title: "Subscription", url: "/billing", icon: CreditCard },
     ],
   },
   {
@@ -105,6 +105,8 @@ const menuSections = [
     items: [
       { title: "Settings", url: "/settings", icon: Settings },
       { title: "Automation", url: "/automation", icon: Zap },
+      { title: "Pricing Plans", url: "/pricing", icon: DollarSign },
+      { title: "Subscription", url: "/billing", icon: CreditCard },
     ],
   },
 ];
@@ -265,40 +267,69 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
 
       <SidebarFooter>
         <SidebarMenu>
-          {onStartTour && (
-            <SidebarMenuItem>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton data-testid="button-help-tours">
-                    <HelpCircle />
-                    <span>Take a Tour</span>
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="start" className="w-56">
-                  <DropdownMenuLabel>Guided Tours</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onStartTour("welcome")} data-testid="button-tour-welcome">
-                    <Compass className="h-4 w-4 mr-2" />
-                    Welcome Tour
-                  </DropdownMenuItem>
-                  {tours.filter(t => t.id !== "welcome").map((tour) => (
-                    <DropdownMenuItem key={tour.id} onClick={() => onStartTour(tour.id)} data-testid={`button-tour-${tour.id}`}>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      {tour.title}
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton data-testid="button-footer-more">
+                  <Settings />
+                  <span>More</span>
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-56">
+                <DropdownMenuLabel>Advanced</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/settings" onClick={handleNavClick} data-testid="link-more-settings">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/api-keys" onClick={handleNavClick} data-testid="link-more-api-keys">
+                    <KeyRound className="h-4 w-4 mr-2" />
+                    API Keys
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/webhooks" onClick={handleNavClick} data-testid="link-more-webhooks">
+                    <Webhook className="h-4 w-4 mr-2" />
+                    Webhooks
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/migration" onClick={handleNavClick} data-testid="link-more-migration">
+                    <Database className="h-4 w-4 mr-2" />
+                    Data Migration
+                  </Link>
+                </DropdownMenuItem>
+                {onStartTour && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Help</DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => onStartTour("welcome")} data-testid="button-tour-welcome">
+                      <Compass className="h-4 w-4 mr-2" />
+                      Welcome Tour
                     </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </SidebarMenuItem>
-          )}
-          {logout && (
-            <SidebarMenuItem>
-              <SidebarMenuButton onClick={() => logout()} disabled={isLoggingOut} data-testid="button-sidebar-logout">
-                <LogOut />
-                <span>Sign Out</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          )}
+                    {tours.filter(t => t.id !== "welcome").map((tour) => (
+                      <DropdownMenuItem key={tour.id} onClick={() => onStartTour(tour.id)} data-testid={`button-tour-${tour.id}`}>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        {tour.title}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+                {logout && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => logout()} disabled={isLoggingOut} data-testid="button-sidebar-logout">
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>

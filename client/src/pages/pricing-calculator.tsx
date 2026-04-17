@@ -1042,6 +1042,13 @@ export default function PricingCalculator() {
 
   const effectiveConfig = { ...DEFAULT_PRICING_CONFIG, ...(configData || {}) };
 
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("tab");
+    if (t === "simulator" || t === "settings") return t;
+    return "calculator";
+  });
+
   if (configLoading) {
     return (
       <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
@@ -1066,7 +1073,7 @@ export default function PricingCalculator() {
         />
       </div>
 
-      <Tabs defaultValue="calculator">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="calculator" data-testid="tab-calculator">
             <Calculator className="mr-1 h-4 w-4" />
