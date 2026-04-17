@@ -197,6 +197,7 @@ export default function TechMobile() {
   const [gatePhoto, setGatePhoto] = useState<File | null>(null);
   const [gatePhotoPreview, setGatePhotoPreview] = useState<string | null>(null);
   const [extraFiles, setExtraFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [noGate, setNoGate] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const gateFileInputRef = useRef<HTMLInputElement>(null);
   const extraFileInputRef = useRef<HTMLInputElement>(null);
@@ -555,6 +556,7 @@ export default function TechMobile() {
     setGatePhoto(null);
     setGatePhotoPreview(null);
     setExtraFiles([]);
+    setNoGate(false);
     setIsCompleting(false);
   };
 
@@ -625,66 +627,75 @@ export default function TechMobile() {
   };
 
   const handleCompleteAndSend = async () => {
-    if (!completeDialogVisit || !gatePhoto) return;
+    if (!completeDialogVisit || (!gatePhoto && !noGate)) return;
     setIsCompleting(true);
 
     try {
-      let gateClosedPath: string;
-      try {
-        gateClosedPath = await uploadFileDirect(gatePhoto);
-      } catch (uploadErr) {
-        if (isNetworkError(uploadErr)) {
-          const gatePhotoId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "gate", blob: gatePhoto });
-          const gateRef = `__pending_photo_${gatePhotoId}__`;
-          const extraPhotoRefs: string[] = [];
-          for (const extra of extraFiles) {
-            const extraId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "extra", blob: extra.file });
-            extraPhotoRefs.push(`__pending_photo_${extraId}__`);
+      let gateClosedPath: string | undefined;
+
+      if (noGate) {
+        gateClosedPath = undefined;
+      } else {
+        try {
+          gateClosedPath = await uploadFileDirect(gatePhoto!);
+        } catch (uploadErr) {
+          if (isNetworkError(uploadErr)) {
+            const gatePhotoId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "gate", blob: gatePhoto! });
+            const gateRef = `__pending_photo_${gatePhotoId}__`;
+            const extraPhotoRefs: string[] = [];
+            for (const extra of extraFiles) {
+              const extraId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "extra", blob: extra.file });
+              extraPhotoRefs.push(`__pending_photo_${extraId}__`);
+            }
+            await addPendingMutation({
+              method: "POST",
+              url: `/api/visits/${completeDialogVisit.id}/complete-notify`,
+              body: {
+                gateClosedPhoto: gateRef,
+                extraPhotos: extraPhotoRefs.length > 0 ? extraPhotoRefs : undefined,
+                technicianNotes: notes[completeDialogVisit.id] || undefined,
+                noGate: false,
+              },
+            });
+            await queueGroupVisitsOffline(gateRef);
+            finishCompletionOffline();
+            return;
           }
-          await addPendingMutation({
-            method: "POST",
-            url: `/api/visits/${completeDialogVisit.id}/complete-notify`,
-            body: {
-              gateClosedPhoto: gateRef,
-              extraPhotos: extraPhotoRefs.length > 0 ? extraPhotoRefs : undefined,
-              technicianNotes: notes[completeDialogVisit.id] || undefined,
-            },
-          });
-          await queueGroupVisitsOffline(gateRef);
-          finishCompletionOffline();
-          return;
+          throw uploadErr;
         }
-        throw uploadErr;
       }
 
       const extraPaths: string[] = [];
-      try {
-        for (const extra of extraFiles) {
-          const path = await uploadFileDirect(extra.file);
-          extraPaths.push(path);
-        }
-      } catch (extraUploadErr) {
-        if (isNetworkError(extraUploadErr)) {
-          const extraPhotoRefs: string[] = [];
-          for (let i = extraPaths.length; i < extraFiles.length; i++) {
-            const extraId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "extra", blob: extraFiles[i].file });
-            extraPhotoRefs.push(`__pending_photo_${extraId}__`);
+      if (!noGate) {
+        try {
+          for (const extra of extraFiles) {
+            const path = await uploadFileDirect(extra.file);
+            extraPaths.push(path);
           }
-          const allExtraRefs = [...extraPaths, ...extraPhotoRefs];
-          await addPendingMutation({
-            method: "POST",
-            url: `/api/visits/${completeDialogVisit.id}/complete-notify`,
-            body: {
-              gateClosedPhoto: gateClosedPath,
-              extraPhotos: allExtraRefs.length > 0 ? allExtraRefs : undefined,
-              technicianNotes: notes[completeDialogVisit.id] || undefined,
-            },
-          });
-          await queueGroupVisitsOffline(gateClosedPath);
-          finishCompletionOffline();
-          return;
+        } catch (extraUploadErr) {
+          if (isNetworkError(extraUploadErr)) {
+            const extraPhotoRefs: string[] = [];
+            for (let i = extraPaths.length; i < extraFiles.length; i++) {
+              const extraId = await addPendingPhoto({ visitId: completeDialogVisit.id, photoType: "extra", blob: extraFiles[i].file });
+              extraPhotoRefs.push(`__pending_photo_${extraId}__`);
+            }
+            const allExtraRefs = [...extraPaths, ...extraPhotoRefs];
+            await addPendingMutation({
+              method: "POST",
+              url: `/api/visits/${completeDialogVisit.id}/complete-notify`,
+              body: {
+                gateClosedPhoto: gateClosedPath,
+                extraPhotos: allExtraRefs.length > 0 ? allExtraRefs : undefined,
+                technicianNotes: notes[completeDialogVisit.id] || undefined,
+                noGate: false,
+              },
+            });
+            await queueGroupVisitsOffline(gateClosedPath!);
+            finishCompletionOffline();
+            return;
+          }
+          throw extraUploadErr;
         }
-        throw extraUploadErr;
       }
 
       try {
@@ -692,6 +703,7 @@ export default function TechMobile() {
           gateClosedPhoto: gateClosedPath,
           extraPhotos: extraPaths.length > 0 ? extraPaths : undefined,
           technicianNotes: notes[completeDialogVisit.id] || undefined,
+          noGate,
         });
       } catch (notifyErr) {
         if (isNetworkError(notifyErr)) {
@@ -702,9 +714,10 @@ export default function TechMobile() {
               gateClosedPhoto: gateClosedPath,
               extraPhotos: extraPaths.length > 0 ? extraPaths : undefined,
               technicianNotes: notes[completeDialogVisit.id] || undefined,
+              noGate,
             },
           });
-          await queueGroupVisitsOffline(gateClosedPath);
+          if (!noGate) await queueGroupVisitsOffline(gateClosedPath!);
           finishCompletionOffline();
           return;
         }
@@ -725,6 +738,7 @@ export default function TechMobile() {
             await apiRequest("POST", `/api/visits/${groupVisit.id}/complete-notify`, {
               gateClosedPhoto: gateClosedPath,
               technicianNotes: notes[completeDialogVisit.id] || undefined,
+              noGate,
             });
             completedCount++;
           } catch (groupErr: any) {
@@ -778,7 +792,9 @@ export default function TechMobile() {
   };
 
   const completionMessage = completeDialogVisit?.contact
-    ? `Hi ${completeDialogVisit.contact.firstName}. ${company?.name || "Our team"} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`
+    ? noGate
+      ? `Hi ${completeDialogVisit.contact.firstName}. ${company?.name || "Our team"} just finished your poop scoop service. Let us know if there is anything we can do.`
+      : `Hi ${completeDialogVisit.contact.firstName}. ${company?.name || "Our team"} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`
     : "";
 
   return (
@@ -1249,92 +1265,118 @@ export default function TechMobile() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium mb-1">Proof Photo (required)</p>
-              <p className="text-xs text-muted-foreground mb-2">Take a photo showing the service area is clean and secure</p>
+            {/* No gate checkbox */}
+            <label className="flex items-center gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/50" data-testid="label-no-gate">
               <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                ref={gateFileInputRef}
-                className="hidden"
-                onChange={handleGatePhotoCapture}
-                data-testid="input-gate-photo"
+                type="checkbox"
+                checked={noGate}
+                onChange={e => {
+                  setNoGate(e.target.checked);
+                  if (e.target.checked) {
+                    setGatePhoto(null);
+                    setGatePhotoPreview(null);
+                    setExtraFiles([]);
+                  }
+                }}
+                className="h-4 w-4 accent-primary"
+                data-testid="checkbox-no-gate"
               />
-              {gatePhotoPreview ? (
-                <div className="relative">
-                  <img
-                    src={gatePhotoPreview}
-                    alt="Gate closed"
-                    className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
-                    data-testid="img-gate-preview"
-                  />
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-1 right-1 h-6 w-6"
-                    onClick={() => { setGatePhoto(null); setGatePhotoPreview(null); }}
-                    data-testid="button-remove-gate-photo"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  className="w-full h-24 border-dashed"
-                  onClick={() => gateFileInputRef.current?.click()}
-                  data-testid="button-capture-gate-photo"
-                >
-                  <Camera className="mr-2 h-5 w-5" />
-                  Take Proof Photo
-                </Button>
-              )}
-            </div>
+              <div>
+                <p className="text-sm font-medium">No gate</p>
+                <p className="text-xs text-muted-foreground">Photo not required for this yard</p>
+              </div>
+            </label>
 
-            <div>
-              <p className="text-sm font-medium mb-2">Additional Photos (optional)</p>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                ref={extraFileInputRef}
-                className="hidden"
-                onChange={handleExtraPhotoCapture}
-                data-testid="input-extra-photo"
-              />
-              {extraFiles.length > 0 && (
-                <div className="grid grid-cols-3 gap-2 mb-2">
-                  {extraFiles.map((ef, i) => (
-                    <div key={i} className="relative">
+            {!noGate && (
+              <>
+                <div>
+                  <p className="text-sm font-medium mb-1">Proof Photo (required)</p>
+                  <p className="text-xs text-muted-foreground mb-2">Take a photo showing the service area is clean and secure</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={gateFileInputRef}
+                    className="hidden"
+                    onChange={handleGatePhotoCapture}
+                    data-testid="input-gate-photo"
+                  />
+                  {gatePhotoPreview ? (
+                    <div className="relative">
                       <img
-                        src={ef.preview}
-                        alt={`Extra ${i + 1}`}
-                        className="rounded-md h-20 w-full object-cover"
-                        data-testid={`img-extra-preview-${i}`}
+                        src={gatePhotoPreview}
+                        alt="Gate closed"
+                        className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
+                        data-testid="img-gate-preview"
                       />
                       <Button
                         variant="destructive"
                         size="icon"
-                        className="absolute top-0.5 right-0.5 h-5 w-5"
-                        onClick={() => removeExtraPhoto(i)}
-                        data-testid={`button-remove-extra-${i}`}
+                        className="absolute top-1 right-1 h-6 w-6"
+                        onClick={() => { setGatePhoto(null); setGatePhotoPreview(null); }}
+                        data-testid="button-remove-gate-photo"
                       >
                         <X className="h-3 w-3" />
                       </Button>
                     </div>
-                  ))}
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="w-full h-24 border-dashed"
+                      onClick={() => gateFileInputRef.current?.click()}
+                      data-testid="button-capture-gate-photo"
+                    >
+                      <Camera className="mr-2 h-5 w-5" />
+                      Take Proof Photo
+                    </Button>
+                  )}
                 </div>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => extraFileInputRef.current?.click()}
-                data-testid="button-add-extra-photo"
-              >
-                <Plus className="mr-1 h-4 w-4" /> Add Photo
-              </Button>
-            </div>
+
+                <div>
+                  <p className="text-sm font-medium mb-2">Additional Photos (optional)</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={extraFileInputRef}
+                    className="hidden"
+                    onChange={handleExtraPhotoCapture}
+                    data-testid="input-extra-photo"
+                  />
+                  {extraFiles.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2 mb-2">
+                      {extraFiles.map((ef, i) => (
+                        <div key={i} className="relative">
+                          <img
+                            src={ef.preview}
+                            alt={`Extra ${i + 1}`}
+                            className="rounded-md h-20 w-full object-cover"
+                            data-testid={`img-extra-preview-${i}`}
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-0.5 right-0.5 h-5 w-5"
+                            onClick={() => removeExtraPhoto(i)}
+                            data-testid={`button-remove-extra-${i}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => extraFileInputRef.current?.click()}
+                    data-testid="button-add-extra-photo"
+                  >
+                    <Plus className="mr-1 h-4 w-4" /> Add Photo
+                  </Button>
+                </div>
+              </>
+            )}
 
             <div className="rounded-md bg-muted p-3">
               <p className="text-xs font-medium text-muted-foreground mb-1">Text to customer:</p>
@@ -1353,7 +1395,7 @@ export default function TechMobile() {
             </Button>
             <Button
               onClick={handleCompleteAndSend}
-              disabled={!gatePhoto || isCompleting}
+              disabled={(!gatePhoto && !noGate) || isCompleting}
               data-testid="button-send-complete"
             >
               {isCompleting ? (

@@ -6091,8 +6091,8 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: `Cannot complete visit from '${existing.status}' status. Visit must be started first.` });
       }
 
-      const { gateClosedPhoto, extraPhotos, technicianNotes } = req.body;
-      if (!gateClosedPhoto || typeof gateClosedPhoto !== "string") {
+      const { gateClosedPhoto, extraPhotos, technicianNotes, noGate } = req.body;
+      if (!noGate && (!gateClosedPhoto || typeof gateClosedPhoto !== "string")) {
         return res.status(400).json({ error: "gateClosedPhoto is required" });
       }
       if (extraPhotos && !Array.isArray(extraPhotos)) {
@@ -6148,37 +6148,44 @@ Return ONLY valid JSON, no markdown.`,
       let completionSmsResult: any = null;
       let etaSmsResult: any = null;
 
-      const appBaseUrl = `https://${req.get("host")}`;
-      const gatePhotoFullUrl = gateClosedPhoto ? `${appBaseUrl}${gateClosedPhoto}` : undefined;
+      const todayStr = new Date().toISOString().split("T")[0];
+      const isScheduledForToday = visit.scheduledDate === todayStr;
 
-      const completionSmsReady = await isSmsConfiguredForCompany(companyId);
-      if (contact.phone && completionSmsReady) {
-        const completionMsg = `Hi ${contact.firstName}. ${company.name} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`;
-        completionSmsResult = await sendSmsForCompany({
-          to: contact.phone,
-          body: completionMsg,
-          mediaUrl: gatePhotoFullUrl,
-          companyId,
-          contactId: contact.id,
-        });
+      if (isScheduledForToday) {
+        const appBaseUrl = `https://${req.get("host")}`;
+        const gatePhotoFullUrl = gateClosedPhoto ? `${appBaseUrl}${gateClosedPhoto}` : undefined;
 
-        if (completionSmsResult.success) {
-          const completionFrom = await getFromPhoneForCompany(companyId);
-          await storage.createMessage({
+        const completionSmsReady = await isSmsConfiguredForCompany(companyId);
+        if (contact.phone && completionSmsReady) {
+          const completionMsg = noGate
+            ? `Hi ${contact.firstName}. ${company.name} just finished your poop scoop service. Let us know if there is anything we can do.`
+            : `Hi ${contact.firstName}. ${company.name} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`;
+          completionSmsResult = await sendSmsForCompany({
+            to: contact.phone,
+            body: completionMsg,
+            mediaUrl: noGate ? undefined : gatePhotoFullUrl,
             companyId,
             contactId: contact.id,
-            channel: "sms",
-            direction: "outbound",
-            status: "sent",
-            fromAddress: completionFrom,
-            toAddress: contact.phone,
-            body: completionMsg,
-            externalId: completionSmsResult.messageSid,
           });
+
+          if (completionSmsResult.success) {
+            const completionFrom = await getFromPhoneForCompany(companyId);
+            await storage.createMessage({
+              companyId,
+              contactId: contact.id,
+              channel: "sms",
+              direction: "outbound",
+              status: "sent",
+              fromAddress: completionFrom,
+              toAddress: contact.phone,
+              body: completionMsg,
+              externalId: completionSmsResult.messageSid,
+            });
+          }
         }
       }
 
-      if (visit.routeId) {
+      if (isScheduledForToday && visit.routeId) {
         try {
           const allPlansOnRoute = await storage.getServicePlans(companyId, { routeId: visit.routeId, isActive: true });
           const sorted = allPlansOnRoute.sort((a, b) => a.stopOrder - b.stopOrder);
