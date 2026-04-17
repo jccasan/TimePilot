@@ -212,7 +212,20 @@ export default function CommandCenter() {
   }, []);
 
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [groupByTech, setGroupByTech] = useState(false);
+  const [groupByTech, setGroupByTech] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("commandCenter.groupByTech") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("commandCenter.groupByTech", String(groupByTech));
+    } catch {
+    }
+  }, [groupByTech]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const visits = data?.visits ?? [];
