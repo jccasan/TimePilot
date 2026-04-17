@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 function fmt(n: number, decimals = 2): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -9,6 +10,7 @@ function fmtInt(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 function ResizableCardBody({ storageKey, defaultHeight = 320, minHeight = 120, children }: { storageKey: string; defaultHeight?: number; minHeight?: number; children: ReactNode }) {
+  const isMobileResize = useIsMobile();
   const [height, setHeight] = useState(() => {
     const saved = localStorage.getItem(`dash-h-${storageKey}`);
     return saved ? Math.max(minHeight, parseInt(saved, 10)) : defaultHeight;
@@ -41,18 +43,20 @@ function ResizableCardBody({ storageKey, defaultHeight = 320, minHeight = 120, c
 
   return (
     <div className="flex flex-col">
-      <div className="overflow-y-auto" style={{ height }} data-testid={`scrollable-${storageKey}`}>
+      <div className="overflow-y-auto" style={{ height: isMobileResize ? undefined : height }} data-testid={`scrollable-${storageKey}`}>
         {children}
       </div>
-      <div
-        className="flex items-center justify-center h-5 cursor-row-resize hover:bg-muted/50 transition-colors border-t select-none rounded-b-lg"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        data-testid={`resize-handle-${storageKey}`}
-      >
-        <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground/60" />
-      </div>
+      {!isMobileResize && (
+        <div
+          className="flex items-center justify-center h-5 cursor-row-resize hover:bg-muted/50 transition-colors border-t select-none rounded-b-lg"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          data-testid={`resize-handle-${storageKey}`}
+        >
+          <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground/60" />
+        </div>
+      )}
     </div>
   );
 }
@@ -1843,7 +1847,7 @@ function GridWidgetsSection({
           margin={[16, 16]}
         >
           {currentLayout.map(item => (
-            <div key={item.i} className="relative group" data-testid={`grid-widget-${item.i}`}>
+            <div key={item.i} className="relative group" style={isMobile ? { touchAction: 'auto' } : undefined} data-testid={`grid-widget-${item.i}`}>
               {!isMobile && (
                 <div className="widget-drag-handle absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1 rounded bg-background/80 backdrop-blur-sm border shadow-sm">
                   <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />

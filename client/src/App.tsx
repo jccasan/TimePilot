@@ -220,7 +220,7 @@ function AuthenticatedLayout() {
     <TutorialProvider>
       <SidebarProvider>
         <div className="flex h-screen w-full">
-          <AppSidebar onStartTour={startTour} />
+          <AppSidebar onStartTour={startTour} logout={logout} isLoggingOut={isLoggingOut} />
           <div className="flex flex-col flex-1 min-w-0">
             <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
               <div className="flex items-center gap-2">
@@ -237,6 +237,7 @@ function AuthenticatedLayout() {
                   onClick={() => logout()}
                   disabled={isLoggingOut}
                   data-testid="button-logout"
+                  className="hidden sm:inline-flex"
                 >
                   <LogOut />
                 </Button>

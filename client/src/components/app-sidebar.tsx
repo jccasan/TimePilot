@@ -34,6 +34,7 @@ import {
   Plus,
   UserPlus,
   Receipt,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -46,6 +47,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -121,10 +123,11 @@ const menuSections = [
   },
 ];
 
-export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => void }) {
+export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?: (tourId: string) => void; logout?: () => void; isLoggingOut?: boolean }) {
   const [location, navigate] = useLocation();
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [generateInvoiceOpen, setGenerateInvoiceOpen] = useState(false);
+  const { isMobile, setOpenMobile } = useSidebar();
   const { data: company } = useQuery<{ logoUrl: string | null; name: string }>({
     queryKey: ["/api/company"],
   });
@@ -209,7 +212,11 @@ export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => 
                       data-active={location === item.url}
                       tooltip={item.title}
                     >
-                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/[\s/]/g, "-")}`}>
+                      <Link
+                        href={item.url}
+                        data-testid={`link-${item.title.toLowerCase().replace(/[\s/]/g, "-")}`}
+                        onClick={() => { if (isMobile) setOpenMobile(false); }}
+                      >
                         <item.icon />
                         <span>{item.title}</span>
                         {item.title === "Messages" && unreadSmsCount > 0 && (
@@ -226,43 +233,55 @@ export function AppSidebar({ onStartTour }: { onStartTour?: (tourId: string) => 
           </SidebarGroup>
         ))}
       </SidebarContent>
-      {onStartTour && (
-        <SidebarFooter>
+      <SidebarFooter>
           <SidebarMenu>
-            <SidebarMenuItem>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton data-testid="button-help-tours">
-                    <HelpCircle />
-                    <span>Take a Tour</span>
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="start" className="w-56">
-                  <DropdownMenuLabel>Guided Tours</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => onStartTour("welcome")}
-                    data-testid="button-tour-welcome"
-                  >
-                    <Compass className="h-4 w-4 mr-2" />
-                    Welcome Tour
-                  </DropdownMenuItem>
-                  {tours.filter(t => t.id !== "welcome").map((tour) => (
+            {onStartTour && (
+              <SidebarMenuItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <SidebarMenuButton data-testid="button-help-tours">
+                      <HelpCircle />
+                      <span>Take a Tour</span>
+                    </SidebarMenuButton>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="top" align="start" className="w-56">
+                    <DropdownMenuLabel>Guided Tours</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      key={tour.id}
-                      onClick={() => onStartTour(tour.id)}
-                      data-testid={`button-tour-${tour.id}`}
+                      onClick={() => onStartTour("welcome")}
+                      data-testid="button-tour-welcome"
                     >
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      {tour.title}
+                      <Compass className="h-4 w-4 mr-2" />
+                      Welcome Tour
                     </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </SidebarMenuItem>
+                    {tours.filter(t => t.id !== "welcome").map((tour) => (
+                      <DropdownMenuItem
+                        key={tour.id}
+                        onClick={() => onStartTour(tour.id)}
+                        data-testid={`button-tour-${tour.id}`}
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        {tour.title}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </SidebarMenuItem>
+            )}
+            {logout && (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => logout()}
+                  disabled={isLoggingOut}
+                  data-testid="button-sidebar-logout"
+                >
+                  <LogOut />
+                  <span>Sign Out</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
           </SidebarMenu>
         </SidebarFooter>
-      )}
     </Sidebar>
   );
 }
