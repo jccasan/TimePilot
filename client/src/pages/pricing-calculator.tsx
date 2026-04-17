@@ -61,6 +61,7 @@ import {
   SlidersHorizontal,
   HelpCircle,
 } from "lucide-react";
+import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
 
 function centsToDollars(cents: number | null | undefined): string {
   if (cents === null || cents === undefined) return "";
@@ -1075,6 +1076,10 @@ export default function PricingCalculator() {
             <SlidersHorizontal className="mr-1 h-4 w-4" />
             Settings
           </TabsTrigger>
+          <TabsTrigger value="simulator" data-testid="tab-simulator">
+            <TrendingUp className="mr-1 h-4 w-4" />
+            Pricing Simulator
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="calculator" className="mt-4">
           <CalculatorPanel />
@@ -1084,6 +1089,9 @@ export default function PricingCalculator() {
             config={effectiveConfig}
             onSaved={() => {}}
           />
+        </TabsContent>
+        <TabsContent value="simulator" className="mt-0 -mx-4 md:-mx-6">
+          <AIPricingOptimizer />
         </TabsContent>
       </Tabs>
     </div>

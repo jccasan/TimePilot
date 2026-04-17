@@ -35,8 +35,9 @@ import { useUpload } from "@/hooks/use-upload";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
-import { Globe, Copy, Check, Link2, Send, MessageSquare } from "lucide-react";
+import { Globe, Copy, Check, Link2, Send, MessageSquare, Code2, Webhook, Database, ChevronRight as ChevronRightIcon } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { Link } from "wouter";
 
 const companyFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -112,6 +113,7 @@ const SETTINGS_BLOCK_DEFS: { id: string; label: string; defaultW: number; defaul
   { id: "auto_visit_generation", label: "Auto Visit Generation", defaultW: 6, defaultH: 3, minW: 4, minH: 2 },
   { id: "lead_sources", label: "Lead Sources", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "audit_log", label: "Audit Log", defaultW: 12, defaultH: 5, minW: 6, minH: 4 },
+  { id: "developer_tools", label: "Developer Tools", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -123,7 +125,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "data_import_export", "signup_widget",
   "webhook_lead", "sms_quote_template",
   "quote_auto_follow_up", "auto_visit_generation",
-  "lead_sources",
+  "lead_sources", "developer_tools",
   "audit_log",
 ];
 
@@ -3425,6 +3427,40 @@ export default function Settings() {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+        );
+      case "developer_tools":
+        return (
+          <Card className="h-full overflow-auto">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <Code2 className="h-5 w-5" />
+                Developer Tools
+              </CardTitle>
+              <CardDescription>API access, webhooks, and data migration tools.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {[
+                { href: "/api-keys", icon: KeyRound, label: "API Keys", description: "Manage API keys for external integrations" },
+                { href: "/webhooks", icon: Webhook, label: "Webhooks", description: "Configure event webhook endpoints" },
+                { href: "/migration", icon: Database, label: "Data Migration", description: "Import data from other services" },
+              ].map(({ href, icon: Icon, label, description }) => (
+                <Link key={href} href={href}>
+                  <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer" data-testid={`link-dev-${label.toLowerCase().replace(/\s/g, "-")}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center shrink-0">
+                        <Icon className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium leading-none">{label}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+                      </div>
+                    </div>
+                    <ChevronRightIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                  </div>
+                </Link>
+              ))}
             </CardContent>
           </Card>
         );

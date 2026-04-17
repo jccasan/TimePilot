@@ -101,11 +101,11 @@ function Router() {
       <Route path="/profitability" component={Profitability} />
       <Route path="/profitability/:contactId" component={ProfitabilityDetail} />
       <Route path="/route-profit-maps" component={RouteProfitMaps} />
-      <Route path="/ai-pricing-optimizer" component={AIPricingOptimizer} />
+      <Route path="/ai-pricing-optimizer"><Redirect to="/pricing-calculator?tab=simulator" /></Route>
       <Route path="/overhead-costs" component={OverheadCosts} />
       <Route path="/communications" component={Communications} />
       <Route path="/reports" component={Reports} />
-      <Route path="/analytics" component={Analytics} />
+      <Route path="/analytics"><Redirect to="/reports?tab=analytics" /></Route>
       <Route path="/portal" component={Portal} />
       <Route path="/settings" component={Settings} />
       <Route path="/migration" component={MigrationPage} />

@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   TrendingUp, DollarSign, Users, FileText,
   CalendarCheck, BarChart3, BookOpen, TrendingDown,
 } from "lucide-react";
+import Analytics from "@/pages/analytics";
 
 type RevenueMonth = {
   month: string;
@@ -75,7 +77,7 @@ const periodOptions = [
   ]},
 ];
 
-export default function Reports() {
+function ReportsContent() {
   const [period, setPeriod] = useState("6m");
 
   const { data, isLoading } = useQuery<ReportData>({
@@ -88,10 +90,9 @@ export default function Reports() {
   const hasProjections = data?.monthlyRevenue.some(m => m.projected);
 
   return (
-    <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-reports-heading">Reports</h1>
           <p className="text-muted-foreground text-sm">
             {data?.periodLabel || "Business performance overview"}
           </p>
@@ -329,6 +330,39 @@ export default function Reports() {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+export default function Reports() {
+  const [tab, setTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("tab") === "analytics" ? "analytics" : "reports";
+  });
+
+  return (
+    <div className="p-4 md:p-6 overflow-auto h-full">
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold" data-testid="text-reports-heading">Reports &amp; Analytics</h1>
+      </div>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="reports" data-testid="tab-reports">
+            <BarChart3 className="mr-1.5 h-4 w-4" />
+            Reports
+          </TabsTrigger>
+          <TabsTrigger value="analytics" data-testid="tab-analytics">
+            <TrendingUp className="mr-1.5 h-4 w-4" />
+            Analytics
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="reports">
+          <ReportsContent />
+        </TabsContent>
+        <TabsContent value="analytics" className="-m-4 md:-m-6">
+          <Analytics />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
