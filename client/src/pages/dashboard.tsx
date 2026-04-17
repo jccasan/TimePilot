@@ -89,7 +89,7 @@ import {
   StickyNote, Route, GripVertical, X, LayoutGrid,
   Inbox, ArrowRight, RotateCcw, Cloud, MapPinned,
   Sun, CloudRain, CloudSnow, CloudLightning, CloudDrizzle,
-  Cloudy, Snowflake, Wind, GripHorizontal, Bell, Info, AlertOctagon,
+  Cloudy, Snowflake, Wind, GripHorizontal, Bell, Info, AlertOctagon, List,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -641,6 +641,13 @@ function ClientRequestsCard() {
               </div>
             );
           })}
+        </div>
+        <div className="mt-3 pt-2 border-t">
+          <Link href="/communications">
+            <span className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1" data-testid="link-view-all-requests">
+              View all communications <ArrowRight className="h-3 w-3" />
+            </span>
+          </Link>
         </div>
       </CardContent>
     </Card>
@@ -1240,12 +1247,38 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
             </div>
           ))}
         </div>
+        <div className="px-4 pb-3 pt-1 border-t mt-2">
+          <Link href="/scheduling">
+            <span className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1" data-testid="link-view-all-appointments">
+              View full schedule <ArrowRight className="h-3 w-3" />
+            </span>
+          </Link>
+        </div>
       </ResizableCardBody>
     </Card>
   );
 }
 
 function BusinessPerformance({ data }: { data: PipelineData }) {
+  const { toast } = useToast();
+  const [remindingId, setRemindingId] = useState<string | null>(null);
+
+  const sendReminderMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      setRemindingId(contactId);
+      const res = await apiRequest("POST", `/api/contacts/${contactId}/send-payment-reminder`);
+      return res.json();
+    },
+    onSuccess: (_, contactId) => {
+      toast({ title: "Reminder sent", description: "Payment reminder sent to client." });
+      setRemindingId(null);
+    },
+    onError: (err: Error, contactId) => {
+      toast({ title: "Failed to send reminder", description: err.message, variant: "destructive" });
+      setRemindingId(null);
+    },
+  });
+
   return (
     <div className="space-y-3" data-testid="section-business-performance">
       <Card data-testid="card-receivables">
@@ -1270,18 +1303,40 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
             <div className="space-y-1.5 pt-1 border-t">
               <p className="text-xs text-muted-foreground font-medium">Top Balances</p>
               {data.receivables.topClients.map((client) => (
-                <Link key={client.contactId} href={`/contacts/${client.contactId}`}>
-                  <div
-                    className="flex items-center justify-between gap-2 text-sm py-1 hover:bg-muted/50 rounded px-1 cursor-pointer"
-                    data-testid={`receivable-client-${client.contactId}`}
-                  >
-                    <span className="truncate">{client.contactName}</span>
-                    <span className="font-medium tabular-nums shrink-0">${fmt(client.total)}</span>
+                <div
+                  key={client.contactId}
+                  className="flex items-center justify-between gap-2 text-sm py-1 hover:bg-muted/50 rounded px-1 group"
+                  data-testid={`receivable-client-${client.contactId}`}
+                >
+                  <Link href={`/contacts/${client.contactId}`} className="truncate flex-1">
+                    <span className="hover:underline cursor-pointer">{client.contactName}</span>
+                  </Link>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="font-medium tabular-nums">${fmt(client.total)}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-1.5 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity text-primary hover:text-primary"
+                      onClick={() => sendReminderMutation.mutate(client.contactId)}
+                      disabled={remindingId === client.contactId}
+                      data-testid={`button-send-reminder-${client.contactId}`}
+                      title="Send payment reminder"
+                    >
+                      <Bell className="h-3 w-3 mr-0.5" />
+                      {remindingId === client.contactId ? "…" : "Remind"}
+                    </Button>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           )}
+          <div className="pt-1 border-t">
+            <Link href="/invoices?tab=awaiting">
+              <span className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1" data-testid="link-view-all-receivables">
+                View all invoices <ArrowRight className="h-3 w-3" />
+              </span>
+            </Link>
+          </div>
         </CardContent>
       </Card>
 
@@ -1492,6 +1547,7 @@ function QuickNotesWidget() {
   const [notes, setNotes] = useState("");
   const [initialized, setInitialized] = useState(false);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -1518,6 +1574,43 @@ function QuickNotesWidget() {
     }, 1000);
   }, [notesMutation]);
 
+  const applyFormat = useCallback((type: "bold" | "bullet") => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = notes.slice(start, end);
+
+    let newText = notes;
+    let newCursor = end;
+
+    if (type === "bold") {
+      if (selected) {
+        newText = notes.slice(0, start) + `**${selected}**` + notes.slice(end);
+        newCursor = start + selected.length + 4;
+      } else {
+        newText = notes.slice(0, start) + `****` + notes.slice(end);
+        newCursor = start + 2;
+      }
+    } else if (type === "bullet") {
+      const lineStart = notes.lastIndexOf("\n", start - 1) + 1;
+      const lineText = notes.slice(lineStart, start);
+      if (lineText.startsWith("• ")) {
+        newText = notes.slice(0, lineStart) + lineText.slice(2) + notes.slice(start);
+        newCursor = start - 2;
+      } else {
+        newText = notes.slice(0, lineStart) + "• " + notes.slice(lineStart);
+        newCursor = start + 2;
+      }
+    }
+
+    handleChange(newText);
+    setTimeout(() => {
+      ta.focus();
+      ta.setSelectionRange(newCursor, newCursor);
+    }, 0);
+  }, [notes, handleChange]);
+
   return (
     <div className="h-full flex flex-col" data-testid="widget-quick-notes-content">
       <div className="flex items-center gap-2 mb-2">
@@ -1526,9 +1619,32 @@ function QuickNotesWidget() {
         {notesMutation.isPending && (
           <span className="text-[10px] text-muted-foreground">Saving...</span>
         )}
+        <div className="ml-auto flex items-center gap-0.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 text-xs font-bold text-muted-foreground hover:text-foreground"
+            onClick={() => applyFormat("bold")}
+            title="Bold (wrap selection in **)"
+            data-testid="button-notes-bold"
+          >
+            B
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+            onClick={() => applyFormat("bullet")}
+            title="Bullet list (toggle • prefix)"
+            data-testid="button-notes-bullet"
+          >
+            <List className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
       <Textarea
-        className="flex-1 resize-none text-sm min-h-0"
+        ref={textareaRef}
+        className="flex-1 resize-none text-sm min-h-0 font-mono"
         placeholder="Jot down reminders, to-dos, or notes..."
         value={notes}
         onChange={(e) => handleChange(e.target.value)}

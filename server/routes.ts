@@ -9720,6 +9720,51 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/contacts/:id/send-payment-reminder", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      const company = await storage.getCompany(companyId);
+      const contactInvoices = await storage.getInvoices(companyId, { contactId: contact.id });
+      const outstanding = contactInvoices.filter(inv => ["pending", "sent"].includes(inv.status));
+      const totalOwed = outstanding.reduce((sum, inv) => sum + parseFloat(inv.total || "0"), 0);
+
+      if (outstanding.length === 0) {
+        return res.status(400).json({ error: "Contact has no outstanding invoices" });
+      }
+
+      const contactName = contact.firstName || "there";
+      const companyName = company?.name || "Your service provider";
+      const baseUrl = getBaseUrl(req);
+      const portalUrl = `${baseUrl}/portal`;
+
+      let smsSent = false;
+      let emailSent = false;
+
+      if (contact.phone && await isSmsConfiguredForCompany(companyId)) {
+        const body = `Hi ${contactName}, you have an outstanding balance of $${totalOwed.toFixed(2)} with ${companyName}. Please visit ${portalUrl} to pay online. Reply STOP to opt out.`;
+        await sendSmsForCompany({ to: contact.phone, body, companyId, contactId: contact.id });
+        smsSent = true;
+      }
+
+      if (contact.email && !smsSent) {
+        const subject = `Payment Reminder from ${companyName}`;
+        const text = `Hi ${contactName},\n\nThis is a reminder that you have an outstanding balance of $${totalOwed.toFixed(2)} with ${companyName}.\n\nPay online at: ${portalUrl}\n\nThank you!`;
+        const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><h3>Payment Reminder</h3><p>Hi ${contactName},</p><p>This is a friendly reminder that you have an outstanding balance of <strong>$${totalOwed.toFixed(2)}</strong> with ${companyName}.</p><p><a href="${portalUrl}" style="background:#2d8a5e;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Pay Online</a></p><p>Thank you!</p></div>`;
+        await sendEmail({ companyId, to: contact.email, subject, text, html, senderName: company?.name });
+        emailSent = true;
+      }
+
+      if (!smsSent && !emailSent) {
+        return res.status(400).json({ error: "Contact has no phone or email to send a reminder to" });
+      }
+
+      res.json({ success: true, smsSent, emailSent, totalOwed });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/contacts/:id/setup-intent", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
