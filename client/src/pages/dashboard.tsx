@@ -293,6 +293,7 @@ const WIDGET_DEFS: {
   { id: "current_plan", label: "Current Plan", icon: ClipboardList, description: "Your subscription details", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
   { id: "weather_forecast", label: "Weather Forecast", icon: Cloud, description: "5-day weather forecast for your area", defaultW: 6, defaultH: 3, minW: 4, minH: 3, category: "insights" },
   { id: "route_map_preview", label: "Route Map", icon: MapPinned, description: "Map preview of today's routes", defaultW: 6, defaultH: 5, minW: 4, minH: 4, category: "insights" },
+  { id: "todays_appointments", label: "Today's Appointments", icon: CalendarCheck, description: "Full list of today's visits with status controls", defaultW: 8, defaultH: 5, minW: 6, minH: 4, category: "insights" },
 ];
 
 const DEFAULT_WIDGET_IDS = [
@@ -1540,6 +1541,63 @@ function RouteSummaryWidget() {
   );
 }
 
+function CommandCenterShortcutWidget() {
+  const { data: stats, isLoading } = useQuery<CompanyStats>({
+    queryKey: ["/api/company/stats"],
+    refetchInterval: 30000,
+  });
+
+  const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  const total = stats?.todaysVisits ?? 0;
+  const completed = stats?.todaysVisitBreakdown?.completed ?? 0;
+  const inProgress = stats?.todaysVisitBreakdown?.inProgress ?? 0;
+  const scheduled = stats?.todaysVisitBreakdown?.scheduled ?? 0;
+
+  return (
+    <Card data-testid="card-command-center-shortcut">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-base" data-testid="text-today-ops-title">Today's Operations</CardTitle>
+          <span className="text-xs text-muted-foreground" data-testid="text-today-ops-date">{today}</span>
+        </div>
+        <CardDescription>Live visit summary — updates every 30 seconds</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="grid grid-cols-4 gap-3">
+            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-16 rounded-lg" />)}
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-3">
+            <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="stat-total-visits">
+              <div className="text-2xl font-bold">{total}</div>
+              <div className="text-xs text-muted-foreground mt-1">Total</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-green-50 dark:bg-green-950/30" data-testid="stat-completed-visits">
+              <div className="text-2xl font-bold text-green-700 dark:text-green-400">{completed}</div>
+              <div className="text-xs text-muted-foreground mt-1">Done</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30" data-testid="stat-in-progress-visits">
+              <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{inProgress}</div>
+              <div className="text-xs text-muted-foreground mt-1">Active</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="stat-scheduled-visits">
+              <div className="text-2xl font-bold">{scheduled}</div>
+              <div className="text-xs text-muted-foreground mt-1">Pending</div>
+            </div>
+          </div>
+        )}
+        <Link href="/command-center">
+          <Button className="w-full" data-testid="button-open-command-center">
+            Open Command Center
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
 function QuickNotesWidget() {
   const { data: company } = useQuery<CompanyData>({
     queryKey: ["/api/company"],
@@ -2579,6 +2637,14 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         );
+      case "todays_appointments":
+        return (
+          <Card className="h-full overflow-auto" data-testid="widget-todays-appointments">
+            <CardContent className="p-4 h-full">
+              <TodaysAppointments visits={pipeline?.todaysVisits ?? []} />
+            </CardContent>
+          </Card>
+        );
       default:
         return null;
     }
@@ -2656,9 +2722,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          {pipeline && (
-            <TodaysAppointments visits={pipeline.todaysVisits} />
-          )}
+          <CommandCenterShortcutWidget />
         </div>
 
         <div>
