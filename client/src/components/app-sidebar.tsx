@@ -77,7 +77,6 @@ const menuSections = [
     label: "Operations",
     key: "operations",
     items: [
-      { title: "Dashboard", url: "/", icon: LayoutDashboard },
       { title: "Command Center", url: "/command-center", icon: Radio, adminOnly: true },
       { title: "Scheduling", url: "/scheduling", icon: Calendar },
       { title: "Routes", url: "/routes", icon: MapPin },
@@ -212,6 +211,25 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
         <div className="px-3 pt-1 pb-3">
           <GlobalSearch />
         </div>
+
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  data-active={location === "/"}
+                  tooltip="Dashboard"
+                >
+                  <Link href="/" data-testid="link-dashboard" onClick={handleNavClick}>
+                    <LayoutDashboard />
+                    <span>Dashboard</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
         {menuSections.map((section) => {
           const isCollapsed = section.label ? (collapsed[section.key] ?? false) : false;
