@@ -91,6 +91,7 @@ export default function ContactDetail() {
   const [editing, setEditing] = useState(false);
   const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
   const [measurePropertyId, setMeasurePropertyId] = useState<string | null>(null);
+  const [editAddressPropertyId, setEditAddressPropertyId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [newTagName, setNewTagName] = useState("");
   const smsComposeRef = useRef<HTMLDivElement>(null);
@@ -244,6 +245,42 @@ export default function ContactDetail() {
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const editAddressSchema = z.object({
+    streetAddress: z.string().min(1, "Street address is required"),
+    city: z.string().min(1, "City is required"),
+    state: z.string().min(1, "State is required"),
+    zipCode: z.string().min(1, "Zip code is required"),
+  });
+
+  const editAddressForm = useForm<z.infer<typeof editAddressSchema>>({
+    resolver: zodResolver(editAddressSchema),
+    defaultValues: { streetAddress: "", city: "", state: "", zipCode: "" },
+  });
+
+  const updateAddressMutation = useMutation({
+    mutationFn: async ({ propertyId, data }: { propertyId: string; data: z.infer<typeof editAddressSchema> }) => {
+      const res = await apiRequest("PATCH", `/api/properties/${propertyId}`, data);
+      return res.json() as Promise<{ geocodeFailed?: boolean }>;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      if (result?.geocodeFailed) {
+        toast({
+          title: "Address updated",
+          description: "Address saved, but we still couldn't locate it on the map—coordinates were not updated. Double-check the address and try again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Address updated", description: "Address and coordinates updated successfully." });
+        setEditAddressPropertyId(null);
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error updating address", description: error.message, variant: "destructive" });
     },
   });
 
@@ -752,6 +789,31 @@ export default function ContactDetail() {
                           </div>
                         )}
                       </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {(!prop.latitude || !prop.longitude) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1"
+                            onClick={() => {
+                              if (editAddressPropertyId === prop.id) {
+                                setEditAddressPropertyId(null);
+                              } else {
+                                editAddressForm.reset({
+                                  streetAddress: prop.streetAddress || "",
+                                  city: prop.city || "",
+                                  state: prop.state || "",
+                                  zipCode: prop.zipCode || "",
+                                });
+                                setEditAddressPropertyId(prop.id);
+                              }
+                            }}
+                            data-testid={`button-edit-address-${prop.id}`}
+                          >
+                            <MapPin className="h-3.5 w-3.5" />
+                            {editAddressPropertyId === prop.id ? "Cancel" : "Edit Address"}
+                          </Button>
+                        )}
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0" data-testid={`button-delete-property-${prop.id}`}>
@@ -777,7 +839,101 @@ export default function ContactDetail() {
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
+                      </div>
                     </div>
+                    {editAddressPropertyId === prop.id && (
+                      <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                          <MapPin className="h-3.5 w-3.5" /> Fix address &amp; re-geocode
+                        </p>
+                        <Form {...editAddressForm}>
+                          <form
+                            onSubmit={editAddressForm.handleSubmit((data) =>
+                              updateAddressMutation.mutate({ propertyId: prop.id, data })
+                            )}
+                            className="space-y-2"
+                          >
+                            <FormField
+                              control={editAddressForm.control}
+                              name="streetAddress"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-xs">Street Address</FormLabel>
+                                  <FormControl>
+                                    <AddressAutocomplete
+                                      value={field.value}
+                                      onChange={field.onChange}
+                                      onSelect={(addr) => {
+                                        editAddressForm.setValue("streetAddress", addr.streetAddress);
+                                        editAddressForm.setValue("city", addr.city);
+                                        editAddressForm.setValue("state", addr.state);
+                                        editAddressForm.setValue("zipCode", addr.zipCode);
+                                      }}
+                                      data-testid={`input-edit-street-${prop.id}`}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <div className="grid grid-cols-3 gap-2">
+                              <FormField
+                                control={editAddressForm.control}
+                                name="city"
+                                render={({ field }) => (
+                                  <FormItem className="col-span-1">
+                                    <FormLabel className="text-xs">City</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} className="h-8 text-sm" data-testid={`input-edit-city-${prop.id}`} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={editAddressForm.control}
+                                name="state"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs">State</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} className="h-8 text-sm" data-testid={`input-edit-state-${prop.id}`} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={editAddressForm.control}
+                                name="zipCode"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs">Zip</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} className="h-8 text-sm" data-testid={`input-edit-zip-${prop.id}`} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            <Button
+                              type="submit"
+                              size="sm"
+                              className="h-8 text-xs w-full"
+                              disabled={updateAddressMutation.isPending}
+                              data-testid={`button-save-address-${prop.id}`}
+                            >
+                              {updateAddressMutation.isPending ? (
+                                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Saving &amp; geocoding…</>
+                              ) : (
+                                "Save &amp; Re-geocode"
+                              )}
+                            </Button>
+                          </form>
+                        </Form>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 flex-wrap">
                       {prop.measuredYardSqft && yardCat ? (
                         <>
