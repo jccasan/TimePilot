@@ -165,6 +165,7 @@ export default function TechMobile() {
   const [viewMode, setViewMode] = useState<"start-day" | "route">("start-day");
   const [showMapOverlay, setShowMapOverlay] = useState(false);
   const [techPosition, setTechPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [driveInfo, setDriveInfo] = useState<Map<string, { durationText: string; distanceText: string } | null>>(new Map());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [uploadingVisitId, setUploadingVisitId] = useState<string | null>(null);
@@ -330,6 +331,39 @@ export default function TechMobile() {
       navigator.geolocation.clearWatch(watchId);
     };
   }, [showMapOverlay]);
+
+  useEffect(() => {
+    if (!showMapOverlay || !techPosition) return;
+    const upcomingVisits = allVisitsFlat.filter(
+      v =>
+        v.status !== "completed" &&
+        v.status !== "skipped" &&
+        v.status !== "cancelled" &&
+        v.property?.latitude != null &&
+        v.property?.longitude != null
+    );
+    if (upcomingVisits.length === 0) return;
+
+    const destinations = upcomingVisits.map(v => ({ lat: v.property!.latitude!, lng: v.property!.longitude! }));
+    apiRequest("POST", "/api/tech/distances", {
+      originLat: techPosition.lat,
+      originLng: techPosition.lng,
+      destinations,
+    })
+      .then(res => res.json())
+      .then((data: { results?: (null | { durationText: string; distanceText: string })[], fallback?: boolean }) => {
+        if (!data.results) return;
+        const map = new Map<string, { durationText: string; distanceText: string } | null>();
+        upcomingVisits.forEach((v, i) => {
+          map.set(v.id, data.results![i] ?? null);
+        });
+        setDriveInfo(map);
+      })
+      .catch(() => {
+        // silently fall back to haversine
+      });
+  }, [showMapOverlay, techPosition, allVisitsFlat]);
+
 
   useEffect(() => {
     if (visits && visits.some(v => v.status === "in_progress")) {
@@ -1362,11 +1396,24 @@ export default function TechMobile() {
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {distanceMiles !== null && (
-                      <span className="text-xs text-muted-foreground" data-testid={`distance-stop-${visit.id}`}>
-                        {distanceMiles < 0.1 ? "<0.1 mi" : `${distanceMiles.toFixed(1)} mi`}
-                      </span>
-                    )}
+                    {!isDone && (() => {
+                      const drive = driveInfo.get(visit.id);
+                      if (drive) {
+                        return (
+                          <span className="text-xs text-muted-foreground" data-testid={`distance-stop-${visit.id}`}>
+                            {drive.durationText} · {drive.distanceText}
+                          </span>
+                        );
+                      }
+                      if (distanceMiles !== null) {
+                        return (
+                          <span className="text-xs text-muted-foreground" data-testid={`distance-stop-${visit.id}`}>
+                            {distanceMiles < 0.1 ? "<0.1 mi" : `${distanceMiles.toFixed(1)} mi`}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                     {isActive && <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">Active</Badge>}
                   </div>
                 </div>

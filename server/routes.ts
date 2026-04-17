@@ -1104,6 +1104,59 @@ export async function registerRoutes(
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/tech/distances", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { originLat, originLng, destinations } = req.body;
+      if (
+        typeof originLat !== "number" ||
+        typeof originLng !== "number" ||
+        !Array.isArray(destinations) ||
+        destinations.length === 0
+      ) {
+        return res.status(400).json({ error: "originLat, originLng, and destinations[] required" });
+      }
+
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        return res.status(503).json({ error: "Google Maps not configured", fallback: true });
+      }
+
+      const destParam = destinations
+        .map((d: { lat: number; lng: number }) => `${d.lat},${d.lng}`)
+        .join("|");
+
+      const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originLat},${originLng}&destinations=${encodeURIComponent(destParam)}&mode=driving&units=imperial&key=${apiKey}`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        return res.status(502).json({ error: "Distance Matrix request failed", fallback: true });
+      }
+
+      const data = await response.json() as {
+        status: string;
+        rows: Array<{ elements: Array<{ status: string; duration: { text: string; value: number }; distance: { text: string; value: number } }> }>;
+      };
+
+      if (data.status !== "OK" || !data.rows?.[0]?.elements) {
+        return res.status(502).json({ error: "Distance Matrix returned error", fallback: true });
+      }
+
+      const results = data.rows[0].elements.map((el) => {
+        if (el.status !== "OK") return null;
+        return {
+          durationText: el.duration.text,
+          durationSeconds: el.duration.value,
+          distanceText: el.distance.text,
+          distanceMeters: el.distance.value,
+        };
+      });
+
+      res.json({ results });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/mapbox-static-image", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
