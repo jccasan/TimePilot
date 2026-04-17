@@ -840,38 +840,40 @@ export async function registerRoutes(
 
   app.get("/api/streetview", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) return res.status(503).json({ error: "Street View not configured" });
+      const token = process.env.MAPBOX_PUBLIC_TOKEN;
+      if (!token) return res.status(503).json({ error: "Street view not configured" });
 
-      const { address, lat, lng, size, fov } = req.query;
-      if (!address && !(lat && lng)) {
+      const { address, lat, lng, size } = req.query;
+
+      let latitude: number;
+      let longitude: number;
+
+      if (lat && lng) {
+        latitude = parseFloat(lat as string);
+        longitude = parseFloat(lng as string);
+      } else if (address) {
+        const geocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address as string)}.json?access_token=${token}&limit=1`;
+        const geocodeRes = await fetch(geocodeUrl);
+        if (!geocodeRes.ok) return res.status(502).json({ error: "Geocoding failed" });
+        const geocodeData = await geocodeRes.json();
+        if (!geocodeData.features?.length) return res.status(404).json({ error: "Address not found" });
+        [longitude, latitude] = geocodeData.features[0].center;
+      } else {
         return res.status(400).json({ error: "address or lat+lng required" });
       }
 
       const allowedSizes = ["400x200", "400x250", "600x300", "640x400"];
       const safeSize = allowedSizes.includes(size as string) ? (size as string) : "600x300";
-      const safeFov = Math.min(120, Math.max(20, parseInt(fov as string) || 90));
+      const [width, height] = safeSize.split("x").map(Number);
 
-      const params = new URLSearchParams({
-        size: safeSize,
-        fov: String(safeFov),
-        key: apiKey,
-      });
-
-      if (lat && lng) {
-        params.set("location", `${lat},${lng}`);
-      } else {
-        params.set("location", address as string);
-      }
-
-      const url = `https://maps.googleapis.com/maps/api/streetview?${params.toString()}`;
+      const url = `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/${longitude},${latitude},17,0,0/${width}x${height}?access_token=${token}`;
       const response = await fetch(url);
 
       if (!response.ok) {
-        return res.status(response.status).json({ error: "Street View request failed" });
+        return res.status(response.status).json({ error: "Street view request failed" });
       }
 
-      res.set("Content-Type", response.headers.get("content-type") || "image/jpeg");
+      res.set("Content-Type", response.headers.get("content-type") || "image/png");
       res.set("Cache-Control", "public, max-age=604800");
 
       const buffer = Buffer.from(await response.arrayBuffer());
@@ -883,30 +885,35 @@ export async function registerRoutes(
 
   app.get("/api/satellite", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) return res.status(503).json({ error: "Satellite view not configured" });
+      const token = process.env.MAPBOX_PUBLIC_TOKEN;
+      if (!token) return res.status(503).json({ error: "Satellite view not configured" });
 
       const { address, lat, lng, size, zoom } = req.query;
-      if (!address && !(lat && lng)) {
+
+      let latitude: number;
+      let longitude: number;
+
+      if (lat && lng) {
+        latitude = parseFloat(lat as string);
+        longitude = parseFloat(lng as string);
+      } else if (address) {
+        const geocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address as string)}.json?access_token=${token}&limit=1`;
+        const geocodeRes = await fetch(geocodeUrl);
+        if (!geocodeRes.ok) return res.status(502).json({ error: "Geocoding failed" });
+        const geocodeData = await geocodeRes.json();
+        if (!geocodeData.features?.length) return res.status(404).json({ error: "Address not found" });
+        [longitude, latitude] = geocodeData.features[0].center;
+      } else {
         return res.status(400).json({ error: "address or lat+lng required" });
       }
 
       const allowedSizes = ["400x200", "400x250", "400x300", "600x300", "600x400", "640x400"];
       const safeSize = allowedSizes.includes(size as string) ? (size as string) : "600x300";
+      const [width, height] = safeSize.split("x").map(Number);
       const safeZoom = Math.min(21, Math.max(15, parseInt(zoom as string) || 19));
 
-      const location = (lat && lng) ? `${lat},${lng}` : (address as string);
-
-      const params = new URLSearchParams({
-        center: location,
-        zoom: String(safeZoom),
-        size: safeSize,
-        maptype: "satellite",
-        markers: `color:red|${location}`,
-        key: apiKey,
-      });
-
-      const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
+      const marker = `pin-s+ff0000(${longitude},${latitude})`;
+      const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${encodeURIComponent(marker)}/${longitude},${latitude},${safeZoom}/${width}x${height}?access_token=${token}`;
       const response = await fetch(url);
 
       if (!response.ok) {
