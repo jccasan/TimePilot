@@ -57,6 +57,7 @@ import PricingCalculator from "@/pages/pricing-calculator";
 import Profitability from "@/pages/profitability";
 import ProfitabilityDetail from "@/pages/profitability-detail";
 import RouteProfitMaps from "@/pages/route-profit-maps";
+import FieldView from "@/pages/field-view";
 import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
 import OverheadCosts from "@/pages/overhead-costs";
 import MigrationPage from "@/pages/migration-page";
@@ -102,6 +103,7 @@ function Router() {
       <Route path="/profitability" component={Profitability} />
       <Route path="/profitability/:contactId" component={ProfitabilityDetail} />
       <Route path="/route-profit-maps" component={RouteProfitMaps} />
+      <Route path="/field-view" component={FieldView} />
       <Route path="/ai-pricing-optimizer"><Redirect to="/pricing-calculator?tab=simulator" /></Route>
       <Route path="/overhead-costs" component={OverheadCosts} />
       <Route path="/communications" component={Communications} />

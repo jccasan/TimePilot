@@ -34,6 +34,7 @@ import {
   KeyRound,
   Webhook,
   Database,
+  Radio,
 } from "lucide-react";
 import {
   Sidebar,
@@ -86,6 +87,7 @@ const menuSections = [
       { title: "Command Center", url: "/command-center", icon: LayoutDashboard, adminOnly: true },
       { title: "Scheduling", url: "/scheduling", icon: Calendar },
       { title: "Routes", url: "/routes", icon: MapPin },
+      { title: "Live Field Map", url: "/field-view", icon: Radio },
       { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Reports & Analytics", url: "/reports", icon: BarChart3 },
       { title: "Field View", url: "/m/today", icon: Smartphone },
