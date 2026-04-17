@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { format } from "date-fns";
 import {
   Calendar,
@@ -206,11 +206,49 @@ function buildTechGroups(visits: CommandCenterVisit[]): TechGroup[] {
 
 export default function CommandCenter() {
   const [, navigate] = useLocation();
+  const searchString = useSearch();
   const todayDate = new Date();
   const todayString = toLocalDateString(todayDate);
 
-  const [selectedDate, setSelectedDate] = useState<Date>(todayDate);
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const params = new URLSearchParams(searchString);
+    const dateParam = params.get("date");
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      const parsed = new Date(dateParam + "T12:00:00");
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    try {
+      const saved = sessionStorage.getItem("commandCenter.lastDate");
+      if (saved && /^\d{4}-\d{2}-\d{2}$/.test(saved)) {
+        const parsed = new Date(saved + "T12:00:00");
+        if (!isNaN(parsed.getTime())) return parsed;
+      }
+    } catch {
+    }
+    return todayDate;
+  });
   const [calendarOpen, setCalendarOpen] = useState(false);
+
+  useEffect(() => {
+    const dateStr = toLocalDateString(selectedDate);
+    try {
+      if (dateStr === todayString) {
+        sessionStorage.removeItem("commandCenter.lastDate");
+      } else {
+        sessionStorage.setItem("commandCenter.lastDate", dateStr);
+      }
+    } catch {
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (dateStr === todayString) {
+      params.delete("date");
+    } else {
+      params.set("date", dateStr);
+    }
+    const newSearch = params.toString();
+    const newUrl = window.location.pathname + (newSearch ? "?" + newSearch : "");
+    window.history.replaceState({}, "", newUrl);
+  }, [selectedDate]);
 
   const selectedDateString = toLocalDateString(selectedDate);
   const isToday = selectedDateString === todayString;
