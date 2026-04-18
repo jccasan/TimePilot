@@ -33,7 +33,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, DollarSign, Clock, CheckCircle2, ChevronDown, ChevronRight, SendHorizonal, RefreshCw, Square, CheckSquare } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
@@ -288,6 +289,56 @@ export default function Invoices() {
 
   const activePricing = useMemo(() => pricing?.filter(p => p.isActive) || [], [pricing]);
 
+  const { data: allInvoicesForStats } = useQuery<Invoice[]>({
+    queryKey: ["/api/invoices"],
+    queryFn: async () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const r = await fetch("/api/invoices", { credentials: "include", headers });
+      if (!r.ok) return [];
+      return r.json();
+    },
+  });
+
+  const revenueDashboard = useMemo(() => {
+    const all = allInvoicesForStats || [];
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+
+    let thisWeekRevenue = 0;
+    let collectedThisWeek = 0;
+    let outstandingBalance = 0;
+    let overdueAmount = 0;
+
+    for (const inv of all) {
+      const total = Number(inv.total) || 0;
+      const isPaid = inv.status === "paid";
+      const isVoided = inv.status === "voided";
+      const isOverdue = inv.dueDate && !isPaid && !isVoided &&
+        new Date(inv.dueDate + "T23:59:59") < now;
+
+      if (isPaid) {
+        if (inv.paidAt && new Date(inv.paidAt) >= weekStart) {
+          thisWeekRevenue += total;
+          collectedThisWeek += total;
+        }
+      }
+      if (!isPaid && !isVoided) {
+        outstandingBalance += total;
+        if (isOverdue) overdueAmount += total;
+      }
+    }
+    return { thisWeekRevenue, collectedThisWeek, outstandingBalance, overdueAmount };
+  }, [allInvoicesForStats]);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    overdue: true, unpaid: true, draft: true, paid: false,
+  });
+
   const subtotal = useMemo(() => lineItems.reduce((sum, li) => sum + (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0), 0), [lineItems]);
   const parsedDiscountValue = parseFloat(discountValue) || 0;
   const discountAmount = discountType === "percent" ? subtotal * (Math.abs(parsedDiscountValue) / 100) : discountType === "amount" ? Math.abs(parsedDiscountValue) : 0;
@@ -479,6 +530,67 @@ export default function Invoices() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const [batchPending, setBatchPending] = useState(false);
+
+  async function batchSend(ids: string[]) {
+    setBatchPending(true);
+    let sent = 0;
+    try {
+      await Promise.all(ids.map(id =>
+        apiRequest("POST", `/api/invoices/${id}/send-email`).then(() => { sent++; }).catch(() => {})
+      ));
+      queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+      toast({ title: `Sent ${sent} invoice${sent !== 1 ? "s" : ""}` });
+      setSelectedIds(new Set());
+    } finally { setBatchPending(false); }
+  }
+
+  async function batchCharge(ids: string[]) {
+    setBatchPending(true);
+    let charged = 0;
+    try {
+      await Promise.all(ids.map(id =>
+        apiRequest("POST", `/api/invoices/${id}/charge`).then(() => { charged++; }).catch(() => {})
+      ));
+      queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      toast({ title: `Charged ${charged} invoice${charged !== 1 ? "s" : ""}` });
+      setSelectedIds(new Set());
+    } finally { setBatchPending(false); }
+  }
+
+  async function batchMarkPaid(ids: string[]) {
+    setBatchPending(true);
+    let marked = 0;
+    try {
+      await Promise.all(ids.map(id =>
+        apiRequest("PATCH", `/api/invoices/${id}`, { status: "paid", paidAt: new Date().toISOString() })
+          .then(() => { marked++; }).catch(() => {})
+      ));
+      queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      toast({ title: `Marked ${marked} invoice${marked !== 1 ? "s" : ""} as paid` });
+      setSelectedIds(new Set());
+    } finally { setBatchPending(false); }
+  }
+
+  function toggleSelectAll(invoiceList: Invoice[]) {
+    if (invoiceList.every(inv => selectedIds.has(inv.id))) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(invoiceList.map(inv => inv.id)));
+    }
+  }
+
+  function toggleSelectOne(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const editSubtotal = useMemo(() => editLineItems.reduce((sum, li) => sum + (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0), 0), [editLineItems]);
   const editParsedDiscountValue = parseFloat(editDiscountValue) || 0;
@@ -720,6 +832,194 @@ export default function Invoices() {
     </TableHead>
   );
 
+  const groupedInvoices = useMemo(() => {
+    if (!sortedInvoices) return { overdue: [], unpaid: [], draft: [], paid: [] };
+    const now = new Date();
+    const overdue: Invoice[] = [];
+    const unpaid: Invoice[] = [];
+    const draft: Invoice[] = [];
+    const paid: Invoice[] = [];
+    for (const inv of sortedInvoices) {
+      if (inv.status === "paid") { paid.push(inv); continue; }
+      if (inv.status === "draft") { draft.push(inv); continue; }
+      if (inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now) { overdue.push(inv); continue; }
+      unpaid.push(inv);
+    }
+    return { overdue, unpaid, draft, paid };
+  }, [sortedInvoices]);
+
+  function renderInvoiceRows(list: Invoice[], testPrefix?: string) {
+    return list.map((invoice) => {
+      const contact = contactMap[invoice.contactId];
+      const hasAutopay = !!(contact?.stripeCustomerId);
+      const isOverdue = invoice.dueDate && invoice.status !== "paid" && invoice.status !== "voided" && new Date(invoice.dueDate + "T23:59:59") < new Date();
+      return (
+        <TableRow
+          key={invoice.id}
+          data-testid={`row-invoice-${testPrefix ? testPrefix + "-" : ""}${invoice.id}`}
+          className={`cursor-pointer ${isOverdue ? "bg-red-50/60 dark:bg-red-950/20" : ""} ${selectedIds.has(invoice.id) ? "bg-muted/40" : ""}`}
+          onClick={() => viewInvoiceDetail(invoice.id)}
+        >
+          <TableCell className="pl-3" onClick={e => e.stopPropagation()}>
+            <Checkbox
+              checked={selectedIds.has(invoice.id)}
+              onCheckedChange={() => toggleSelectOne(invoice.id)}
+              data-testid={`checkbox-invoice-${invoice.id}`}
+            />
+          </TableCell>
+          <TableCell className="font-medium">
+            <div className="flex items-center gap-2">
+              {isOverdue && <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />}
+              {invoice.invoiceNumber}
+              {invoice.autoGenerated && <Badge variant="outline" className="text-xs">Auto</Badge>}
+            </div>
+          </TableCell>
+          <TableCell>
+            <div className="flex items-center gap-1.5">
+              {contact ? (
+                <ClientInfoPopover contactId={contact.id}>
+                  <span className="hover:underline">{contact.firstName} {contact.lastName}</span>
+                </ClientInfoPopover>
+              ) : <span className="text-muted-foreground">Unknown</span>}
+              {hasAutopay && (
+                <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400 hidden sm:inline-flex" title="Card on file">
+                  <CreditCard className="h-2.5 w-2.5 mr-0.5" />Autopay
+                </Badge>
+              )}
+            </div>
+          </TableCell>
+          <TableCell className="text-muted-foreground">{new Date(invoice.createdAt).toLocaleDateString()}</TableCell>
+          <TableCell className={isOverdue ? "text-red-600 dark:text-red-400 font-medium" : ""}>
+            {invoice.dueDate}{isOverdue ? " (Overdue)" : ""}
+          </TableCell>
+          <TableCell className="font-semibold">${Number(invoice.total).toFixed(2)}</TableCell>
+          <TableCell>
+            <Badge variant="secondary" className={invoiceStatusColors[invoice.status] || ""}>
+              {invoiceStatusLabels[invoice.status] || invoice.status}
+            </Badge>
+          </TableCell>
+          <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-end gap-1">
+              <Button variant="ghost" size="icon" className="h-8 w-8"
+                onClick={() => { setPreviewInvoiceId(invoice.id); setPreviewDialogOpen(true); }}
+                title="Preview invoice"
+              >
+                <Printer className="h-4 w-4" />
+              </Button>
+              {invoice.status !== "paid" && stripeConfig?.configured && (
+                <>
+                  <Button variant="ghost" size="icon" className="h-8 w-8"
+                    onClick={() => chargeMutation.mutate(invoice.id)}
+                    disabled={chargeMutation.isPending}
+                    title="Charge card on file"
+                  >
+                    {chargeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8"
+                    onClick={() => checkoutMutation.mutate(invoice.id)}
+                    disabled={checkoutMutation.isPending}
+                    title="Send to Stripe Checkout"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+              {invoice.status !== "paid" && (
+                <Button variant="ghost" size="icon" className="h-8 w-8"
+                  onClick={() => markPaidMutation.mutate(invoice.id)}
+                  disabled={markPaidMutation.isPending}
+                  title="Mark as paid"
+                >
+                  <span className="text-xs font-bold">$</span>
+                </Button>
+              )}
+              {invoice.status !== "paid" && (
+                <Button variant="default" size="sm" className="h-8"
+                  onClick={() => sendEmailMutation.mutate(invoice.id)}
+                  disabled={sendEmailMutation.isPending}
+                >
+                  {sendEmailMutation.isPending && sendEmailMutation.variables === invoice.id
+                    ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    : <Mail className="mr-1 h-4 w-4" />}
+                  Send
+                </Button>
+              )}
+              {invoice.status !== "paid" && (
+                <Button variant="ghost" size="icon" className="h-8 w-8"
+                  onClick={() => { if (window.confirm("Permanently delete this invoice?")) deleteMutation.mutate(invoice.id); }}
+                  disabled={deleteMutation.isPending}
+                  title="Delete invoice"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </TableCell>
+        </TableRow>
+      );
+    });
+  }
+
+  function renderGroupedSection(
+    label: string,
+    list: Invoice[],
+    key: string,
+    headerClass: string,
+  ) {
+    const sectionTotal = list.reduce((s, inv) => s + Number(inv.total), 0);
+    const isExpanded = expandedSections[key] !== false;
+    return (
+      <div key={key} className="rounded-md border overflow-hidden" data-testid={`section-${key}`}>
+        <div
+          className={`flex items-center justify-between px-4 py-2 cursor-pointer select-none ${headerClass}`}
+          onClick={() => setExpandedSections(s => ({ ...s, [key]: !isExpanded }))}
+          data-testid={`section-header-${key}`}
+        >
+          <div className="flex items-center gap-2">
+            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            <span className="font-semibold text-sm">{label}</span>
+            <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal">{list.length}</Badge>
+          </div>
+          <span className="text-sm font-medium">${sectionTotal.toFixed(2)}</span>
+        </div>
+        {isExpanded && list.length > 0 && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10 pl-3">
+                  <Checkbox
+                    checked={list.every(inv => selectedIds.has(inv.id))}
+                    onCheckedChange={() => {
+                      if (list.every(inv => selectedIds.has(inv.id))) {
+                        setSelectedIds(prev => { const next = new Set(prev); list.forEach(inv => next.delete(inv.id)); return next; });
+                      } else {
+                        setSelectedIds(prev => { const next = new Set(prev); list.forEach(inv => next.add(inv.id)); return next; });
+                      }
+                    }}
+                    aria-label={`Select all ${label} invoices`}
+                  />
+                </TableHead>
+                <SortHeader field="invoiceNumber">Invoice</SortHeader>
+                <SortHeader field="contact">Client</SortHeader>
+                <SortHeader field="createdAt">Created</SortHeader>
+                <SortHeader field="dueDate">Due Date</SortHeader>
+                <SortHeader field="total">Amount</SortHeader>
+                <SortHeader field="status">Status</SortHeader>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {renderInvoiceRows(list, key)}
+            </TableBody>
+          </Table>
+        )}
+        {isExpanded && list.length === 0 && (
+          <div className="py-6 text-center text-sm text-muted-foreground">No {label.toLowerCase()} invoices.</div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -954,7 +1254,111 @@ export default function Invoices() {
         </div>
       </div>
 
-      <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="revenue-dashboard">
+        <Card className="border-l-4 border-l-emerald-500">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">This Week</p>
+                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400" data-testid="stat-this-week-revenue">
+                  ${revenueDashboard.thisWeekRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+              <TrendingUp className="h-8 w-8 text-emerald-500 opacity-70" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-amber-500">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Outstanding</p>
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="stat-outstanding-balance">
+                  ${revenueDashboard.outstandingBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+              <Clock className="h-8 w-8 text-amber-500 opacity-70" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-red-500">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Overdue</p>
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400" data-testid="stat-overdue-amount">
+                  ${revenueDashboard.overdueAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+              <AlertTriangle className="h-8 w-8 text-red-500 opacity-70" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-blue-500">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Collected This Week</p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400" data-testid="stat-collected-week">
+                  ${revenueDashboard.collectedThisWeek.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+              <CheckCircle2 className="h-8 w-8 text-blue-500 opacity-70" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-muted/70 border border-border" data-testid="batch-action-bar">
+          <span className="text-sm font-medium">{selectedIds.size} selected</span>
+          <div className="flex flex-wrap items-center gap-2 ml-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => batchSend(Array.from(selectedIds))}
+              disabled={batchPending}
+              data-testid="button-batch-send"
+            >
+              <SendHorizonal className="mr-1 h-3.5 w-3.5" />
+              Send All
+            </Button>
+            {stripeConfig?.configured && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => batchCharge(Array.from(selectedIds))}
+                disabled={batchPending}
+                data-testid="button-batch-charge"
+              >
+                <CreditCard className="mr-1 h-3.5 w-3.5" />
+                Charge All
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => batchMarkPaid(Array.from(selectedIds))}
+              disabled={batchPending}
+              data-testid="button-batch-mark-paid"
+            >
+              <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+              Mark Paid
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedIds(new Set())}
+              data-testid="button-clear-selection"
+            >
+              Clear
+            </Button>
+          </div>
+          {batchPending && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
+        </div>
+      )}
+
+      <Tabs value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setSelectedIds(new Set()); }}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="all" data-testid="tab-invoice-all">All</TabsTrigger>
           <TabsTrigger value="uninvoiced" data-testid="tab-invoice-uninvoiced">Uninvoiced</TabsTrigger>
@@ -1017,11 +1421,38 @@ export default function Invoices() {
             </Card>
           )}
         </div>
+      ) : statusFilter === "all" && sortedInvoices.length > 0 ? (
+        <div className="space-y-3">
+          {groupedInvoices.overdue.length > 0 && renderGroupedSection(
+            "Overdue", groupedInvoices.overdue, "overdue",
+            "bg-red-50/80 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-b"
+          )}
+          {renderGroupedSection(
+            "Unpaid / Sent", groupedInvoices.unpaid, "unpaid",
+            "bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-b"
+          )}
+          {renderGroupedSection(
+            "Draft", groupedInvoices.draft, "draft",
+            "bg-muted/40 text-muted-foreground border-b"
+          )}
+          {renderGroupedSection(
+            "Paid", groupedInvoices.paid, "paid",
+            "bg-emerald-50/40 dark:bg-emerald-950/10 text-emerald-700 dark:text-emerald-400 border-b"
+          )}
+        </div>
       ) : sortedInvoices.length > 0 ? (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10 pl-3">
+                  <Checkbox
+                    checked={sortedInvoices.length > 0 && sortedInvoices.every(inv => selectedIds.has(inv.id))}
+                    onCheckedChange={() => toggleSelectAll(sortedInvoices)}
+                    data-testid="checkbox-select-all"
+                    aria-label="Select all invoices"
+                  />
+                </TableHead>
                 <SortHeader field="invoiceNumber">Invoice</SortHeader>
                 <SortHeader field="contact">Client</SortHeader>
                 <SortHeader field="createdAt">Created</SortHeader>
@@ -1034,14 +1465,23 @@ export default function Invoices() {
             <TableBody>
               {sortedInvoices.map((invoice) => {
                 const contact = contactMap[invoice.contactId];
+                const hasAutopay = !!(contact?.stripeCustomerId);
                 const isOverdue = invoice.dueDate && invoice.status !== "paid" && invoice.status !== "voided" && new Date(invoice.dueDate + "T23:59:59") < new Date();
                 return (
                   <TableRow
                     key={invoice.id}
                     data-testid={`row-invoice-${invoice.id}`}
-                    className={`cursor-pointer ${isOverdue ? "bg-red-50/60 dark:bg-red-950/20" : ""}`}
+                    className={`cursor-pointer ${isOverdue ? "bg-red-50/60 dark:bg-red-950/20" : ""} ${selectedIds.has(invoice.id) ? "bg-muted/40" : ""}`}
                     onClick={() => viewInvoiceDetail(invoice.id)}
                   >
+                    <TableCell className="pl-3" onClick={e => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(invoice.id)}
+                        onCheckedChange={() => toggleSelectOne(invoice.id)}
+                        data-testid={`checkbox-invoice-${invoice.id}`}
+                        aria-label={`Select invoice ${invoice.invoiceNumber}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium" data-testid={`text-invoice-number-${invoice.id}`}>
                       <div className="flex items-center gap-2">
                         {isOverdue && <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />}
@@ -1052,11 +1492,18 @@ export default function Invoices() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {contact ? (
-                        <ClientInfoPopover contactId={contact.id}>
-                          <span className="hover:underline">{contact.firstName} {contact.lastName}</span>
-                        </ClientInfoPopover>
-                      ) : <span className="text-muted-foreground">Unknown</span>}
+                      <div className="flex items-center gap-1.5">
+                        {contact ? (
+                          <ClientInfoPopover contactId={contact.id}>
+                            <span className="hover:underline">{contact.firstName} {contact.lastName}</span>
+                          </ClientInfoPopover>
+                        ) : <span className="text-muted-foreground">Unknown</span>}
+                        {hasAutopay && (
+                          <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400 hidden sm:inline-flex" data-testid={`badge-autopay-${invoice.id}`} title="Card on file">
+                            <CreditCard className="h-2.5 w-2.5 mr-0.5" />Autopay
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(invoice.createdAt).toLocaleDateString()}

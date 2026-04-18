@@ -44,7 +44,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Data Management**: CRM for contacts and properties, CSV import with AI-assisted mapping, activity logs, and global search.
 - **Jobs & Scheduling (Unified)**: Job management directly from the Scheduling page. Auto-visit generation on job creation. Supports individual visit editing, client filtering, and toggling hidden statuses.
 - **Scheduling & Routing**: Auto-visit generation, auto-assignment to daily routes, drag-and-drop route builder with map visualization, and route locking. Calendar views with drag-and-drop rescheduling.
-- **Financials**: Detailed invoicing with Stripe integration, payment ledger, profitability dashboard, client tipping, and QuickBooks Online bidirectional sync.
+- **Financials**: Detailed invoicing with Stripe integration, payment ledger, profitability dashboard, client tipping, and QuickBooks Online bidirectional sync. Invoicing redesign adds: revenue dashboard (this week, outstanding, overdue, collected), multi-select batch actions (send/charge/mark paid), grouped invoice sections (Overdue/Unpaid/Draft/Paid) in the "All" view, and autopay indicators for contacts with Stripe on file.
 - **Communication**: Integrated two-way email and SMS with a unified threaded conversation inbox, client portal, and configurable notifications. Supports shared-number multi-tenant SMS routing and MMS.
 - **Admin Messaging Monitor**: Platform admin page for messaging analytics, tenant-specific message breakdown, and exception queue management.
 - **Client Signup Widget**: Public-facing signup and quote page with instant pricing, lead creation, and funnel analytics. Includes configurable auto-follow-up via SMS/email.
