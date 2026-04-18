@@ -914,6 +914,7 @@ export default function CommandCenter() {
         <LiveRoutePlayback
           visits={visits}
           onClose={() => setShowLivePlayback(false)}
+          extraQueryKeys={[["/api/admin/command-center-stats", selectedDateString]]}
         />
       )}
     </div>

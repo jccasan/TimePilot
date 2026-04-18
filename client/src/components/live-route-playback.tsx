@@ -3,6 +3,8 @@ import { Play, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
+const EMPTY_QUERY_KEYS: unknown[][] = [];
+
 type PlaybackSpeed = "slow" | "normal" | "fast" | "turbo";
 const SPEED_MS: Record<PlaybackSpeed, number> = { slow: 3000, normal: 1500, fast: 600, turbo: 150 };
 const SPEED_LABELS: Record<PlaybackSpeed, string> = { slow: "1×", normal: "2×", fast: "5×", turbo: "10×" };
@@ -13,7 +15,15 @@ export interface PlaybackVisit {
   startedAt?: string | null;
 }
 
-export function LiveRoutePlayback({ visits, onClose }: { visits: PlaybackVisit[]; onClose: () => void }) {
+export function LiveRoutePlayback({
+  visits,
+  onClose,
+  extraQueryKeys = EMPTY_QUERY_KEYS,
+}: {
+  visits: PlaybackVisit[];
+  onClose: () => void;
+  extraQueryKeys?: unknown[][];
+}) {
   const scheduledVisits = useMemo(
     () => visits.filter(v => v.status === "scheduled" || v.status === "in_progress"),
     [visits]
@@ -41,8 +51,11 @@ export function LiveRoutePlayback({ visits, onClose }: { visits: PlaybackVisit[]
         startedAt: visit.startedAt ?? new Date().toISOString(),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/visits/range"] });
+      for (const key of extraQueryKeys) {
+        queryClient.invalidateQueries({ queryKey: key });
+      }
     } catch (_) {}
-  }, [scheduledVisits]);
+  }, [scheduledVisits, extraQueryKeys]);
 
   useEffect(() => {
     if (!isPlaying || done) return;
@@ -68,6 +81,9 @@ export function LiveRoutePlayback({ visits, onClose }: { visits: PlaybackVisit[]
     setDone(false);
     setCurrentIdx(0);
     queryClient.invalidateQueries({ queryKey: ["/api/visits/range"] });
+    for (const key of extraQueryKeys) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
   };
 
   const total = scheduledVisits.length;
