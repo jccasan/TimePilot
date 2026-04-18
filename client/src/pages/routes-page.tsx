@@ -1402,15 +1402,15 @@ export default function RoutesPage() {
   const dayStopCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const d of DAYS) counts[d] = 0;
-    for (const visit of weekVisits) {
-      if (!visit.scheduledDate || visit.status === "cancelled") continue;
-      const visitDate = new Date(visit.scheduledDate + "T12:00:00");
-      const dayIdx = (visitDate.getDay() + 6) % 7;
-      const day = DAYS[dayIdx];
-      if (day !== undefined) counts[day] = (counts[day] || 0) + 1;
+    const routeMap = new Map(allRoutes.map(r => [r.id, r]));
+    for (const plan of servicePlans) {
+      if (!plan.routeId) continue;
+      const route = routeMap.get(plan.routeId);
+      if (!route?.dayOfWeek) continue;
+      counts[route.dayOfWeek] = (counts[route.dayOfWeek] || 0) + 1;
     }
     return counts;
-  }, [weekVisits]);
+  }, [allRoutes, servicePlans]);
 
   const createRouteMutation = useMutation({
     mutationFn: async (data: { name: string; dayOfWeek: string; technicianId: string | null; color: string }) => {
