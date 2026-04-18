@@ -1,0 +1,172 @@
+You are improving the UI/UX of a field-service SaaS app called Scoopilot. This app is for route-based home service businesses like pet waste removal, dog walking, and similar recurring services.
+
+Your task is to redesign and rebuild the current “Add Contact” workflow into a much better “New Customer” flow.
+
+GOAL
+The current flow behaves like a generic CRM data-entry modal. That is wrong.
+We need a fast, mobile-friendly intake flow that helps a service business create a customer and move directly into scheduling and revenue.
+
+CORE PRODUCT PRINCIPLE
+This is not “Add Contact.”
+This is “Create Customer + Start Service.”
+
+The workflow should optimize for:
+- speed
+- minimal typing
+- field usability on mobile
+- moving directly into booking/scheduling
+- collecting only information needed to operate the business
+
+TARGET USERS
+Small service business owners and office staff.
+They may be:
+- on mobile
+- in a truck
+- in the field
+- moving quickly
+- using one hand
+
+So the interface must feel fast, obvious, and low-friction.
+
+REDESIGN REQUIREMENTS
+
+1. Rename the action
+Change all references from:
+- “Add Contact”
+to:
+- “New Customer”
+
+Primary CTA should become:
+- “Create & Schedule”
+
+Do not use weak CTA text like:
+- Save
+- Submit
+- Create Contact
+
+2. Replace the current form structure
+The current modal uses fields like:
+- First Name
+- Last Name
+- Phone
+- Email
+- Status
+
+That is not acceptable.
+
+Replace it with this structure:
+
+PRIMARY VISIBLE FIELDS
+- Full Name
+- Phone Number
+- Service Address
+
+OPTIONAL / HIDDEN UNDER “MORE DETAILS”
+- Email
+- Notes
+- Tags
+- Internal status
+- Lead source
+
+Do not show internal CRM fields like Status in the default UI.
+If status is needed by the system, set it automatically in the background.
+
+3. Address is mandatory
+The service address must be a first-class field in the flow.
+It should be prominent and visually larger than the other fields.
+Use address autocomplete if available.
+If autocomplete is not available yet, structure the component so it can easily support it later.
+
+4. Mobile-first form behavior
+Optimize the layout for phones first.
+Requirements:
+- large tap targets
+- clean spacing
+- minimal scrolling
+- obvious field hierarchy
+- proper input types for phone/email
+- sticky primary CTA on mobile if useful
+- keyboard-friendly flow
+
+5. Full Name instead of First + Last
+Do not split name into first and last unless absolutely required by backend architecture.
+Use a single Full Name field.
+
+6. Phone UX
+Phone field should:
+- auto-format while typing
+- use appropriate mobile keyboard
+- validate gently
+- not feel strict or annoying
+
+7. Post-create behavior
+After customer creation, do not dump the user back to a list or a dead-end profile.
+Immediately transition into the next revenue-driving step.
+
+After “Create & Schedule,” move to a second step or next screen for:
+- service frequency
+- service type
+- any pricing drivers if relevant
+- first service scheduling
+
+The user should feel like they are continuing a workflow, not completing admin.
+
+8. Flow structure
+Build the interaction as either:
+Option A:
+- Step 1: New Customer
+- Step 2: Service Setup / Scheduling
+
+or Option B:
+- Single compact flow with progressive reveal
+
+Either is acceptable, but the experience must be fast and obvious.
+
+9. Design direction
+The UI should feel:
+- modern
+- simple
+- clean
+- operational
+- practical
+
+Avoid:
+- enterprise clutter
+- unnecessary borders
+- over-designed cards
+- too many fields visible at once
+- generic CRM vibes
+
+10. Information architecture
+The visual hierarchy should make this obvious:
+1. Who is the customer?
+2. Where is the service?
+3. What service happens next?
+
+11. Build quality
+Implement clean, production-quality code.
+Use reusable components.
+Keep state management clean.
+Comment only where useful.
+Do not overengineer.
+
+DELIVERABLES
+I want:
+1. An improved UX structure for the New Customer flow
+2. Updated UI text and labels
+3. The rebuilt component(s)
+4. A logical transition into scheduling/service setup
+5. A short explanation of what changed and why
+
+SUCCESS CRITERIA
+The flow should:
+- require fewer manual inputs
+- collect address early
+- remove internal CRM clutter
+- feel good on mobile
+- move directly toward scheduling
+- feel like a service-business tool, not a generic CRM
+
+IMPORTANT
+Think like a product designer who understands home service operations.
+Prioritize speed, clarity, and revenue workflow over generic CRM completeness.
