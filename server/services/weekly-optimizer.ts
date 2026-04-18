@@ -471,6 +471,45 @@ function findOptimalK(stops: WeeklyStop[], maxK: number): number {
   return optK;
 }
 
+/**
+ * Merge any cluster smaller than minSize into its nearest neighbor (by
+ * centroid-to-centroid distance). Runs repeatedly until no undersized cluster
+ * remains or only one cluster is left.
+ */
+function mergeSmallClusters(clusters: WeeklyStop[][], minSize: number): WeeklyStop[][] {
+  if (clusters.length <= 1) return clusters;
+
+  let result = [...clusters];
+  let changed = true;
+
+  while (changed && result.length > 1) {
+    changed = false;
+    const smallIdx = result.findIndex(c => c.length < minSize);
+    if (smallIdx === -1) break;
+
+    const smallCentroid = centroid(result[smallIdx]);
+    let nearestIdx = -1;
+    let nearestDist = Infinity;
+
+    for (let i = 0; i < result.length; i++) {
+      if (i === smallIdx) continue;
+      const c = centroid(result[i]);
+      const d = haversineDistance(smallCentroid.lat, smallCentroid.lon, c.lat, c.lon);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearestIdx = i;
+      }
+    }
+
+    if (nearestIdx === -1) break;
+    result[nearestIdx] = [...result[nearestIdx], ...result[smallIdx]];
+    result.splice(smallIdx, 1);
+    changed = true;
+  }
+
+  return result;
+}
+
 function assignByGeoClustering(
   stops: WeeklyStop[],
   activeDays: string[],
@@ -489,7 +528,14 @@ function assignByGeoClustering(
   const maxK = activeDays.length * Math.max(1, techsPerDay);
 
   const optK = findOptimalK(stops, maxK);
-  const clusters = kMeansClustering(stops, optK);
+  let clusters = kMeansClustering(stops, optK);
+
+  // Absorb clusters that are too small to stand alone as a day's route.
+  // Threshold scales with route size: ~1/3 of the average stops-per-day,
+  // floored at MIN_STOPS_FOR_OWN_DAY so tiny companies aren't over-merged.
+  const avgStopsPerDay = stops.length / activeDays.length;
+  const minClusterSize = Math.max(MIN_STOPS_FOR_OWN_DAY, Math.floor(avgStopsPerDay * 0.33));
+  clusters = mergeSmallClusters(clusters, minClusterSize);
 
   const orderedClusters = startPoint
     ? [...clusters].sort((a, b) => {
