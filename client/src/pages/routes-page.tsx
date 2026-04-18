@@ -6,6 +6,7 @@ import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { Route, ServicePlan, Contact, Property, Visit } from "@shared/schema";
+type RouteWithOptStatus = Route & { isOptimizedCurrent?: boolean };
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -311,7 +312,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
   onEdit, onDelete, onOptimize, onReverse, onDispatch, onUnassignAll, onLock, isOptimizing, isReversing, isDispatching, isUnassigning, isLocking,
   visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick, onOnMyWay, onMyWaySendingId, onSelectStop, selectedStopId }: {
-  route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
+  route: RouteWithOptStatus; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
   onOptimize: (routeId: string, stopCount: number) => void;
@@ -345,6 +346,10 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   const creditsNeeded = stopCount <= 30 ? 1 : 2;
   const isOverLimit = stopCount > 30;
   const isOverMax = stopCount > 60;
+  const isOptimized = route.isOptimizedCurrent ?? !!(route.lastOptimizedAt && route.optimizedStopHash);
+  const optimizedDate = isOptimized && route.lastOptimizedAt
+    ? new Date(route.lastOptimizedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : null;
 
   return (
     <Card className="flex flex-col" data-testid={`card-route-${route.id}`}>
@@ -414,17 +419,28 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
         </div>
 
         <div className="flex gap-1.5">
-          <Button
-            size="sm"
-            variant="outline"
-            className={`flex-1 text-xs ${route.isLocked ? "opacity-50" : ""}`}
-            onClick={() => onOptimize(route.id, stopCount)}
-            disabled={isOptimizing || stopCount < 2 || isOverMax || (credits < 999999 && credits < creditsNeeded)}
-            data-testid={`button-optimize-${route.id}`}
-          >
-            {isOptimizing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : route.isLocked ? <Lock className="h-3 w-3 mr-1 text-amber-500" /> : <Navigation className="h-3 w-3 mr-1" />}
-            Optimize ({creditsNeeded} {creditsNeeded === 1 ? "Credit" : "Credits"})
-          </Button>
+          {isOptimized && !isOptimizing ? (
+            <div
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-md border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 text-xs px-2 py-1.5 cursor-default"
+              data-testid={`badge-optimized-${route.id}`}
+              title={`Optimized on ${optimizedDate}`}
+            >
+              <CheckCircle className="h-3 w-3 shrink-0" />
+              <span>Optimized {optimizedDate}</span>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className={`flex-1 text-xs ${route.isLocked ? "opacity-50" : ""}`}
+              onClick={() => onOptimize(route.id, stopCount)}
+              disabled={isOptimizing || stopCount < 2 || isOverMax || (credits < 999999 && credits < creditsNeeded)}
+              data-testid={`button-optimize-${route.id}`}
+            >
+              {isOptimizing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : route.isLocked ? <Lock className="h-3 w-3 mr-1 text-amber-500" /> : <Navigation className="h-3 w-3 mr-1" />}
+              Optimize ({creditsNeeded} {creditsNeeded === 1 ? "Credit" : "Credits"})
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -968,7 +984,7 @@ export default function RoutesPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
-  const { data: allRoutes = [], isLoading: routesLoading } = useQuery<Route[]>({ queryKey: ["/api/routes"] });
+  const { data: allRoutes = [], isLoading: routesLoading } = useQuery<RouteWithOptStatus[]>({ queryKey: ["/api/routes"] });
   const { data: servicePlans = [], isLoading: plansLoading } = useQuery<ServicePlan[]>({ queryKey: ["/api/service-plans?isActive=true"] });
   const { data: contacts = [] } = useQuery<Contact[]>({ queryKey: ["/api/contacts"] });
   const { data: properties = [] } = useQuery<Property[]>({ queryKey: ["/api/properties"] });
@@ -1501,6 +1517,7 @@ export default function RoutesPage() {
       setOptimizingRouteId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       setRouteMetrics(prev => { const next = { ...prev }; delete next[routeId]; return next; });
       if (data.optimized) {
         setSavingsResult(data);

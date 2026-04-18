@@ -103,6 +103,31 @@ export function calculateTotalDistance(stops: Stop[], startPoint?: StartPoint): 
   return Math.round(pathDistance(stops, startPoint) * 100) / 100;
 }
 
+function nearestNeighborFromFirst(stops: Stop[], forcedFirst: Stop, startPoint?: StartPoint): Stop[] {
+  const result: Stop[] = [forcedFirst];
+  const remaining = stops.filter(s => s.id !== forcedFirst.id);
+  let currentLat = forcedFirst.latitude;
+  let currentLon = forcedFirst.longitude;
+
+  while (remaining.length > 0) {
+    let nearestIdx = 0;
+    let nearestDist = Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const dist = haversineDistance(currentLat, currentLon, remaining[i].latitude, remaining[i].longitude);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestIdx = i;
+      }
+    }
+    const nearest = remaining.splice(nearestIdx, 1)[0];
+    result.push(nearest);
+    currentLat = nearest.latitude;
+    currentLon = nearest.longitude;
+  }
+
+  return result;
+}
+
 export function optimizeRoute(stops: Stop[], startPoint?: StartPoint): { orderedIds: string[]; totalDistance: number } {
   if (stops.length <= 1) {
     return {
@@ -113,12 +138,48 @@ export function optimizeRoute(stops: Stop[], startPoint?: StartPoint): { ordered
     };
   }
 
-  const nnOrder = nearestNeighbor(stops, startPoint);
-  const optimized = twoOptImprove(nnOrder, startPoint);
+  const MAX_STARTS = Math.min(stops.length, 12);
+  let bestOrder: Stop[] = [];
+  let bestDist = Infinity;
+
+  const stepSize = Math.max(1, Math.floor(stops.length / MAX_STARTS));
+  const seenIdxMap: Record<number, boolean> = {};
+  const candidateIndices: number[] = [];
+  for (let i = 0; i < MAX_STARTS; i++) {
+    const idx = (i * stepSize) % stops.length;
+    if (!seenIdxMap[idx]) {
+      seenIdxMap[idx] = true;
+      candidateIndices.push(idx);
+    }
+  }
+
+  for (const startIdx of candidateIndices) {
+    let nnOrder: Stop[];
+    if (startPoint) {
+      nnOrder = nearestNeighborFromFirst(stops, stops[startIdx], startPoint);
+    } else {
+      const rotated = [...stops.slice(startIdx), ...stops.slice(0, startIdx)];
+      nnOrder = nearestNeighbor(rotated);
+    }
+    const improved = twoOptImprove(nnOrder, startPoint);
+    const dist = pathDistance(improved, startPoint);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestOrder = improved;
+    }
+  }
+
+  const nnDefault = nearestNeighbor(stops, startPoint);
+  const improvedDefault = twoOptImprove(nnDefault, startPoint);
+  const distDefault = pathDistance(improvedDefault, startPoint);
+  if (distDefault < bestDist) {
+    bestDist = distDefault;
+    bestOrder = improvedDefault;
+  }
 
   return {
-    orderedIds: optimized.map(s => s.id),
-    totalDistance: calculateTotalDistance(optimized, startPoint),
+    orderedIds: bestOrder.map(s => s.id),
+    totalDistance: Math.round(bestDist * 100) / 100,
   };
 }
 

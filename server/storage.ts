@@ -866,7 +866,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateServicePlan(id: string, companyId: string, data: Partial<InsertServicePlan>): Promise<ServicePlan> {
+    const shouldInvalidate =
+      "routeId" in data ||
+      "dayOfWeek" in data ||
+      (data.isActive === false);
+
+    let affectedRouteIds: string[] = [];
+    if (shouldInvalidate) {
+      const [existing] = await db.select({ routeId: servicePlans.routeId }).from(servicePlans)
+        .where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
+      if (existing?.routeId) affectedRouteIds.push(existing.routeId);
+      if (data.routeId && data.routeId !== existing?.routeId) affectedRouteIds.push(data.routeId);
+    }
+
     const [sp] = await db.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId))).returning();
+
+    if (affectedRouteIds.length > 0) {
+      const uniqueIds = affectedRouteIds.filter((id, idx, arr) => arr.indexOf(id) === idx);
+      for (const routeId of uniqueIds) {
+        db.update(routes).set({ lastOptimizedAt: null, optimizedStopHash: null, updatedAt: new Date() })
+          .where(and(eq(routes.id, routeId), eq(routes.companyId, companyId)))
+          .execute()
+          .catch(() => {});
+      }
+    }
+
     return sp;
   }
 

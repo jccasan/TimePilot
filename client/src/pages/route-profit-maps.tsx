@@ -16,6 +16,8 @@ import { MapPin, Eye, Layers, ChevronRight, ChevronDown, DollarSign, TrendingUp,
 import ProfitabilityMap, { type MapRoute, type MapStop } from "@/components/profitability-map";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import type { Route as RouteRecord } from "@shared/schema";
+type RouteWithOptStatus = RouteRecord & { isOptimizedCurrent?: boolean };
 
 type ViewMode = "stops" | "zones";
 type DayFilter = "all" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
@@ -181,7 +183,23 @@ export default function RouteProfitMaps() {
     queryKey: ["/api/profitability/route-map"],
   });
 
+  const { data: routeRecords } = useQuery<RouteWithOptStatus[]>({
+    queryKey: ["/api/routes"],
+  });
+
   const routes = routeMapData ?? [];
+
+  const optimizationStateMap = useMemo(() => {
+    const map = new Map<string, { isOptimized: boolean; date: string | null }>();
+    for (const r of (routeRecords ?? [])) {
+      const isOptimized = r.isOptimizedCurrent ?? !!(r.lastOptimizedAt && r.optimizedStopHash);
+      const date = isOptimized && r.lastOptimizedAt
+        ? new Date(r.lastOptimizedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+        : null;
+      map.set(r.id, { isOptimized, date });
+    }
+    return map;
+  }, [routeRecords]);
 
   const optimizeMutation = useMutation({
     mutationFn: async () => {
@@ -305,6 +323,10 @@ export default function RouteProfitMaps() {
     ? Math.round((totalProfitVisible / totalRevenueVisible) * 10000) / 100
     : 0;
 
+  const visibleRoutes = filteredRoutes.filter(r => effectiveVisibleIds.has(r.routeId));
+  const allVisibleOptimized = visibleRoutes.length > 0 &&
+    visibleRoutes.every(r => optimizationStateMap.get(r.routeId)?.isOptimized === true);
+
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center" data-testid="loading-route-profit-maps">
@@ -413,22 +435,33 @@ export default function RouteProfitMaps() {
             </div>
           )}
 
-          <Button
-            variant={isComparing ? "outline" : "default"}
-            size="sm"
-            className="h-8 text-xs gap-1"
-            onClick={() => isComparing ? exitComparison() : optimizeMutation.mutate()}
-            disabled={optimizeMutation.isPending || routes.length === 0}
-            data-testid="button-optimize-week"
-          >
-            {optimizeMutation.isPending ? (
-              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing...</>
-            ) : isComparing ? (
-              <><X className="h-3.5 w-3.5" /> Exit Comparison</>
-            ) : (
-              <><Sparkles className="h-3.5 w-3.5" /> Optimize Week</>
-            )}
-          </Button>
+          {allVisibleOptimized && !isComparing ? (
+            <div
+              className="flex items-center gap-1.5 h-8 px-3 rounded-md border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 text-xs cursor-default"
+              data-testid="badge-all-routes-optimized"
+              title="All visible routes are already optimized"
+            >
+              <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+              <span>All Routes Optimized</span>
+            </div>
+          ) : (
+            <Button
+              variant={isComparing ? "outline" : "default"}
+              size="sm"
+              className="h-8 text-xs gap-1"
+              onClick={() => isComparing ? exitComparison() : optimizeMutation.mutate()}
+              disabled={optimizeMutation.isPending || routes.length === 0}
+              data-testid="button-optimize-week"
+            >
+              {optimizeMutation.isPending ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing...</>
+              ) : isComparing ? (
+                <><X className="h-3.5 w-3.5" /> Exit Comparison</>
+              ) : (
+                <><Sparkles className="h-3.5 w-3.5" /> Optimize Week</>
+              )}
+            </Button>
+          )}
 
           <Button
             variant="ghost"
@@ -619,6 +652,9 @@ export default function RouteProfitMaps() {
               {filteredRoutes.map((route) => {
                 const isVisible = visibleRouteIds.has(route.routeId);
                 const isExpanded = expandedRouteId === route.routeId;
+                const routeOptState = optimizationStateMap.get(route.routeId);
+                const routeIsOptimized = routeOptState?.isOptimized ?? false;
+                const routeOptDate = routeOptState?.date ?? null;
                 return (
                   <div key={route.routeId} className={`${!isVisible ? "opacity-50" : ""}`} data-testid={`route-panel-${route.routeId}`}>
                     <div className="flex items-center gap-2 p-2.5 hover:bg-muted/50 transition-colors">
@@ -643,6 +679,15 @@ export default function RouteProfitMaps() {
                           <div className="flex items-center gap-1.5">
                             <span className="text-sm font-medium truncate" data-testid={`text-route-name-${route.routeId}`}>{route.routeName}</span>
                             {statusBadge(route.status)}
+                            {routeIsOptimized && (
+                              <span
+                                className="inline-flex items-center gap-0.5 text-[10px] text-green-600 dark:text-green-400 shrink-0"
+                                title={`Optimized on ${routeOptDate}`}
+                                data-testid={`badge-map-optimized-${route.routeId}`}
+                              >
+                                <CheckCircle className="h-2.5 w-2.5" />
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-muted-foreground mt-0.5">
                             {route.dayOfWeek.charAt(0).toUpperCase() + route.dayOfWeek.slice(1)} | {route.totalStops} stops | {formatDollars(route.totalProfitCents)} profit

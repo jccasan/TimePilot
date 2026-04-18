@@ -182,6 +182,19 @@ function auditLog(companyId: string, userId: string | null, entityType: string, 
   storage.createAuditEntry({ companyId, userId: userId || null, entityType, entityId, action, changes: changes || {}, ipAddress: ipAddress || null }).catch(console.error);
 }
 
+function computeStopHash(stopIds: string[]): string {
+  const sorted = [...stopIds].sort().join(",");
+  return crypto.createHash("sha256").update(sorted).digest("hex").substring(0, 64);
+}
+
+async function clearRouteOptimizationState(routeId: string, companyId: string): Promise<void> {
+  try {
+    await db.update(routes).set({ lastOptimizedAt: null, optimizedStopHash: null, updatedAt: new Date() }).where(and(eq(routes.id, routeId), eq(routes.companyId, companyId)));
+  } catch (err) {
+    console.error("[route-opt] Failed to clear optimization state for route", routeId, err);
+  }
+}
+
 const EMAIL_NOTIFY_TYPES = new Set([
   "portal_message", "new_message", "service_paused", "service_resumed",
   "payment_failed", "invoice_paid", "new_lead", "general",
@@ -4005,7 +4018,35 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId } = await getCompanyContext(req);
       const dayOfWeek = req.query.dayOfWeek as string | undefined;
       const routesList = await storage.getRoutes(companyId, dayOfWeek);
-      res.json(routesList);
+
+      const optimizedRoutes = routesList.filter(r => r.optimizedStopHash !== null);
+      if (optimizedRoutes.length > 0) {
+        const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+        const plansByRoute = new Map<string, string[]>();
+        for (const plan of allPlans) {
+          if (!plan.routeId) continue;
+          if (!plansByRoute.has(plan.routeId)) plansByRoute.set(plan.routeId, []);
+          plansByRoute.get(plan.routeId)!.push(plan.id);
+        }
+
+        const staleRouteIds: string[] = [];
+        const result = routesList.map(route => {
+          if (!route.optimizedStopHash) return { ...route, isOptimizedCurrent: false };
+          const currentIds = (plansByRoute.get(route.id) ?? []).sort();
+          const currentHash = crypto.createHash("sha256").update(currentIds.join(",")).digest("hex");
+          const isCurrent = currentHash === route.optimizedStopHash;
+          if (!isCurrent) staleRouteIds.push(route.id);
+          return { ...route, isOptimizedCurrent: isCurrent };
+        });
+
+        for (const rId of staleRouteIds) {
+          clearRouteOptimizationState(rId, companyId).catch(console.error);
+        }
+
+        return res.json(result);
+      }
+
+      res.json(routesList.map(r => ({ ...r, isOptimizedCurrent: false })));
     } catch (err) { handleError(res, err); }
   });
 
@@ -4219,6 +4260,9 @@ Return ONLY valid JSON, no markdown.`,
         console.error("[route-optimize] Failed to regenerate visits after optimization:", genErr);
       }
 
+      const stopHash = computeStopHash(routePlans.map(p => p.id));
+      await db.update(routes).set({ lastOptimizedAt: new Date(), optimizedStopHash: stopHash, updatedAt: new Date() }).where(and(eq(routes.id, route.id), eq(routes.companyId, companyId)));
+
       res.json({
         optimized: true,
         totalDistance: Math.round(optimizedDistance * 10) / 10,
@@ -4232,6 +4276,8 @@ Return ONLY valid JSON, no markdown.`,
         creditsUsed: isDemoCompanyForCredits ? 0 : creditsRequired,
         creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - creditsRequired,
         routingEngine: optimizedMapbox ? "mapbox" : "haversine",
+        lastOptimizedAt: new Date().toISOString(),
+        optimizedStopHash: stopHash,
       });
     } catch (err) { handleError(res, err); }
   });
@@ -4871,6 +4917,7 @@ Return ONLY valid JSON, no markdown.`,
       let routesCreated = 0;
       let stopsUpdated = 0;
       const updatedPlanIds: string[] = [];
+      const affectedRouteIds = new Set<string>();
 
       for (const dayPlan of daysToApply) {
         const day = dayPlan.day;
@@ -4900,10 +4947,13 @@ Return ONLY valid JSON, no markdown.`,
             routesCreated++;
           }
           dayRouteIdx++;
+          affectedRouteIds.add(existingRoute.id);
 
           for (let sIdx = 0; sIdx < validStops.length; sIdx++) {
             const stop = validStops[sIdx];
             const spId = getStopId(stop)!;
+            const planBefore = companyPlans.find(p => p.id === spId);
+            if (planBefore?.routeId) affectedRouteIds.add(planBefore.routeId);
             await storage.updateServicePlan(spId, companyId, {
               routeId: existingRoute.id,
               dayOfWeek: day,
@@ -4913,6 +4963,10 @@ Return ONLY valid JSON, no markdown.`,
             stopsUpdated++;
           }
         }
+      }
+
+      for (const rId of affectedRouteIds) {
+        clearRouteOptimizationState(rId, companyId).catch(console.error);
       }
 
       const appliedDaySet = new Set(daysToApply.map(d => d.day));
@@ -5293,6 +5347,18 @@ Return ONLY valid JSON, no markdown.`,
         if (Object.keys(safeUpdates).length === 0) continue;
         const plan = await storage.updateServicePlan(planId, companyId, safeUpdates);
         if (plan) results.push(plan);
+
+        const bulkRouteIdChanged = safeUpdates.routeId !== undefined && safeUpdates.routeId !== existing.routeId;
+        const bulkDayChanged = safeUpdates.dayOfWeek !== undefined && safeUpdates.dayOfWeek !== existing.dayOfWeek;
+        const bulkDeactivated = safeUpdates.isActive === false && existing.isActive === true;
+        if (bulkRouteIdChanged || bulkDayChanged || bulkDeactivated) {
+          const bulkRoutesToClear = new Set<string>();
+          if (existing.routeId) bulkRoutesToClear.add(existing.routeId);
+          if (safeUpdates.routeId) bulkRoutesToClear.add(safeUpdates.routeId);
+          for (const rId of bulkRoutesToClear) {
+            clearRouteOptimizationState(rId, companyId).catch(console.error);
+          }
+        }
       }
 
       res.json({ updated: results.length, results });
@@ -5317,6 +5383,10 @@ Return ONLY valid JSON, no markdown.`,
       const parsed = insertServicePlanSchema.parse(body);
 
       const plan = await storage.createServicePlan(parsed);
+
+      if (plan.routeId) {
+        clearRouteOptimizationState(plan.routeId, companyId).catch(console.error);
+      }
 
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", plan.id, "create", { new: { contactId: parsed.contactId, frequency: parsed.frequency, dayOfWeek: parsed.dayOfWeek } }, req.ip || undefined);
@@ -5490,6 +5560,18 @@ Return ONLY valid JSON, no markdown.`,
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", req.params.id, "update", { old: { frequency: existing.frequency, dayOfWeek: existing.dayOfWeek, routeId: existing.routeId }, new: updateBody }, req.ip || undefined);
 
+      const routeIdChanged = body.routeId !== undefined && body.routeId !== existing.routeId;
+      const dayChanged2 = body.dayOfWeek !== undefined && body.dayOfWeek !== existing.dayOfWeek;
+      const deactivated = body.isActive === false && existing.isActive === true;
+      if (routeIdChanged || dayChanged2 || deactivated) {
+        const routesToClear = new Set<string>();
+        if (existing.routeId) routesToClear.add(existing.routeId);
+        if (body.routeId && body.routeId !== existing.routeId) routesToClear.add(body.routeId);
+        for (const rId of routesToClear) {
+          clearRouteOptimizationState(rId, companyId).catch(console.error);
+        }
+      }
+
       if (body.isActive === false && existing.isActive === true) {
         const today = new Date().toISOString().split("T")[0];
         const cancelledCount = await storage.cancelFutureVisitsForPlans([req.params.id], today);
@@ -5540,6 +5622,9 @@ Return ONLY valid JSON, no markdown.`,
       const existing = await storage.getServicePlan(req.params.id, companyId);
       if (!existing) return res.status(404).json({ error: "Scheduled service not found" });
 
+      if (existing.routeId) {
+        clearRouteOptimizationState(existing.routeId, companyId).catch(console.error);
+      }
       await storage.deleteServicePlan(req.params.id, companyId);
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", req.params.id, "delete", { deleted: { contactId: existing.contactId, frequency: existing.frequency, dayOfWeek: existing.dayOfWeek } }, req.ip || undefined);

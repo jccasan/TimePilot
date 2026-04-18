@@ -377,6 +377,8 @@ export const routes = pgTable("routes", {
   technicianId: varchar("technician_id").references(() => users.id),
   color: varchar("color", { length: 7 }).default("#3b82f6"),
   isLocked: boolean("is_locked").default(false).notNull(),
+  lastOptimizedAt: timestamp("last_optimized_at"),
+  optimizedStopHash: varchar("optimized_stop_hash", { length: 64 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -918,7 +920,7 @@ export const insertContactSchema = createInsertSchema(contacts).omit({ id: true,
 export const insertTagSchema = createInsertSchema(tags).omit({ id: true, createdAt: true });
 export const insertLeadSourceSchema = createInsertSchema(leadSources).omit({ id: true, createdAt: true });
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertRouteSchema = createInsertSchema(routes).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertRouteSchema = createInsertSchema(routes).omit({ id: true, createdAt: true, updatedAt: true, lastOptimizedAt: true, optimizedStopHash: true });
 export const insertAgreementSchema = createInsertSchema(agreements).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertJobAddOnSchema = createInsertSchema(jobAddOns).omit({ id: true, createdAt: true });

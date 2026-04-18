@@ -40,8 +40,11 @@ import {
   Route,
   ChevronDown,
   ChevronRight,
+  CheckCircle,
 } from "lucide-react";
 import { ClientInfoPopover } from "@/components/client-info-popover";
+import type { Route as RouteRecord } from "@shared/schema";
+type RouteWithOptStatus = RouteRecord & { isOptimizedCurrent?: boolean };
 
 interface CustomerPropertyProfitability {
   propertyId: string;
@@ -192,6 +195,15 @@ export default function Profitability() {
     queryKey: ["/api/profitability/route-summary"],
     enabled: viewMode === "routes",
   });
+
+  const { data: routeRecords } = useQuery<RouteWithOptStatus[]>({
+    queryKey: ["/api/routes"],
+    enabled: viewMode === "routes",
+  });
+
+  const routeOptStateMap = new Map<string, boolean>(
+    (routeRecords ?? []).map(r => [r.id, r.isOptimizedCurrent ?? !!(r.lastOptimizedAt && r.optimizedStopHash)])
+  );
 
   const recalculateMutation = useMutation({
     mutationFn: async () => {
@@ -504,7 +516,14 @@ export default function Profitability() {
                               )}
                             </TableCell>
                             <TableCell className="font-medium" data-testid={`text-route-name-${route.routeId}`}>
-                              {route.routeName}
+                              <div className="flex items-center gap-1.5">
+                                {route.routeName}
+                                {routeOptStateMap.get(route.routeId) && (
+                                  <span title="Route is optimized" data-testid={`badge-profit-optimized-${route.routeId}`}>
+                                    <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                                  </span>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="capitalize text-muted-foreground" data-testid={`text-route-day-${route.routeId}`}>
                               {route.dayOfWeek}
