@@ -5197,23 +5197,8 @@ Return ONLY valid JSON, no markdown.`,
         await storage.updateCompany(companyId, { routeCredits: currentCredits - totalRoutes });
       }
 
-      try {
-        const tz = company?.timezone || "America/New_York";
-        const today = getCompanyToday(tz);
-        const affectedPlanIds = [...new Set(updatedPlanIds)];
-        if (affectedPlanIds.length > 0) {
-          await storage.deleteFutureScheduledVisitsForPlans(affectedPlanIds, today);
-          const { generateVisitsForPlans } = await import("./jobs/auto-visits");
-          const startDate = new Date(today + "T00:00:00Z");
-          startDate.setUTCDate(startDate.getUTCDate() + 1);
-          const endDate = new Date(today + "T00:00:00Z");
-          endDate.setUTCDate(endDate.getUTCDate() + 182);
-          await generateVisitsForPlans(companyId, affectedPlanIds, startDate.toISOString().split("T")[0], endDate.toISOString().split("T")[0]);
-        }
-      } catch (genErr) {
-        console.error("[apply-weekly-plan] Failed to regenerate visits after optimization:", genErr);
-      }
-
+      // Respond immediately — visit regeneration runs in the background so the
+      // HTTP request doesn't time out on large route sets.
       res.json({
         applied: true,
         routesCreated,
@@ -5222,6 +5207,28 @@ Return ONLY valid JSON, no markdown.`,
         creditsUsed: isDemoCompanyForCredits ? 0 : totalRoutes,
         creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - totalRoutes,
       });
+
+      // Background: delete stale visits and regenerate for the next 6 months.
+      // Errors here are non-fatal — visits will catch up on the next nightly run.
+      (async () => {
+        try {
+          const tz = company?.timezone || "America/New_York";
+          const today = getCompanyToday(tz);
+          const affectedPlanIds = [...new Set(updatedPlanIds)];
+          if (affectedPlanIds.length > 0) {
+            await storage.deleteFutureScheduledVisitsForPlans(affectedPlanIds, today);
+            const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+            const startDate = new Date(today + "T00:00:00Z");
+            startDate.setUTCDate(startDate.getUTCDate() + 1);
+            const endDate = new Date(today + "T00:00:00Z");
+            endDate.setUTCDate(endDate.getUTCDate() + 182);
+            await generateVisitsForPlans(companyId, affectedPlanIds, startDate.toISOString().split("T")[0], endDate.toISOString().split("T")[0]);
+            console.log(`[apply-weekly-plan] Background visit regen complete for ${affectedPlanIds.length} plans`);
+          }
+        } catch (genErr) {
+          console.error("[apply-weekly-plan] Failed to regenerate visits after optimization:", genErr);
+        }
+      })();
     } catch (err) { handleError(res, err); }
   });
 
