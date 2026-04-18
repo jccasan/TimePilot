@@ -1,0 +1,930 @@
+```text
+You are redesigning and extending the billing, invoicing, collections, and billing automation system for Scoopilot, a route-based field-service SaaS for recurring home service businesses such as pet waste removal, dog walking, and similar service businesses.
+
+Your job is to rebuild this area of the product into a true revenue engine.
+
+This is not a generic invoicing project.
+This is a cash flow, collections, and billing automation project.
+
+==================================================
+PROJECT GOAL
+==================================================
+
+Transform Scoopilot’s current invoicing and billing system from a passive invoice list with fragmented billing rules into a structured, action-first revenue system that:
+
+- minimizes manual invoicing
+- prevents billing errors and double billing
+- supports system-wide billing defaults
+- supports service-level billing rules
+- supports customer-level overrides
+- gives users clear visibility into uninvoiced work, upcoming charges, unpaid invoices, overdue invoices, and collected revenue
+- makes money-related actions obvious and easy
+- improves autopay adoption and autopay execution
+- makes billing feel automatic, supervised, and trustworthy
+
+Core principle:
+Invoices are not documents.
+They are cash flow events.
+
+Secondary principle:
+Users should experience this screen as:
+1. See money
+2. Click one action
+3. Money moves
+
+==================================================
+IMPLEMENTATION RULES
+==================================================
+
+- Use React
+- Build production-quality code
+- Use reusable components
+- Use maintainable state management
+- Use clean conditional rendering
+- Optimize for desktop first, but support tablet and mobile
+- Avoid enterprise clutter and unnecessary visual noise
+- Prefer batch workflows over one-off workflows
+- Make money totals, counts, and actions visible everywhere they matter
+- Remove confusing duplication and weak wording
+- Prevent double billing at the system level, not just visually
+- Preserve existing invoicing functionality where useful, but restructure the UX around collections and automation
+
+==================================================
+NON-NEGOTIABLE BUSINESS RULES
+==================================================
+
+1. Duplicate invoice generation actions must be eliminated.
+If the UI currently contains both:
+- Generate invoices
+- Generate from completed work
+
+They must be consolidated into a single primary action:
+- Generate All Invoices
+
+With optional dropdown actions:
+- Generate by Customer
+- Generate by Date Range
+- Generate Selected
+
+2. Uninvoiced work must support a clear bulk action.
+If the system shows uninvoiced visits and a total dollar amount, there must be a dominant CTA:
+- Generate All ($X)
+
+3. Double billing must be prevented.
+Once work is invoiced:
+- related visits must be marked as invoiced
+- they must be removed from Uninvoiced view
+- they must not be invoiceable again unless explicitly reversed by a deliberate reversal or credit workflow
+
+4. Invoice statuses must be simplified and made business-readable.
+Use only:
+- Uninvoiced
+- Unpaid
+- Overdue
+- Paid
+- Failed
+
+Remove or merge vague labels like:
+- Pending
+- Awaiting Payment
+- Sent
+
+5. Actions must attach directly to money.
+Examples:
+- Outstanding -> Send All Unpaid
+- Overdue -> Send Reminders
+- Autopay -> Charge $X across Y customers
+
+6. Billing logic must be structured into three layers:
+- System Defaults
+- Service-Level Billing Rules
+- Customer Overrides
+
+==================================================
+MASTER TASK LIST
+==================================================
+
+Build this project in the exact order below.
+Respect dependencies.
+Do not skip architecture tasks and jump directly to UI.
+Do not build later tasks before their required prerequisites are complete.
+
+==================================================
+TASK 1: AUDIT CURRENT BILLING AND INVOICING STATE
+==================================================
+
+Objective:
+Understand and normalize the current invoicing, uninvoiced work, autopay, and billing configuration model before redesigning the UI.
+
+Subtasks:
+
+1.1 Inventory current billing-related entities and flows
+- identify invoice model
+- identify invoice status model
+- identify visit/job completion to invoicing relationships
+- identify autopay/payment method data model
+- identify current customer-level automation settings
+- identify current invoice generation triggers
+- identify current uninvoiced work logic
+
+1.2 Identify duplicated, conflicting, or unclear actions
+- locate all invoice generation actions
+- locate all send/reminder actions
+- locate all autopay charging actions
+- identify weak wording and duplicate paths
+
+1.3 Identify current status labels and map them to future simplified statuses
+- document current statuses
+- map old statuses to:
+  - Uninvoiced
+  - Unpaid
+  - Overdue
+  - Paid
+  - Failed
+
+1.4 Identify double-billing risk points
+- detect where a completed visit can remain invoiceable after invoice generation
+- identify whether invoice reversal/credit logic already exists
+- identify whether invoice generation is idempotent or not
+
+Deliverables:
+- billing/invoicing audit summary
+- data model notes
+- list of UI duplication issues
+- status mapping table
+- double-billing risk list
+
+Dependencies:
+- none
+
+==================================================
+TASK 2: DEFINE TARGET BILLING ARCHITECTURE
+==================================================
+
+Objective:
+Create the target billing architecture that governs automation, invoice generation, autopay, and override behavior.
+
+Subtasks:
+
+2.1 Define the 3-layer billing hierarchy
+- System Defaults
+- Service-Level Billing Rules
+- Customer Overrides
+
+2.2 Define precedence rules
+Required precedence:
+- Customer Override wins over Service-Level Rule
+- Service-Level Rule wins over System Default
+- System Default applies when no lower-level rule exists
+
+2.3 Define billing trigger types
+Support:
+- After Job / Per Visit
+- End of Week
+- End of Month
+- Manual Only if absolutely needed
+
+2.4 Define payment behavior types
+Support:
+- Autopay immediately
+- Autopay on billing date
+- Generate and send invoice
+- Generate only for review if needed
+
+2.5 Define autopay eligibility model
+- customer has valid payment method
+- service/rule allows autopay
+- invoice is chargeable
+- no blocking error state
+
+2.6 Define uninvoiced work lifecycle
+Possible lifecycle:
+- completed
+- eligible for invoicing
+- invoiced
+- reversed if applicable
+
+2.7 Define invoice lifecycle using simplified statuses
+Use:
+- Uninvoiced
+- Unpaid
+- Overdue
+- Paid
+- Failed
+
+Deliverables:
+- documented target billing architecture
+- precedence rules
+- lifecycle rules
+- chargeability rules
+
+Dependencies:
+- Task 1
+
+==================================================
+TASK 3: RESTRUCTURE DATA MODELS AND DOMAIN LOGIC
+==================================================
+
+Objective:
+Implement or refactor the domain logic so the UI is built on clean billing rules, not ad hoc screen logic.
+
+Subtasks:
+
+3.1 Create or update system default billing configuration model
+Fields should include:
+- default billing cadence
+- default invoice trigger
+- default payment behavior
+- reminder settings if applicable
+
+3.2 Create or update service-level billing rule model
+Fields should include:
+- service ID
+- billing cadence
+- invoice trigger
+- payment behavior
+- autopay behavior
+- whether service is recurring or one-time
+
+3.3 Create or update customer override model
+Fields should include:
+- customer ID
+- optional override flag
+- optional override cadence
+- optional override trigger
+- optional override payment behavior
+
+3.4 Create invoice eligibility logic
+- determine whether completed work is eligible for invoicing
+- determine whether work has already been invoiced
+- determine whether work should appear in uninvoiced view
+
+3.5 Create double-billing prevention logic
+- prevent visits already linked to an invoice from being invoiced again
+- enforce removal from Uninvoiced view after generation
+- only allow re-invoicing via explicit reversal or correction workflow
+
+3.6 Create upcoming charges computation logic
+- calculate upcoming autopay charges by date
+- aggregate count and total amount
+- group by date and/or billing run
+
+3.7 Create collections metrics computation logic
+Support:
+- This Week
+- Outstanding
+- Overdue
+- Collected
+- counts and totals for statuses
+- unpaid invoice counts
+- autopay-ready counts and totals
+
+Deliverables:
+- refactored billing domain logic
+- invoice eligibility logic
+- double-billing protection
+- upcoming charges logic
+- revenue metrics logic
+
+Dependencies:
+- Task 2
+
+==================================================
+TASK 4: BUILD BILLING AUTOMATION SETTINGS UX
+==================================================
+
+Objective:
+Create the settings interfaces for System Defaults, Service-Level Billing Rules, and Customer Overrides.
+
+Subtasks:
+
+4.1 Build System Defaults settings panel
+Include controls for:
+- default billing cadence
+- default invoice trigger
+- default payment behavior
+- reminder defaults if used
+
+4.2 Build Service-Level Billing Rules UI
+Allow configuring per service:
+- cadence
+- invoice trigger
+- payment behavior
+- autopay behavior
+
+Example use cases:
+- Weekly service -> weekly billing -> autopay
+- One-time cleanup -> immediate billing -> charge immediately
+
+4.3 Build Customer Override UI
+Allow override only when needed.
+Requirements:
+- clearly label as override
+- visually subordinate to defaults
+- show inherited default/service behavior when not overridden
+
+4.4 Build inheritance and precedence display
+The UI should clearly show:
+- what value is inherited
+- what level set the active rule
+- when a customer is using a custom override
+
+Deliverables:
+- settings UI for all three layers
+- clear precedence/inheritance UX
+
+Dependencies:
+- Task 3
+
+==================================================
+TASK 5: BUILD AUTOMATION DASHBOARD
+==================================================
+
+Objective:
+Give the user visibility into the state of billing automation across customers.
+
+Subtasks:
+
+5.1 Create Automation Dashboard summary cards
+Show:
+- customers on autopay
+- customers without payment methods
+- customers with custom billing rules
+- misconfigured customers
+
+5.2 Create misconfiguration list
+Examples:
+- missing payment method
+- invalid payment method
+- billing override incomplete
+- service has no billing rule where required
+
+5.3 Add corrective actions
+Examples:
+- add payment method
+- fix billing rule
+- clear invalid override
+- convert to autopay
+
+5.4 Add filtering and quick navigation
+Allow drilling from summary cards into affected customer lists
+
+Deliverables:
+- automation dashboard
+- fix-misconfigurations workflow
+
+Dependencies:
+- Task 4
+
+==================================================
+TASK 6: BUILD BILLING PIPELINE AND UPCOMING CHARGES VIEWS
+==================================================
+
+Objective:
+Give the user a system-wide view of money that is ready to be invoiced, scheduled to charge, unpaid, overdue, and collected.
+
+Subtasks:
+
+6.1 Build Billing Pipeline view
+Show:
+- Uninvoiced work
+- Upcoming invoices
+- Scheduled autopay charges
+- Unpaid invoices
+- Overdue invoices
+
+6.2 Build Upcoming Charges view
+Display:
+- upcoming charges by date
+- customer count
+- total amount
+- review action
+- run early action if allowed
+
+6.3 Build pipeline summary metrics
+Show counts and totals for:
+- uninvoiced work
+- upcoming charges
+- unpaid
+- overdue
+- paid/collected
+
+6.4 Add navigation and relationship to invoicing dashboard
+Pipeline should connect naturally to invoices screen and automation settings
+
+Deliverables:
+- billing pipeline UI
+- upcoming charges UI
+- connected navigation
+
+Dependencies:
+- Task 3
+- Task 5
+
+==================================================
+TASK 7: REDESIGN INVOICES PAGE INFORMATION ARCHITECTURE
+==================================================
+
+Objective:
+Replace the current passive invoice-list-first structure with an action-first money dashboard.
+
+Subtasks:
+
+7.1 Rebuild page layout into the following non-negotiable structure
+
+TOP BAR
+Left:
+- Invoices
+
+Right:
+- Primary CTA: Generate All Invoices
+- Attached dropdown:
+  - Generate by Customer
+  - Generate by Date Range
+  - Generate Selected
+
+Remove duplicate actions such as:
+- Generate from completed work
+
+7.2 Build ROW 1: Money Dashboard
+Show 4 summary cards:
+- This Week
+- Outstanding
+- Overdue
+- Collected
+
+Attach direct actions:
+- Outstanding -> Send All Unpaid
+- Overdue -> Send Reminders
+- This Week -> no action required
+- Collected -> no action required
+
+7.3 Build ROW 2: Primary Action Bar
+Show:
+- Generate All Invoices
+- Charge Autopay ($X across Y customers)
+- Send Unpaid (X invoices)
+
+Right side:
+- Automation settings entry point
+
+Do not use weak wording such as:
+- Send 1 unpaid
+
+Do not display disabled-looking dead buttons without clear explanation.
+
+7.4 Build ROW 3: Status Filters
+Use only:
+- All
+- Uninvoiced
+- Unpaid
+- Overdue
+- Paid
+- Failed
+
+Set Uninvoiced as default highlighted tab if appropriate.
+
+Remove:
+- Pending
+- Awaiting Payment
+- Sent
+
+7.5 Build ROW 4: Uninvoiced Summary Block
+Display:
+- total visits
+- total dollar value
+
+Add dominant CTA:
+- Generate All ($X)
+
+Add optional secondary action:
+- Preview Before Generating
+
+This must be the most visually prominent CTA on the screen when uninvoiced work exists.
+
+7.6 Build ROW 5: Customer List / Work List
+Each row should include:
+- customer name
+- visit count
+- total amount
+- Generate Invoice button
+
+Enhancements:
+- checkbox for batch selection
+- autopay badge if enabled
+- quick actions:
+  - View visits
+  - Exclude from batch
+
+Deliverables:
+- redesigned invoices page layout
+- action-first dashboard structure
+
+Dependencies:
+- Task 6
+
+==================================================
+TASK 8: BUILD BULK INVOICE GENERATION FLOWS
+==================================================
+
+Objective:
+Make invoice generation fast, clear, and safe.
+
+Subtasks:
+
+8.1 Build Generate All Invoices action
+This is the primary generation entry point.
+
+8.2 Build alternate generation actions
+From dropdown:
+- Generate by Customer
+- Generate by Date Range
+- Generate Selected
+
+8.3 Build uninvoiced bulk generation flow
+When uninvoiced work exists, support:
+- Generate All ($X)
+- Preview Before Generating
+
+8.4 Build generation confirmation modal
+Modal must show:
+- number of visits being invoiced
+- total amount
+- explicit message that these items will be removed from Uninvoiced
+- explicit note that they cannot be invoiced again unless reversed
+
+Buttons:
+- Generate Invoices
+- Cancel
+
+8.5 Build post-generation behavior
+After successful generation:
+- mark visits as invoiced
+- remove them from Uninvoiced
+- move resulting invoices into Unpaid or charge flow as appropriate
+- show success banner:
+  - "$27,009 in invoices generated" or similar dynamic value
+
+Deliverables:
+- safe bulk invoice generation UX
+- confirmation modal
+- post-generation state updates
+
+Dependencies:
+- Task 7
+- Task 3
+
+==================================================
+TASK 9: BUILD AUTOPAY COLLECTION FLOWS
+==================================================
+
+Objective:
+Make autopay visible, trustworthy, and easy to execute in bulk.
+
+Subtasks:
+
+9.1 Build dynamic autopay action in primary action bar
+Show:
+- Charge Autopay ($X across Y customers)
+
+9.2 Build autopay review modal
+Show:
+- number of customers ready
+- total charge amount
+
+Buttons:
+- Charge Now
+- Cancel
+
+9.3 Build autopay execution flow
+After success:
+- show confirmation banner with total charged
+- update statuses and collections metrics
+
+9.4 Build failed charge handling
+If charges fail:
+- mark invoice/payment as Failed
+- surface failure in Failed filter
+- surface issue in Automation Dashboard if payment method is invalid
+- support retry failed payments
+
+9.5 Build autopay visibility across UI
+Show autopay badges in customer rows where relevant
+Show autopay-ready totals in dashboard and pipeline
+
+Deliverables:
+- autopay charging workflow
+- retry flow
+- autopay status visibility
+
+Dependencies:
+- Task 6
+- Task 8
+
+==================================================
+TASK 10: BUILD COLLECTIONS ACTIONS
+==================================================
+
+Objective:
+Make unpaid and overdue money actionable.
+
+Subtasks:
+
+10.1 Build Send All Unpaid action
+Trigger from Outstanding card and/or action bar
+
+10.2 Build Send Reminders action
+Trigger from Overdue card and/or invoice list
+
+10.3 Build batch send flow
+Display affected invoice count and optional total amount
+
+10.4 Build reminder automation hooks if supported
+- auto-send reminder after X days
+- configurable in automation settings if appropriate
+
+10.5 Build retry failed payment action
+Make Failed filter and failed invoice items actionable
+
+Deliverables:
+- unpaid send flow
+- overdue reminder flow
+- retry failed flow
+
+Dependencies:
+- Task 7
+- Task 9
+
+==================================================
+TASK 11: BUILD STATUS, FILTER, AND LIST UX
+==================================================
+
+Objective:
+Make the invoice and uninvoiced data easy to read and act on.
+
+Subtasks:
+
+11.1 Implement simplified statuses everywhere
+Ensure all invoice-related UI uses only:
+- Uninvoiced
+- Unpaid
+- Overdue
+- Paid
+- Failed
+
+11.2 Make money visible in filters
+Examples:
+- Unpaid (14 • $2,340)
+- Overdue (5 • $1,091)
+
+11.3 Remove dead or ambiguous states
+If an action cannot be used:
+- explain why clearly
+or
+- hide it
+
+Do not leave unexplained disabled controls.
+
+11.4 Improve row-level quick actions
+Possible actions:
+- Generate Invoice
+- View visits
+- Exclude from batch
+- Send reminder
+- Retry payment
+- View invoice details
+
+11.5 Add badges and chips where useful
+Examples:
+- Autopay Enabled
+- Failed Payment
+- Overdue
+
+Deliverables:
+- clean list/filter/status UX
+- readable counts and totals
+
+Dependencies:
+- Task 7
+- Task 8
+- Task 9
+- Task 10
+
+==================================================
+TASK 12: BUILD INVOICE DETAIL VIEW
+==================================================
+
+Objective:
+Make invoice details clearly tied to work performed and payment state.
+
+Subtasks:
+
+12.1 Redesign invoice detail view to include:
+- services performed
+- service dates
+- clear pricing breakdown
+- payment status
+- payment method status
+- customer details
+
+12.2 Add collections actions to detail view where relevant
+- send reminder
+- retry payment
+- charge now if allowed
+- mark reversal/credit path if supported
+
+12.3 Make it obvious where the invoice came from
+The user should understand:
+- which visits/services created this invoice
+- why the total is what it is
+
+Deliverables:
+- improved invoice detail page or panel
+
+Dependencies:
+- Task 11
+
+==================================================
+TASK 13: BUILD SYSTEM SAFETY, REVERSAL, AND AUDIT BEHAVIOR
+==================================================
+
+Objective:
+Prevent billing mistakes and make corrections safe.
+
+Subtasks:
+
+13.1 Implement hard prevention for duplicate invoice generation
+- idempotent generation logic where possible
+- no duplicate generation from same eligible work set
+
+13.2 Add reversal/correction pathway if needed
+If invoices must be adjusted:
+- explicit reverse/correct flow
+- make that the only way to re-expose previously invoiced work
+
+13.3 Add audit visibility
+Users/admins should be able to understand:
+- when invoices were generated
+- from what work
+- by what action
+- whether autopay was attempted
+- whether reminders were sent
+
+Deliverables:
+- safety logic
+- correction workflow
+- billing audit trail
+
+Dependencies:
+- Task 8
+- Task 9
+- Task 10
+- Task 12
+
+==================================================
+TASK 14: CONNECT END-TO-END REVENUE FLOW
+==================================================
+
+Objective:
+Ensure the whole system behaves like one connected revenue engine.
+
+Subtasks:
+
+14.1 Connect completed work -> invoice eligibility
+Completed jobs/visits should flow into uninvoiced work only when appropriate.
+
+14.2 Connect invoice generation -> unpaid or autopay flow
+Generated invoices should either:
+- move to Unpaid
+or
+- move directly into autopay review/charge flow depending on configuration
+
+14.3 Connect autopay -> paid/failed states
+Successful charges update Paid/Collected
+Failed charges update Failed and surface recovery actions
+
+14.4 Connect reminders and unpaid collections
+Unpaid and overdue states should naturally connect to reminder workflows
+
+14.5 Connect automation dashboard to operational fixes
+Misconfigurations should route users directly to the right corrective screen
+
+Deliverables:
+- fully connected revenue lifecycle
+- end-to-end system flow
+
+Dependencies:
+- Task 13
+
+==================================================
+TASK 15: FINAL UX POLISH AND QUALITY PASS
+==================================================
+
+Objective:
+Make the experience fast, obvious, and production-ready.
+
+Subtasks:
+
+15.1 Review copy and wording
+Use strong, clear, business-readable wording.
+Examples:
+- Generate All Invoices
+- Generate All ($X)
+- Charge Autopay ($X across Y customers)
+- Send All Unpaid
+- Send Reminders
+
+Avoid weak or vague wording.
+
+15.2 Review visibility and hierarchy
+The most important visual priorities should be:
+- money totals
+- status counts
+- batch actions
+- dominant revenue CTA
+
+15.3 Review empty states
+Examples:
+- no uninvoiced work
+- no overdue invoices
+- no autopay-ready charges
+- no failed payments
+
+15.4 Review loading states
+Examples:
+- calculating totals
+- charging autopay
+- generating invoices
+- sending reminders
+
+15.5 Review responsive behavior
+Ensure usable layouts on desktop, tablet, and smaller screens
+
+15.6 Review trust and confirmation states
+Users should always understand:
+- what action they are taking
+- what money is affected
+- what will happen next
+
+Deliverables:
+- polished production-ready UX
+- reviewed copy
+- stable states and feedback
+
+Dependencies:
+- Task 14
+
+==================================================
+RECOMMENDED COMPONENT STRUCTURE
+==================================================
+
+You may organize code into reusable components such as:
+
+- InvoicesPage
+- InvoiceTopBar
+- InvoiceMoneyDashboard
+- InvoiceActionBar
+- InvoiceStatusFilters
+- UninvoicedSummaryBlock
+- UninvoicedCustomerList
+- InvoiceRow
+- InvoiceDetailPanel
+- GenerateInvoicesModal
+- AutopayChargeModal
+- SendRemindersModal
+- BillingAutomationDashboard
+- BillingDefaultsSettings
+- ServiceBillingRulesPanel
+- CustomerBillingOverridePanel
+- UpcomingChargesView
+- BillingPipelineView
+- FailedPaymentsPanel
+
+You may adapt naming as needed, but keep component boundaries logical.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+The final system should:
+
+- remove duplicate and confusing invoice-generation actions
+- make uninvoiced work easy to bill in bulk
+- prevent double billing
+- simplify statuses into business-readable language
+- expose upcoming charges clearly
+- improve autopay visibility and execution
+- reduce manual invoicing work
+- increase collections speed
+- make billing behavior predictable
+- help users understand exactly what money is ready, unpaid, overdue, or collected
+- feel like a financial control center for a recurring service business
+
+Final user experience target:
+- user sees money clearly
+- user understands what action matters most
+- user clicks once or a few obvious times
+- money moves forward safely
+
+Build the system in the task order above and respect all dependencies.
+```
