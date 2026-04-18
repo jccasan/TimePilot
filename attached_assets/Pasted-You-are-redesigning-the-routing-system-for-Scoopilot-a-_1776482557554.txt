@@ -1,0 +1,170 @@
+You are redesigning the routing system for Scoopilot, a field-service SaaS focused on route-based businesses.
+
+CONTEXT
+The current system supports scheduling and some routing, but routing feels like a secondary feature.
+
+We need to rebuild routing as a first-class system.
+
+GOAL
+Create a route-first experience that allows users to:
+- view routes by day and technician
+- optimize routes quickly
+- reorder stops easily
+- understand efficiency at a glance
+- move jobs across days and routes
+
+CORE PRINCIPLE
+Routing is not a feature.
+Routing is the product.
+
+--------------------------------------------------
+
+ROUTE BOARD (PRIMARY UI)
+
+Build a Route Board view where routes are grouped by:
+- Day
+- Technician
+
+Each route should be a visible unit:
+
+Route Card should display:
+- Technician name
+- Day
+- Number of stops
+- Total distance (miles)
+- Estimated duration
+
+Inside each route:
+- ordered list of stops
+- drag-and-drop reordering
+- quick actions per stop
+
+--------------------------------------------------
+
+SPLIT VIEW
+
+Implement a split layout:
+
+LEFT:
+- Route stops (ordered list)
+
+RIGHT:
+- Map view with route lines
+
+Requirements:
+- reordering stops updates the map instantly
+- selecting a stop highlights it on the map
+- moving stops updates route path in real time
+
+--------------------------------------------------
+
+OPTIMIZATION
+
+Add route optimization functionality:
+
+Button:
+- “Optimize Route”
+
+Behavior:
+- reorder stops automatically
+- update route order
+- show results clearly
+
+After optimization, display:
+- miles saved
+- time saved
+
+Do not hide results.
+
+--------------------------------------------------
+
+MULTI-DAY OPTIMIZATION
+
+Add a higher-level action:
+- “Optimize Week”
+
+Behavior:
+- redistribute jobs across days
+- balance workload
+- reduce travel distance
+
+After running:
+- show what changed
+- highlight moved jobs
+- show total savings
+
+--------------------------------------------------
+
+DRAG AND MOVE
+
+Users must be able to:
+- drag stops within a route to reorder
+- drag stops between routes (different days or technicians)
+
+This must feel fast and responsive.
+
+--------------------------------------------------
+
+QUICK ACTIONS
+
+From the route view, users should be able to:
+- reassign technician
+- reschedule job
+- mark job complete
+- open details if needed
+
+Avoid forcing modal-heavy workflows.
+
+--------------------------------------------------
+
+METRICS
+
+Each route must clearly show:
+- total stops
+- total distance
+- estimated duration
+
+These should update dynamically.
+
+--------------------------------------------------
+
+UX REQUIREMENTS
+
+- fast, responsive interactions
+- minimal clicks
+- clear visual hierarchy
+- mobile and tablet friendly (but optimized for desktop dispatch)
+- clean modern design
+- no clutter
+
+--------------------------------------------------
+
+IMPLEMENTATION
+
+- React components
+- reusable route card, stop item, map panel
+- clean state management
+- real-time updates between list and map
+- modular structure for future expansion
+
+--------------------------------------------------
+
+DELIVERABLES
+
+- Route Board UI
+- Route detail view with split layout
+- drag-and-drop interaction
+- optimization behavior with visible results
+- multi-day optimization flow
+- clean, production-ready code
+
+--------------------------------------------------
+
+SUCCESS CRITERIA
+
+The routing system should:
+- make route efficiency obvious
+- reduce planning time
+- reduce miles driven
+- feel like a dispatch tool, not a calendar
+- become the core value of the product

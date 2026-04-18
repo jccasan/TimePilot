@@ -4,25 +4,29 @@ import { Skeleton } from "@/components/ui/skeleton";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 export type RouteStop = {
+  id?: string;
   stopNumber: number;
   contactName: string;
   streetAddress: string;
   latitude: number;
   longitude: number;
+  routeColor?: string;
 };
 
 type RouteMapViewProps = {
   stops: RouteStop[];
   routeName: string;
-  onStopClick?: (stopNumber: number) => void;
+  selectedStopId?: string | null;
+  onStopClick?: (id: string) => void;
 };
 
-const GREEN_MARKER = "#22c55e";
+const DEFAULT_COLOR = "#22c55e";
+const SELECTED_COLOR = "#f59e0b";
 
-export default function RouteMapView({ stops, routeName, onStopClick }: RouteMapViewProps) {
+export default function RouteMapView({ stops, routeName, selectedStopId, onStopClick }: RouteMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+  const markerMapRef = useRef<Map<string, { marker: any; color: string }>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
 
   const { data: tokenData, isLoading: tokenLoading } = useQuery<{ token: string }>({
@@ -59,30 +63,32 @@ export default function RouteMapView({ stops, routeName, onStopClick }: RouteMap
         if (cancelled) return;
         setMapLoaded(true);
 
-        const validStops = stops.filter(
-          (s) => s.latitude && s.longitude
-        );
+        const validStops = stops.filter(s => s.latitude && s.longitude);
 
         validStops.forEach((stop) => {
+          const color = stop.routeColor || DEFAULT_COLOR;
+          const isSelected = stop.id != null && stop.id === selectedStopId;
           const el = document.createElement("div");
           el.className = "route-map-marker";
           el.setAttribute("data-testid", `marker-stop-${stop.stopNumber}`);
-          el.style.width = "28px";
-          el.style.height = "28px";
+          el.style.width = isSelected ? "34px" : "28px";
+          el.style.height = isSelected ? "34px" : "28px";
           el.style.borderRadius = "50%";
-          el.style.backgroundColor = GREEN_MARKER;
+          el.style.backgroundColor = isSelected ? SELECTED_COLOR : color;
           el.style.color = "white";
           el.style.display = "flex";
           el.style.alignItems = "center";
           el.style.justifyContent = "center";
           el.style.fontSize = "12px";
           el.style.fontWeight = "bold";
-          el.style.border = "2px solid white";
+          el.style.border = isSelected ? "3px solid white" : "2px solid white";
           el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
           el.style.cursor = "pointer";
+          el.style.transition = "all 0.15s ease";
           el.textContent = String(stop.stopNumber);
-          if (onStopClick) {
-            el.addEventListener("click", () => onStopClick(stop.stopNumber));
+
+          if (onStopClick && stop.id) {
+            el.addEventListener("click", () => onStopClick(stop.id!));
           }
 
           const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
@@ -98,43 +104,45 @@ export default function RouteMapView({ stops, routeName, onStopClick }: RouteMap
             .setPopup(popup)
             .addTo(map);
 
-          markersRef.current.push(marker);
+          if (stop.id) {
+            markerMapRef.current.set(stop.id, { marker, color });
+          }
         });
 
-        if (validStops.length >= 2) {
-          const coordinates = validStops.map((s) => [s.longitude, s.latitude]);
+        const colorGroups = new Map<string, RouteStop[]>();
+        validStops.forEach(stop => {
+          const color = stop.routeColor || DEFAULT_COLOR;
+          if (!colorGroups.has(color)) colorGroups.set(color, []);
+          colorGroups.get(color)!.push(stop);
+        });
 
-          map.addSource("route-line", {
+        let lineIndex = 0;
+        colorGroups.forEach((groupStops, color) => {
+          if (groupStops.length < 2) return;
+          const coordinates = groupStops.map(s => [s.longitude, s.latitude]);
+          const sourceId = `route-line-${lineIndex}`;
+          const layerId = `route-line-layer-${lineIndex}`;
+          map.addSource(sourceId, {
             type: "geojson",
             data: {
               type: "Feature",
               properties: {},
-              geometry: {
-                type: "LineString",
-                coordinates,
-              },
+              geometry: { type: "LineString", coordinates },
             },
           });
-
           map.addLayer({
-            id: "route-line-layer",
+            id: layerId,
             type: "line",
-            source: "route-line",
-            layout: {
-              "line-join": "round",
-              "line-cap": "round",
-            },
-            paint: {
-              "line-color": GREEN_MARKER,
-              "line-width": 3,
-              "line-opacity": 0.7,
-            },
+            source: sourceId,
+            layout: { "line-join": "round", "line-cap": "round" },
+            paint: { "line-color": color, "line-width": 3, "line-opacity": 0.7 },
           });
-        }
+          lineIndex++;
+        });
 
         if (validStops.length > 1) {
           const bounds = new mapboxgl.LngLatBounds();
-          validStops.forEach((s) => bounds.extend([s.longitude, s.latitude]));
+          validStops.forEach(s => bounds.extend([s.longitude, s.latitude]));
           map.fitBounds(bounds, { padding: 60 });
         }
       });
@@ -142,8 +150,8 @@ export default function RouteMapView({ stops, routeName, onStopClick }: RouteMap
 
     return () => {
       cancelled = true;
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
+      markerMapRef.current.forEach(({ marker }) => marker.remove());
+      markerMapRef.current.clear();
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -151,6 +159,27 @@ export default function RouteMapView({ stops, routeName, onStopClick }: RouteMap
       setMapLoaded(false);
     };
   }, [tokenData?.token, stops]);
+
+  useEffect(() => {
+    markerMapRef.current.forEach(({ marker, color }, id) => {
+      const el = marker.getElement();
+      const isSelected = id === selectedStopId;
+      el.style.backgroundColor = isSelected ? SELECTED_COLOR : color;
+      el.style.width = isSelected ? "34px" : "28px";
+      el.style.height = isSelected ? "34px" : "28px";
+      el.style.border = isSelected ? "3px solid white" : "2px solid white";
+    });
+    if (selectedStopId && mapRef.current) {
+      const selectedStop = stops.find(s => s.id === selectedStopId);
+      if (selectedStop) {
+        mapRef.current.flyTo({
+          center: [selectedStop.longitude, selectedStop.latitude],
+          zoom: 15,
+          duration: 600,
+        });
+      }
+    }
+  }, [selectedStopId, stops]);
 
   if (tokenLoading) {
     return (

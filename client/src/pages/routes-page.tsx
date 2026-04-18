@@ -121,7 +121,7 @@ function LegSeparator({ distance, duration }: { distance: number; duration: numb
   );
 }
 
-function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, updatingVisitStatus, onStopClick, onOnMyWay, onMyWaySendingId }: {
+function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, updatingVisitStatus, onStopClick, onOnMyWay, onMyWaySendingId, onSelectStop, isSelected }: {
   stop: ServicePlan; contacts: Contact[]; properties: Property[];
   visit?: Visit | null; onVisitStatusChange?: (visitId: string, status: string) => void;
   updatingVisitId?: string | null;
@@ -129,6 +129,8 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
   onOnMyWay?: (visitId: string) => void;
   onMyWaySendingId?: string | null;
+  onSelectStop?: (stopId: string) => void;
+  isSelected?: boolean;
 }) {
   const contact = contacts.find(c => c.id === stop.contactId);
   const property = properties.find(p => p.id === stop.propertyId);
@@ -143,7 +145,7 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
 
   return (
     <div ref={setNodeRef} style={style}
-      className={`border rounded-md p-2.5 bg-background transition-all ${isDragging ? "opacity-30" : ""} ${isCompleted ? "border-green-300 dark:border-green-800 opacity-70" : ""} ${isSkipped ? "border-orange-300 dark:border-orange-800 opacity-60" : ""} ${isCancelled ? "border-red-300 dark:border-red-800 opacity-50" : ""}`}
+      className={`border rounded-md p-2.5 bg-background transition-all ${isDragging ? "opacity-30" : ""} ${isSelected ? "ring-2 ring-amber-400 border-amber-300" : ""} ${isCompleted ? "border-green-300 dark:border-green-800 opacity-70" : ""} ${isSkipped ? "border-orange-300 dark:border-orange-800 opacity-60" : ""} ${isCancelled ? "border-red-300 dark:border-red-800 opacity-50" : ""}`}
       data-testid={`draggable-stop-${stop.id}`}
     >
       <div className="flex items-start gap-2">
@@ -182,6 +184,17 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
                 <Badge variant="outline" className="text-[10px]" data-testid={`badge-stop-order-${stop.id}`}>
                   #{stop.stopOrder}
                 </Badge>
+              )}
+              {onSelectStop && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onSelectStop(stop.id); }}
+                  className={`p-0.5 rounded transition-colors ${isSelected ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
+                  title={isSelected ? "Deselect on map" : "Highlight on map"}
+                  data-testid={`button-select-stop-${stop.id}`}
+                >
+                  <MapPin className="h-3 w-3" />
+                </button>
               )}
               {visit && onVisitStatusChange && (visit.status === "scheduled" || visit.status === "in_progress") && (
                 <Button
@@ -296,7 +309,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
   onEdit, onDelete, onOptimize, onReverse, onDispatch, onUnassignAll, onLock, isOptimizing, isReversing, isDispatching, isUnassigning, isLocking,
-  visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick, onOnMyWay, onMyWaySendingId }: {
+  visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick, onOnMyWay, onMyWaySendingId, onSelectStop, selectedStopId }: {
   route: Route; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
@@ -315,6 +328,8 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
   onOnMyWay?: (visitId: string) => void;
   onMyWaySendingId?: string | null;
+  onSelectStop?: (stopId: string) => void;
+  selectedStopId?: string | null;
 }) {
   const tech = team.find(t => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
@@ -468,6 +483,8 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
                     onStopClick={onStopClick}
                     onOnMyWay={onOnMyWay}
                     onMyWaySendingId={onMyWaySendingId}
+                    onSelectStop={onSelectStop}
+                    isSelected={selectedStopId === stop.id}
                   />
                 </div>
               );
@@ -923,6 +940,7 @@ export default function RoutesPage() {
   const [unassigningRouteId, setUnassigningRouteId] = useState<string | null>(null);
   const [confirmUnassignAll, setConfirmUnassignAll] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [showZones, setShowZones] = useState(false);
   const [showWeeklyOptimizer, setShowWeeklyOptimizer] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -1387,11 +1405,13 @@ export default function RoutesPage() {
         const contact = contacts.find(c => c.id === sp.contactId);
         if (property?.latitude && property?.longitude) {
           allDayStops.push({
+            id: sp.id,
             stopNumber: idx + 1,
             contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
             streetAddress: property.streetAddress || "",
             latitude: Number(property.latitude),
             longitude: Number(property.longitude),
+            routeColor: route.color || "#22c55e",
           });
         }
       });
@@ -1658,13 +1678,14 @@ export default function RoutesPage() {
               </Button>
             </div>
             <Button
-              variant="outline"
+              variant={viewMode === "map" ? "default" : "outline"}
               size="sm"
+              className="xl:hidden"
               onClick={() => setViewMode(viewMode === "list" ? "map" : "list")}
               data-testid="button-toggle-view"
             >
               {viewMode === "list" ? <Map className="h-4 w-4 mr-1" /> : <List className="h-4 w-4 mr-1" />}
-              {viewMode === "list" ? "Map" : "List"}
+              {viewMode === "list" ? "Map" : "Routes"}
             </Button>
             <Button
               variant={showZones ? "default" : "outline"}
@@ -1766,130 +1787,140 @@ export default function RoutesPage() {
         <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-60 w-full" />)}
         </div>
-      ) : viewMode === "map" ? (
-        <div className="flex-1 overflow-hidden" data-testid="route-map-view-wrapper">
-          <Suspense fallback={<Skeleton className="h-full w-full" />}>
-            <RouteMapView
-              stops={mapStops}
-              routeName={`${DAY_LABELS[selectedDay]} Routes`}
-            />
-          </Suspense>
-        </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter}
           onDragStart={handleDragStart} onDragOver={handleDragOver}
           onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}
         >
-          <div className="flex-1 overflow-auto p-4 md:p-6 pt-4">
-            <div className="flex flex-col lg:flex-row gap-4 h-full">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-semibold flex items-center gap-2" data-testid="text-day-heading">
-                    <RouteIcon className="h-5 w-5" />{DAY_LABELS[selectedDay]} Routes
-                  </h2>
-                  <span className="text-sm text-muted-foreground">
-                    {routesForDay.length} {routesForDay.length === 1 ? "route" : "routes"}
-                  </span>
+          <div className="flex-1 flex overflow-hidden">
+            {/* Left panel: routes + unassigned — hidden on small screens when map view is active */}
+            <div className={`flex-1 flex-col overflow-auto p-4 md:p-6 pt-4 ${viewMode === "map" ? "hidden xl:flex" : "flex"}`}>
+              <div className="flex flex-col lg:flex-row gap-4 h-full">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-lg font-semibold flex items-center gap-2" data-testid="text-day-heading">
+                      <RouteIcon className="h-5 w-5" />{DAY_LABELS[selectedDay]} Routes
+                    </h2>
+                    <span className="text-sm text-muted-foreground">
+                      {routesForDay.length} {routesForDay.length === 1 ? "route" : "routes"}
+                    </span>
+                  </div>
+
+                  {weekOffset > 0 && dayVisits.length === 0 && routesForDay.length > 0 && (
+                    <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 px-3 py-2 mb-3 text-sm text-blue-700 dark:text-blue-300" data-testid="banner-no-visits-yet">
+                      <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                      <span>Visits for this week haven't been generated yet — check back later or adjust your auto-visit window.</span>
+                    </div>
+                  )}
+
+                  {routesForDay.length === 0 ? (
+                    <Card className="border-dashed">
+                      <CardContent className="p-8 text-center">
+                        <RouteIcon className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                        <p className="text-muted-foreground mb-3">No routes for {DAY_LABELS[selectedDay]}</p>
+                        <Button variant="outline" onClick={() => { setEditingRoute(null); setDialogOpen(true); }} data-testid="button-create-route-empty">
+                          <Plus className="h-4 w-4 mr-1" /> Create a Route
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {routesForDay.map(route => (
+                        <RouteCard key={route.id} route={route}
+                          stops={stopsByRoute[route.id] || []}
+                          contacts={contacts} properties={properties} team={team}
+                          isOverThis={overContainerId === `route-${route.id}`}
+                          credits={credits}
+                          onEdit={(r) => { setEditingRoute(r); setDialogOpen(true); }}
+                          onDelete={(r) => {
+                            if ((stopsByRoute[r.id]?.length || 0) > 0) {
+                              toast({ title: "Cannot delete", description: "Remove all stops first.", variant: "destructive" });
+                            } else { deleteRouteMutation.mutate(r.id); }
+                          }}
+                          onOptimize={handleOptimizeClick}
+                          onReverse={(id) => {
+                            const r = allRoutes.find(rt => rt.id === id);
+                            if (r?.isLocked) {
+                              toast({ title: "Route is locked", description: "Unlock this route before reversing.", variant: "destructive" });
+                              return;
+                            }
+                            reverseRouteMutation.mutate(id);
+                          }}
+                          onDispatch={(id) => dispatchMutation.mutate(id)}
+                          onUnassignAll={(id) => setConfirmUnassignAll(id)}
+                          onLock={(id) => lockRouteMutation.mutate(id)}
+                          isOptimizing={optimizingRouteId === route.id}
+                          isReversing={reversingRouteId === route.id}
+                          isDispatching={dispatchingRouteId === route.id}
+                          isLocking={lockingRouteId === route.id}
+                          visitsByPlan={visitsByPlan}
+                          onVisitStatusChange={handleVisitStatusChange}
+                          updatingVisitId={updatingVisitId}
+                          updatingVisitStatus={updatingVisitStatus}
+                          metrics={routeMetrics[route.id] || null}
+                          metricsLoading={metricsLoadingRoutes.has(route.id)}
+                          isUnassigning={unassigningRouteId === route.id}
+                          onStopClick={handleStopClick}
+                          onOnMyWay={handleOnMyWay}
+                          onMyWaySendingId={onMyWaySending}
+                          onSelectStop={(id) => setSelectedStopId(prev => prev === id ? null : id)}
+                          selectedStopId={selectedStopId}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {weekOffset > 0 && dayVisits.length === 0 && routesForDay.length > 0 && (
-                  <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 px-3 py-2 mb-3 text-sm text-blue-700 dark:text-blue-300" data-testid="banner-no-visits-yet">
-                    <Info className="h-4 w-4 mt-0.5 shrink-0" />
-                    <span>Visits for this week haven't been generated yet — check back later or adjust your auto-visit window.</span>
-                  </div>
-                )}
-
-                {routesForDay.length === 0 ? (
-                  <Card className="border-dashed">
-                    <CardContent className="p-8 text-center">
-                      <RouteIcon className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-                      <p className="text-muted-foreground mb-3">No routes for {DAY_LABELS[selectedDay]}</p>
-                      <Button variant="outline" onClick={() => { setEditingRoute(null); setDialogOpen(true); }} data-testid="button-create-route-empty">
-                        <Plus className="h-4 w-4 mr-1" /> Create a Route
-                      </Button>
+                <div className="lg:w-64 xl:w-72 shrink-0">
+                  <Card className="h-full max-h-[calc(100vh-280px)] flex flex-col" data-testid="card-unassigned">
+                    <CardHeader className="p-3 pb-2 space-y-2 shrink-0">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 text-orange-500" />
+                          Unassigned Stops
+                          <Badge variant="secondary" data-testid="badge-unassigned-count">{unassignedPlans.length}</Badge>
+                        </CardTitle>
+                      </div>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input placeholder="Search by name or address..." className="pl-8 h-8 text-sm"
+                          value={unassignedSearch} onChange={e => setUnassignedSearch(e.target.value)}
+                          data-testid="input-unassigned-search" />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-2 pt-0 flex-1 overflow-hidden">
+                      <ScrollArea className="h-full">
+                        <DroppableZone id={UNASSIGNED_DROP} isOver={overContainerId === UNASSIGNED_DROP}>
+                          {unassignedPlans.length > 0 ? (
+                            unassignedPlans.map(stop => (
+                              <DraggableStop key={stop.id} stop={stop} contacts={contacts} properties={properties} />
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground text-center py-6">
+                              {servicePlans.length === 0 ? "No unassigned stops" : "All stops assigned"}
+                            </p>
+                          )}
+                        </DroppableZone>
+                      </ScrollArea>
                     </CardContent>
                   </Card>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {routesForDay.map(route => (
-                      <RouteCard key={route.id} route={route}
-                        stops={stopsByRoute[route.id] || []}
-                        contacts={contacts} properties={properties} team={team}
-                        isOverThis={overContainerId === `route-${route.id}`}
-                        credits={credits}
-                        onEdit={(r) => { setEditingRoute(r); setDialogOpen(true); }}
-                        onDelete={(r) => {
-                          if ((stopsByRoute[r.id]?.length || 0) > 0) {
-                            toast({ title: "Cannot delete", description: "Remove all stops first.", variant: "destructive" });
-                          } else { deleteRouteMutation.mutate(r.id); }
-                        }}
-                        onOptimize={handleOptimizeClick}
-                        onReverse={(id) => {
-                          const r = allRoutes.find(rt => rt.id === id);
-                          if (r?.isLocked) {
-                            toast({ title: "Route is locked", description: "Unlock this route before reversing.", variant: "destructive" });
-                            return;
-                          }
-                          reverseRouteMutation.mutate(id);
-                        }}
-                        onDispatch={(id) => dispatchMutation.mutate(id)}
-                        onUnassignAll={(id) => setConfirmUnassignAll(id)}
-                        onLock={(id) => lockRouteMutation.mutate(id)}
-                        isOptimizing={optimizingRouteId === route.id}
-                        isReversing={reversingRouteId === route.id}
-                        isDispatching={dispatchingRouteId === route.id}
-                        isLocking={lockingRouteId === route.id}
-                        visitsByPlan={visitsByPlan}
-                        onVisitStatusChange={handleVisitStatusChange}
-                        updatingVisitId={updatingVisitId}
-                        updatingVisitStatus={updatingVisitStatus}
-                        metrics={routeMetrics[route.id] || null}
-                        metricsLoading={metricsLoadingRoutes.has(route.id)}
-                        isUnassigning={unassigningRouteId === route.id}
-                        onStopClick={handleStopClick}
-                        onOnMyWay={handleOnMyWay}
-                        onMyWaySendingId={onMyWaySending}
-                      />
-                    ))}
-                  </div>
-                )}
-
+                </div>
               </div>
+            </div>
 
-              <div className="lg:w-80 xl:w-96 shrink-0">
-                <Card className="h-full max-h-[calc(100vh-280px)] flex flex-col" data-testid="card-unassigned">
-                  <CardHeader className="p-3 pb-2 space-y-2 shrink-0">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 text-orange-500" />
-                        Unassigned Stops
-                        <Badge variant="secondary" data-testid="badge-unassigned-count">{unassignedPlans.length}</Badge>
-                      </CardTitle>
-                    </div>
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                      <Input placeholder="Search by name or address..." className="pl-8 h-8 text-sm"
-                        value={unassignedSearch} onChange={e => setUnassignedSearch(e.target.value)}
-                        data-testid="input-unassigned-search" />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-2 pt-0 flex-1 overflow-hidden">
-                    <ScrollArea className="h-full">
-                      <DroppableZone id={UNASSIGNED_DROP} isOver={overContainerId === UNASSIGNED_DROP}>
-                        {unassignedPlans.length > 0 ? (
-                          unassignedPlans.map(stop => (
-                            <DraggableStop key={stop.id} stop={stop} contacts={contacts} properties={properties} />
-                          ))
-                        ) : (
-                          <p className="text-xs text-muted-foreground text-center py-6">
-                            {servicePlans.length === 0 ? "No unassigned stops" : "All stops assigned"}
-                          </p>
-                        )}
-                      </DroppableZone>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-              </div>
+            {/* Right panel: map — always visible on xl+, full-width on smaller screens when viewMode=map */}
+            <div
+              className={`border-l flex-col overflow-hidden ${viewMode === "map" ? "flex flex-1 xl:w-[340px] xl:flex-none xl:shrink-0" : "hidden xl:flex xl:w-[340px] xl:shrink-0"}`}
+              data-testid="route-map-view-wrapper"
+            >
+              <Suspense fallback={<Skeleton className="h-full w-full" />}>
+                <RouteMapView
+                  stops={mapStops}
+                  routeName={`${DAY_LABELS[selectedDay]} Routes`}
+                  selectedStopId={selectedStopId}
+                  onStopClick={(id) => setSelectedStopId(prev => prev === id ? null : id)}
+                />
+              </Suspense>
             </div>
           </div>
 
