@@ -7410,15 +7410,15 @@ Return ONLY valid JSON, no markdown.`,
 
       // Auto-set paidAt when marking as paid and not provided
       if (invoiceUpdates.status === "paid" && !invoiceUpdates.paidAt) {
-        invoiceUpdates.paidAt = new Date() as any;
+        invoiceUpdates.paidAt = new Date();
       }
 
       // Convert any date/timestamp string fields to proper Date objects for Drizzle
       if (invoiceUpdates.paidAt && typeof invoiceUpdates.paidAt === "string") {
-        invoiceUpdates.paidAt = new Date(invoiceUpdates.paidAt) as any;
+        invoiceUpdates.paidAt = new Date(invoiceUpdates.paidAt);
       }
       if (invoiceUpdates.lastPaymentAttempt && typeof invoiceUpdates.lastPaymentAttempt === "string") {
-        invoiceUpdates.lastPaymentAttempt = new Date(invoiceUpdates.lastPaymentAttempt) as any;
+        invoiceUpdates.lastPaymentAttempt = new Date(invoiceUpdates.lastPaymentAttempt);
       }
 
       if (lineItems && Array.isArray(lineItems)) {
