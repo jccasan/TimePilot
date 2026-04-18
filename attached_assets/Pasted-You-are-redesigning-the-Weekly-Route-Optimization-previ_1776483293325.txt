@@ -1,0 +1,315 @@
+You are redesigning the Weekly Route Optimization preview and apply flow for Scoopilot, a route-based field-service SaaS for businesses like pet waste removal, dog walking, and similar recurring home services.
+
+CONTEXT
+The optimization engine already works and already produces real value.
+
+The current optimization experience already includes:
+- miles saved
+- time saved
+- dollar savings
+- jobs moved across days and/or technicians
+- ability to notify affected customers with one click
+
+So this is NOT a backend or feature-gap problem.
+
+This is a UX / trust / decision-speed problem.
+
+The issue is that the optimization screen likely shows the right information, but does not make it easy enough for a busy operator to instantly understand:
+1. what improved
+2. what changed
+3. what risk exists
+4. what happens when they click apply
+
+GOAL
+Redesign the Weekly Route Optimization experience so that a dispatcher or owner can:
+- understand the outcome in under 5 seconds
+- trust the changes
+- confidently apply them
+- optionally notify affected customers
+- feel like the system is helping, not shuffling things randomly
+
+CORE PRODUCT PRINCIPLE
+Optimization is not just a calculation.
+It is a decision-support workflow.
+
+The UI must prioritize:
+- clarity
+- trust
+- speed of understanding
+- explicit control
+- low perceived risk
+
+--------------------------------------------------
+PRIMARY UX PROBLEM TO SOLVE
+
+The current screen may already show everything, but it likely presents too much at once and does not create a strong enough visual hierarchy.
+
+We need to transform it from:
+- information-rich
+into:
+- decision-clear
+
+Users must instantly understand:
+- savings
+- number of affected jobs
+- what moved
+- whether notifications will be sent
+- whether anything risky changed
+
+--------------------------------------------------
+REDESIGN GOALS
+
+1. Create a clear preview state
+When optimization results are shown, the interface should clearly feel like a review step before changes are applied.
+
+Add a strong title / state marker such as:
+- Weekly Optimization Preview
+- Review Optimization Changes
+- Optimization Results
+
+This state change should be visually obvious.
+
+2. Make impact metrics dominant
+At the top of the preview, show the highest-value metrics as the primary visual focus.
+
+Top summary should prominently display:
+- miles saved
+- time saved
+- dollar savings
+- number of jobs moved
+
+These should be large, bold, scannable, and visually dominant over all secondary details.
+
+Example of desired reading speed:
+A user should understand the outcome in one glance.
+
+3. Layer the information
+Do not dump all detail equally on screen at once.
+
+Structure the preview in layers:
+
+LAYER 1: Summary
+- miles saved
+- time saved
+- dollars saved
+- jobs moved
+
+LAYER 2: Changes
+- list of moved jobs
+- day changes
+- technician reassignments
+- route tightening details
+
+LAYER 3: Notification controls
+- whether customer notifications will be sent
+- how many customers are affected
+
+LAYER 4: Apply / Cancel decision
+
+Use progressive disclosure where appropriate.
+Detailed changes can be collapsible or placed in a lower-priority review section.
+
+4. Clarify what changed
+The user needs to quickly understand who moved where.
+
+Present changes in a clean, readable format.
+Each changed job should clearly show:
+- customer or job name
+- original day / technician
+- new day / technician
+- optional reason tag
+
+Examples of helpful reason tags:
+- grouped by proximity
+- balanced workload
+- reduced cross-zone travel
+- route tightening
+
+Do not make these explanations verbose.
+Short tags or chips are enough.
+
+5. Clarify what did NOT change / risk level
+Users need reassurance.
+
+Show explicit trust signals such as:
+- No locked jobs changed
+- VIP jobs preserved
+- Recurring patterns preserved where possible
+- 3 jobs changed days
+- 0 jobs changed technicians
+
+If there are constraints respected, say so.
+If there are meaningful tradeoffs, say so clearly.
+
+The user should not be left wondering whether the system broke something important.
+
+6. Make notification behavior explicit
+The current system supports customer notification. That is good.
+
+But the preview must clearly show:
+- whether notification is ON or OFF
+- how many customers will be notified
+- when notifications will be sent
+- whether the user can apply without notifying
+
+This must not be ambiguous.
+
+Example:
+- Notify affected customers: ON
+- 9 customers will receive updated schedule notices
+
+Use a clear toggle or checkbox, with concise explanatory text.
+
+7. Make final actions unambiguous
+The final actions should be extremely clear.
+
+Primary CTA:
+- Apply Optimization
+
+Secondary CTA:
+- Cancel
+or
+- Keep Current Routes
+
+Optional tertiary action:
+- Review All Changes
+
+The user must know exactly what happens when they click the primary button.
+
+8. Improve post-apply trust
+After optimization is applied, preserve user understanding.
+
+The applied state should:
+- briefly highlight moved jobs
+- show a success banner or summary
+- reinforce the value created
+
+Example:
+- Optimization applied: saved 33 miles and 1.2 hours this week
+
+If possible, tag changed jobs temporarily with something like:
+- moved by optimization
+- reassigned
+- updated route
+
+This helps the user understand the aftermath instead of feeling disoriented.
+
+--------------------------------------------------
+RECOMMENDED LAYOUT
+
+Build a preview panel / modal / drawer with this structure:
+
+SECTION 1: Header
+- Weekly Optimization Preview
+- short subtext like:
+  Review changes before applying them to this week’s routes
+
+SECTION 2: Impact Summary (most visually dominant)
+- Miles Saved
+- Time Saved
+- Dollar Savings
+- Jobs Moved
+
+Use card-based summary metrics or equivalent clear layout.
+
+SECTION 3: Change Review
+- grouped changes by day and/or technician
+or
+- grouped changes by category:
+  - moved to different day
+  - reassigned to different technician
+  - reordered within same route
+
+Each row should show before → after.
+
+SECTION 4: Trust / Constraints
+- no locked jobs changed
+- recurring cadence preserved where possible
+- X jobs changed day
+- Y jobs changed technician
+
+SECTION 5: Notifications
+- toggle: notify affected customers
+- count of customers affected
+- short explanation
+
+SECTION 6: Actions
+- Apply Optimization
+- Cancel
+
+--------------------------------------------------
+DESIGN REQUIREMENTS
+
+- clean and modern UI
+- strong visual hierarchy
+- easy to scan in under 5 seconds
+- collapsible detail sections where helpful
+- minimal cognitive overload
+- desktop-first for dispatchers, but responsive
+- avoid clutter, unnecessary borders, or enterprise-style noise
+
+--------------------------------------------------
+IMPLEMENTATION REQUIREMENTS
+
+Use React and build production-quality code.
+
+Requirements:
+- reusable components
+- clean state management
+- clear separation between summary, changes, notifications, and actions
+- progressive disclosure for change detail
+- support before/after data structures cleanly
+- easy to extend later with locking, filters, or optimization strategies
+
+Suggested component structure:
+- OptimizationPreviewPanel
+- OptimizationSummaryCards
+- OptimizationChangesList
+- OptimizationTrustSignals
+- OptimizationNotificationControls
+- OptimizationActionBar
+
+If a confirmation state and applied state are separate, structure those cleanly too.
+
+--------------------------------------------------
+DATA / LOGIC EXPECTATIONS
+
+Assume the backend already provides the necessary optimization result data, including:
+- before/after mileage
+- before/after time
+- dollar savings
+- changed jobs
+- original and new day/technician
+- notification eligibility
+- any constraint-respect or lock metadata
+
+Your job is to present this data clearly, not redesign the optimization algorithm.
+
+--------------------------------------------------
+DELIVERABLES
+
+I want:
+1. a redesigned Weekly Optimization Preview UI
+2. improved visual hierarchy for summary metrics
+3. a clean change-review experience
+4. explicit notification controls
+5. trust / constraint messaging
+6. clear apply / cancel actions
+7. post-apply state handling
+8. clean, production-ready React component code
+9. a short explanation of the redesign decisions
+
+--------------------------------------------------
+SUCCESS CRITERIA
+
+The final experience should:
+- let users understand optimization results in under 5 seconds
+- make savings immediately obvious
+- make changes easy to review
+- reduce hesitation before applying
+- increase trust in the optimization engine
+- make the feature feel like a decision-support tool, not a black box
+
+IMPORTANT
+Think like a product designer for home-service dispatchers and operators.
+Prioritize clarity, trust, and decision speed over raw information density.

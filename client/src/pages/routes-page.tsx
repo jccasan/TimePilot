@@ -33,7 +33,7 @@ import {
 import {
   MapPin, Dog, GripVertical, Plus, Pencil, Trash2, Route as RouteIcon,
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
-  Clock, ShoppingCart, RotateCcw, Map, List, Save, ChevronDown, ChevronUp,
+  Clock, ShoppingCart, RotateCcw, Map as MapIcon, List, Save, ChevronDown, ChevronUp,
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
   CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert, Lock, Unlock,
   Sparkles, ArrowRight, Check, X, ToggleLeft, Calendar,
@@ -1423,14 +1423,36 @@ export default function RoutesPage() {
     const counts: Record<string, number> = {};
     for (const d of DAYS) counts[d] = 0;
     const routeMap = new Map(allRoutes.map(r => [r.id, r]));
+    const dateRouteStopIds: Record<string, Set<string>> = {};
+    for (const d of DAYS) dateRouteStopIds[d] = new Set();
     for (const plan of servicePlans) {
       if (!plan.routeId) continue;
       const route = routeMap.get(plan.routeId);
       if (!route?.dayOfWeek) continue;
+      if (route.date) {
+        const rd = new Date(route.date + "T12:00:00");
+        if (rd >= currentWeekRange.start && rd <= currentWeekRange.end) {
+          dateRouteStopIds[route.dayOfWeek].add(plan.id);
+        }
+        continue;
+      }
       counts[route.dayOfWeek] = (counts[route.dayOfWeek] || 0) + 1;
     }
+    for (const visit of weekVisits) {
+      if (!visit.routeId) continue;
+      const route = routeMap.get(visit.routeId);
+      if (!route?.dayOfWeek || !route.date) continue;
+      const rd = new Date(route.date + "T12:00:00");
+      if (rd >= currentWeekRange.start && rd <= currentWeekRange.end) {
+        const stopKey = visit.servicePlanId ?? visit.id;
+        dateRouteStopIds[route.dayOfWeek].add(stopKey);
+      }
+    }
+    for (const d of DAYS) {
+      counts[d] = (counts[d] || 0) + dateRouteStopIds[d].size;
+    }
     return counts;
-  }, [allRoutes, servicePlans]);
+  }, [allRoutes, servicePlans, weekVisits, currentWeekRange]);
 
   const createRouteMutation = useMutation({
     mutationFn: async (data: { name: string; dayOfWeek: string; technicianId: string | null; color: string }) => {
@@ -1462,6 +1484,7 @@ export default function RoutesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/range"] });
       setRouteMetrics({});
     },
     onError: (err: Error) => toast({ title: "Error moving stop", description: err.message, variant: "destructive" }),
@@ -1542,6 +1565,7 @@ export default function RoutesPage() {
     },
     onSuccess: (data: any) => {
       setDispatchingRouteId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/range"] });
       toast({ title: "Route dispatched", description: `${data.visitsCreated} visits created for ${data.date}${data.visitsSkipped > 0 ? ` (${data.visitsSkipped} already existed)` : ""}` });
     },
     onError: (err: Error) => {
@@ -1684,7 +1708,7 @@ export default function RoutesPage() {
               onClick={() => setViewMode(viewMode === "list" ? "map" : "list")}
               data-testid="button-toggle-view"
             >
-              {viewMode === "list" ? <Map className="h-4 w-4 mr-1" /> : <List className="h-4 w-4 mr-1" />}
+              {viewMode === "list" ? <MapIcon className="h-4 w-4 mr-1" /> : <List className="h-4 w-4 mr-1" />}
               {viewMode === "list" ? "Map" : "Routes"}
             </Button>
             <Button
