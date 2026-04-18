@@ -82,6 +82,7 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
   const [createdContact, setCreatedContact] = useState<{ id: string; firstName: string } | null>(null);
   const [sendingPortalInvite, setSendingPortalInvite] = useState(false);
   const scheduleNowRef = useRef(false);
+  const servicePrefRef = useRef<{ frequency: string; serviceDay: string }>({ frequency: "", serviceDay: "" });
 
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(contactFormSchema),
@@ -116,7 +117,10 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
       form.reset();
       if (scheduleNowRef.current) {
         handleClose();
-        navigate(`/scheduling?addJob=1&contactId=${result.id as string}`);
+        const params = new URLSearchParams({ addJob: "1", contactId: result.id as string });
+        if (servicePrefRef.current.frequency) params.set("frequency", servicePrefRef.current.frequency);
+        if (servicePrefRef.current.serviceDay) params.set("serviceDay", servicePrefRef.current.serviceDay);
+        navigate(`/scheduling?${params.toString()}`);
       } else {
         setCreatedContact({ id: result.id as string, firstName: result.firstName as string });
       }
@@ -164,7 +168,12 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
       return;
     }
     scheduleNowRef.current = scheduleNow;
-    createMutation.mutate(form.getValues());
+    const values = form.getValues();
+    servicePrefRef.current = {
+      frequency: values.serviceFrequency || "",
+      serviceDay: values.serviceDay || "",
+    };
+    createMutation.mutate(values);
   };
 
   const frequency = form.watch("serviceFrequency") || "";

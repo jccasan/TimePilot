@@ -164,6 +164,8 @@ function ScheduleJobForm({
   team,
   services,
   initialContactId,
+  initialFrequency,
+  initialDayOfWeek,
 }: {
   onSubmit: (data: JobFormPayload) => void;
   isPending: boolean;
@@ -172,6 +174,8 @@ function ScheduleJobForm({
   team: TeamMember[];
   services: ServicePricingItem[];
   initialContactId?: string | null;
+  initialFrequency?: string | null;
+  initialDayOfWeek?: string | null;
 }) {
   const tz = useCompanyTimezone();
   const [jobType, setJobType] = useState<string>("recurring");
@@ -179,8 +183,8 @@ function ScheduleJobForm({
   const [propertyId, setPropertyId] = useState("");
   const [selectedServices, setSelectedServices] = useState<Array<{ id: string; name: string; price: string }>>([]);
   const [addServiceId, setAddServiceId] = useState("");
-  const [frequency, setFrequency] = useState("weekly");
-  const [dayOfWeek, setDayOfWeek] = useState("");
+  const [frequency, setFrequency] = useState(initialFrequency || "weekly");
+  const [dayOfWeek, setDayOfWeek] = useState(initialDayOfWeek || "");
   const [pricePerVisit, setPricePerVisit] = useState("");
   const [manualServiceName, setManualServiceName] = useState("");
   const [startDate, setStartDate] = useState(toLocalDateString(new Date(), tz));
@@ -442,6 +446,8 @@ export default function Scheduling() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [prefilledContactId, setPrefilledContactId] = useState<string | null>(null);
+  const [prefilledFrequency, setPrefilledFrequency] = useState<string | null>(null);
+  const [prefilledDayOfWeek, setPrefilledDayOfWeek] = useState<string | null>(null);
   const [clientFilter, setClientFilter] = useState("");
   const [showHiddenStatuses, setShowHiddenStatuses] = useState(() =>
     localStorage.getItem("scoopilot_sched_show_hidden") === "true"
@@ -449,11 +455,23 @@ export default function Scheduling() {
   const [pendingVisitId, setPendingVisitId] = useState<string | null>(null);
   const isAdminOrOwner = authUser?.role === "owner" || authUser?.role === "admin";
 
+  const frequencyFromContactDialog: Record<string, string | null> = {
+    "1_per_week": "weekly",
+    "2_per_week": "weekly",
+    "biweekly": "biweekly",
+    "as_needed": null,
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("addJob") === "1") {
       const cid = params.get("contactId") || null;
       setPrefilledContactId(cid);
+      const rawFreq = params.get("frequency") || "";
+      const mappedFreq = frequencyFromContactDialog[rawFreq] || null;
+      setPrefilledFrequency(mappedFreq);
+      const day = params.get("serviceDay") || null;
+      setPrefilledDayOfWeek(day);
       setDialogOpen(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -711,14 +729,14 @@ export default function Scheduling() {
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold" data-testid="text-scheduling-heading">Scheduling</h1>
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setPrefilledContactId(null); }}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setPrefilledContactId(null); setPrefilledFrequency(null); setPrefilledDayOfWeek(null); } }}>
           <DialogTrigger asChild>
             <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Add Job</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Add Job</DialogTitle></DialogHeader>
             <ScheduleJobForm
-              key={prefilledContactId || "none"}
+              key={`${prefilledContactId || "none"}-${prefilledFrequency || ""}-${prefilledDayOfWeek || ""}`}
               onSubmit={(data) => createMutation.mutate(data)}
               isPending={createMutation.isPending}
               contacts={contacts || []}
@@ -726,6 +744,8 @@ export default function Scheduling() {
               team={team || []}
               services={pricingItems || []}
               initialContactId={prefilledContactId}
+              initialFrequency={prefilledFrequency}
+              initialDayOfWeek={prefilledDayOfWeek}
             />
           </DialogContent>
         </Dialog>
