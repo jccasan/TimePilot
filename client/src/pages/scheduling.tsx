@@ -26,9 +26,16 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Select,
   SelectContent,
@@ -45,7 +52,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, CalendarDays, CalendarRange,
   CheckCircle, XCircle, Ban, Clock, MapPin, DollarSign, User, CalendarCheck, Loader2, GripVertical,
-  Send, MessageSquare, Trash2, Search, Eye, EyeOff, Pencil,
+  Send, MessageSquare, Trash2, Search, Eye, EyeOff, Pencil, ChevronDown, Check, ChevronsUpDown,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -156,6 +163,22 @@ const dayOfWeekLabels: Record<string, string> = {
   sunday: "Sunday",
 };
 
+function getServiceCategory(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes("biweekly") || lower.includes("bi-weekly") || lower.includes("every 2") || lower.includes("every two")) return "Biweekly Services";
+  if (lower.includes("weekly")) return "Weekly Services";
+  if (lower.includes("one-time") || lower.includes("onetime") || lower.includes("one time")) return "One-Time";
+  if (lower.includes("add-on") || lower.includes("addon") || lower.includes("add on")) return "Add-ons";
+  if (lower.includes("monthly")) return "Monthly Services";
+  return "Other Services";
+}
+
+function getDayOfWeekFromDate(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00");
+  const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  return days[d.getDay()] || "";
+}
+
 function ScheduleJobForm({
   onSubmit,
   isPending,
@@ -182,9 +205,9 @@ function ScheduleJobForm({
   const [contactId, setContactId] = useState(initialContactId || "");
   const [propertyId, setPropertyId] = useState("");
   const [selectedServices, setSelectedServices] = useState<Array<{ id: string; name: string; price: string }>>([]);
-  const [addServiceId, setAddServiceId] = useState("");
+  const [serviceComboOpen, setServiceComboOpen] = useState(false);
   const [frequency, setFrequency] = useState(initialFrequency || "weekly");
-  const [dayOfWeek, setDayOfWeek] = useState(initialDayOfWeek || "");
+  const [dayOfWeek, setDayOfWeek] = useState(() => initialDayOfWeek || getDayOfWeekFromDate(toLocalDateString(new Date(), tz)));
   const [pricePerVisit, setPricePerVisit] = useState("");
   const [manualServiceName, setManualServiceName] = useState("");
   const [startDate, setStartDate] = useState(toLocalDateString(new Date(), tz));
@@ -192,18 +215,42 @@ function ScheduleJobForm({
   const [endTime, setEndTime] = useState("");
   const [anytime, setAnytime] = useState(true);
   const [endsAfterMode, setEndsAfterMode] = useState<"none" | "count" | "date">("none");
+  const [showEndCondition, setShowEndCondition] = useState(false);
   const [endsAfterCount, setEndsAfterCount] = useState("");
   const [endsAfterUnit, setEndsAfterUnit] = useState("months");
   const [endDate, setEndDate] = useState("");
   const [visitInstructions, setVisitInstructions] = useState("");
-  const [assignedUserId, setAssignedUserId] = useState("");
+  const [assignedUserId, setAssignedUserId] = useState("none");
 
   const activeServices = useMemo(() => services.filter(s => s.isActive), [services]);
+
+  const groupedServices = useMemo(() => {
+    const groups: Record<string, ServicePricingItem[]> = {};
+    activeServices.forEach(s => {
+      const cat = getServiceCategory(s.name);
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(s);
+    });
+    const order = ["Weekly Services", "Biweekly Services", "Monthly Services", "One-Time", "Add-ons", "Other Services"];
+    return order.filter(cat => groups[cat]).map(cat => ({ category: cat, items: groups[cat] }));
+  }, [activeServices]);
 
   const filteredProperties = useMemo(() => {
     if (!contactId) return [];
     return properties.filter(p => p.contactId === contactId);
   }, [contactId, properties]);
+
+  useEffect(() => {
+    if (!contactId) { setPropertyId(""); return; }
+    const props = properties.filter(p => p.contactId === contactId);
+    if (props.length === 1) setPropertyId(props[0].id);
+    else setPropertyId("");
+  }, [contactId, properties]);
+
+  const handleStartDateChange = (val: string) => {
+    setStartDate(val);
+    if (val) setDayOfWeek(getDayOfWeekFromDate(val));
+  };
 
   const totalPrice = useMemo(() => {
     if (selectedServices.length === 0) return pricePerVisit;
@@ -215,6 +262,11 @@ function ScheduleJobForm({
     if (selectedServices.length === 0) return manualServiceName || null;
     return selectedServices.map(s => s.name).join(" + ");
   }, [selectedServices, manualServiceName]);
+
+  const handleAddService = (svc: ServicePricingItem) => {
+    setSelectedServices(prev => [...prev, { id: svc.id, name: svc.name, price: svc.basePrice }]);
+    setServiceComboOpen(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,182 +307,292 @@ function ScheduleJobForm({
     onSubmit(payload);
   };
 
+  const singleProperty = filteredProperties.length === 1 ? filteredProperties[0] : null;
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div>
-        <Label className="text-sm font-semibold">Job Type</Label>
-        <div className="flex gap-2 mt-1.5">
-          <Button type="button" variant={jobType === "one_off" ? "default" : "outline"} size="sm" onClick={() => { setJobType("one_off"); setFrequency("onetime"); }} data-testid="button-job-type-one-off">One-off</Button>
-          <Button type="button" variant={jobType === "recurring" ? "default" : "outline"} size="sm" onClick={() => { setJobType("recurring"); setFrequency("weekly"); }} data-testid="button-job-type-recurring">Recurring</Button>
-        </div>
-      </div>
+    <form onSubmit={handleSubmit} className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Customer</Label>
-          <Select value={contactId} onValueChange={(v) => { setContactId(v); setPropertyId(""); }}>
-            <SelectTrigger data-testid="select-job-contact"><SelectValue placeholder="Select customer" /></SelectTrigger>
-            <SelectContent>{contacts.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}</SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Property</Label>
-          <Select value={propertyId} onValueChange={setPropertyId} disabled={!contactId}>
-            <SelectTrigger data-testid="select-job-property"><SelectValue placeholder={contactId ? "Select property" : "Select customer first"} /></SelectTrigger>
-            <SelectContent>{filteredProperties.map(p => (<SelectItem key={p.id} value={p.id}>{p.streetAddress}</SelectItem>))}</SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <Label>Services</Label>
-        {selectedServices.length > 0 && (
-          <div className="space-y-2">
-            {selectedServices.map((svc, idx) => (
-              <div key={svc.id + idx} className="flex items-center justify-between bg-muted/50 rounded-md px-3 py-2" data-testid={`service-row-${idx}`}>
-                <span className="text-sm font-medium">{svc.name}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">${parseFloat(svc.price || "0").toFixed(2)}</span>
-                  <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setSelectedServices(prev => prev.filter((_, i) => i !== idx))} data-testid={`button-remove-service-${idx}`}>
-                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {activeServices.length > 0 ? (
-          <div className="flex gap-2">
-            <Select value={addServiceId} onValueChange={setAddServiceId}>
-              <SelectTrigger className="flex-1" data-testid="select-job-service"><SelectValue placeholder="Add a service..." /></SelectTrigger>
-              <SelectContent>{activeServices.map(s => (<SelectItem key={s.id} value={s.id}>{s.name} — ${parseFloat(s.basePrice).toFixed(2)}</SelectItem>))}</SelectContent>
-            </Select>
-            <Button type="button" variant="outline" size="sm" disabled={!addServiceId} onClick={() => { const svc = activeServices.find(s => s.id === addServiceId); if (svc) { setSelectedServices(prev => [...prev, { id: svc.id, name: svc.name, price: svc.basePrice }]); setAddServiceId(""); } }} data-testid="button-add-service">
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <Input value={manualServiceName} onChange={e => setManualServiceName(e.target.value)} placeholder="Service name (e.g. Waste Removal)" data-testid="input-job-service-name" />
-            <Input type="number" min="0" step="0.01" value={pricePerVisit} onChange={e => setPricePerVisit(e.target.value)} placeholder="Price per visit (e.g. 35.00)" data-testid="input-job-price-manual" />
-          </div>
-        )}
-        <div className="flex items-center justify-between pt-1">
-          <Label className="text-sm">Total per Visit</Label>
-          <span className="text-sm font-semibold" data-testid="text-total-price">${(parseFloat(totalPrice) || 0).toFixed(2)}</span>
-        </div>
-      </div>
-
-      <div className="border-t pt-4">
-        <h3 className="text-sm font-semibold mb-3">Schedule</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Section: Customer */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer</h3>
           <div className="space-y-1.5">
-            <Label>Start Date</Label>
-            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} data-testid="input-job-start-date" />
+            <Label>Customer</Label>
+            <Select value={contactId} onValueChange={(v) => { setContactId(v); }}>
+              <SelectTrigger data-testid="select-job-contact"><SelectValue placeholder="Select customer" /></SelectTrigger>
+              <SelectContent>{contacts.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}</SelectContent>
+            </Select>
           </div>
-          {!anytime && (
-            <>
-              <div className="space-y-1.5">
-                <Label>Start Time</Label>
-                <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} data-testid="input-job-start-time" />
+          <div className="space-y-1.5">
+            <Label>Property</Label>
+            {singleProperty ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-md border text-sm" data-testid="text-auto-property">
+                <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span>{singleProperty.streetAddress}</span>
               </div>
-              <div className="space-y-1.5">
-                <Label>End Time</Label>
-                <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} data-testid="input-job-end-time" />
-              </div>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2 mt-3">
-          <Checkbox id="anytime" checked={anytime} onCheckedChange={(checked) => setAnytime(!!checked)} data-testid="checkbox-job-anytime" />
-          <Label htmlFor="anytime" className="text-sm cursor-pointer">Anytime</Label>
-        </div>
-      </div>
-
-      {jobType === "recurring" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Repeats</Label>
-              <Select value={frequency} onValueChange={setFrequency}>
-                <SelectTrigger data-testid="select-job-frequency"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
+            ) : (
+              <Select value={propertyId} onValueChange={setPropertyId} disabled={!contactId}>
+                <SelectTrigger data-testid="select-job-property"><SelectValue placeholder={contactId ? "Select property" : "Select customer first"} /></SelectTrigger>
+                <SelectContent>{filteredProperties.map(p => (<SelectItem key={p.id} value={p.id}>{p.streetAddress}</SelectItem>))}</SelectContent>
               </Select>
-            </div>
-            {frequency !== "monthly" && (
-              <div className="space-y-1.5">
-                <Label>Day of Week</Label>
-                <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-                  <SelectTrigger data-testid="select-job-day"><SelectValue placeholder="Select day" /></SelectTrigger>
-                  <SelectContent>{Object.entries(dayOfWeekLabels).map(([val, label]) => (<SelectItem key={val} value={val}>{label}</SelectItem>))}</SelectContent>
-                </Select>
-              </div>
             )}
           </div>
-          <div className="space-y-3">
-            <Label className="text-sm font-semibold">End Condition</Label>
+        </div>
+
+        <Separator />
+
+        {/* Section: Service */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Service</h3>
+
+          {selectedServices.length > 0 && (
             <div className="space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="endsAfterMode" checked={endsAfterMode === "none"} onChange={() => setEndsAfterMode("none")} className="accent-primary" data-testid="radio-ends-never" />
-                <span className="text-sm">No end date</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="endsAfterMode" checked={endsAfterMode === "count"} onChange={() => setEndsAfterMode("count")} className="accent-primary" data-testid="radio-ends-after" />
-                <span className="text-sm">Ends after</span>
-              </label>
-              {endsAfterMode === "count" && (
-                <div className="flex gap-2 ml-6">
-                  <Input type="number" min="1" value={endsAfterCount} onChange={e => setEndsAfterCount(e.target.value)} className="w-20" data-testid="input-ends-after-count" />
-                  <Select value={endsAfterUnit} onValueChange={setEndsAfterUnit}>
-                    <SelectTrigger className="w-32" data-testid="select-ends-after-unit"><SelectValue /></SelectTrigger>
+              {selectedServices.map((svc, idx) => (
+                <div key={svc.id + idx} className="flex items-center justify-between bg-muted/50 border rounded-md px-3 py-2.5" data-testid={`service-row-${idx}`}>
+                  <span className="text-sm font-medium">{svc.name}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold tabular-nums">${parseFloat(svc.price || "0").toFixed(2)}</span>
+                    <button type="button" className="text-muted-foreground hover:text-destructive transition-colors" onClick={() => setSelectedServices(prev => prev.filter((_, i) => i !== idx))} data-testid={`button-remove-service-${idx}`}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeServices.length > 0 ? (
+            <div>
+              {selectedServices.length === 0 ? (
+                <Popover open={serviceComboOpen} onOpenChange={setServiceComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full justify-between" data-testid="button-open-service-picker">
+                      <span className="text-muted-foreground">Select a service...</span>
+                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search services..." data-testid="input-service-search" />
+                      <CommandList>
+                        <CommandEmpty>No services found.</CommandEmpty>
+                        {groupedServices.map(group => (
+                          <CommandGroup key={group.category} heading={group.category}>
+                            {group.items.map(svc => (
+                              <CommandItem key={svc.id} value={svc.name} onSelect={() => handleAddService(svc)} data-testid={`service-option-${svc.id}`}>
+                                <span className="flex-1">{svc.name}</span>
+                                <span className="text-muted-foreground text-sm tabular-nums">${parseFloat(svc.basePrice).toFixed(2)}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              ) : (
+                <Popover open={serviceComboOpen} onOpenChange={setServiceComboOpen}>
+                  <PopoverTrigger asChild>
+                    <button type="button" className="text-sm text-primary hover:underline font-medium" data-testid="button-add-another-service">
+                      + Add another service
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search services..." data-testid="input-service-search-more" />
+                      <CommandList>
+                        <CommandEmpty>No services found.</CommandEmpty>
+                        {groupedServices.map(group => (
+                          <CommandGroup key={group.category} heading={group.category}>
+                            {group.items.map(svc => (
+                              <CommandItem key={svc.id} value={svc.name} onSelect={() => handleAddService(svc)} data-testid={`service-option-more-${svc.id}`}>
+                                <span className="flex-1">{svc.name}</span>
+                                <span className="text-muted-foreground text-sm tabular-nums">${parseFloat(svc.basePrice).toFixed(2)}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Input value={manualServiceName} onChange={e => setManualServiceName(e.target.value)} placeholder="Service name (e.g. Waste Removal)" data-testid="input-job-service-name" />
+              <Input type="number" min="0" step="0.01" value={pricePerVisit} onChange={e => setPricePerVisit(e.target.value)} placeholder="Price per visit (e.g. 35.00)" data-testid="input-job-price-manual" />
+            </div>
+          )}
+
+          <div className="flex items-center justify-between bg-muted/30 rounded-md px-3 py-2 border">
+            <span className="text-sm text-muted-foreground">Total per visit</span>
+            <span className="text-sm font-bold tabular-nums" data-testid="text-total-price">
+              ${(parseFloat(totalPrice) || 0).toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Section: Schedule */}
+        <div className="space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Schedule</h3>
+
+          <div className="flex gap-2">
+            <Button type="button" variant={jobType === "recurring" ? "default" : "outline"} size="sm" onClick={() => { setJobType("recurring"); setFrequency("weekly"); }} data-testid="button-job-type-recurring">Recurring</Button>
+            <Button type="button" variant={jobType === "one_off" ? "default" : "outline"} size="sm" onClick={() => { setJobType("one_off"); setFrequency("onetime"); }} data-testid="button-job-type-one-off">One-off</Button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Start Date</Label>
+              <Input type="date" value={startDate} onChange={e => handleStartDateChange(e.target.value)} data-testid="input-job-start-date" />
+            </div>
+            {!anytime && (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Start Time</Label>
+                  <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} data-testid="input-job-start-time" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>End Time</Label>
+                  <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} data-testid="input-job-end-time" />
+                </div>
+              </>
+            )}
+            <div className="flex items-end pb-0.5">
+              <div className="flex items-center gap-2">
+                <Checkbox id="anytime" checked={anytime} onCheckedChange={(checked) => setAnytime(!!checked)} data-testid="checkbox-job-anytime" />
+                <Label htmlFor="anytime" className="text-sm cursor-pointer">Anytime</Label>
+              </div>
+            </div>
+          </div>
+
+          {jobType === "recurring" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Repeats</Label>
+                  <Select value={frequency} onValueChange={setFrequency}>
+                    <SelectTrigger data-testid="select-job-frequency"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="days">Days</SelectItem>
-                      <SelectItem value="weeks">Weeks</SelectItem>
-                      <SelectItem value="months">Months</SelectItem>
-                      <SelectItem value="years">Years</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="endsAfterMode" checked={endsAfterMode === "date"} onChange={() => setEndsAfterMode("date")} className="accent-primary" data-testid="radio-ends-on" />
-                <span className="text-sm">Ends on</span>
-              </label>
-              {endsAfterMode === "date" && (
-                <div className="ml-6">
-                  <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} data-testid="input-ends-on-date" />
-                </div>
-              )}
+                {frequency !== "monthly" && (
+                  <div className="space-y-1.5">
+                    <Label>Day of Week</Label>
+                    <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
+                      <SelectTrigger data-testid="select-job-day"><SelectValue placeholder="Select day" /></SelectTrigger>
+                      <SelectContent>{Object.entries(dayOfWeekLabels).map(([val, label]) => (<SelectItem key={val} value={val}>{label}</SelectItem>))}</SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                {!showEndCondition ? (
+                  <button
+                    type="button"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setShowEndCondition(true)}
+                    data-testid="button-show-end-condition"
+                  >
+                    + Set end date or limit
+                  </button>
+                ) : (
+                  <div className="space-y-2 border rounded-md p-3 bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium">End Condition</Label>
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => { setShowEndCondition(false); setEndsAfterMode("none"); }}
+                        data-testid="button-hide-end-condition"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="endsAfterMode" checked={endsAfterMode === "none"} onChange={() => setEndsAfterMode("none")} className="accent-primary" data-testid="radio-ends-never" />
+                        <span className="text-sm">No end date</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="endsAfterMode" checked={endsAfterMode === "count"} onChange={() => setEndsAfterMode("count")} className="accent-primary" data-testid="radio-ends-after" />
+                        <span className="text-sm">Ends after</span>
+                      </label>
+                      {endsAfterMode === "count" && (
+                        <div className="flex gap-2 ml-6">
+                          <Input type="number" min="1" value={endsAfterCount} onChange={e => setEndsAfterCount(e.target.value)} className="w-20" data-testid="input-ends-after-count" />
+                          <Select value={endsAfterUnit} onValueChange={setEndsAfterUnit}>
+                            <SelectTrigger className="w-32" data-testid="select-ends-after-unit"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="days">Days</SelectItem>
+                              <SelectItem value="weeks">Weeks</SelectItem>
+                              <SelectItem value="months">Months</SelectItem>
+                              <SelectItem value="years">Years</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="endsAfterMode" checked={endsAfterMode === "date"} onChange={() => setEndsAfterMode("date")} className="accent-primary" data-testid="radio-ends-on" />
+                        <span className="text-sm">Ends on</span>
+                      </label>
+                      {endsAfterMode === "date" && (
+                        <div className="ml-6">
+                          <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} data-testid="input-ends-on-date" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Section: Assignment */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Assignment</h3>
+          <div className="space-y-1.5">
+            <Label>Assigned Team Member</Label>
+            <Select value={assignedUserId} onValueChange={setAssignedUserId}>
+              <SelectTrigger data-testid="select-job-assigned"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unassigned</SelectItem>
+                {team.map(t => (<SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
-      )}
 
-      <div className="space-y-1.5">
-        <Label>Assigned Team Member</Label>
-        <Select value={assignedUserId} onValueChange={setAssignedUserId}>
-          <SelectTrigger data-testid="select-job-assigned"><SelectValue placeholder="Select team member (optional)" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Unassigned</SelectItem>
-            {team.map(t => (<SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>))}
-          </SelectContent>
-        </Select>
+        <Separator />
+
+        {/* Section: Notes */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes</h3>
+          <div className="space-y-1.5">
+            <Label>Visit Instructions</Label>
+            <Textarea value={visitInstructions} onChange={e => setVisitInstructions(e.target.value)} placeholder="Instructions for technician..." rows={3} data-testid="input-job-instructions" />
+          </div>
+        </div>
+
       </div>
 
-      <div className="space-y-1.5">
-        <Label>Visit Instructions</Label>
-        <Textarea value={visitInstructions} onChange={e => setVisitInstructions(e.target.value)} placeholder="Instructions for technician..." rows={3} data-testid="input-job-instructions" />
-      </div>
-
-      <DialogFooter>
-        <Button type="submit" disabled={isPending || !contactId || !propertyId} data-testid="button-submit-job">
-          {isPending ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Creating...</> : "Create Job"}
+      {/* Sticky footer */}
+      <div className="border-t px-6 py-4 bg-background shrink-0">
+        <Button type="submit" className="w-full" size="lg" disabled={isPending || !contactId || !propertyId} data-testid="button-submit-job">
+          {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating Job...</> : "Create Job"}
         </Button>
-      </DialogFooter>
+      </div>
     </form>
   );
 }
@@ -729,26 +891,29 @@ export default function Scheduling() {
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold" data-testid="text-scheduling-heading">Scheduling</h1>
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setPrefilledContactId(null); setPrefilledFrequency(null); setPrefilledDayOfWeek(null); } }}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Add Job</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Add Job</DialogTitle></DialogHeader>
-            <ScheduleJobForm
-              key={`${prefilledContactId || "none"}-${prefilledFrequency || ""}-${prefilledDayOfWeek || ""}`}
-              onSubmit={(data) => createMutation.mutate(data)}
-              isPending={createMutation.isPending}
-              contacts={contacts || []}
-              properties={properties || []}
-              team={team || []}
-              services={pricingItems || []}
-              initialContactId={prefilledContactId}
-              initialFrequency={prefilledFrequency}
-              initialDayOfWeek={prefilledDayOfWeek}
-            />
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setDialogOpen(true)} data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Add Job</Button>
+        <Sheet open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setPrefilledContactId(null); setPrefilledFrequency(null); setPrefilledDayOfWeek(null); } }}>
+          <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col" data-testid="sheet-new-job">
+            <SheetHeader className="px-6 py-4 border-b shrink-0">
+              <SheetTitle>New Job</SheetTitle>
+              <SheetDescription>Fill in the details below to create a new job and generate visits.</SheetDescription>
+            </SheetHeader>
+            <div className="flex-1 overflow-hidden flex flex-col">
+              <ScheduleJobForm
+                key={`${prefilledContactId || "none"}-${prefilledFrequency || ""}-${prefilledDayOfWeek || ""}`}
+                onSubmit={(data) => createMutation.mutate(data)}
+                isPending={createMutation.isPending}
+                contacts={contacts || []}
+                properties={properties || []}
+                team={team || []}
+                services={pricingItems || []}
+                initialContactId={prefilledContactId}
+                initialFrequency={prefilledFrequency}
+                initialDayOfWeek={prefilledDayOfWeek}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
