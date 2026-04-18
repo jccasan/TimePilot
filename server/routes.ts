@@ -4875,6 +4875,10 @@ Return ONLY valid JSON, no markdown.`,
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
+      // Demo unlimited-credits bypass (mirrors /api/routes/:id/optimize)
+      const demoUnlimitedCredits = !!(company as any).demoUnlimitedCredits;
+      const isDemoCompanyForCredits = demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
+
       const daysToApply: DayPlan[] = acceptedDays && Array.isArray(acceptedDays)
         ? typedDays.filter(d => acceptedDays.includes(d.day))
         : typedDays;
@@ -4904,7 +4908,7 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       const currentCredits = company.routeCredits ?? 0;
-      if (currentCredits < totalRoutes) {
+      if (!isDemoCompanyForCredits && currentCredits < totalRoutes) {
         return res.status(402).json({
           error: "Insufficient route credits",
           creditsRequired: totalRoutes,
@@ -4985,7 +4989,9 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      await storage.updateCompany(companyId, { routeCredits: currentCredits - totalRoutes });
+      if (!isDemoCompanyForCredits) {
+        await storage.updateCompany(companyId, { routeCredits: currentCredits - totalRoutes });
+      }
 
       try {
         const tz = company?.timezone || "America/New_York";
@@ -5009,8 +5015,8 @@ Return ONLY valid JSON, no markdown.`,
         routesCreated,
         routesRemoved,
         stopsUpdated,
-        creditsUsed: totalRoutes,
-        creditsRemaining: currentCredits - totalRoutes,
+        creditsUsed: isDemoCompanyForCredits ? 0 : totalRoutes,
+        creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - totalRoutes,
       });
     } catch (err) { handleError(res, err); }
   });
