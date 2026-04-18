@@ -976,6 +976,7 @@ export default function RoutesPage() {
   const [extraFiles, setExtraFiles] = useState<{ file: File; preview: string }[]>([]);
   const [isCompleting, setIsCompleting] = useState(false);
   const [completionNotes, setCompletionNotes] = useState("");
+  const [noGate, setNoGate] = useState(false);
   const gateFileInputRef = useRef<HTMLInputElement>(null);
   const extraFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1178,7 +1179,7 @@ export default function RoutesPage() {
   }, []);
 
   const handleCompleteAndSend = useCallback(async () => {
-    if (!completeDialogVisitId || !gatePhoto) return;
+    if (!completeDialogVisitId || (!gatePhoto && !noGate)) return;
     setIsCompleting(true);
 
     try {
@@ -1190,41 +1191,46 @@ export default function RoutesPage() {
         });
       }
 
-      const token = localStorage.getItem("sessionToken");
-      const hdrs: Record<string, string> = {};
-      if (token) hdrs["Authorization"] = `Bearer ${token}`;
-
-      const formData = new FormData();
-      formData.append("file", gatePhoto);
-      const uploadRes = await fetch("/api/uploads/direct", {
-        method: "POST",
-        credentials: "include",
-        headers: hdrs,
-        body: formData,
-      });
-      if (!uploadRes.ok) throw new Error("Failed to upload photo");
-      const uploadData = await uploadRes.json();
-      const gateClosedPath = uploadData.objectPath;
-
+      let gateClosedPath: string | undefined;
       const extraPaths: string[] = [];
-      for (const extra of extraFiles) {
-        const extraForm = new FormData();
-        extraForm.append("file", extra.file);
-        const extraRes = await fetch("/api/uploads/direct", {
+
+      if (!noGate && gatePhoto) {
+        const token = localStorage.getItem("sessionToken");
+        const hdrs: Record<string, string> = {};
+        if (token) hdrs["Authorization"] = `Bearer ${token}`;
+
+        const formData = new FormData();
+        formData.append("file", gatePhoto);
+        const uploadRes = await fetch("/api/uploads/direct", {
           method: "POST",
           credentials: "include",
           headers: hdrs,
-          body: extraForm,
+          body: formData,
         });
-        if (!extraRes.ok) throw new Error("Failed to upload extra photo");
-        const extraData = await extraRes.json();
-        extraPaths.push(extraData.objectPath);
+        if (!uploadRes.ok) throw new Error("Failed to upload photo");
+        const uploadData = await uploadRes.json();
+        gateClosedPath = uploadData.objectPath;
+
+        for (const extra of extraFiles) {
+          const extraForm = new FormData();
+          extraForm.append("file", extra.file);
+          const extraRes = await fetch("/api/uploads/direct", {
+            method: "POST",
+            credentials: "include",
+            headers: hdrs,
+            body: extraForm,
+          });
+          if (!extraRes.ok) throw new Error("Failed to upload extra photo");
+          const extraData = await extraRes.json();
+          extraPaths.push(extraData.objectPath);
+        }
       }
 
       await apiRequest("POST", `/api/visits/${completeDialogVisitId}/complete-notify`, {
         gateClosedPhoto: gateClosedPath,
         extraPhotos: extraPaths.length > 0 ? extraPaths : undefined,
         technicianNotes: completionNotes || undefined,
+        noGate: noGate || undefined,
       });
 
       queryClient.invalidateQueries({ queryKey: ["/api/visits/range", selectedDayDate] });
@@ -1239,7 +1245,7 @@ export default function RoutesPage() {
     } finally {
       setIsCompleting(false);
     }
-  }, [completeDialogVisitId, gatePhoto, extraFiles, completionNotes, selectedDayDate, toast, dayVisits]);
+  }, [completeDialogVisitId, gatePhoto, noGate, extraFiles, completionNotes, selectedDayDate, toast, dayVisits]);
 
   const [onMyWaySending, setOnMyWaySending] = useState<string | null>(null);
   const [onMyWayCooldowns, setOnMyWayCooldowns] = useState<Record<string, number>>({});
@@ -2053,7 +2059,16 @@ export default function RoutesPage() {
         />
       )}
 
-      <Dialog open={!!completeDialogVisitId} onOpenChange={(open) => { if (!open) setCompleteDialogVisitId(null); }}>
+      <Dialog open={!!completeDialogVisitId} onOpenChange={(open) => {
+        if (!open) {
+          setCompleteDialogVisitId(null);
+          setNoGate(false);
+          setGatePhoto(null);
+          setGatePhotoPreview(null);
+          setExtraFiles([]);
+          setCompletionNotes("");
+        }
+      }}>
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto" data-testid="dialog-complete-visit">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2066,92 +2081,118 @@ export default function RoutesPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium mb-1">Proof Photo (required)</p>
-              <p className="text-xs text-muted-foreground mb-2">Take a photo showing the service area is clean and secure</p>
+            {/* No gate checkbox */}
+            <label className="flex items-center gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/50" data-testid="label-no-gate">
               <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                ref={gateFileInputRef}
-                className="hidden"
-                onChange={handleGatePhotoCapture}
-                data-testid="input-gate-photo"
+                type="checkbox"
+                checked={noGate}
+                onChange={e => {
+                  setNoGate(e.target.checked);
+                  if (e.target.checked) {
+                    setGatePhoto(null);
+                    setGatePhotoPreview(null);
+                    setExtraFiles([]);
+                  }
+                }}
+                className="h-4 w-4 accent-primary"
+                data-testid="checkbox-no-gate"
               />
-              {gatePhotoPreview ? (
-                <div className="relative">
-                  <img
-                    src={gatePhotoPreview}
-                    alt="Gate closed"
-                    className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
-                    data-testid="img-gate-preview"
-                  />
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-1 right-1 h-6 w-6"
-                    onClick={() => { setGatePhoto(null); setGatePhotoPreview(null); }}
-                    data-testid="button-remove-gate-photo"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  className="w-full h-24 border-dashed"
-                  onClick={() => gateFileInputRef.current?.click()}
-                  data-testid="button-capture-gate-photo"
-                >
-                  <Camera className="mr-2 h-5 w-5" />
-                  Take Proof Photo
-                </Button>
-              )}
-            </div>
+              <div>
+                <p className="text-sm font-medium">No gate</p>
+                <p className="text-xs text-muted-foreground">Photo not required for this yard</p>
+              </div>
+            </label>
 
-            <div>
-              <p className="text-sm font-medium mb-2">Additional Photos (optional)</p>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                ref={extraFileInputRef}
-                className="hidden"
-                onChange={handleExtraPhotoCapture}
-                data-testid="input-extra-photo"
-              />
-              {extraFiles.length > 0 && (
-                <div className="grid grid-cols-3 gap-2 mb-2">
-                  {extraFiles.map((ef, i) => (
-                    <div key={i} className="relative">
+            {!noGate && (
+              <>
+                <div>
+                  <p className="text-sm font-medium mb-1">Proof Photo (required)</p>
+                  <p className="text-xs text-muted-foreground mb-2">Take a photo showing the service area is clean and secure</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={gateFileInputRef}
+                    className="hidden"
+                    onChange={handleGatePhotoCapture}
+                    data-testid="input-gate-photo"
+                  />
+                  {gatePhotoPreview ? (
+                    <div className="relative">
                       <img
-                        src={ef.preview}
-                        alt={`Extra ${i + 1}`}
-                        className="rounded-md h-20 w-full object-cover"
-                        data-testid={`img-extra-preview-${i}`}
+                        src={gatePhotoPreview}
+                        alt="Gate closed"
+                        className="rounded-md max-h-32 sm:max-h-48 w-full object-cover"
+                        data-testid="img-gate-preview"
                       />
                       <Button
                         variant="destructive"
                         size="icon"
-                        className="absolute top-0.5 right-0.5 h-5 w-5"
-                        onClick={() => removeExtraPhoto(i)}
-                        data-testid={`button-remove-extra-${i}`}
+                        className="absolute top-1 right-1 h-6 w-6"
+                        onClick={() => { setGatePhoto(null); setGatePhotoPreview(null); }}
+                        data-testid="button-remove-gate-photo"
                       >
                         <X className="h-3 w-3" />
                       </Button>
                     </div>
-                  ))}
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="w-full h-24 border-dashed"
+                      onClick={() => gateFileInputRef.current?.click()}
+                      data-testid="button-capture-gate-photo"
+                    >
+                      <Camera className="mr-2 h-5 w-5" />
+                      Take Proof Photo
+                    </Button>
+                  )}
                 </div>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => extraFileInputRef.current?.click()}
-                data-testid="button-add-extra-photo"
-              >
-                <Plus className="mr-1 h-4 w-4" /> Add Photo
-              </Button>
-            </div>
+
+                <div>
+                  <p className="text-sm font-medium mb-2">Additional Photos (optional)</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={extraFileInputRef}
+                    className="hidden"
+                    onChange={handleExtraPhotoCapture}
+                    data-testid="input-extra-photo"
+                  />
+                  {extraFiles.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2 mb-2">
+                      {extraFiles.map((ef, i) => (
+                        <div key={i} className="relative">
+                          <img
+                            src={ef.preview}
+                            alt={`Extra ${i + 1}`}
+                            className="rounded-md h-20 w-full object-cover"
+                            data-testid={`img-extra-preview-${i}`}
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-0.5 right-0.5 h-5 w-5"
+                            onClick={() => removeExtraPhoto(i)}
+                            data-testid={`button-remove-extra-${i}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => extraFileInputRef.current?.click()}
+                    data-testid="button-add-extra-photo"
+                  >
+                    <Plus className="mr-1 h-4 w-4" /> Add Photo
+                  </Button>
+                </div>
+              </>
+            )}
 
             <div>
               <p className="text-sm font-medium mb-1">Notes (optional)</p>
@@ -2166,14 +2207,33 @@ export default function RoutesPage() {
 
             <div className="rounded-md bg-muted p-3">
               <p className="text-xs font-medium text-muted-foreground mb-1">Text to customer:</p>
-              <p className="text-sm" data-testid="text-completion-sms-preview">{completionMessage}</p>
+              <p className="text-sm" data-testid="text-completion-sms-preview">
+                {noGate
+                  ? completionMessage.replace("Here is your gate closed image. ", "")
+                  : completionMessage}
+              </p>
+              {(() => {
+                const visitDate = dayVisits.find(v => v.id === completeDialogVisitId)?.scheduledDate;
+                const isToday = visitDate === new Date().toISOString().split("T")[0];
+                if (!isToday) {
+                  return <p className="text-xs text-muted-foreground mt-1 italic">No message will be sent (past visit)</p>;
+                }
+                return null;
+              })()}
             </div>
           </div>
 
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setCompleteDialogVisitId(null)}
+              onClick={() => {
+                setCompleteDialogVisitId(null);
+                setNoGate(false);
+                setGatePhoto(null);
+                setGatePhotoPreview(null);
+                setExtraFiles([]);
+                setCompletionNotes("");
+              }}
               disabled={isCompleting}
               data-testid="button-cancel-complete"
             >
@@ -2181,7 +2241,7 @@ export default function RoutesPage() {
             </Button>
             <Button
               onClick={handleCompleteAndSend}
-              disabled={!gatePhoto || isCompleting}
+              disabled={(!gatePhoto && !noGate) || isCompleting}
               data-testid="button-send-complete"
             >
               {isCompleting ? (
