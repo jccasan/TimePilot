@@ -1,0 +1,211 @@
+You are redesigning and rebuilding the Scoopilot scheduling experience, including the service selection system, for a route-based field-service SaaS.
+
+CONTEXT
+Scoopilot is used by small service businesses (pet waste removal, dog walking, etc.) to schedule recurring and one-off jobs.
+
+The current “Add Job” scheduling modal is usable but flawed:
+- too tall
+- too form-heavy
+- too many manual decisions
+- recurring setup causes friction
+- service dropdown is noisy and hard to scan
+- pricing feedback is unclear or broken
+- system does not auto-fill enough known information
+
+GOAL
+Rebuild the scheduling flow into a fast, intelligent dispatch workflow that minimizes input, reduces friction, and moves users quickly to a scheduled job.
+
+This should feel like operations software, not a generic CRM form.
+
+PRIMARY UX PRINCIPLES
+- speed over completeness
+- reduce typing and clicks
+- follow the user’s mental model
+- auto-fill wherever possible
+- reveal complexity only when needed
+- optimize for the most common recurring case
+- keep pricing clear and trustworthy
+- make service selection fast and obvious
+
+--------------------------------------------------
+CORE FLOW STRUCTURE
+
+Rebuild the scheduling flow around this order:
+
+1. Customer
+   - Customer selector
+   - Service Address (rename “Property” if needed for clarity)
+   - if customer has only one address, auto-select it
+
+2. Service
+   - Service selection (major redesign required)
+   - Total per visit (must update immediately)
+
+3. Schedule
+   - Job Type: One-off or Recurring
+   - Start Date
+   - Time or “Anytime”
+   - Recurrence (only if recurring)
+
+4. Assignment
+   - Assigned team member (suggest or default to Unassigned)
+
+5. Notes
+   - Visit instructions (optional, visually secondary)
+
+--------------------------------------------------
+SCHEDULING UX REQUIREMENTS
+
+1. Reduce vertical height
+- Avoid long scrolling modals
+- Use grouped layout or a 2-step flow
+- Consider a side drawer or panel instead of a traditional modal
+- Keep primary CTA easy to reach
+
+2. Fix field order
+- Do not mix service, schedule, and assignment randomly
+- Follow logical flow: who → what → when → who executes → notes
+
+3. Optimize recurring setup
+When “Recurring” is selected:
+- default frequency to Weekly
+- auto-fill day of week from selected start date
+- default end condition to No End Date
+- hide advanced recurrence options unless user changes them
+- do not force unnecessary selections
+
+4. Fix pricing behavior
+- selecting a service must immediately update total
+- if pricing is async, show “Calculating…” state
+- never show misleading $0.00 if price exists
+- visually tie total to selected service(s)
+
+5. Add intelligent defaults
+- auto-select property if only one exists
+- auto-fill weekday from date
+- suggest common services if known
+- suggest preferred technician if available
+- default assignment to Unassigned if none selected
+
+--------------------------------------------------
+SERVICE DROPDOWN REDESIGN (HIGH PRIORITY)
+
+The current service dropdown is too long, noisy, and hard to scan.
+This must be significantly improved.
+
+PROBLEMS TO SOLVE
+- too many options in one flat list
+- mixes recurring, one-time, and variants
+- pricing is hard to compare quickly
+- user must hunt for the correct option
+
+GOAL
+Make service selection fast, scannable, and low-effort.
+
+ACCEPTABLE APPROACHES (choose best implementation)
+
+Option A: Grouped dropdown
+- Group services into categories:
+  - Weekly Services
+  - Biweekly Services
+  - One-Time Services
+  - Add-ons
+- Clear headers for each group
+- Keep list structured and scannable
+
+Option B: Command-style searchable dropdown
+- User types to filter
+- Show top matches immediately
+- Include category + price in results
+- Fast keyboard navigation
+
+Option C: Two-step selection
+1. Select service category (e.g. Weekly Scooping)
+2. Select variant (e.g. 1 dog, 2 dogs, etc.)
+
+REQUIREMENTS
+- pricing must be visible next to each option
+- labels must be clear and readable
+- common services must be easy to access
+- reduce visual clutter
+- avoid overwhelming the user
+
+MULTI-SERVICE SUPPORT
+If multiple services per job are allowed:
+- replace small ambiguous “+” icon with clear action:
+  “Add another service”
+- show selected services as stacked items or chips
+- update total dynamically as services are added
+
+--------------------------------------------------
+UI / DESIGN REQUIREMENTS
+
+- mobile-friendly layout
+- large tap targets
+- minimal scrolling
+- clear grouping and spacing
+- clean, modern design
+- no enterprise CRM clutter
+- no unnecessary borders or visual noise
+
+SECTION GROUPING
+
+SECTION 1: Customer
+- Customer
+- Service Address
+
+SECTION 2: Service
+- Service selector
+- Total per visit
+
+SECTION 3: Schedule
+- Job Type
+- Start Date
+- Time / Anytime
+- Recurrence (progressive reveal)
+
+SECTION 4: Assignment
+- Team Member
+
+SECTION 5: Notes
+- Visit Instructions
+
+--------------------------------------------------
+IMPLEMENTATION REQUIREMENTS
+
+- build reusable React components
+- clean state management
+- clear conditional rendering for:
+  - recurring vs one-off
+  - service selection
+  - pricing updates
+- responsive layout (desktop, tablet, mobile)
+- production-quality code (not prototype-level)
+- support future integrations like address autocomplete
+
+--------------------------------------------------
+DELIVERABLES
+
+1. Rebuilt scheduling UI
+2. Redesigned service selection component
+3. Improved flow logic and field ordering
+4. Immediate pricing update behavior
+5. Smart defaults and progressive reveal
+6. Clean, maintainable component code
+7. Short explanation of redesign decisions
+
+--------------------------------------------------
+SUCCESS CRITERIA
+
+The new scheduling flow should:
+- require fewer clicks and less typing
+- eliminate unnecessary scrolling
+- make recurring scheduling feel simple
+- make service selection fast and intuitive
+- show accurate pricing immediately
+- guide users naturally through the process
+- feel like a dispatch tool, not a form
+
+IMPORTANT
+Think like a product designer for home-service operators.
+Prioritize speed, clarity, and operational efficiency over generic flexibility.

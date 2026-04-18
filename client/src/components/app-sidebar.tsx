@@ -186,7 +186,7 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setAddContactOpen(true)} data-testid="quick-create-contact">
                 <UserPlus className="h-4 w-4 mr-2" />
-                New Contact
+                New Customer
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => { navigate("/quotes?create=true"); handleNavClick(); }} data-testid="quick-create-quote">
                 <ClipboardCheck className="h-4 w-4 mr-2" />

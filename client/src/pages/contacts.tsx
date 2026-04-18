@@ -237,7 +237,7 @@ export default function Contacts() {
           </Button>
           <Button onClick={() => setDialogOpen(true)} data-testid="button-add-contact">
             <Plus className="mr-1 h-4 w-4" />
-            Add Contact
+            New Customer
           </Button>
           <AddContactDialog open={dialogOpen} onOpenChange={setDialogOpen} />
         </div>
