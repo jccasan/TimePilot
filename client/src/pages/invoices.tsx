@@ -431,6 +431,19 @@ export default function Invoices() {
     }
   };
 
+  type UninvoicedSortField = "name" | "amount" | "visits";
+  const [uninvoicedSortField, setUninvoicedSortField] = useState<UninvoicedSortField>("amount");
+  const [uninvoicedSortDir, setUninvoicedSortDir] = useState<SortDir>("desc");
+
+  const toggleUninvoicedSort = (field: UninvoicedSortField) => {
+    if (uninvoicedSortField === field) {
+      setUninvoicedSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setUninvoicedSortField(field);
+      setUninvoicedSortDir(field === "name" ? "asc" : "desc");
+    }
+  };
+
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices", statusFilter],
     queryFn: async () => {
@@ -1169,6 +1182,21 @@ export default function Invoices() {
       overdue: { count: overdueCount, total: overdueTotal },
     };
   }, [allInvoicesForStats]);
+
+  const sortedUninvoicedByContact = useMemo(() => {
+    const list = uninvoicedSummary?.byContact ?? [];
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      if (uninvoicedSortField === "name") {
+        cmp = a.contactName.localeCompare(b.contactName);
+      } else if (uninvoicedSortField === "amount") {
+        cmp = a.totalDollars - b.totalDollars;
+      } else {
+        cmp = a.count - b.count;
+      }
+      return uninvoicedSortDir === "asc" ? cmp : -cmp;
+    });
+  }, [uninvoicedSummary, uninvoicedSortField, uninvoicedSortDir]);
 
   const autopayEligibleInvoices = useMemo(() => {
     if (!allInvoicesForStats || !contacts) return [];
@@ -1915,7 +1943,7 @@ export default function Invoices() {
                 <div className="text-sm text-muted-foreground border-b pb-3 mb-3">
                   <span className="font-semibold text-foreground">{uninvoicedSummary.count}</span> visits · Total: <span className="font-semibold text-foreground">${uninvoicedSummary.totalDollars.toFixed(2)}</span>
                 </div>
-                {uninvoicedSummary.byContact.map((entry) => {
+                {sortedUninvoicedByContact.map((entry) => {
                   const contact = contacts?.find(c => c.id === entry.contactId);
                   const hasAutopay = !!(contact?.autoPayEnabled && contact?.stripeCustomerId);
                   return (
@@ -2125,7 +2153,31 @@ export default function Invoices() {
                   </div>
                 </CardContent>
               </Card>
-              {uninvoicedSummary.byContact.map((entry) => {
+              <div className="flex items-center gap-1.5 flex-wrap" data-testid="uninvoiced-sort-controls">
+                <span className="text-xs text-muted-foreground mr-1">Sort by:</span>
+                {(["amount", "visits", "name"] as const).map((field) => {
+                  const labels: Record<string, string> = { amount: "Amount", visits: "Visit Count", name: "Name" };
+                  const active = uninvoicedSortField === field;
+                  return (
+                    <Button
+                      key={field}
+                      size="sm"
+                      variant={active ? "secondary" : "ghost"}
+                      className="h-7 px-2.5 text-xs font-medium"
+                      onClick={() => toggleUninvoicedSort(field)}
+                      data-testid={`button-uninvoiced-sort-${field}`}
+                    >
+                      {labels[field]}
+                      {active ? (
+                        uninvoicedSortDir === "asc" ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />
+                      ) : (
+                        <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" />
+                      )}
+                    </Button>
+                  );
+                })}
+              </div>
+              {sortedUninvoicedByContact.map((entry) => {
                 const contact = contacts?.find(c => c.id === entry.contactId);
                 const hasAutopay = !!(contact?.autoPayEnabled && contact?.stripeCustomerId);
                 const isSelected = selectedUninvoicedIds.has(entry.contactId);
