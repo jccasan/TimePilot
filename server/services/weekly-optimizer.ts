@@ -90,6 +90,43 @@ function assignToNearestCentroid(
   return best;
 }
 
+function kmeansPlusPlusSeeds(stops: WeeklyStop[], k: number): { lat: number; lon: number }[] {
+  const overall = centroid(stops);
+
+  let maxDist = -1;
+  let firstIdx = 0;
+  for (let i = 0; i < stops.length; i++) {
+    const d = haversineDistance(stops[i].latitude, stops[i].longitude, overall.lat, overall.lon);
+    if (d > maxDist) {
+      maxDist = d;
+      firstIdx = i;
+    }
+  }
+
+  const seeds: { lat: number; lon: number }[] = [
+    { lat: stops[firstIdx].latitude, lon: stops[firstIdx].longitude },
+  ];
+
+  while (seeds.length < k) {
+    let maxMinDist = -1;
+    let nextIdx = 0;
+    for (let i = 0; i < stops.length; i++) {
+      let minDist = Infinity;
+      for (const seed of seeds) {
+        const d = haversineDistance(stops[i].latitude, stops[i].longitude, seed.lat, seed.lon);
+        if (d < minDist) minDist = d;
+      }
+      if (minDist > maxMinDist) {
+        maxMinDist = minDist;
+        nextIdx = i;
+      }
+    }
+    seeds.push({ lat: stops[nextIdx].latitude, lon: stops[nextIdx].longitude });
+  }
+
+  return seeds;
+}
+
 export function kMeansClustering(
   stops: WeeklyStop[],
   k: number,
@@ -100,14 +137,8 @@ export function kMeansClustering(
   }
 
   const indices = new Array(stops.length).fill(0);
-  const step = Math.floor(stops.length / k);
-  const sorted = [...stops].sort((a, b) => a.latitude - b.latitude || a.longitude - b.longitude);
 
-  let centroids: { lat: number; lon: number }[] = [];
-  for (let i = 0; i < k; i++) {
-    const idx = Math.min(i * step, sorted.length - 1);
-    centroids.push({ lat: sorted[idx].latitude, lon: sorted[idx].longitude });
-  }
+  let centroids: { lat: number; lon: number }[] = kmeansPlusPlusSeeds(stops, k);
 
   for (let iter = 0; iter < maxIter; iter++) {
     let changed = false;
@@ -263,47 +294,73 @@ export function analyzeWeeklySchedule(
     currentTotalMinutes += totalMinutes;
   }
 
-  let proposedByDay: Map<string, WeeklyStop[]>;
-
-  if (respectZones && zones.length > 0) {
-    proposedByDay = assignByZones(stops, zones, activeDays);
-  } else {
-    proposedByDay = assignByGeoClustering(stops, activeDays, startPoint, maxStopsPerDay);
-  }
-
   const proposedDays: DayProposal[] = [];
   let proposedTotalMiles = 0;
   let proposedTotalMinutes = 0;
+  const proposedStopDayMap = new Map<string, string>();
 
-  for (const day of activeDays) {
-    const dayStops = proposedByDay.get(day) || [];
-    const routes = splitIntoSubRoutes(dayStops, day, startPoint);
-    const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
-    const totalMinutes = routes.reduce((s, r) => s + r.estimatedMinutes, 0);
-    proposedDays.push({
-      day,
-      routes,
-      totalStops: dayStops.length,
-      totalMiles: Math.round(totalMiles * 10) / 10,
-      totalMinutes: Math.round(totalMinutes),
-    });
-    proposedTotalMiles += totalMiles;
-    proposedTotalMinutes += totalMinutes;
+  if (respectZones && zones.length > 0) {
+    const proposedByDay = assignByZones(stops, zones, activeDays);
+    for (const day of activeDays) {
+      const dayStops = proposedByDay.get(day) || [];
+      for (const stop of dayStops) proposedStopDayMap.set(stop.servicePlanId, day);
+      const routes = splitIntoSubRoutes(dayStops, day, startPoint);
+      const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
+      const totalMinutes = routes.reduce((s, r) => s + r.estimatedMinutes, 0);
+      proposedDays.push({
+        day,
+        routes,
+        totalStops: dayStops.length,
+        totalMiles: Math.round(totalMiles * 10) / 10,
+        totalMinutes: Math.round(totalMinutes),
+      });
+      proposedTotalMiles += totalMiles;
+      proposedTotalMinutes += totalMinutes;
+    }
+  } else {
+    const clustersByDay = assignByGeoClustering(stops, activeDays, startPoint, maxStopsPerDay);
+    for (const day of activeDays) {
+      const dayClusters = clustersByDay.get(day) || [];
+      const dayStops = dayClusters.flat();
+      for (const stop of dayStops) proposedStopDayMap.set(stop.servicePlanId, day);
+
+      const routes: ProposedRoute[] = [];
+      for (const cluster of dayClusters) {
+        const subRoutes = splitIntoSubRoutes(cluster, day, startPoint);
+        routes.push(...subRoutes);
+      }
+
+      if (routes.length > 1) {
+        routes.forEach((r, idx) => {
+          r.routeLabel = `${capitalize(day)} Route ${String.fromCharCode(65 + idx)}`;
+        });
+      }
+
+      const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
+      const totalMinutes = routes.reduce((s, r) => s + r.estimatedMinutes, 0);
+      proposedDays.push({
+        day,
+        routes,
+        totalStops: dayStops.length,
+        totalMiles: Math.round(totalMiles * 10) / 10,
+        totalMinutes: Math.round(totalMinutes),
+      });
+      proposedTotalMiles += totalMiles;
+      proposedTotalMinutes += totalMinutes;
+    }
   }
 
   const movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[] = [];
-  for (const day of activeDays) {
-    const dayStops = proposedByDay.get(day) || [];
-    for (const stop of dayStops) {
-      const origDay = stop.currentDay && activeDays.includes(stop.currentDay) ? stop.currentDay : "monday";
-      if (origDay !== day) {
-        movedStops.push({
-          stopId: stop.servicePlanId,
-          fromDay: origDay,
-          toDay: day,
-          contactName: stop.contactName,
-        });
-      }
+  for (const stop of stops) {
+    const origDay = stop.currentDay && activeDays.includes(stop.currentDay) ? stop.currentDay : "monday";
+    const newDay = proposedStopDayMap.get(stop.servicePlanId) ?? origDay;
+    if (origDay !== newDay) {
+      movedStops.push({
+        stopId: stop.servicePlanId,
+        fromDay: origDay,
+        toDay: newDay,
+        contactName: stop.contactName,
+      });
     }
   }
 
@@ -376,42 +433,81 @@ function assignByZones(
   return result;
 }
 
+function totalIntraClusterDistance(clusters: WeeklyStop[][]): number {
+  let total = 0;
+  for (const cluster of clusters) {
+    if (cluster.length === 0) continue;
+    const c = centroid(cluster);
+    for (const stop of cluster) {
+      total += haversineDistance(stop.latitude, stop.longitude, c.lat, c.lon);
+    }
+  }
+  return total;
+}
+
+function findOptimalK(stops: WeeklyStop[], maxK: number): number {
+  if (stops.length <= 1) return 1;
+  if (maxK <= 1) return 1;
+
+  const effectiveMax = Math.min(maxK, stops.length);
+
+  const d1 = totalIntraClusterDistance(kMeansClustering(stops, 1));
+  if (d1 === 0) return 1;
+
+  const GAIN_THRESHOLD = 0.10;
+
+  let prevDist = d1;
+  let optK = 1;
+
+  for (let k = 2; k <= effectiveMax; k++) {
+    const clusters = kMeansClustering(stops, k);
+    const dist = totalIntraClusterDistance(clusters);
+    const gain = (prevDist - dist) / d1;
+    if (gain < GAIN_THRESHOLD) break;
+    optK = k;
+    prevDist = dist;
+  }
+
+  return optK;
+}
+
 function assignByGeoClustering(
   stops: WeeklyStop[],
   activeDays: string[],
   startPoint?: StartPoint,
   maxStopsPerDay?: number
-): Map<string, WeeklyStop[]> {
-  const result = new Map<string, WeeklyStop[]>();
+): Map<string, WeeklyStop[][]> {
+  const result = new Map<string, WeeklyStop[][]>();
   for (const day of activeDays) {
     result.set(day, []);
   }
 
   if (stops.length === 0) return result;
 
-  const divisor = maxStopsPerDay && maxStopsPerDay > 0 ? maxStopsPerDay : MIN_STOPS_FOR_OWN_DAY;
-  const numDays = Math.min(activeDays.length, Math.max(1, Math.ceil(stops.length / divisor)));
-  const usedDays = activeDays.slice(0, numDays);
+  const stopsPerRoute = maxStopsPerDay && maxStopsPerDay > 0 ? maxStopsPerDay : MAX_STOPS_PER_ROUTE;
+  const techsPerDay = Math.ceil(stops.length / stopsPerRoute / activeDays.length) || 1;
+  const maxK = activeDays.length * Math.max(1, techsPerDay);
 
-  const clusters = kMeansClustering(stops, numDays);
+  const optK = findOptimalK(stops, maxK);
+  const clusters = kMeansClustering(stops, optK);
 
-  if (startPoint) {
-    const clusterCentroids = clusters.map(c => centroid(c));
-    const sortedIndices = clusterCentroids
-      .map((c, i) => ({ idx: i, dist: haversineDistance(startPoint.latitude, startPoint.longitude, c.lat, c.lon) }))
-      .sort((a, b) => a.dist - b.dist)
-      .map(x => x.idx);
+  const orderedClusters = startPoint
+    ? [...clusters].sort((a, b) => {
+        const ca = centroid(a);
+        const cb = centroid(b);
+        return (
+          haversineDistance(startPoint.latitude, startPoint.longitude, ca.lat, ca.lon) -
+          haversineDistance(startPoint.latitude, startPoint.longitude, cb.lat, cb.lon)
+        );
+      })
+    : clusters;
 
-    for (let i = 0; i < sortedIndices.length; i++) {
-      const dayIdx = i % usedDays.length;
-      const cluster = clusters[sortedIndices[i]];
-      result.get(usedDays[dayIdx])!.push(...cluster);
-    }
-  } else {
-    for (let i = 0; i < clusters.length; i++) {
-      const dayIdx = i % usedDays.length;
-      result.get(usedDays[dayIdx])!.push(...clusters[i]);
-    }
+  const usedDayCount = Math.min(orderedClusters.length, activeDays.length);
+  const usedDays = activeDays.slice(0, usedDayCount);
+
+  for (let i = 0; i < orderedClusters.length; i++) {
+    const dayIdx = i % usedDays.length;
+    result.get(usedDays[dayIdx])!.push(orderedClusters[i]);
   }
 
   return result;
