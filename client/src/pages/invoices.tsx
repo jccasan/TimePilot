@@ -310,6 +310,52 @@ function CollectionsPanel({
   );
 }
 
+function UninvoicedVisitBreakdown({ contactId }: { contactId: string }) {
+  const { data, isLoading } = useQuery<{ visits: { id: string; scheduledDate: string; servicePlanName: string; pricePerVisit: string; propertyAddress: string }[]; totalDollars: number }>({
+    queryKey: ["/api/contacts", contactId, "uninvoiced-visits"],
+    queryFn: () => apiRequest("GET", `/api/contacts/${contactId}/uninvoiced-visits`).then(r => r.json()),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="px-4 pb-3 space-y-1.5">
+        {[1, 2].map(i => <Skeleton key={i} className="h-7 w-full" />)}
+      </div>
+    );
+  }
+
+  if (!data || data.visits.length === 0) {
+    return (
+      <p className="px-4 pb-3 text-xs text-muted-foreground" data-testid={`text-no-uninvoiced-visits-${contactId}`}>
+        No visit details available.
+      </p>
+    );
+  }
+
+  return (
+    <div className="px-4 pb-3 pt-0 border-t mt-0" data-testid={`breakdown-uninvoiced-${contactId}`}>
+      <div className="mt-2 space-y-1">
+        {data.visits.map(visit => (
+          <div
+            key={visit.id}
+            className="flex items-center justify-between text-xs text-muted-foreground py-1"
+            data-testid={`row-visit-detail-${visit.id}`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-medium text-foreground shrink-0">{visit.scheduledDate}</span>
+              <span className="truncate hidden sm:inline">{visit.servicePlanName}</span>
+              {visit.propertyAddress && visit.propertyAddress !== "Unknown" && (
+                <span className="truncate text-muted-foreground/70 hidden md:inline">{visit.propertyAddress}</span>
+              )}
+            </div>
+            <span className="font-medium text-foreground shrink-0 ml-3">${parseFloat(visit.pricePerVisit).toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const VALID_TAB_VALUES = ["all", "uninvoiced", "unpaid", "overdue", "paid", "failed"];
 
 function getInitialTab(): string {
@@ -492,6 +538,7 @@ export default function Invoices() {
   const [confirmGenerateAll, setConfirmGenerateAll] = useState(false);
   const [generateAllContactIds, setGenerateAllContactIds] = useState<string[] | null>(null);
   const [selectedUninvoicedIds, setSelectedUninvoicedIds] = useState<Set<string>>(new Set());
+  const [expandedUninvoicedIds, setExpandedUninvoicedIds] = useState<Set<string>>(new Set());
   const [previewSheetOpen, setPreviewSheetOpen] = useState(false);
   const [generateDialogContactId, setGenerateDialogContactId] = useState<string | undefined>(undefined);
   const [automationOpen, setAutomationOpen] = useState(false);
@@ -2082,6 +2129,7 @@ export default function Invoices() {
                 const contact = contacts?.find(c => c.id === entry.contactId);
                 const hasAutopay = !!(contact?.autoPayEnabled && contact?.stripeCustomerId);
                 const isSelected = selectedUninvoicedIds.has(entry.contactId);
+                const isExpanded = expandedUninvoicedIds.has(entry.contactId);
                 return (
                   <Card key={entry.contactId} data-testid={`card-uninvoiced-${entry.contactId}`} className={isSelected ? "border-primary/40 bg-primary/5" : ""}>
                     <CardContent className="flex items-center gap-3 p-4">
@@ -2098,7 +2146,7 @@ export default function Invoices() {
                         data-testid={`checkbox-uninvoiced-${entry.contactId}`}
                         aria-label={`Select ${entry.contactName}`}
                       />
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-medium" data-testid={`text-uninvoiced-name-${entry.contactId}`}>{entry.contactName}</p>
                           {hasAutopay && (
@@ -2107,9 +2155,23 @@ export default function Invoices() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-sm text-muted-foreground">
+                        <button
+                          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mt-0.5 cursor-pointer"
+                          onClick={() => {
+                            setExpandedUninvoicedIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(entry.contactId)) next.delete(entry.contactId);
+                              else next.add(entry.contactId);
+                              return next;
+                            });
+                          }}
+                          data-testid={`button-expand-uninvoiced-${entry.contactId}`}
+                          aria-expanded={isExpanded}
+                          aria-label={`${isExpanded ? "Collapse" : "Expand"} visit details for ${entry.contactName}`}
+                        >
+                          {isExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
                           {entry.count} visit{entry.count !== 1 ? "s" : ""} · ${entry.totalDollars.toFixed(2)}
-                        </p>
+                        </button>
                       </div>
                       <Button
                         size="sm"
@@ -2123,6 +2185,7 @@ export default function Invoices() {
                         <Zap className="mr-1 h-3.5 w-3.5" /> Generate Invoice
                       </Button>
                     </CardContent>
+                    {isExpanded && <UninvoicedVisitBreakdown contactId={entry.contactId} />}
                   </Card>
                 );
               })}
