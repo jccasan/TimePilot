@@ -33,7 +33,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, DollarSign, Clock, CheckCircle2, ChevronDown, ChevronRight, SendHorizonal, RefreshCw, Square, CheckSquare, Bell, Settings, X, History } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, DollarSign, Clock, CheckCircle2, ChevronDown, ChevronRight, SendHorizonal, RefreshCw, Square, CheckSquare, Bell, Settings, X, History, Eye } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
@@ -297,9 +310,15 @@ function CollectionsPanel({
   );
 }
 
+const VALID_TAB_VALUES = ["all", "uninvoiced", "unpaid", "overdue", "paid", "failed"];
+
 function getInitialTab(): string {
   const params = new URLSearchParams(window.location.search);
-  return params.get("tab") || localStorage.getItem("scoopilot_inv_status_filter") || "all";
+  const urlTab = params.get("tab");
+  if (urlTab && VALID_TAB_VALUES.includes(urlTab)) return urlTab;
+  const stored = localStorage.getItem("scoopilot_inv_status_filter");
+  if (stored && VALID_TAB_VALUES.includes(stored)) return stored;
+  return "all";
 }
 
 export default function Invoices() {
@@ -372,12 +391,24 @@ export default function Invoices() {
       const token = localStorage.getItem("sessionToken");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      if (statusFilter === "awaiting") {
-        const [sent, pending] = await Promise.all([
+      if (statusFilter === "unpaid") {
+        const [draft, sent, pending] = await Promise.all([
+          fetch("/api/invoices?status=draft", { credentials: "include", headers }).then(r => r.ok ? r.json() : []),
           fetch("/api/invoices?status=sent", { credentials: "include", headers }).then(r => r.ok ? r.json() : []),
           fetch("/api/invoices?status=pending", { credentials: "include", headers }).then(r => r.ok ? r.json() : []),
         ]);
-        return [...sent, ...pending];
+        const now = new Date();
+        const combined = [...draft, ...sent, ...pending];
+        return combined.filter((inv: Invoice) => !(inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now));
+      }
+      if (statusFilter === "overdue") {
+        const r = await fetch("/api/invoices", { credentials: "include", headers });
+        if (!r.ok) throw new Error("Failed to fetch invoices");
+        const all: Invoice[] = await r.json();
+        const now = new Date();
+        return all.filter((inv: Invoice) =>
+          inv.status !== "paid" && inv.status !== "voided" && inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now
+        );
       }
       const queryParams = statusFilter !== "all" && statusFilter !== "uninvoiced" ? `?status=${statusFilter}` : "";
       const r = await fetch(`/api/invoices${queryParams}`, { credentials: "include", headers });
@@ -403,7 +434,6 @@ export default function Invoices() {
 
   const { data: uninvoicedSummary, isLoading: uninvoicedLoading } = useQuery<UninvoicedSummary>({
     queryKey: ["/api/company/uninvoiced-summary"],
-    enabled: statusFilter === "uninvoiced",
   });
 
   const activePricing = useMemo(() => pricing?.filter(p => p.isActive) || [], [pricing]);
@@ -459,6 +489,11 @@ export default function Invoices() {
   });
   const [confirmSendAll, setConfirmSendAll] = useState(false);
   const [confirmChargeAll, setConfirmChargeAll] = useState(false);
+  const [confirmGenerateAll, setConfirmGenerateAll] = useState(false);
+  const [generateAllContactIds, setGenerateAllContactIds] = useState<string[] | null>(null);
+  const [selectedUninvoicedIds, setSelectedUninvoicedIds] = useState<Set<string>>(new Set());
+  const [previewSheetOpen, setPreviewSheetOpen] = useState(false);
+  const [generateDialogContactId, setGenerateDialogContactId] = useState<string | undefined>(undefined);
   const [automationOpen, setAutomationOpen] = useState(false);
   const [editInvoiceReminders, setEditInvoiceReminders] = useState<{
     preDueDays: number[];
@@ -698,6 +733,34 @@ export default function Invoices() {
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const generateAllMutation = useMutation({
+    mutationFn: async (contactIds: string[] | null) => {
+      const body = contactIds ? { contactIds } : {};
+      const res = await apiRequest("POST", "/api/invoices/generate-all-from-uninvoiced", body);
+      return res.json();
+    },
+    onSuccess: (data: { created: number; totalDollars: number }) => {
+      queryClient.invalidateQueries({ predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      setConfirmGenerateAll(false);
+      setGenerateAllContactIds(null);
+      setSelectedUninvoicedIds(new Set());
+      if (data.created > 0) {
+        toast({
+          title: `$${data.totalDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} in invoices generated`,
+          description: `${data.created} invoice${data.created !== 1 ? "s" : ""} created`,
+        });
+      } else {
+        toast({ title: "No invoices generated", description: "No uninvoiced work found." });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Generation failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -1023,6 +1086,29 @@ export default function Invoices() {
   const allUnpaidInvoices = useMemo(() => {
     if (!allInvoicesForStats) return [];
     return allInvoicesForStats.filter(inv => ["pending", "sent"].includes(inv.status));
+  }, [allInvoicesForStats]);
+
+  const tabBadges = useMemo(() => {
+    if (!allInvoicesForStats) return { unpaid: { count: 0, total: 0 }, overdue: { count: 0, total: 0 } };
+    const now = new Date();
+    let unpaidCount = 0; let unpaidTotal = 0;
+    let overdueCount = 0; let overdueTotal = 0;
+    for (const inv of allInvoicesForStats) {
+      if (inv.status === "voided" || inv.status === "paid") continue;
+      const total = Number(inv.total) || 0;
+      const isOverdue = inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now;
+      if (isOverdue) {
+        overdueCount++;
+        overdueTotal += total;
+      } else if (["draft", "sent", "pending"].includes(inv.status)) {
+        unpaidCount++;
+        unpaidTotal += total;
+      }
+    }
+    return {
+      unpaid: { count: unpaidCount, total: unpaidTotal },
+      overdue: { count: overdueCount, total: overdueTotal },
+    };
   }, [allInvoicesForStats]);
 
   const autopayEligibleInvoices = useMemo(() => {
@@ -1495,15 +1581,65 @@ export default function Invoices() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg border border-border bg-card" data-testid="persistent-batch-actions">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setGenerateDialogOpen(true)}
-          data-testid="button-persistent-generate"
-        >
-          <Zap className="mr-1 h-3.5 w-3.5 text-amber-500" />
-          Generate Invoices
-        </Button>
+        <div className="flex items-center">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => {
+              setGenerateAllContactIds(null);
+              setConfirmGenerateAll(true);
+            }}
+            className="rounded-r-none border-r-0"
+            data-testid="button-persistent-generate"
+            disabled={generateAllMutation.isPending}
+          >
+            <Zap className="mr-1 h-3.5 w-3.5" />
+            Generate All Invoices
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="default"
+                size="sm"
+                className="rounded-l-none px-2"
+                data-testid="button-generate-dropdown-trigger"
+                disabled={generateAllMutation.isPending}
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                onClick={() => { setGenerateDialogContactId(undefined); setGenerateDialogOpen(true); }}
+                data-testid="dropdown-generate-by-customer"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Generate by Customer
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => { setGenerateDialogContactId(undefined); setGenerateDialogOpen(true); }}
+                data-testid="dropdown-generate-by-date"
+              >
+                <Clock className="mr-2 h-4 w-4" />
+                Generate by Date Range
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={selectedUninvoicedIds.size === 0}
+                onClick={() => {
+                  if (selectedUninvoicedIds.size > 0) {
+                    setGenerateAllContactIds(Array.from(selectedUninvoicedIds));
+                    setConfirmGenerateAll(true);
+                  }
+                }}
+                data-testid="dropdown-generate-selected"
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Generate Selected {selectedUninvoicedIds.size > 0 ? `(${selectedUninvoicedIds.size})` : ""}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         <Button
           variant="outline"
@@ -1511,9 +1647,15 @@ export default function Invoices() {
           disabled={batchPending || allUnpaidInvoices.length === 0}
           onClick={() => setConfirmSendAll(true)}
           data-testid="button-persistent-send-unpaid"
+          className="flex items-center gap-1.5"
         >
-          <SendHorizonal className="mr-1 h-3.5 w-3.5 text-blue-500" />
-          Send {allUnpaidInvoices.length > 0 ? allUnpaidInvoices.length : ""} Unpaid
+          <SendHorizonal className="h-3.5 w-3.5 text-blue-500" />
+          Send All Unpaid
+          {allUnpaidInvoices.length > 0 && (
+            <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0 h-4">
+              {allUnpaidInvoices.length}
+            </Badge>
+          )}
         </Button>
 
         {stripeConfig?.configured && (
@@ -1523,9 +1665,15 @@ export default function Invoices() {
             disabled={batchPending || autopayEligibleInvoices.length === 0}
             onClick={() => setConfirmChargeAll(true)}
             data-testid="button-persistent-charge-autopay"
+            className="flex items-center gap-1.5"
           >
-            <CreditCard className="mr-1 h-3.5 w-3.5 text-emerald-500" />
-            Charge {autopayEligibleInvoices.length > 0 ? autopayEligibleInvoices.length : ""} Autopay
+            <CreditCard className="h-3.5 w-3.5 text-emerald-500" />
+            Charge Autopay
+            {autopayEligibleInvoices.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0 h-4">
+                ${autopayEligibleInvoices.reduce((s, inv) => s + Number(inv.total), 0).toLocaleString("en-US", { maximumFractionDigits: 0 })} · {autopayEligibleInvoices.length}
+              </Badge>
+            )}
           </Button>
         )}
 
@@ -1546,7 +1694,7 @@ export default function Invoices() {
           Automation
         </Button>
 
-        {batchPending && <Loader2 className="h-4 w-4 animate-spin" />}
+        {(batchPending || generateAllMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
       </div>
 
       {selectedIds.size > 0 && (
@@ -1650,6 +1798,92 @@ export default function Invoices() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={confirmGenerateAll} onOpenChange={(open) => { if (!open) { setConfirmGenerateAll(false); setGenerateAllContactIds(null); } }}>
+        <DialogContent className="max-w-md" data-testid="dialog-confirm-generate-all">
+          <DialogHeader>
+            <DialogTitle>
+              Generate {generateAllContactIds ? generateAllContactIds.length : uninvoicedSummary?.byContact.length ?? 0} invoice{(generateAllContactIds ? generateAllContactIds.length : uninvoicedSummary?.byContact.length ?? 0) !== 1 ? "s" : ""}?
+            </DialogTitle>
+            <DialogDescription>
+              This will create invoices totaling ${
+                generateAllContactIds
+                  ? (uninvoicedSummary?.byContact.filter(c => generateAllContactIds.includes(c.contactId)).reduce((s, c) => s + c.totalDollars, 0) ?? 0).toFixed(2)
+                  : uninvoicedSummary?.totalDollars.toFixed(2) ?? "0.00"
+              } for {generateAllContactIds ? generateAllContactIds.length : uninvoicedSummary?.byContact.length ?? 0} customer{(generateAllContactIds ? generateAllContactIds.length : uninvoicedSummary?.byContact.length ?? 0) !== 1 ? "s" : ""} based on their completed work.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-sm">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <p>These visits will be marked as invoiced and removed from this view. This cannot be undone without voiding the invoices.</p>
+          </div>
+          <div className="flex gap-2 mt-2">
+            <Button
+              className="flex-1"
+              onClick={() => generateAllMutation.mutate(generateAllContactIds)}
+              disabled={generateAllMutation.isPending}
+              data-testid="button-confirm-generate-all"
+            >
+              {generateAllMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Zap className="mr-1 h-4 w-4" />}
+              Generate Invoices
+            </Button>
+            <Button variant="outline" onClick={() => { setConfirmGenerateAll(false); setGenerateAllContactIds(null); }} data-testid="button-cancel-generate-all">
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Sheet open={previewSheetOpen} onOpenChange={setPreviewSheetOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto" data-testid="sheet-preview-uninvoiced">
+          <SheetHeader>
+            <SheetTitle>Invoice Preview</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-3">
+            {uninvoicedSummary && uninvoicedSummary.count > 0 ? (
+              <>
+                <div className="text-sm text-muted-foreground border-b pb-3 mb-3">
+                  <span className="font-semibold text-foreground">{uninvoicedSummary.count}</span> visits · Total: <span className="font-semibold text-foreground">${uninvoicedSummary.totalDollars.toFixed(2)}</span>
+                </div>
+                {uninvoicedSummary.byContact.map((entry) => {
+                  const contact = contacts?.find(c => c.id === entry.contactId);
+                  const hasAutopay = !!(contact?.autoPayEnabled && contact?.stripeCustomerId);
+                  return (
+                    <div key={entry.contactId} className="flex items-start justify-between gap-3 p-3 rounded-md border" data-testid={`preview-row-${entry.contactId}`}>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{entry.contactName}</p>
+                          {hasAutopay && (
+                            <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400">
+                              <CreditCard className="h-2.5 w-2.5 mr-0.5" />Autopay
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">{entry.count} visit{entry.count !== 1 ? "s" : ""}</p>
+                      </div>
+                      <span className="font-semibold">${entry.totalDollars.toFixed(2)}</span>
+                    </div>
+                  );
+                })}
+                <Button
+                  className="w-full mt-2"
+                  onClick={() => {
+                    setPreviewSheetOpen(false);
+                    setGenerateAllContactIds(null);
+                    setConfirmGenerateAll(true);
+                  }}
+                  data-testid="button-generate-from-preview"
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  Generate All (${uninvoicedSummary.totalDollars.toFixed(2)})
+                </Button>
+              </>
+            ) : (
+              <p className="text-muted-foreground text-sm">No uninvoiced work found.</p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
       {automationOpen && (
         <Card className="border-dashed" data-testid="section-automation">
           <CardHeader className="p-4 pb-2">
@@ -1742,10 +1976,22 @@ export default function Invoices() {
         <TabsList className="flex-wrap">
           <TabsTrigger value="all" data-testid="tab-invoice-all">All</TabsTrigger>
           <TabsTrigger value="uninvoiced" data-testid="tab-invoice-uninvoiced">Uninvoiced</TabsTrigger>
-          <TabsTrigger value="draft" data-testid="tab-invoice-draft">Draft</TabsTrigger>
-          <TabsTrigger value="sent" data-testid="tab-invoice-sent">Sent</TabsTrigger>
-          <TabsTrigger value="awaiting" data-testid="tab-invoice-awaiting">Awaiting Payment</TabsTrigger>
-          <TabsTrigger value="pending" data-testid="tab-invoice-pending">Pending</TabsTrigger>
+          <TabsTrigger value="unpaid" data-testid="tab-invoice-unpaid">
+            Unpaid
+            {tabBadges.unpaid.count > 0 && (
+              <span className="ml-1.5 text-xs font-normal opacity-80">
+                ({tabBadges.unpaid.count} · ${tabBadges.unpaid.total.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })})
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="overdue" data-testid="tab-invoice-overdue">
+            Overdue
+            {tabBadges.overdue.count > 0 && (
+              <span className="ml-1.5 text-xs font-normal opacity-80">
+                ({tabBadges.overdue.count} · ${tabBadges.overdue.total.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })})
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="paid" data-testid="tab-invoice-paid">Paid</TabsTrigger>
           <TabsTrigger value="failed" data-testid="tab-invoice-failed">Failed</TabsTrigger>
         </TabsList>
@@ -1765,33 +2011,121 @@ export default function Invoices() {
             </div>
           ) : uninvoicedSummary && uninvoicedSummary.count > 0 ? (
             <>
-              <Card>
-                <CardContent className="p-4" data-testid="text-uninvoiced-total">
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-semibold text-foreground">{uninvoicedSummary.count}</span> completed visit{uninvoicedSummary.count !== 1 ? "s" : ""} worth{" "}
-                    <span className="font-semibold text-foreground">${uninvoicedSummary.totalDollars.toFixed(2)}</span> need invoicing
-                  </p>
-                </CardContent>
-              </Card>
-              {uninvoicedSummary.byContact.map((entry) => (
-                <Card key={entry.contactId} data-testid={`card-uninvoiced-${entry.contactId}`}>
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div>
-                      <p className="font-medium" data-testid={`text-uninvoiced-name-${entry.contactId}`}>{entry.contactName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {entry.count} visit{entry.count !== 1 ? "s" : ""} -- ${entry.totalDollars.toFixed(2)}
+              <Card className="border-2 border-primary/20 bg-primary/5" data-testid="card-uninvoiced-cta">
+                <CardContent className="p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div data-testid="text-uninvoiced-total">
+                      <p className="text-base font-semibold text-foreground">
+                        {uninvoicedSummary.count} completed visit{uninvoicedSummary.count !== 1 ? "s" : ""} ready to invoice
+                      </p>
+                      <p className="text-2xl font-bold text-primary mt-0.5">
+                        Total: ${uninvoicedSummary.totalDollars.toFixed(2)}
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => setGenerateDialogOpen(true)}
-                      data-testid={`button-generate-invoice-${entry.contactId}`}
-                    >
-                      <Zap className="mr-1 h-4 w-4" /> Generate Invoice
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="default"
+                        variant="default"
+                        onClick={() => {
+                          setGenerateAllContactIds(null);
+                          setConfirmGenerateAll(true);
+                        }}
+                        disabled={generateAllMutation.isPending}
+                        data-testid="button-generate-all-cta"
+                        className="font-semibold"
+                      >
+                        {generateAllMutation.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Zap className="mr-2 h-4 w-4" />
+                        )}
+                        Generate All (${uninvoicedSummary.totalDollars.toFixed(0)})
+                      </Button>
+                      <Button
+                        size="default"
+                        variant="outline"
+                        onClick={() => setPreviewSheetOpen(true)}
+                        data-testid="button-preview-uninvoiced"
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview First
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              {uninvoicedSummary.byContact.map((entry) => {
+                const contact = contacts?.find(c => c.id === entry.contactId);
+                const hasAutopay = !!(contact?.autoPayEnabled && contact?.stripeCustomerId);
+                const isSelected = selectedUninvoicedIds.has(entry.contactId);
+                return (
+                  <Card key={entry.contactId} data-testid={`card-uninvoiced-${entry.contactId}`} className={isSelected ? "border-primary/40 bg-primary/5" : ""}>
+                    <CardContent className="flex items-center gap-3 p-4">
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checked) => {
+                          setSelectedUninvoicedIds(prev => {
+                            const next = new Set(prev);
+                            if (checked) next.add(entry.contactId);
+                            else next.delete(entry.contactId);
+                            return next;
+                          });
+                        }}
+                        data-testid={`checkbox-uninvoiced-${entry.contactId}`}
+                        aria-label={`Select ${entry.contactName}`}
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium" data-testid={`text-uninvoiced-name-${entry.contactId}`}>{entry.contactName}</p>
+                          {hasAutopay && (
+                            <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400">
+                              <CreditCard className="h-2.5 w-2.5 mr-0.5" />Autopay
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {entry.count} visit{entry.count !== 1 ? "s" : ""} · ${entry.totalDollars.toFixed(2)}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setGenerateDialogContactId(entry.contactId);
+                          setGenerateDialogOpen(true);
+                        }}
+                        data-testid={`button-generate-invoice-${entry.contactId}`}
+                      >
+                        <Zap className="mr-1 h-3.5 w-3.5" /> Generate Invoice
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              {selectedUninvoicedIds.size > 0 && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/70 border" data-testid="uninvoiced-batch-bar">
+                  <span className="text-sm font-medium">{selectedUninvoicedIds.size} selected</span>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setGenerateAllContactIds(Array.from(selectedUninvoicedIds));
+                      setConfirmGenerateAll(true);
+                    }}
+                    disabled={generateAllMutation.isPending}
+                    data-testid="button-generate-selected"
+                  >
+                    <Zap className="mr-1 h-3.5 w-3.5" /> Generate Selected ({selectedUninvoicedIds.size})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setSelectedUninvoicedIds(new Set())}
+                    data-testid="button-clear-uninvoiced-selection"
+                  >
+                    Clear
+                  </Button>
+                </div>
+              )}
             </>
           ) : (
             <Card>
@@ -2631,8 +2965,12 @@ export default function Invoices() {
 
       <GenerateInvoiceDialog
         open={generateDialogOpen}
-        onOpenChange={setGenerateDialogOpen}
-        showContactPicker
+        onOpenChange={(open) => {
+          setGenerateDialogOpen(open);
+          if (!open) setGenerateDialogContactId(undefined);
+        }}
+        contactId={generateDialogContactId}
+        showContactPicker={!generateDialogContactId}
       />
     </div>
   );
