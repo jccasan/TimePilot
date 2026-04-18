@@ -2519,7 +2519,7 @@ export default function Dashboard() {
       case "quick_actions":
         return (
           <Card className="h-full" data-testid="widget-quick-actions">
-            <CardHeader>
+            <CardHeader className="pt-4 px-4 pb-2">
               <CardTitle className="text-lg">Quick Actions</CardTitle>
               <CardDescription>Common tasks</CardDescription>
             </CardHeader>
