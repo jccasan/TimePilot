@@ -737,12 +737,14 @@ export default function Invoices() {
   });
 
   const generateAllMutation = useMutation({
-    mutationFn: async (contactIds: string[] | null) => {
-      const body = contactIds ? { contactIds } : {};
+    mutationFn: async ({ contactIds, sendAfterGenerate }: { contactIds: string[] | null; sendAfterGenerate?: boolean }) => {
+      const body: Record<string, unknown> = {};
+      if (contactIds) body.contactIds = contactIds;
+      if (sendAfterGenerate) body.sendAfterGenerate = true;
       const res = await apiRequest("POST", "/api/invoices/generate-all-from-uninvoiced", body);
       return res.json();
     },
-    onSuccess: (data: { created: number; totalDollars: number }) => {
+    onSuccess: (data: { created: number; totalDollars: number; sent?: number; failed?: number }, variables) => {
       queryClient.invalidateQueries({ predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
@@ -751,10 +753,20 @@ export default function Invoices() {
       setGenerateAllContactIds(null);
       setSelectedUninvoicedIds(new Set());
       if (data.created > 0) {
-        toast({
-          title: `$${data.totalDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} in invoices generated`,
-          description: `${data.created} invoice${data.created !== 1 ? "s" : ""} created`,
-        });
+        const dollarStr = data.totalDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (variables.sendAfterGenerate) {
+          const sentN = data.sent ?? 0;
+          const failedN = data.failed ?? 0;
+          const sentDesc = failedN > 0
+            ? `${data.created} invoice${data.created !== 1 ? "s" : ""} created, ${sentN} sent, ${failedN} failed to send`
+            : `${data.created} invoice${data.created !== 1 ? "s" : ""} created and sent to ${sentN} customer${sentN !== 1 ? "s" : ""}`;
+          toast({ title: `$${dollarStr} generated and sent`, description: sentDesc });
+        } else {
+          toast({
+            title: `$${dollarStr} in invoices generated`,
+            description: `${data.created} invoice${data.created !== 1 ? "s" : ""} created`,
+          });
+        }
       } else {
         toast({ title: "No invoices generated", description: "No uninvoiced work found." });
       }
@@ -1816,17 +1828,29 @@ export default function Invoices() {
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
             <p>These visits will be marked as invoiced and removed from this view. This cannot be undone without voiding the invoices.</p>
           </div>
-          <div className="flex gap-2 mt-2">
-            <Button
-              className="flex-1"
-              onClick={() => generateAllMutation.mutate(generateAllContactIds)}
-              disabled={generateAllMutation.isPending}
-              data-testid="button-confirm-generate-all"
-            >
-              {generateAllMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Zap className="mr-1 h-4 w-4" />}
-              Generate Invoices
-            </Button>
-            <Button variant="outline" onClick={() => { setConfirmGenerateAll(false); setGenerateAllContactIds(null); }} data-testid="button-cancel-generate-all">
+          <div className="flex flex-col gap-2 mt-2">
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                onClick={() => generateAllMutation.mutate({ contactIds: generateAllContactIds, sendAfterGenerate: true })}
+                disabled={generateAllMutation.isPending}
+                data-testid="button-confirm-generate-and-send"
+              >
+                {generateAllMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <SendHorizonal className="mr-1 h-4 w-4" />}
+                Generate &amp; Send
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => generateAllMutation.mutate({ contactIds: generateAllContactIds })}
+                disabled={generateAllMutation.isPending}
+                data-testid="button-confirm-generate-all"
+              >
+                {generateAllMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Zap className="mr-1 h-4 w-4" />}
+                Generate Only
+              </Button>
+            </div>
+            <Button variant="ghost" onClick={() => { setConfirmGenerateAll(false); setGenerateAllContactIds(null); }} data-testid="button-cancel-generate-all" className="w-full">
               Cancel
             </Button>
           </div>
