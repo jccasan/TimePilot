@@ -277,7 +277,10 @@ async function ensureCompanyColumns() {
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS subscription_updated_at TIMESTAMP;
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS qbo_fee_account_ref VARCHAR(50);
       ALTER TABLE routes ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE routes ADD COLUMN IF NOT EXISTS last_optimized_at TIMESTAMP;
+      ALTER TABLE routes ADD COLUMN IF NOT EXISTS optimized_stop_hash VARCHAR(64);
     `);
+    console.log("[Migration] routes optimization columns (last_optimized_at, optimized_stop_hash) verified");
     await pool.query(`
       DO $$ BEGIN
         ALTER TYPE automation_trigger ADD VALUE IF NOT EXISTS 'quote_created';
