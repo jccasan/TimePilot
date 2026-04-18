@@ -15,7 +15,9 @@ import {
   ChevronDown,
   ChevronRight,
   List,
+  Play,
 } from "lucide-react";
+import { LiveRoutePlayback } from "@/components/live-route-playback";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -297,6 +299,13 @@ export default function CommandCenter() {
     [validVisitsForMap]
   );
 
+  const [showLivePlayback, setShowLivePlayback] = useState(false);
+
+  const { data: demoStatus } = useQuery<{ isDemo: boolean; settings?: { livePlaybackEnabled?: boolean } }>({
+    queryKey: ["/api/demo/status"],
+  });
+  const isLivePlaybackEnabled = !!(demoStatus?.isDemo && demoStatus?.settings?.livePlaybackEnabled);
+
   const [activeTab, setActiveTab] = useState(() => {
     try { return localStorage.getItem("scoopilot_cc_active_tab") ?? "overview"; } catch { return "overview"; }
   });
@@ -420,6 +429,17 @@ export default function CommandCenter() {
               </PopoverContent>
             </Popover>
           </div>
+          {isLivePlaybackEnabled && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowLivePlayback(true)}
+              data-testid="button-open-live-playback"
+              className="h-9 text-primary border-primary/50 hover:bg-primary/10"
+            >
+              <Play className="h-4 w-4 mr-1" /> Live Playback
+            </Button>
+          )}
           <Link href="/scheduling">
             <a
               className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline h-9 px-1"
@@ -889,6 +909,13 @@ export default function CommandCenter() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {showLivePlayback && (
+        <LiveRoutePlayback
+          visits={visits}
+          onClose={() => setShowLivePlayback(false)}
+        />
+      )}
     </div>
   );
 }
