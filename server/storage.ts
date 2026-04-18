@@ -6,7 +6,7 @@ import {
   agreements, jobs, jobAddOns,
   visits, invoices, invoiceLineItems, automationRules,
   automationEventLogs, apiKeys, webhooks, webhookDeliveries, attachments,
-  servicePricing, servicePackages, messages, portalSessions, adminNotes,
+  servicePricing, serviceBillingRules, servicePackages, messages, portalSessions, adminNotes,
   smsMessages, emailsSent, accountDailyMetrics, saasCostsMonthly, costConfig,
   usageEvents,
   notifications, timeEntries, activityLog, auditTrail,
@@ -36,6 +36,7 @@ import {
   type Webhook, type InsertWebhook,
   type Attachment, type InsertAttachment,
   type ServicePricingItem, type InsertServicePricing,
+  type ServiceBillingRule, type InsertServiceBillingRule,
   type ServicePackage, type InsertServicePackage,
   type Message, type InsertMessage,
   type AdminNote, type InsertAdminNote,
@@ -246,6 +247,11 @@ export interface IStorage {
   createServicePricingItem(data: InsertServicePricing): Promise<ServicePricingItem>;
   updateServicePricingItem(id: string, companyId: string, data: Partial<InsertServicePricing>): Promise<ServicePricingItem>;
   deleteServicePricingItem(id: string, companyId: string): Promise<void>;
+
+  // Service Billing Rules
+  getServiceBillingRules(companyId: string): Promise<ServiceBillingRule[]>;
+  upsertServiceBillingRule(companyId: string, servicePricingId: string, data: Partial<InsertServiceBillingRule>): Promise<ServiceBillingRule>;
+  deleteServiceBillingRule(companyId: string, servicePricingId: string): Promise<void>;
 
   // Service Packages
   getServicePackages(companyId: string): Promise<ServicePackage[]>;
@@ -1435,6 +1441,28 @@ export class DatabaseStorage implements IStorage {
 
   async deleteServicePricingItem(id: string, companyId: string): Promise<void> {
     await db.delete(servicePricing).where(and(eq(servicePricing.id, id), eq(servicePricing.companyId, companyId)));
+  }
+
+  // ================ Service Billing Rules ================
+  async getServiceBillingRules(companyId: string): Promise<ServiceBillingRule[]> {
+    return db.select().from(serviceBillingRules).where(eq(serviceBillingRules.companyId, companyId));
+  }
+
+  async upsertServiceBillingRule(companyId: string, servicePricingId: string, data: Partial<InsertServiceBillingRule>): Promise<ServiceBillingRule> {
+    const [rule] = await db.insert(serviceBillingRules)
+      .values({ companyId, servicePricingId, ...data })
+      .onConflictDoUpdate({
+        target: [serviceBillingRules.companyId, serviceBillingRules.servicePricingId],
+        set: { ...data, updatedAt: new Date() },
+      })
+      .returning();
+    return rule;
+  }
+
+  async deleteServiceBillingRule(companyId: string, servicePricingId: string): Promise<void> {
+    await db.delete(serviceBillingRules).where(
+      and(eq(serviceBillingRules.companyId, companyId), eq(serviceBillingRules.servicePricingId, servicePricingId))
+    );
   }
 
   // ================ Service Packages ================

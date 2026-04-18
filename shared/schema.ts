@@ -222,6 +222,9 @@ export const companies = pgTable("companies", {
   retellAgentId: varchar("retell_agent_id", { length: 255 }),
   retellKnowledgeBaseId: varchar("retell_knowledge_base_id", { length: 255 }),
   venmoHandle: varchar("venmo_handle", { length: 100 }),
+  billingCadence: text("billing_cadence").notNull().default("per_visit"),
+  billingTrigger: text("billing_trigger").notNull().default("after_job"),
+  defaultPaymentBehavior: text("default_payment_behavior").notNull().default("send_invoice"),
   maxStopsPerRoute: integer("max_stops_per_route"),
   customMaxUsers: integer("custom_max_users"),
   messageRetentionDays: integer("message_retention_days").notNull().default(30),
@@ -304,6 +307,9 @@ export const contacts = pgTable("contacts", {
     distanceFromNearestStopMiles?: number;
     overheadAllocationCents?: number;
   }>(),
+  billingCadenceOverride: text("billing_cadence_override"),
+  billingTriggerOverride: text("billing_trigger_override"),
+  paymentBehaviorOverride: text("payment_behavior_override"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -766,6 +772,21 @@ export const servicePricing = pgTable("service_pricing", {
   index("idx_svcpricing_category").on(table.category),
 ]);
 
+export const serviceBillingRules = pgTable("service_billing_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  servicePricingId: varchar("service_pricing_id").notNull().references(() => servicePricing.id, { onDelete: "cascade" }),
+  billingCadence: text("billing_cadence"),
+  billingTrigger: text("billing_trigger"),
+  paymentBehavior: text("payment_behavior"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sbr_company").on(table.companyId),
+  index("idx_sbr_service").on(table.servicePricingId),
+  unique().on(table.companyId, table.servicePricingId),
+]);
+
 export const servicePackages = pgTable("service_packages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
@@ -917,6 +938,7 @@ export const invoiceLineItemRelations = relations(invoiceLineItems, ({ one }) =>
 export const insertCompanySchema = createInsertSchema(companies).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCompanyUserSchema = createInsertSchema(companyUsers).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertContactSchema = createInsertSchema(contacts).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertServiceBillingRuleSchema = createInsertSchema(serviceBillingRules).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertTagSchema = createInsertSchema(tags).omit({ id: true, createdAt: true });
 export const insertLeadSourceSchema = createInsertSchema(leadSources).omit({ id: true, createdAt: true });
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true, updatedAt: true });
@@ -941,6 +963,8 @@ export type CompanyUser = typeof companyUsers.$inferSelect;
 export type InsertCompanyUser = z.infer<typeof insertCompanyUserSchema>;
 export type Contact = typeof contacts.$inferSelect;
 export type InsertContact = z.infer<typeof insertContactSchema>;
+export type ServiceBillingRule = typeof serviceBillingRules.$inferSelect;
+export type InsertServiceBillingRule = z.infer<typeof insertServiceBillingRuleSchema>;
 export type Tag = typeof tags.$inferSelect;
 export type InsertTag = z.infer<typeof insertTagSchema>;
 export type LeadSource = typeof leadSources.$inferSelect;

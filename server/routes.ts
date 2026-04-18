@@ -2014,13 +2014,26 @@ Return ONLY valid JSON, no markdown.`,
         "reminderSettings", "invoiceReminderSettings", "roverAiEnabled", "slug", "leadWebhookSmsTemplate",
         "quoteAutoFollowUpEnabled", "quoteFollowUpSmsTemplate", "quoteFollowUpEmailEnabled", "quoteFollowUpEmailSubject", "quoteFollowUpEmailBody", "quoteFormLayout",
         "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle", "maxStopsPerRoute",
-        "country", "currency", "taxRatePercent"];
+        "country", "currency", "taxRatePercent",
+        "billingCadence", "billingTrigger", "defaultPaymentBehavior"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
       }
       if (updates.timezone && !validTimezones.includes(updates.timezone)) {
         return res.status(400).json({ error: "Invalid timezone" });
+      }
+      const validBillingCadences = ["per_visit", "weekly", "monthly", "manual"];
+      const validBillingTriggers = ["after_job", "end_of_week", "end_of_month", "manual"];
+      const validPaymentBehaviors = ["autopay_immediate", "autopay_scheduled", "send_invoice", "review_only"];
+      if (updates.billingCadence && !validBillingCadences.includes(updates.billingCadence)) {
+        return res.status(400).json({ error: "Invalid billingCadence" });
+      }
+      if (updates.billingTrigger && !validBillingTriggers.includes(updates.billingTrigger)) {
+        return res.status(400).json({ error: "Invalid billingTrigger" });
+      }
+      if (updates.defaultPaymentBehavior && !validPaymentBehaviors.includes(updates.defaultPaymentBehavior)) {
+        return res.status(400).json({ error: "Invalid defaultPaymentBehavior" });
       }
       if (updates.slug !== undefined) {
         const cleanSlug = String(updates.slug).toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-|-$/g, "");
@@ -7787,6 +7800,47 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       await storage.deleteServicePricingItem(req.params.id, companyId);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/service-billing-rules", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const rules = await storage.getServiceBillingRules(companyId);
+      res.json(rules);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.put("/api/service-billing-rules/:servicePricingId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const validCadences = ["per_visit", "weekly", "monthly", "manual"];
+      const validTriggers = ["after_job", "end_of_week", "end_of_month", "manual"];
+      const validBehaviors = ["autopay_immediate", "autopay_scheduled", "send_invoice", "review_only"];
+      const pricingItems = await storage.getServicePricing(companyId);
+      if (!pricingItems.some(item => item.id === req.params.servicePricingId)) {
+        return res.status(404).json({ error: "Service pricing item not found" });
+      }
+      const { billingCadence, billingTrigger, paymentBehavior } = req.body;
+      if (billingCadence && !validCadences.includes(billingCadence)) return res.status(400).json({ error: "Invalid billingCadence" });
+      if (billingTrigger && !validTriggers.includes(billingTrigger)) return res.status(400).json({ error: "Invalid billingTrigger" });
+      if (paymentBehavior && !validBehaviors.includes(paymentBehavior)) return res.status(400).json({ error: "Invalid paymentBehavior" });
+      const rule = await storage.upsertServiceBillingRule(companyId, req.params.servicePricingId, {
+        billingCadence: billingCadence || null,
+        billingTrigger: billingTrigger || null,
+        paymentBehavior: paymentBehavior || null,
+      });
+      res.json(rule);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.delete("/api/service-billing-rules/:servicePricingId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      await storage.deleteServiceBillingRule(companyId, req.params.servicePricingId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });

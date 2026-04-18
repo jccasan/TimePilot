@@ -8,7 +8,14 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
-import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, ActivityLog, Invoice, Message, Route } from "@shared/schema";
+import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, ActivityLog, Invoice, Message, Route, ServiceBillingRule } from "@shared/schema";
+import {
+  BILLING_CADENCE_LABELS,
+  BILLING_TRIGGER_LABELS,
+  PAYMENT_BEHAVIOR_LABELS,
+  BillingRuleInheritance,
+  resolveBillingField,
+} from "@/components/billing-rule-inheritance";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -648,6 +655,8 @@ export default function ContactDetail() {
       <ProfitabilityIndicator contactId={id!} contactStatus={contact.status} />
 
       <BillingPreferences contact={contact} contactId={id!} />
+
+      <BillingOverrideSection contact={contact} contactId={id!} />
 
       <PortalAccessCard contact={contact} contactId={id!} />
 
@@ -1799,6 +1808,174 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
         <p className="text-xs text-muted-foreground">
           Current: {autoInvoice ? "Auto" : "Manual"} / {timingLabels[contact.invoiceTiming || "after_service"]} / {frequencyLabels[contact.invoiceFrequency || "per_service"]}
         </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BillingOverrideSection({ contact, contactId }: { contact: Contact; contactId: string }) {
+  const { toast } = useToast();
+  const [enabled, setEnabled] = useState(
+    !!(contact.billingCadenceOverride || contact.billingTriggerOverride || contact.paymentBehaviorOverride)
+  );
+  const [cadence, setCadence] = useState(contact.billingCadenceOverride || "");
+  const [trigger, setTrigger] = useState(contact.billingTriggerOverride || "");
+  const [payment, setPayment] = useState(contact.paymentBehaviorOverride || "");
+
+  useEffect(() => {
+    const hasOverride = !!(contact.billingCadenceOverride || contact.billingTriggerOverride || contact.paymentBehaviorOverride);
+    setEnabled(hasOverride);
+    setCadence(contact.billingCadenceOverride || "");
+    setTrigger(contact.billingTriggerOverride || "");
+    setPayment(contact.paymentBehaviorOverride || "");
+  }, [contact.billingCadenceOverride, contact.billingTriggerOverride, contact.paymentBehaviorOverride]);
+
+  const { data: company } = useQuery<{ billingCadence: string; billingTrigger: string; defaultPaymentBehavior: string }>({
+    queryKey: ["/api/company"],
+  });
+
+  const { data: serviceBillingRules = [] } = useQuery<ServiceBillingRule[]>({
+    queryKey: ["/api/service-billing-rules"],
+  });
+
+  const { data: contactServicePlans = [] } = useQuery<(ServicePlan & { addOns?: { id: string; servicePricingId: string; name: string; price: string }[] })[]>({
+    queryKey: ["/api/service-plans" + `?contactId=${contactId}`],
+    enabled: !!contactId,
+  });
+
+  const { data: pricingItems = [] } = useQuery<ServicePricingItem[]>({
+    queryKey: ["/api/pricing"],
+  });
+
+  const systemCadence = company?.billingCadence || "per_visit";
+  const systemTrigger = company?.billingTrigger || "after_job";
+  const systemBehavior = company?.defaultPaymentBehavior || "send_invoice";
+
+  const contactPricingIds = Array.from(new Set(
+    contactServicePlans.flatMap(plan => (plan.addOns || []).map(a => a.servicePricingId))
+  ));
+  const matchedServiceRule = (serviceBillingRules as ServiceBillingRule[]).find(
+    r => contactPricingIds.includes(r.servicePricingId)
+  );
+  const matchedPricingItem = matchedServiceRule
+    ? (pricingItems as ServicePricingItem[]).find(p => p.id === matchedServiceRule.servicePricingId)
+    : undefined;
+  const matchedServiceName = matchedPricingItem?.name;
+
+  const resolvedCadence = resolveBillingField("cadence", contact.billingCadenceOverride, matchedServiceRule?.billingCadence, systemCadence);
+  const resolvedTrigger = resolveBillingField("trigger", contact.billingTriggerOverride, matchedServiceRule?.billingTrigger, systemTrigger);
+  const resolvedPayment = resolveBillingField("payment", contact.paymentBehaviorOverride, matchedServiceRule?.paymentBehavior, systemBehavior);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { billingCadenceOverride: string | null; billingTriggerOverride: string | null; paymentBehaviorOverride: string | null }) => {
+      await apiRequest("PATCH", `/api/contacts/${contactId}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
+      toast({ title: "Billing override saved" });
+    },
+    onError: () => toast({ title: "Failed to save override", variant: "destructive" }),
+  });
+
+  const handleToggle = (checked: boolean) => {
+    setEnabled(checked);
+    if (!checked) {
+      saveMutation.mutate({
+        billingCadenceOverride: null,
+        billingTriggerOverride: null,
+        paymentBehaviorOverride: null,
+      });
+    }
+  };
+
+  const handleSave = () => {
+    saveMutation.mutate({
+      billingCadenceOverride: cadence || null,
+      billingTriggerOverride: trigger || null,
+      paymentBehaviorOverride: payment || null,
+    });
+  };
+
+  const hasChanges = enabled && (
+    cadence !== (contact.billingCadenceOverride || "") ||
+    trigger !== (contact.billingTriggerOverride || "") ||
+    payment !== (contact.paymentBehaviorOverride || "")
+  );
+
+  return (
+    <Card data-testid="section-contact-billing-override">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap pb-3">
+        <div>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Receipt className="h-5 w-5" /> Billing Override
+            {enabled && <Badge variant="outline" className="text-xs">Override</Badge>}
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {enabled
+              ? "This customer uses custom billing rules that override service and system defaults."
+              : "This customer uses the default billing rules."}
+          </p>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={handleToggle}
+          disabled={saveMutation.isPending}
+          data-testid="switch-billing-override"
+        />
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!enabled ? (
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground font-medium mb-2">Resolved billing settings (inherited):</p>
+            <BillingRuleInheritance label="Cadence" value={resolvedCadence.value} labels={BILLING_CADENCE_LABELS} origin={resolvedCadence.origin} sourceName={resolvedCadence.origin === "service" ? matchedServiceName : undefined} />
+            <BillingRuleInheritance label="Trigger" value={resolvedTrigger.value} labels={BILLING_TRIGGER_LABELS} origin={resolvedTrigger.origin} sourceName={resolvedTrigger.origin === "service" ? matchedServiceName : undefined} />
+            <BillingRuleInheritance label="Payment" value={resolvedPayment.value} labels={PAYMENT_BEHAVIOR_LABELS} origin={resolvedPayment.origin} sourceName={resolvedPayment.origin === "service" ? matchedServiceName : undefined} />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">Billing Cadence</Label>
+                <Select value={cadence || systemCadence} onValueChange={setCadence}>
+                  <SelectTrigger data-testid="select-override-cadence">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(BILLING_CADENCE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Invoice Trigger</Label>
+                <Select value={trigger || systemTrigger} onValueChange={setTrigger}>
+                  <SelectTrigger data-testid="select-override-trigger">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(BILLING_TRIGGER_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Payment Behavior</Label>
+                <Select value={payment || systemBehavior} onValueChange={setPayment}>
+                  <SelectTrigger data-testid="select-override-payment">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PAYMENT_BEHAVIOR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {hasChanges && (
+              <Button size="sm" onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-billing-override">
+                <Save className="mr-1 h-4 w-4" />
+                {saveMutation.isPending ? "Saving..." : "Save Override"}
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

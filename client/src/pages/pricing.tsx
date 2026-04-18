@@ -5,8 +5,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { ServicePricingItem, ServicePackage, PricingRulesConfig, PricingConfig } from "@shared/schema";
+import type { ServicePricingItem, ServicePackage, PricingRulesConfig, PricingConfig, ServiceBillingRule } from "@shared/schema";
 import { DEFAULT_PRICING_RULES } from "@shared/schema";
+import {
+  BILLING_CADENCE_LABELS,
+  BILLING_TRIGGER_LABELS,
+  PAYMENT_BEHAVIOR_LABELS,
+  BillingRuleInheritance,
+} from "@/components/billing-rule-inheritance";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -432,6 +438,32 @@ export default function Pricing() {
     queryKey: ["/api/pricing-config"],
   });
 
+  const { data: serviceBillingRules = [] } = useQuery<ServiceBillingRule[]>({
+    queryKey: ["/api/service-billing-rules"],
+  });
+
+  const { data: company } = useQuery<{ billingCadence: string; billingTrigger: string; defaultPaymentBehavior: string }>({
+    queryKey: ["/api/company"],
+  });
+
+  const upsertBillingRuleMutation = useMutation({
+    mutationFn: async ({ servicePricingId, data }: { servicePricingId: string; data: Partial<ServiceBillingRule> }) => {
+      await apiRequest("PUT", `/api/service-billing-rules/${servicePricingId}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-billing-rules"] });
+    },
+  });
+
+  const deleteBillingRuleMutation = useMutation({
+    mutationFn: async (servicePricingId: string) => {
+      await apiRequest("DELETE", `/api/service-billing-rules/${servicePricingId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-billing-rules"] });
+    },
+  });
+
   const pricingRules: PricingRulesConfig = pricingConfig?.pricingRules || DEFAULT_PRICING_RULES;
 
   const pricingForm = useForm<PricingFormValues>({
@@ -834,6 +866,113 @@ export default function Pricing() {
               )}
             </CardContent>
           </Card>
+
+          {filteredItems && filteredItems.length > 0 && (
+            <Card data-testid="card-service-billing-rules">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Settings2 className="h-4 w-4" />
+                  Billing Rules for {CATEGORY_LABELS[activeTab]}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">Override the system billing defaults for individual services. Leave as "Use system default" to inherit from your company billing settings.</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {filteredItems.sort((a, b) => a.sortOrder - b.sortOrder).map((item) => {
+                  const existingRule = serviceBillingRules.find(r => r.servicePricingId === item.id);
+                  const hasCustomRule = !!(existingRule?.billingCadence || existingRule?.billingTrigger || existingRule?.paymentBehavior);
+                  const systemCadence = company?.billingCadence || "per_visit";
+                  const systemTrigger = company?.billingTrigger || "after_job";
+                  const systemBehavior = company?.defaultPaymentBehavior || "send_invoice";
+                  return (
+                    <div key={item.id} className="border rounded-md p-3 space-y-2" data-testid={`billing-rule-item-${item.id}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium truncate">{item.name}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {!hasCustomRule && (
+                            <span className="text-xs text-muted-foreground">Using system default</span>
+                          )}
+                          {hasCustomRule && (
+                            <Badge variant="outline" className="text-xs">Custom Rule</Badge>
+                          )}
+                          <Switch
+                            checked={hasCustomRule}
+                            onCheckedChange={(checked) => {
+                              if (!checked) {
+                                deleteBillingRuleMutation.mutate(item.id);
+                              } else {
+                                upsertBillingRuleMutation.mutate({
+                                  servicePricingId: item.id,
+                                  data: {
+                                    billingCadence: systemCadence,
+                                    billingTrigger: systemTrigger,
+                                    paymentBehavior: systemBehavior,
+                                  },
+                                });
+                              }
+                            }}
+                            data-testid={`switch-billing-rule-${item.id}`}
+                          />
+                        </div>
+                      </div>
+                      {!hasCustomRule && (
+                        <div className="space-y-1 pl-1">
+                          <BillingRuleInheritance label="Cadence" value={systemCadence} labels={BILLING_CADENCE_LABELS} origin="system" muted />
+                          <BillingRuleInheritance label="Trigger" value={systemTrigger} labels={BILLING_TRIGGER_LABELS} origin="system" muted />
+                          <BillingRuleInheritance label="Payment" value={systemBehavior} labels={PAYMENT_BEHAVIOR_LABELS} origin="system" muted />
+                        </div>
+                      )}
+                      {hasCustomRule && (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-1">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Cadence</p>
+                            <Select
+                              value={existingRule?.billingCadence || systemCadence}
+                              onValueChange={(v) => upsertBillingRuleMutation.mutate({ servicePricingId: item.id, data: { ...(existingRule || {}), billingCadence: v } })}
+                            >
+                              <SelectTrigger className="h-8 text-xs" data-testid={`select-rule-cadence-${item.id}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(BILLING_CADENCE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Trigger</p>
+                            <Select
+                              value={existingRule?.billingTrigger || systemTrigger}
+                              onValueChange={(v) => upsertBillingRuleMutation.mutate({ servicePricingId: item.id, data: { ...(existingRule || {}), billingTrigger: v } })}
+                            >
+                              <SelectTrigger className="h-8 text-xs" data-testid={`select-rule-trigger-${item.id}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(BILLING_TRIGGER_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Payment</p>
+                            <Select
+                              value={existingRule?.paymentBehavior || systemBehavior}
+                              onValueChange={(v) => upsertBillingRuleMutation.mutate({ servicePricingId: item.id, data: { ...(existingRule || {}), paymentBehavior: v } })}
+                            >
+                              <SelectTrigger className="h-8 text-xs" data-testid={`select-rule-payment-${item.id}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(PAYMENT_BEHAVIOR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-xl font-bold" data-testid="text-packages-heading">Service Packages</h2>
