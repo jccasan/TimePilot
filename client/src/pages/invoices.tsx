@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, DollarSign, Clock, CheckCircle2, ChevronDown, ChevronRight, SendHorizonal, RefreshCw, Square, CheckSquare } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, DollarSign, Clock, CheckCircle2, ChevronDown, ChevronRight, SendHorizonal, RefreshCw, Square, CheckSquare, Bell, Settings, X, History } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
@@ -172,6 +172,125 @@ function PaymentHistorySection({ invoiceId, invoiceTotal }: { invoiceId: string;
               </span>
             </div>
           </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+interface ReminderLog {
+  id: string;
+  contactId: string;
+  reminderType: string;
+  channel: string;
+  messagePreview: string;
+  deliveryStatus: string;
+  sentAt: string;
+}
+
+function CollectionsPanel({
+  invoice,
+  contact,
+  onSendReminder,
+  onRetryCharge,
+  sendReminderPending,
+  retryChargePending,
+  stripeConfigured,
+}: {
+  invoice: Invoice;
+  contact?: Contact;
+  onSendReminder: () => void;
+  onRetryCharge: () => void;
+  sendReminderPending: boolean;
+  retryChargePending: boolean;
+  stripeConfigured: boolean;
+}) {
+  const { data: reminderLogsData } = useQuery<{ logs: ReminderLog[]; total: number }>({
+    queryKey: ["/api/company/reminder-logs"],
+    enabled: !!contact?.id,
+  });
+
+  const contactReminderLogs = useMemo(() => {
+    if (!reminderLogsData?.logs || !contact?.id) return [];
+    return reminderLogsData.logs
+      .filter(l => l.contactId === contact.id && l.reminderType.startsWith("invoice"))
+      .slice(0, 5);
+  }, [reminderLogsData, contact?.id]);
+
+  const hasAutopay = !!(contact?.autoPayEnabled && contact?.stripeCustomerId);
+  const isOverdue = invoice.dueDate && new Date(invoice.dueDate + "T23:59:59") < new Date();
+  const isFailed = invoice.status === "failed";
+
+  return (
+    <Card data-testid="collections-panel" className={isOverdue ? "border-red-200 dark:border-red-900" : ""}>
+      <CardHeader className="p-3 pb-2">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <Bell className="h-4 w-4 text-muted-foreground" />
+          Collections
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 pt-0 space-y-3">
+        {contact && (
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {hasAutopay
+                ? <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1"><CreditCard className="h-3 w-3" /> Autopay enabled</span>
+                : <span className="text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> No autopay</span>
+              }
+            </span>
+            {contact.email && <span>{contact.email}</span>}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onSendReminder}
+            disabled={sendReminderPending || (!contact?.email && !contact?.phone)}
+            data-testid="button-send-payment-reminder"
+          >
+            {sendReminderPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Mail className="mr-1 h-3.5 w-3.5" />}
+            Send Reminder
+          </Button>
+          {stripeConfigured && hasAutopay && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onRetryCharge}
+              disabled={retryChargePending}
+              data-testid="button-retry-charge"
+              className={isFailed ? "border-red-400 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950" : ""}
+            >
+              {retryChargePending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CreditCard className="mr-1 h-3.5 w-3.5" />}
+              {isFailed ? "Retry Charge" : "Charge Card"}
+            </Button>
+          )}
+        </div>
+
+        {contactReminderLogs.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+              <History className="h-3 w-3" /> Recent Reminders
+            </p>
+            <div className="space-y-1">
+              {contactReminderLogs.map(log => (
+                <div key={log.id} className="text-xs flex items-center justify-between gap-2 py-0.5" data-testid={`reminder-log-${log.id}`}>
+                  <span className="text-muted-foreground truncate flex-1">{log.messagePreview?.substring(0, 60)}…</span>
+                  <Badge variant="outline" className={`shrink-0 text-[10px] px-1.5 py-0 h-4 ${log.deliveryStatus === "sent" ? "border-green-400 text-green-700 dark:text-green-400" : "border-red-400 text-red-600"}`}>
+                    {log.channel} · {log.deliveryStatus}
+                  </Badge>
+                  <span className="text-muted-foreground shrink-0 tabular-nums">
+                    {new Date(log.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {contactReminderLogs.length === 0 && (
+          <p className="text-xs text-muted-foreground italic">No reminder history for this client.</p>
         )}
       </CardContent>
     </Card>
@@ -338,6 +457,15 @@ export default function Invoices() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     overdue: true, unpaid: true, draft: true, paid: false,
   });
+  const [confirmSendAll, setConfirmSendAll] = useState(false);
+  const [confirmChargeAll, setConfirmChargeAll] = useState(false);
+  const [automationOpen, setAutomationOpen] = useState(false);
+  const [editInvoiceReminders, setEditInvoiceReminders] = useState<{
+    preDueDays: number[];
+    overdueIntervalDays: number;
+    maxReminders: number;
+  } | null>(null);
+  const [preDueDaysInput, setPreDueDaysInput] = useState("");
 
   const subtotal = useMemo(() => lineItems.reduce((sum, li) => sum + (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0), 0), [lineItems]);
   const parsedDiscountValue = parseFloat(discountValue) || 0;
@@ -440,6 +568,48 @@ export default function Invoices() {
     },
   });
 
+  interface InvoiceReminderSettings {
+    preDueDays: number[];
+    overdueIntervalDays: number;
+    maxReminders: number;
+  }
+  interface CompanyReminderSettingsData {
+    reminderSettings: unknown[];
+    invoiceReminderSettings: InvoiceReminderSettings;
+    remindersEnabled: boolean;
+  }
+
+  const { data: companyReminderSettings } = useQuery<CompanyReminderSettingsData>({
+    queryKey: ["/api/company/reminder-settings"],
+  });
+
+  const saveReminderSettingsMutation = useMutation({
+    mutationFn: async (settings: InvoiceReminderSettings) => {
+      await apiRequest("PATCH", "/api/company", { invoiceReminderSettings: settings });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/reminder-settings"] });
+      toast({ title: "Reminder settings saved", description: "Invoice reminder schedule updated." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error saving settings", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const sendPaymentReminderMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await apiRequest("POST", `/api/contacts/${contactId}/send-payment-reminder`);
+      return res.json();
+    },
+    onSuccess: (data: { smsSent?: boolean; emailSent?: boolean; totalOwed?: number }) => {
+      const channel = data.smsSent ? "SMS" : data.emailSent ? "email" : "message";
+      toast({ title: "Reminder sent", description: `Payment reminder sent via ${channel}.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to send reminder", description: error.message, variant: "destructive" });
+    },
+  });
+
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!contactId) throw new Error("Please select a contact");
@@ -535,27 +705,29 @@ export default function Invoices() {
 
   async function batchSend(ids: string[]) {
     setBatchPending(true);
-    let sent = 0;
+    let sent = 0; let failed = 0;
     try {
       await Promise.all(ids.map(id =>
-        apiRequest("POST", `/api/invoices/${id}/send-email`).then(() => { sent++; }).catch(() => {})
+        apiRequest("POST", `/api/invoices/${id}/send-email`).then(() => { sent++; }).catch(() => { failed++; })
       ));
       queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
-      toast({ title: `Sent ${sent} invoice${sent !== 1 ? "s" : ""}` });
+      const total = sent + failed;
+      toast({ title: failed === 0 ? `${sent} invoice${sent !== 1 ? "s" : ""} sent` : `${sent} of ${total} invoices sent`, description: failed > 0 ? `${failed} failed.` : undefined });
       setSelectedIds(new Set());
     } finally { setBatchPending(false); }
   }
 
   async function batchCharge(ids: string[]) {
     setBatchPending(true);
-    let charged = 0;
+    let charged = 0; let failed = 0;
     try {
       await Promise.all(ids.map(id =>
-        apiRequest("POST", `/api/invoices/${id}/charge`).then(() => { charged++; }).catch(() => {})
+        apiRequest("POST", `/api/invoices/${id}/charge`).then(() => { charged++; }).catch(() => { failed++; })
       ));
       queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
-      toast({ title: `Charged ${charged} invoice${charged !== 1 ? "s" : ""}` });
+      const total = charged + failed;
+      toast({ title: failed === 0 ? `${charged} invoice${charged !== 1 ? "s" : ""} charged` : `${charged} of ${total} invoices charged`, description: failed > 0 ? `${failed} failed.` : undefined });
       setSelectedIds(new Set());
     } finally { setBatchPending(false); }
   }
@@ -848,6 +1020,19 @@ export default function Invoices() {
     return { overdue, unpaid, draft, paid };
   }, [sortedInvoices]);
 
+  const allUnpaidInvoices = useMemo(() => {
+    if (!allInvoicesForStats) return [];
+    return allInvoicesForStats.filter(inv => ["pending", "sent"].includes(inv.status));
+  }, [allInvoicesForStats]);
+
+  const autopayEligibleInvoices = useMemo(() => {
+    if (!allInvoicesForStats || !contacts) return [];
+    const contactsWithAutopay = new Set(contacts.filter(c => c.autoPayEnabled && c.stripeCustomerId).map(c => c.id));
+    return allInvoicesForStats.filter(inv =>
+      ["pending", "sent"].includes(inv.status) && contactsWithAutopay.has(inv.contactId)
+    );
+  }, [allInvoicesForStats, contacts]);
+
   function renderInvoiceRows(list: Invoice[], testPrefix?: string) {
     return list.map((invoice) => {
       const contact = contactMap[invoice.contactId];
@@ -930,7 +1115,7 @@ export default function Invoices() {
                   disabled={markPaidMutation.isPending}
                   title="Mark as paid"
                 >
-                  <span className="text-xs font-bold">$</span>
+                  <CheckCircle2 className="h-4 w-4" />
                 </Button>
               )}
               {invoice.status !== "paid" && (
@@ -1309,6 +1494,61 @@ export default function Invoices() {
         </Card>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg border border-border bg-card" data-testid="persistent-batch-actions">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setGenerateDialogOpen(true)}
+          data-testid="button-persistent-generate"
+        >
+          <Zap className="mr-1 h-3.5 w-3.5 text-amber-500" />
+          Generate Invoices
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={batchPending || allUnpaidInvoices.length === 0}
+          onClick={() => setConfirmSendAll(true)}
+          data-testid="button-persistent-send-unpaid"
+        >
+          <SendHorizonal className="mr-1 h-3.5 w-3.5 text-blue-500" />
+          Send {allUnpaidInvoices.length > 0 ? allUnpaidInvoices.length : ""} Unpaid
+        </Button>
+
+        {stripeConfig?.configured && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={batchPending || autopayEligibleInvoices.length === 0}
+            onClick={() => setConfirmChargeAll(true)}
+            data-testid="button-persistent-charge-autopay"
+          >
+            <CreditCard className="mr-1 h-3.5 w-3.5 text-emerald-500" />
+            Charge {autopayEligibleInvoices.length > 0 ? autopayEligibleInvoices.length : ""} Autopay
+          </Button>
+        )}
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            const currentSettings = companyReminderSettings?.invoiceReminderSettings;
+            const defaults = currentSettings || { preDueDays: [7, 2, 1, 0], overdueIntervalDays: 2, maxReminders: 10 };
+            setEditInvoiceReminders(defaults);
+            setPreDueDaysInput(defaults.preDueDays.join(", "));
+            setAutomationOpen(v => !v);
+          }}
+          data-testid="button-toggle-automation"
+          className="ml-auto"
+        >
+          <Settings className="mr-1 h-3.5 w-3.5" />
+          Automation
+        </Button>
+
+        {batchPending && <Loader2 className="h-4 w-4 animate-spin" />}
+      </div>
+
       {selectedIds.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-muted/70 border border-border" data-testid="batch-action-bar">
           <span className="text-sm font-medium">{selectedIds.size} selected</span>
@@ -1356,6 +1596,146 @@ export default function Invoices() {
           </div>
           {batchPending && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
         </div>
+      )}
+
+      <Dialog open={confirmSendAll} onOpenChange={setConfirmSendAll}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Send {allUnpaidInvoices.length} Unpaid Invoices?</DialogTitle>
+            <DialogDescription>
+              This will email all {allUnpaidInvoices.length} unpaid invoice{allUnpaidInvoices.length !== 1 ? "s" : ""} to their respective clients.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mt-2">
+            <Button
+              className="flex-1"
+              onClick={() => {
+                setConfirmSendAll(false);
+                batchSend(allUnpaidInvoices.map(inv => inv.id));
+              }}
+              disabled={batchPending}
+              data-testid="button-confirm-send-all"
+            >
+              {batchPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <SendHorizonal className="mr-1 h-4 w-4" />}
+              Send All
+            </Button>
+            <Button variant="outline" onClick={() => setConfirmSendAll(false)}>Cancel</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmChargeAll} onOpenChange={setConfirmChargeAll}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Charge {autopayEligibleInvoices.length} Autopay Invoices?</DialogTitle>
+            <DialogDescription>
+              This will attempt to charge {autopayEligibleInvoices.length} autopay-enabled invoice{autopayEligibleInvoices.length !== 1 ? "s" : ""} to the cards on file.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mt-2">
+            <Button
+              className="flex-1"
+              onClick={() => {
+                setConfirmChargeAll(false);
+                batchCharge(autopayEligibleInvoices.map(inv => inv.id));
+              }}
+              disabled={batchPending}
+              data-testid="button-confirm-charge-all"
+            >
+              {batchPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <CreditCard className="mr-1 h-4 w-4" />}
+              Charge All
+            </Button>
+            <Button variant="outline" onClick={() => setConfirmChargeAll(false)}>Cancel</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {automationOpen && (
+        <Card className="border-dashed" data-testid="section-automation">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Bell className="h-4 w-4 text-muted-foreground" />
+                Invoice Auto-Reminder Rules
+              </CardTitle>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setAutomationOpen(false)} data-testid="button-close-automation">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Control when automatic payment reminders are sent to clients with outstanding invoices.</p>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-4">
+            {editInvoiceReminders && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-xs">Pre-Due Reminder Days</Label>
+                    <Input
+                      value={preDueDaysInput}
+                      onChange={e => setPreDueDaysInput(e.target.value)}
+                      placeholder="e.g., 7, 2, 1, 0"
+                      data-testid="input-pre-due-days"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Days before due date (comma-separated)</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Overdue Interval (days)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={editInvoiceReminders.overdueIntervalDays}
+                      onChange={e => setEditInvoiceReminders({ ...editInvoiceReminders, overdueIntervalDays: parseInt(e.target.value) || 2 })}
+                      data-testid="input-overdue-interval"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">How often to remind after overdue</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Max Reminders</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={editInvoiceReminders.maxReminders}
+                      onChange={e => setEditInvoiceReminders({ ...editInvoiceReminders, maxReminders: parseInt(e.target.value) || 10 })}
+                      data-testid="input-max-reminders"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Stop sending after this many</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const days = preDueDaysInput.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 0);
+                      if (days.length === 0) {
+                        toast({ title: "Invalid days", description: "Enter at least one day value.", variant: "destructive" });
+                        return;
+                      }
+                      saveReminderSettingsMutation.mutate({ ...editInvoiceReminders, preDueDays: days });
+                    }}
+                    disabled={saveReminderSettingsMutation.isPending}
+                    data-testid="button-save-reminder-settings"
+                  >
+                    {saveReminderSettingsMutation.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+                    Save Settings
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const defaults = companyReminderSettings?.invoiceReminderSettings || { preDueDays: [7, 2, 1, 0], overdueIntervalDays: 2, maxReminders: 10 };
+                      setEditInvoiceReminders(defaults);
+                      setPreDueDaysInput(defaults.preDueDays.join(", "));
+                    }}
+                    data-testid="button-reset-reminder-settings"
+                  >
+                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <Tabs value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setSelectedIds(new Set()); }}>
@@ -2200,6 +2580,18 @@ export default function Invoices() {
                     invoiceId={selectedInvoice.id}
                     invoiceTotal={Number(selectedInvoice.total)}
                   />
+
+                  {selectedInvoice.status !== "paid" && (
+                    <CollectionsPanel
+                      invoice={selectedInvoice}
+                      contact={contactMap[selectedInvoice.contactId]}
+                      onSendReminder={() => sendPaymentReminderMutation.mutate(selectedInvoice.contactId)}
+                      onRetryCharge={() => { chargeMutation.mutate(selectedInvoice.id); }}
+                      sendReminderPending={sendPaymentReminderMutation.isPending}
+                      retryChargePending={chargeMutation.isPending}
+                      stripeConfigured={!!stripeConfig?.configured}
+                    />
+                  )}
 
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => {
