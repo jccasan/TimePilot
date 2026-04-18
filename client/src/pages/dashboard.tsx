@@ -2302,12 +2302,12 @@ export default function Dashboard() {
     switch (widgetId) {
       case "mrr":
         return (
-          <Card className="h-full" data-testid="widget-mrr">
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+          <Card className="h-full flex flex-col" data-testid="widget-mrr">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium">Monthly Revenue (MRR)</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
               {isLoading ? (
                 <Skeleton className="h-8 w-24" />
               ) : (
@@ -2320,12 +2320,12 @@ export default function Dashboard() {
         );
       case "month_revenue":
         return (
-          <Card className="h-full" data-testid="widget-month-revenue">
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+          <Card className="h-full flex flex-col" data-testid="widget-month-revenue">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium">Revenue This Month</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
               {isLoading ? (
                 <Skeleton className="h-8 w-24" />
               ) : (
@@ -2339,12 +2339,12 @@ export default function Dashboard() {
       case "requires_invoicing":
         return (
           <Link href="/invoices?tab=uninvoiced">
-            <Card className="h-full cursor-pointer hover:shadow-md transition-shadow" data-testid="widget-requires-invoicing">
-              <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <Card className="h-full flex flex-col cursor-pointer hover:shadow-md transition-shadow" data-testid="widget-requires-invoicing">
+              <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
                 <CardTitle className="text-sm font-medium">Requires Invoicing</CardTitle>
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
                 {pipelineLoading ? (
                   <Skeleton className="h-8 w-24" />
                 ) : !pipeline ? (
@@ -2370,12 +2370,12 @@ export default function Dashboard() {
         );
       case "overdue_invoices":
         return (
-          <Card className="h-full" data-testid="widget-overdue-invoices">
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+          <Card className="h-full flex flex-col" data-testid="widget-overdue-invoices">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium">Overdue Invoices</CardTitle>
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
               {isLoading ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
@@ -2393,12 +2393,12 @@ export default function Dashboard() {
         );
       case "todays_visits":
         return (
-          <Card className="h-full" data-testid="widget-todays-visits">
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+          <Card className="h-full flex flex-col" data-testid="widget-todays-visits">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium">Today's Visits</CardTitle>
               <CalendarCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
               {isLoading ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
@@ -2423,12 +2423,12 @@ export default function Dashboard() {
         );
       case "active_clients":
         return (
-          <Card className="h-full" data-testid="widget-active-clients">
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+          <Card className="h-full flex flex-col" data-testid="widget-active-clients">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
               {isLoading ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
@@ -2441,12 +2441,12 @@ export default function Dashboard() {
         );
       case "service_plans":
         return (
-          <Card className="h-full" data-testid="widget-service-plans">
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+          <Card className="h-full flex flex-col" data-testid="widget-service-plans">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium">Jobs</CardTitle>
               <ClipboardList className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
               {isLoading ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
@@ -2459,12 +2459,12 @@ export default function Dashboard() {
         );
       case "team_size":
         return (
-          <Card className="h-full" data-testid="widget-team-size">
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+          <Card className="h-full flex flex-col" data-testid="widget-team-size">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium">Team Size</CardTitle>
               <UserCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
               {isLoading ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
@@ -2480,12 +2480,12 @@ export default function Dashboard() {
         );
       case "texts_sent":
         return (
-          <Card className="h-full" data-testid="widget-texts-sent">
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+          <Card className="h-full flex flex-col" data-testid="widget-texts-sent">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium">SMS Sent</CardTitle>
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
               {isLoading ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
@@ -2499,12 +2499,12 @@ export default function Dashboard() {
         );
       case "emails_sent":
         return (
-          <Card className="h-full" data-testid="widget-emails-sent">
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+          <Card className="h-full flex flex-col" data-testid="widget-emails-sent">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium">Emails Sent</CardTitle>
               <Mail className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
               {isLoading ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
@@ -2615,12 +2615,12 @@ export default function Dashboard() {
         );
       case "current_plan":
         return (
-          <Card className="h-full" data-testid="widget-current-plan">
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+          <Card className="h-full flex flex-col" data-testid="widget-current-plan">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium">Current Plan</CardTitle>
               <ClipboardList className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">
               {isLoading ? (
                 <Skeleton className="h-8 w-full" />
               ) : (
