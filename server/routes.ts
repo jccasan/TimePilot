@@ -603,6 +603,197 @@ export async function registerRoutes(
 
   // ================ Geocode Proxy (Mapbox) ================
 
+  app.get("/api/billing/health", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const now = new Date();
+      const sevenDaysLater = new Date(now);
+      sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+      const nowDateStr = now.toISOString().slice(0, 10);
+      const sevenDaysStr = sevenDaysLater.toISOString().slice(0, 10);
+
+      const allContacts = await db
+        .select({
+          id: contacts.id,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+          autoPayEnabled: contacts.autoPayEnabled,
+          stripeCustomerId: contacts.stripeCustomerId,
+        })
+        .from(contacts)
+        .where(eq(contacts.companyId, companyId));
+
+      const totalCustomers = allContacts.length;
+      const autopayContacts = allContacts.filter(c => c.autoPayEnabled);
+      const autopayCustomers = autopayContacts.length;
+      const autopayPercent = totalCustomers > 0 ? Math.round((autopayCustomers / totalCustomers) * 100) : 0;
+
+      const missingPaymentMethodContacts = autopayContacts.filter(c => !c.stripeCustomerId);
+      const missingPaymentMethod = missingPaymentMethodContacts.length;
+
+      const [failedInvoices, activeAgreements] = await Promise.all([
+        db.select({ id: invoices.id, contactId: invoices.contactId, total: invoices.total })
+          .from(invoices)
+          .where(and(eq(invoices.companyId, companyId), eq(invoices.status, "failed"))),
+        db.select({ contactId: agreementsTable.contactId })
+          .from(agreementsTable)
+          .where(and(eq(agreementsTable.companyId, companyId), eq(agreementsTable.isActive, true))),
+      ]);
+      const failedPayments = failedInvoices.length;
+
+      const contactsWithActiveAgreement = new Set(activeAgreements.map(a => a.contactId));
+      const autopayContactIds = new Set(autopayContacts.map(c => c.id));
+      const noRuleContacts = autopayContacts.filter(c => !contactsWithActiveAgreement.has(c.id));
+
+      const upcomingInvoices = await db
+        .select({ id: invoices.id, contactId: invoices.contactId, total: invoices.total, dueDate: invoices.dueDate })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.companyId, companyId),
+            or(eq(invoices.status, "sent"), eq(invoices.status, "pending"), eq(invoices.status, "draft")),
+            sql`${invoices.dueDate} >= ${nowDateStr}`,
+            sql`${invoices.dueDate} <= ${sevenDaysStr}`
+          )
+        );
+
+      const autopayUpcomingInvoices = upcomingInvoices.filter(inv => autopayContactIds.has(inv.contactId));
+      const upcomingChargesTotal = autopayUpcomingInvoices.reduce((sum, inv) => sum + Math.round(parseFloat(inv.total) * 100), 0);
+      const upcomingChargesCustomers = new Set(autopayUpcomingInvoices.map(inv => inv.contactId)).size;
+
+      const byDate: Record<string, { customers: Set<string>; totalCents: number; invoiceIds: string[] }> = {};
+      for (const inv of autopayUpcomingInvoices) {
+        const d = inv.dueDate;
+        if (!byDate[d]) byDate[d] = { customers: new Set(), totalCents: 0, invoiceIds: [] };
+        byDate[d].customers.add(inv.contactId);
+        byDate[d].totalCents += Math.round(parseFloat(inv.total) * 100);
+        byDate[d].invoiceIds.push(inv.id);
+      }
+      const upcomingCharges = Object.entries(byDate)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, info]) => ({
+          date,
+          customers: info.customers.size,
+          totalCents: info.totalCents,
+          invoiceIds: info.invoiceIds,
+        }));
+
+      const misconfigurations: Array<{ contactId: string; contactName: string; issue: string }> = [];
+      const contactMap = new Map(allContacts.map(c => [c.id, c]));
+      for (const c of missingPaymentMethodContacts) {
+        misconfigurations.push({ contactId: c.id, contactName: `${c.firstName} ${c.lastName}`.trim(), issue: "no_payment_method" });
+      }
+      const failedContactIdSet = new Set(failedInvoices.map(i => i.contactId));
+      for (const contactId of failedContactIdSet) {
+        const c = contactMap.get(contactId);
+        if (c) misconfigurations.push({ contactId: c.id, contactName: `${c.firstName} ${c.lastName}`.trim(), issue: "failed_charge" });
+      }
+      for (const c of noRuleContacts) {
+        misconfigurations.push({ contactId: c.id, contactName: `${c.firstName} ${c.lastName}`.trim(), issue: "no_billing_rule" });
+      }
+
+      res.json({
+        autopayCustomers,
+        totalCustomers,
+        autopayPercent,
+        autopayContacts: autopayContacts.map(c => ({ id: c.id, name: `${c.firstName} ${c.lastName}`.trim() })),
+        missingPaymentMethod,
+        failedPayments,
+        upcomingChargesTotal,
+        upcomingChargesCustomers,
+        upcomingCharges,
+        misconfigurations,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  async function chargeInvoiceInternal(invoiceId: string, companyId: string, userId: string | null, ipAddress?: string): Promise<{ status: string }> {
+    const invoice = await storage.getInvoice(invoiceId, companyId);
+    if (!invoice || invoice.status === "paid") return { status: "skipped" };
+    const contact = await storage.getContact(invoice.contactId, companyId);
+    if (!contact?.stripeCustomerId) return { status: "no_payment_method" };
+    const company = await storage.getCompany(companyId);
+    const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+    const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+    const { customerId: resolvedCustomerId, wasRecreated } = await ensureConnectedCustomer({
+      currentCustomerId: contact.stripeCustomerId,
+      stripeAccount: connectAcct,
+      email: contact.email || undefined,
+      name: contactName,
+      metadata: { contactId: contact.id, companyId },
+    });
+    if (wasRecreated) await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustomerId });
+    const result = await chargeInvoiceAutomatically({
+      customerId: resolvedCustomerId,
+      amount: parseFloat(invoice.total),
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      stripeConnectAccountId: connectAcct,
+      tenantId: companyId,
+      currency: company?.currency || "usd",
+    });
+    const updateData: Record<string, unknown> = { paymentAttempts: (invoice.paymentAttempts || 0) + 1, lastPaymentAttempt: new Date() };
+    if (result.status === "succeeded") {
+      updateData.status = "paid";
+      updateData.paidAt = new Date();
+      updateData.stripePaymentIntentId = result.paymentIntentId;
+      notify(companyId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+      qboAutoSync(companyId, invoice.id, "payment");
+    } else {
+      updateData.status = "failed";
+      if (result.paymentIntentId) updateData.stripePaymentIntentId = result.paymentIntentId;
+      notify(companyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}.`, `/invoices`);
+    }
+    const updated = await storage.updateInvoice(invoice.id, companyId, updateData as Parameters<typeof storage.updateInvoice>[2]);
+    auditLog(companyId, userId, "invoice", invoice.id, "update", {
+      old: { status: invoice.status, paymentAttempts: invoice.paymentAttempts },
+      new: { status: updated.status, paymentAttempts: updated.paymentAttempts, chargeResult: result.status },
+    }, ipAddress);
+    return { status: result.status };
+  }
+
+  app.post("/api/billing/charge-by-date", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId } = await getCompanyContext(req);
+      const { date } = req.body;
+      if (!date) return res.status(400).json({ error: "date is required" });
+
+      const autopayEligible = await db
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(and(eq(contacts.companyId, companyId), eq(contacts.autoPayEnabled, true), isNotNull(contacts.stripeCustomerId)));
+      const autopayContactIds = new Set(autopayEligible.map(c => c.id));
+
+      const dateInvoices = await db
+        .select({ id: invoices.id, contactId: invoices.contactId })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.companyId, companyId),
+            or(eq(invoices.status, "sent"), eq(invoices.status, "pending"), eq(invoices.status, "draft")),
+            eq(invoices.dueDate, date)
+          )
+        );
+
+      const toCharge = dateInvoices.filter(inv => autopayContactIds.has(inv.contactId));
+      const results: Array<{ invoiceId: string; status: string }> = [];
+      for (const inv of toCharge) {
+        try {
+          const chargeResult = await chargeInvoiceInternal(inv.id, companyId, userId, req.ip || undefined);
+          results.push({ invoiceId: inv.id, status: chargeResult.status });
+        } catch {
+          results.push({ invoiceId: inv.id, status: "error" });
+        }
+      }
+
+      res.json({ charged: results.length, results });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/billing/prices", isAuthenticated, async (_req: Request, res: Response) => {
     try {
       let stripePrices = getCachedStripePrices();

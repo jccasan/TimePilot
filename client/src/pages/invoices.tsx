@@ -33,7 +33,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, DollarSign, Clock, CheckCircle2, ChevronDown, ChevronRight, SendHorizonal, RefreshCw, Square, CheckSquare, Bell, Settings, X, History, Eye } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, DollarSign, Clock, CheckCircle2, ChevronDown, ChevronRight, SendHorizonal, RefreshCw, Square, CheckSquare, Bell, Settings, X, History, Eye, ShieldCheck, Users, Calendar, AlertCircle, Activity } from "lucide-react";
+import { useLocation } from "wouter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -356,7 +357,421 @@ function UninvoicedVisitBreakdown({ contactId }: { contactId: string }) {
   );
 }
 
-const VALID_TAB_VALUES = ["all", "uninvoiced", "unpaid", "overdue", "paid", "failed"];
+interface BillingHealthData {
+  autopayCustomers: number;
+  totalCustomers: number;
+  autopayPercent: number;
+  autopayContacts: Array<{ id: string; name: string }>;
+  missingPaymentMethod: number;
+  failedPayments: number;
+  upcomingChargesTotal: number;
+  upcomingChargesCustomers: number;
+  upcomingCharges: Array<{ date: string; customers: number; totalCents: number; invoiceIds: string[] }>;
+  misconfigurations: Array<{ contactId: string; contactName: string; issue: string }>;
+}
+
+function formatDateLabel(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" });
+}
+
+function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void }) {
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [showUpcoming, setShowUpcoming] = useState(false);
+  const [showAutopayList, setShowAutopayList] = useState(false);
+  const [miscFilter, setMiscFilter] = useState<"all" | "no_payment_method" | "failed_charge" | "no_billing_rule">("all");
+
+  const { data: health, isLoading, refetch } = useQuery<BillingHealthData>({
+    queryKey: ["/api/billing/health"],
+  });
+
+  const chargeByDateMutation = useMutation({
+    mutationFn: async (date: string) => {
+      return apiRequest("POST", "/api/billing/charge-by-date", { date });
+    },
+    onSuccess: (_data, date) => {
+      toast({ title: "Charges initiated", description: `Batch charge for ${formatDateLabel(date)} started.` });
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to initiate batch charges.", variant: "destructive" });
+    },
+  });
+
+  const runAllMutation = useMutation({
+    mutationFn: async () => {
+      if (!health) return;
+      for (const row of health.upcomingCharges) {
+        await apiRequest("POST", "/api/billing/charge-by-date", { date: row.date });
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "All charges initiated", description: "Batch charges for all upcoming dates started." });
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to initiate all charges.", variant: "destructive" });
+    },
+  });
+
+  const retryAllMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("GET", "/api/invoices?status=failed");
+      const failed: Array<{ id: string }> = await r.json();
+      for (const inv of failed) {
+        await apiRequest("POST", `/api/invoices/${inv.id}/charge`, {}).catch(() => {});
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "Retrying failed payments", description: "All failed invoices are being retried." });
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to retry invoices.", variant: "destructive" });
+    },
+  });
+
+  const filteredMisconfigs = health?.misconfigurations.filter(m => {
+    if (miscFilter === "all") return true;
+    return m.issue === miscFilter;
+  }) ?? [];
+
+  const issueLabel: Record<string, string> = {
+    no_payment_method: "Autopay on, no payment method",
+    failed_charge: "Last charge failed",
+    no_billing_rule: "No billing rule configured",
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 w-full" />)}
+        </div>
+        <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
+
+  if (!health) return null;
+
+  return (
+    <div className="space-y-6" data-testid="panel-billing-health">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card
+          className="cursor-pointer hover:border-primary/50 transition-colors"
+          data-testid="card-autopay-customers"
+          onClick={() => setShowAutopayList(v => !v)}
+        >
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground font-medium">Autopay Customers</p>
+                <p className="text-3xl font-bold mt-1">{health.autopayCustomers}</p>
+                <p className="text-xs text-muted-foreground mt-1">{health.autopayPercent}% adoption · {health.totalCustomers} total</p>
+              </div>
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <ShieldCheck className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+            </div>
+            {health.autopayCustomers > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 w-full text-xs h-7"
+                onClick={(e) => { e.stopPropagation(); setShowAutopayList(v => !v); }}
+                data-testid="button-view-autopay-list"
+              >
+                {showAutopayList ? "Collapse" : "View All"}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer hover:border-primary/50 transition-colors ${health.missingPaymentMethod > 0 ? "border-amber-300 dark:border-amber-700" : ""}`}
+          data-testid="card-missing-payment"
+          onClick={() => setMiscFilter("no_payment_method")}
+        >
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground font-medium">Missing Payment Method</p>
+                <p className="text-3xl font-bold mt-1">{health.missingPaymentMethod}</p>
+                <p className="text-xs text-muted-foreground mt-1">autopay on, no card</p>
+              </div>
+              <div className={`p-2 rounded-lg ${health.missingPaymentMethod > 0 ? "bg-amber-100 dark:bg-amber-900/30" : "bg-muted"}`}>
+                <Users className={`h-5 w-5 ${health.missingPaymentMethod > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+              </div>
+            </div>
+            {health.missingPaymentMethod > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 w-full text-xs h-7"
+                onClick={(e) => { e.stopPropagation(); setMiscFilter("no_payment_method"); }}
+                data-testid="button-fix-missing-payment"
+              >
+                Fix Now
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:border-primary/50 transition-colors"
+          data-testid="card-upcoming-charges"
+          onClick={() => setShowUpcoming(v => !v)}
+        >
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground font-medium">Upcoming Charges (7d)</p>
+                <p className="text-3xl font-bold mt-1">${(health.upcomingChargesTotal / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p className="text-xs text-muted-foreground mt-1">across {health.upcomingChargesCustomers} customer{health.upcomingChargesCustomers !== 1 ? "s" : ""}</p>
+              </div>
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+            {health.upcomingCharges.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 w-full text-xs h-7"
+                onClick={(e) => { e.stopPropagation(); setShowUpcoming(v => !v); }}
+                data-testid="button-review-upcoming"
+              >
+                {showUpcoming ? "Collapse" : "Review"}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer hover:border-primary/50 transition-colors ${health.failedPayments > 0 ? "border-red-300 dark:border-red-800" : ""}`}
+          data-testid="card-failed-payments"
+          onClick={() => onSwitchToFailed()}
+        >
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground font-medium">Failed Payments</p>
+                <p className="text-3xl font-bold mt-1">{health.failedPayments}</p>
+                <p className="text-xs text-muted-foreground mt-1">need attention</p>
+              </div>
+              <div className={`p-2 rounded-lg ${health.failedPayments > 0 ? "bg-red-100 dark:bg-red-900/30" : "bg-muted"}`}>
+                <AlertCircle className={`h-5 w-5 ${health.failedPayments > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} />
+              </div>
+            </div>
+            {health.failedPayments > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 w-full text-xs h-7 border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"
+                onClick={(e) => { e.stopPropagation(); retryAllMutation.mutate(); }}
+                disabled={retryAllMutation.isPending}
+                data-testid="button-retry-all-failed"
+              >
+                {retryAllMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+                Retry All
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {showAutopayList && health.autopayContacts && health.autopayContacts.length > 0 && (
+        <Card data-testid="card-autopay-list">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Autopay Customers ({health.autopayContacts.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y max-h-64 overflow-y-auto">
+              {health.autopayContacts.map(c => (
+                <div key={c.id} className="px-4 py-2 flex items-center justify-between hover:bg-muted/50" data-testid={`row-autopay-contact-${c.id}`}>
+                  <span className="text-sm">{c.name}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs h-6 px-2"
+                    onClick={() => navigate(`/contacts/${c.id}`)}
+                    data-testid={`button-view-contact-${c.id}`}
+                  >
+                    View
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {showUpcoming && health.upcomingCharges.length > 0 && (
+        <Card data-testid="card-upcoming-charges-list">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Upcoming Autopay Charges</CardTitle>
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => runAllMutation.mutate()}
+                disabled={runAllMutation.isPending}
+                data-testid="button-run-all-charges"
+              >
+                {runAllMutation.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Zap className="mr-1 h-3.5 w-3.5" />}
+                Run All
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-center">Customers</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {health.upcomingCharges.map((row) => (
+                  <TableRow key={row.date} data-testid={`row-upcoming-charge-${row.date}`}>
+                    <TableCell className="font-medium">{formatDateLabel(row.date)}</TableCell>
+                    <TableCell className="text-center">{row.customers}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                      ${(row.totalCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => chargeByDateMutation.mutate(row.date)}
+                        disabled={chargeByDateMutation.isPending}
+                        data-testid={`button-run-now-${row.date}`}
+                      >
+                        {chargeByDateMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                        Run Now
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card data-testid="card-misconfiguration-list">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              Billing Misconfigurations
+              {filteredMisconfigs.length > 0 && (
+                <Badge variant="secondary" className="ml-1">{filteredMisconfigs.length}</Badge>
+              )}
+            </CardTitle>
+            <div className="flex flex-wrap gap-1.5">
+              {(["all", "no_payment_method", "failed_charge", "no_billing_rule"] as const).map(f => (
+                <Button
+                  key={f}
+                  size="sm"
+                  variant={miscFilter === f ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setMiscFilter(f)}
+                  data-testid={`button-misc-filter-${f}`}
+                >
+                  {f === "all" ? "All Issues" : f === "no_payment_method" ? "Missing Card" : f === "failed_charge" ? "Failed Charge" : "No Rule"}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {filteredMisconfigs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground" data-testid="text-no-misconfigs">
+              <Activity className="h-8 w-8 mb-2 opacity-40" />
+              <p className="text-sm">{miscFilter === "all" ? "No billing issues found" : "No issues of this type"}</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Issue</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredMisconfigs.map((m, idx) => (
+                  <TableRow key={`${m.contactId}-${m.issue}-${idx}`} data-testid={`row-misconfig-${m.contactId}`}>
+                    <TableCell className="font-medium">{m.contactName || "Unknown"}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="secondary"
+                        className={
+                          m.issue === "failed_charge"
+                            ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+                            : m.issue === "no_billing_rule"
+                              ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                        }
+                      >
+                        {issueLabel[m.issue] || m.issue}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {m.issue === "no_payment_method" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => navigate(`/contacts/${m.contactId}`)}
+                          data-testid={`button-add-card-${m.contactId}`}
+                        >
+                          Add Card
+                        </Button>
+                      )}
+                      {m.issue === "failed_charge" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => onSwitchToFailed()}
+                          data-testid={`button-retry-${m.contactId}`}
+                        >
+                          Retry
+                        </Button>
+                      )}
+                      {m.issue === "no_billing_rule" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => navigate(`/contacts/${m.contactId}`)}
+                          data-testid={`button-set-rule-${m.contactId}`}
+                        >
+                          Set Rule
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+const VALID_TAB_VALUES = ["all", "uninvoiced", "unpaid", "overdue", "paid", "failed", "billing-health"];
 
 function getInitialTab(): string {
   const params = new URLSearchParams(window.location.search);
@@ -2093,10 +2508,16 @@ export default function Invoices() {
           </TabsTrigger>
           <TabsTrigger value="paid" data-testid="tab-invoice-paid">Paid</TabsTrigger>
           <TabsTrigger value="failed" data-testid="tab-invoice-failed">Failed</TabsTrigger>
+          <TabsTrigger value="billing-health" data-testid="tab-invoice-billing-health" className="flex items-center gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Billing Health
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {isLoading ? (
+      {statusFilter === "billing-health" ? (
+        <BillingHealthPanel onSwitchToFailed={() => setStatusFilter("failed")} />
+      ) : isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-20 w-full" />
