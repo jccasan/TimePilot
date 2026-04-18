@@ -35,6 +35,7 @@ import {
   Database,
   Radio,
   HelpCircle,
+  GraduationCap,
 } from "lucide-react";
 import {
   Sidebar,
@@ -59,6 +60,7 @@ import {
 import { GlobalSearch } from "@/components/global-search";
 import { useAuth } from "@/hooks/use-auth";
 import { getAvailableTours } from "@/components/feature-tour";
+import { useTutorialContext } from "@/hooks/use-tutorials";
 import { AddContactDialog } from "@/components/add-contact-dialog";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 
@@ -155,6 +157,7 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
   });
   const uninvoicedCount = uninvoicedData?.count || 0;
   const tours = getAvailableTours();
+  const { startTutorial, allTutorials } = useTutorialContext();
 
   const handleNavClick = () => {
     if (isMobile) setOpenMobile(false);
@@ -306,7 +309,7 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
                   <span>Help</span>
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start" className="w-56">
+              <DropdownMenuContent side="top" align="start" className="w-64">
                 {onStartTour && (
                   <>
                     <DropdownMenuLabel>Guided Tours</DropdownMenuLabel>
@@ -323,6 +326,19 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
                     ))}
                   </>
                 )}
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Step-by-Step Tutorials</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {allTutorials.map((tutorial) => (
+                  <DropdownMenuItem
+                    key={tutorial.id}
+                    onClick={() => startTutorial(tutorial.id)}
+                    data-testid={`button-tutorial-${tutorial.id}`}
+                  >
+                    <GraduationCap className="h-4 w-4 mr-2" />
+                    {tutorial.title}
+                  </DropdownMenuItem>
+                ))}
                 {logout && (
                   <>
                     <DropdownMenuSeparator />

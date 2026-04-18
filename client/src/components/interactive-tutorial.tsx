@@ -106,11 +106,25 @@ const ROUTE_BUILDER_TUTORIAL: TutorialDefinition = {
 
 const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
   id: "tutorial_invoice_creation",
-  version: "1.1",
+  version: "1.2",
   title: "Creating Invoices",
   description: "Learn how to create, customize, and send invoices to your customers.",
   requiredPage: "/invoices",
   steps: [
+    {
+      target: '[data-testid="revenue-dashboard"]',
+      title: "Revenue Dashboard",
+      content: "At the top of the Invoices page you'll find four live metric cards: This Week's revenue, Outstanding balance, Overdue amount, and Collected totals. These update as you create and process invoices.",
+      action: "observe",
+      waitForElement: true,
+    },
+    {
+      target: '[data-testid="persistent-batch-actions"]',
+      title: "Batch Actions",
+      content: "Use the batch action bar to process multiple invoices at once. Select invoices with checkboxes, then click Send All to email them, Charge All to run autopay, or Mark Paid to record offline payments — no need to open each invoice individually.",
+      action: "observe",
+      waitForElement: true,
+    },
     {
       target: '[data-testid="button-create-invoice"]',
       title: "Create a New Invoice",
@@ -151,7 +165,7 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="button-submit-invoice"]',
       title: "Create the Invoice",
-      content: "Click to create the invoice as a draft. After creating, you can review it and send it to the customer.",
+      content: "Click to create the invoice as a draft. New drafts appear in the Draft section on the main Invoices page, where you can review before sending.",
       action: "click",
     },
     {
@@ -160,6 +174,55 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
       content: "Click to email the invoice to your customer. They'll receive a link to view and pay online through the client portal.",
       action: "click",
       waitForElement: true,
+    },
+  ],
+};
+
+const COMPLETE_VISIT_TUTORIAL: TutorialDefinition = {
+  id: "tutorial_complete_visit",
+  version: "1.0",
+  title: "Completing a Visit",
+  description: "Learn how to mark a service visit as complete — with or without a proof photo — and automatically notify the customer.",
+  requiredPage: "/routes",
+  steps: [
+    {
+      target: '[data-testid^="button-day-"]',
+      title: "Select a Service Day",
+      content: "Click any day tab at the top of the Routes page to see the stops scheduled for that day. Today's date is selected by default.",
+      action: "click",
+      waitForElement: true,
+    },
+    {
+      target: '[data-testid^="button-complete-"]',
+      title: "Complete a Stop",
+      content: "Click the green Complete button on any stop card to open the completion dialog. This works for any stop on today's or a past day's route.",
+      action: "click",
+      waitForElement: true,
+    },
+    {
+      target: '[data-testid="dialog-complete-visit"]',
+      title: "Complete Visit Dialog",
+      content: "This dialog collects proof-of-service info and prepares a customer notification. You can attach a proof photo, add notes, and choose the No Gate option if the property doesn't have a gate.",
+      action: "observe",
+      waitForElement: true,
+    },
+    {
+      target: '[data-testid="label-no-gate"]',
+      title: "No Gate Option",
+      content: "Check 'No gate' if this property doesn't have a gate or if you're logging a past visit without a photo. When checked, the photo is optional and the customer message is adjusted — no photo link will be included.",
+      action: "observe",
+    },
+    {
+      target: '[data-testid="input-completion-notes"]',
+      title: "Add Notes (Optional)",
+      content: "Enter any notes about the visit — gate codes you used, issues you noticed, or anything the customer should know. Notes are saved to the visit record.",
+      action: "input",
+    },
+    {
+      target: '[data-testid="button-send-complete"]',
+      title: "Complete & Notify",
+      content: "Click to mark the visit complete and send the customer a text message (for today's visits only). For past dates, the visit is recorded without sending a notification.",
+      action: "click",
     },
   ],
 };
@@ -281,6 +344,7 @@ const PRICING_CALCULATOR_TUTORIAL: TutorialDefinition = {
 export const ALL_TUTORIALS: TutorialDefinition[] = [
   ROUTE_BUILDER_TUTORIAL,
   INVOICE_CREATION_TUTORIAL,
+  COMPLETE_VISIT_TUTORIAL,
   IMPORT_WIZARD_TUTORIAL,
   STRIPE_CONNECT_TUTORIAL,
   PRICING_CALCULATOR_TUTORIAL,

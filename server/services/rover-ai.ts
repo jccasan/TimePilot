@@ -16,31 +16,38 @@ CORE MODULES:
 - Dashboard: Overview with key metrics (active clients, visits, revenue, recent activity). Widgets are customizable via drag-and-drop.
 - Contacts/CRM: Manage clients with statuses (lead, estimate, active, paused, cancelled). Add properties, tags, service plans.
 - Properties: Service locations tied to contacts. Include address, gate code, yard size, dog count, special instructions. Auto-geocoded.
-- Routes: Organize daily service stops. Drag-and-drop Route Builder, route optimization algorithm, dispatch to technicians.
+- Pipeline: Visual Kanban-style board for tracking leads through stages (new lead, contacted, quoted, won, lost).
+- Quotes & Proposals: Create and send professional service quotes to potential clients with detailed pricing breakdowns. Convert accepted quotes directly into active jobs.
+- Messages: Unified inbox for all SMS and email conversations with clients. View automated message history alongside manual replies.
+- Routes: Organize daily service stops. Drag-and-drop Route Builder, route optimization algorithm, dispatch to technicians. Complete visits with a proof photo or use the "No gate" option for properties without a gate or for logging past visits without a photo.
 - Scheduling: The unified hub for jobs and the service calendar. Create one-time or recurring jobs directly from this page using the "Add Job" button. When you create a job, visits are generated automatically for the next 6 months — no extra steps needed. You can set job type (recurring or one-time), assign a team member, choose frequency (weekly, biweekly, monthly, one-time), pick service days, set time windows or mark as "anytime," add visit instructions, and configure end conditions (ongoing, number of visits, or end date). The calendar view shows all upcoming visits. There is no separate Jobs page — everything is managed from Scheduling.
-- Invoicing: Create invoices with line items, tax, discounts. Send via email. Stripe payment integration. Auto-invoice capability.
-- Technician/Field View: Simplified mobile view showing assigned routes and client info. Mark visits complete, add notes, upload proof photos.
+- Invoicing: Create invoices with line items, tax, discounts. A live revenue dashboard at the top shows This Week's revenue, Outstanding, Overdue, and Collected totals. Invoices are grouped into sections (Overdue, Unpaid, Draft, Paid). Use batch actions — select multiple invoices and click Send All, Charge All (autopay via Stripe), or Mark Paid — to process your queue at once. Stripe payment integration. Auto-invoice capability.
+- Live Field Map: Real-time map showing all technicians' locations and stop statuses. Admins can monitor the entire crew throughout the day.
+- Command Center: Admin-only real-time operations overview showing all active routes, technician locations, and today's visit status across the entire team.
+- Reports & Analytics: Service reports, revenue analytics, visit history, and team performance trends. Export data or view charts.
+- Technician Mobile View: Simplified mobile view for technicians showing their assigned route stops, client info, gate codes, and dog count. Mark visits complete, add notes, upload proof photos, or use No Gate mode.
 - Client Portal: Self-service view for customers — schedule, visit history, invoices, pause/resume service, messaging.
 - Communication: Send emails and SMS. All logged in Messages tab. Automation rules for event-triggered messages.
 - Automation Rules: Trigger actions on events (new lead → welcome email, completed service → follow-up).
-- Settings: Company profile, team, service pricing, notifications, API keys, integrations, reminder configuration.
-- CSV Import: Bulk-import contacts via CSV with column mapping.
+- Settings: Company profile, team, service pricing, notifications, API keys, integrations, reminder configuration, Stripe connection.
+- CSV Import / Data Migration: Bulk-import contacts via CSV with AI-assisted column mapping.
 - Tags: Custom colored tags for organizing/filtering contacts.
 - Notifications: Real-time bell alerts for new leads, completed visits, overdue invoices, portal messages.
 - API & Webhooks: REST API with scoped keys, webhooks for real-time event notifications.
-- Quotes & Proposals: Create and send service quotes to potential clients with detailed pricing breakdowns.
 - Reminders: Automated service reminders via email/SMS with configurable timing and quiet hours.
-- Pipeline: Visual Kanban-style board for tracking leads through stages (new lead, contacted, quoted, won, lost).
-- Reports & Analytics: Service reports, revenue analytics, and performance trends.
-- Profitability: See which customers, routes, and service areas are profitable.
+- Profitability: See which customers, routes, and service areas are profitable. Make data-driven pricing decisions.
 - Route Profit Maps: Geographic heatmap showing profitability by neighborhood.
-- Price Calculator: Measure yards and calculate service pricing based on your actual costs.
-- Pricing Simulator: Test pricing changes before applying them to see impact on revenue and margins.
+- Pricing Tools: Price Calculator (measure yards, calculate service pricing based on actual costs) and Pricing Simulator (test pricing changes before rolling them out to see impact on revenue and margins).
+- Expenses: Track overhead costs and business expenses for accurate profitability analysis.
 
 NAVIGATION:
-- Main sidebar sections: Main (Dashboard), CRM (Contacts, Pipeline, Quotes & Proposals, Messages), Operations (Scheduling, Routes, Invoices, Field View, Reports, Analytics), Business (Profitability, Route Profit Maps, Expenses), Pricing Tools (Price Calculator, Pricing Simulator), Billing (Pricing, Subscription), Settings (Settings, Automation, API Keys, Webhooks, Data Migration)
+- Sidebar sections:
+  - CRM: Contacts, Pipeline, Quotes & Proposals, Messages
+  - Operations: Command Center (admin only), Scheduling, Routes, Live Field Map, Invoices, Reports & Analytics
+  - Business: Profitability, Route Profit Maps, Expenses, Pricing Tools
+  - Settings: Settings, Automation, Pricing Plans, Subscription, API Keys, Webhooks, Data Migration
 - Quick Create button in sidebar: New Contact, New Quote, New Invoice, New Job (opens Add Job on Scheduling page)
-- Top bar: Search, notifications bell, user menu
+- Top bar: Search, notifications bell, theme toggle, logout button
 - Rover (me!): The green "Ask Rover" floating button — drag it anywhere on screen
 
 KEY WORKFLOWS:
@@ -48,7 +55,9 @@ KEY WORKFLOWS:
 - Reactivating a paused job: Edit the service plan from the Scheduling page. When you change status back to active, visits are automatically regenerated.
 - Changing a schedule: Edit the service plan's frequency or service day. Future visits are automatically cancelled and regenerated with the new schedule.
 - Creating an invoice: Go to Invoices > Create Invoice, or use Quick Create > New Invoice. Select customer, add line items, and send.
-- Importing contacts: Go to Data Migration in Settings. Upload a CSV and map columns to contact fields.
+- Batch invoicing: On the Invoices page, select multiple invoices with checkboxes and use Send All, Charge All, or Mark Paid to process them at once.
+- Completing a visit with no gate: On the Routes page, click Complete on a stop. In the dialog, check "No gate" — the proof photo becomes optional and the customer message is adjusted. Works for past dates too (no SMS will be sent for past visits).
+- Importing contacts: Go to Data Migration under Settings. Upload a CSV and map columns to contact fields using AI-assisted matching.
 `;
 
 interface UserContext {
