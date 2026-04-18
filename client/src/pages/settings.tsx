@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical, Rocket } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical, Rocket, Zap, PlayCircle, DollarSign } from "lucide-react";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -114,6 +114,7 @@ const SETTINGS_BLOCK_DEFS: { id: string; label: string; defaultW: number; defaul
   { id: "lead_sources", label: "Lead Sources", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "audit_log", label: "Audit Log", defaultW: 12, defaultH: 5, minW: 6, minH: 4 },
   { id: "developer_tools", label: "Developer Tools", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "demo_mode", label: "Demo Mode", defaultW: 6, defaultH: 7, minW: 4, minH: 5 },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -126,7 +127,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "webhook_lead", "sms_quote_template",
   "quote_auto_follow_up", "auto_visit_generation",
   "lead_sources", "developer_tools",
-  "audit_log",
+  "audit_log", "demo_mode",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -2563,6 +2564,138 @@ function ReminderSettingsSection({ company, toast }: { company: Company | null; 
   );
 }
 
+type DemoSettings = {
+  unlimitedCredits: boolean;
+  bypassLimits: boolean;
+  autoCompleteToday: boolean;
+  autoPayInvoices: boolean;
+  livePlaybackEnabled: boolean;
+};
+
+function DemoModeSection() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: demoStatus, isLoading } = useQuery<{ isDemo: boolean; settings?: DemoSettings }>({
+    queryKey: ["/api/demo/status"],
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (updates: Partial<DemoSettings>) =>
+      apiRequest("PATCH", "/api/demo/settings", updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/demo/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+    },
+    onError: () => toast({ title: "Update failed", variant: "destructive" }),
+  });
+
+  const autoCompleteMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/demo/run-auto-complete"),
+    onSuccess: () => {
+      toast({ title: "Auto-complete ran", description: "Today's visits have been marked complete." });
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/range"] });
+    },
+    onError: () => toast({ title: "Failed to run auto-complete", variant: "destructive" }),
+  });
+
+  const autoPayMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/demo/run-auto-pay"),
+    onSuccess: () => {
+      toast({ title: "Auto-pay ran", description: "~90% of invoices marked paid, 10% set overdue." });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+    },
+    onError: () => toast({ title: "Failed to run auto-pay", variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  if (!demoStatus?.isDemo) return (
+    <div className="flex flex-col items-center justify-center h-full gap-2 text-center p-4">
+      <Zap className="h-8 w-8 text-muted-foreground/40" />
+      <p className="text-sm text-muted-foreground">Available on the demo@scoopilot.com account only</p>
+    </div>
+  );
+
+  const settings = demoStatus.settings!;
+
+  const toggles: { key: keyof DemoSettings; icon: React.ElementType; label: string; description: string; actionLabel?: string; onAction?: () => void; actionPending?: boolean }[] = [
+    {
+      key: "unlimitedCredits",
+      icon: Zap,
+      label: "Unlimited Route Credits",
+      description: "Skip credit deduction when optimizing routes",
+    },
+    {
+      key: "bypassLimits",
+      icon: Shield,
+      label: "Bypass Feature Limits",
+      description: "Treat this account as the highest plan tier",
+    },
+    {
+      key: "autoCompleteToday",
+      icon: CheckCircle2,
+      label: "Auto-Complete Today's Visits",
+      description: "Automatically mark all of today's visits as complete (hourly)",
+      actionLabel: "Run now",
+      onAction: () => autoCompleteMutation.mutate(),
+      actionPending: autoCompleteMutation.isPending,
+    },
+    {
+      key: "autoPayInvoices",
+      icon: DollarSign,
+      label: "Auto-Pay Invoices",
+      description: "Pay ~90% of outstanding invoices; leave 10% overdue (daily)",
+      actionLabel: "Run now",
+      onAction: () => autoPayMutation.mutate(),
+      actionPending: autoPayMutation.isPending,
+    },
+    {
+      key: "livePlaybackEnabled",
+      icon: PlayCircle,
+      label: "Live Route Playback",
+      description: "Show a playback overlay on the Routes page to simulate a tech completing stops",
+    },
+  ];
+
+  return (
+    <div className="space-y-2">
+      {toggles.map(({ key, icon: Icon, label, description, actionLabel, onAction, actionPending }) => (
+        <div key={key} className="flex items-start justify-between gap-3 p-3 rounded-lg border bg-muted/20">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+              <Icon className="h-3.5 w-3.5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium leading-tight" data-testid={`text-demo-label-${key}`}>{label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{description}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 mt-0.5">
+            {actionLabel && onAction && settings[key] && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs px-2"
+                onClick={onAction}
+                disabled={actionPending}
+                data-testid={`button-demo-action-${key}`}
+              >
+                {actionPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : actionLabel}
+              </Button>
+            )}
+            <Switch
+              checked={settings[key]}
+              onCheckedChange={(val) => updateMutation.mutate({ [key]: val })}
+              disabled={updateMutation.isPending}
+              data-testid={`switch-demo-${key}`}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -3515,6 +3648,21 @@ export default function Settings() {
         return currentUser?.role === "owner"
           ? <div className="h-full overflow-auto"><AuditLogSection /></div>
           : null;
+      case "demo_mode":
+        return (
+          <Card className="h-full overflow-auto">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-primary" />
+                Demo Mode
+              </CardTitle>
+              <CardDescription>Automation tools for the demo@scoopilot.com account</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DemoModeSection />
+            </CardContent>
+          </Card>
+        );
       default:
         return null;
     }

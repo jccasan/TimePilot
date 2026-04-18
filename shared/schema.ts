@@ -228,6 +228,11 @@ export const companies = pgTable("companies", {
   country: varchar("country", { length: 5 }).notNull().default("us"),
   currency: varchar("currency", { length: 5 }).notNull().default("usd"),
   taxRatePercent: decimal("tax_rate_percent", { precision: 5, scale: 2 }),
+  demoUnlimitedCredits: boolean("demo_unlimited_credits").notNull().default(false),
+  demoBypassLimits: boolean("demo_bypass_limits").notNull().default(false),
+  demoAutoCompleteToday: boolean("demo_auto_complete_today").notNull().default(false),
+  demoAutoPayInvoices: boolean("demo_auto_pay_invoices").notNull().default(false),
+  demoLivePlaybackEnabled: boolean("demo_live_playback_enabled").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

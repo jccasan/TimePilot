@@ -1973,7 +1973,20 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId } = await getCompanyContext(req);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
-      res.json(sanitizeCompany(company));
+      const sanitized = sanitizeCompany(company) as any;
+      // Demo bypass: expose unlimited tier and force all feature flags
+      if ((company as any).demoBypassLimits) {
+        const demoId = await getDemoCompanyId();
+        if (demoId === companyId) {
+          sanitized.subscriptionTier = "tier_10_plus";
+          sanitized.subscriptionStatus = "active";
+          sanitized.roverAiEnabled = true;
+          sanitized.remindersEnabled = true;
+          sanitized.aiImportMappingEnabled = true;
+          sanitized.routeCredits = (company as any).demoUnlimitedCredits ? 999999 : sanitized.routeCredits;
+        }
+      }
+      res.json(sanitized);
     } catch (err) { handleError(res, err); }
   });
 
@@ -2065,6 +2078,85 @@ Return ONLY valid JSON, no markdown.`,
       res.json(sanitizeCompany(company));
     } catch (err) { handleError(res, err); }
   });
+
+  // ── Demo Mode API ────────────────────────────────────────────────────────
+  // Helpers – resolve the demo company ID once per request
+  async function getDemoCompanyId(): Promise<string | null> {
+    const { db } = await import("./db");
+    const { sql: drizzleSql } = await import("drizzle-orm");
+    const row = await db.execute(drizzleSql`
+      SELECT c.id FROM users u
+      JOIN company_users cu ON cu.user_id = u.id
+      JOIN companies c ON c.id = cu.company_id
+      WHERE u.email = 'demo@scoopilot.com' LIMIT 1
+    `);
+    return row.rows?.[0]?.id as string | null;
+  }
+
+  app.get("/api/demo/status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const demoId = await getDemoCompanyId();
+      const isDemo = demoId === companyId;
+      if (!isDemo) return res.json({ isDemo: false });
+      const company = await storage.getCompany(companyId);
+      res.json({
+        isDemo: true,
+        settings: {
+          unlimitedCredits: !!(company as any).demoUnlimitedCredits,
+          bypassLimits: !!(company as any).demoBypassLimits,
+          autoCompleteToday: !!(company as any).demoAutoCompleteToday,
+          autoPayInvoices: !!(company as any).demoAutoPayInvoices,
+          livePlaybackEnabled: !!(company as any).demoLivePlaybackEnabled,
+        },
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/demo/settings", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const demoId = await getDemoCompanyId();
+      if (demoId !== companyId) return res.status(403).json({ error: "Not a demo account" });
+      const allowed = ["unlimitedCredits", "bypassLimits", "autoCompleteToday", "autoPayInvoices", "livePlaybackEnabled"];
+      const keyMap: Record<string, string> = {
+        unlimitedCredits: "demoUnlimitedCredits",
+        bypassLimits: "demoBypassLimits",
+        autoCompleteToday: "demoAutoCompleteToday",
+        autoPayInvoices: "demoAutoPayInvoices",
+        livePlaybackEnabled: "demoLivePlaybackEnabled",
+      };
+      const updates: any = {};
+      for (const k of allowed) {
+        if (req.body[k] !== undefined) updates[keyMap[k]] = !!req.body[k];
+      }
+      const company = await storage.updateCompany(companyId, updates);
+      res.json({ ok: true, company: sanitizeCompany(company) });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/demo/run-auto-complete", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const demoId = await getDemoCompanyId();
+      if (demoId !== companyId) return res.status(403).json({ error: "Not a demo account" });
+      const { runDemoAutoComplete } = await import("./jobs/demo-auto-complete");
+      await runDemoAutoComplete();
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/demo/run-auto-pay", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const demoId = await getDemoCompanyId();
+      if (demoId !== companyId) return res.status(403).json({ error: "Not a demo account" });
+      const { runDemoAutoPay } = await import("./jobs/demo-auto-pay");
+      await runDemoAutoPay();
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
+  });
+  // ── End Demo Mode API ────────────────────────────────────────────────────
 
   app.get("/api/company/users", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -3969,7 +4061,8 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId } = await getCompanyContext(req);
       const company = await storage.getCompany(companyId);
-      res.json({ credits: company?.routeCredits ?? 0 });
+      const demoUnlimited = !!(company as any).demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
+      res.json({ credits: demoUnlimited ? 999999 : (company?.routeCredits ?? 0) });
     } catch (err) { handleError(res, err); }
   });
 
@@ -4023,7 +4116,12 @@ Return ONLY valid JSON, no markdown.`,
 
       const company = await storage.getCompany(companyId);
       const currentCredits = company?.routeCredits ?? 0;
-      if (currentCredits < creditsRequired) {
+
+      // Demo unlimited-credits bypass
+      const demoUnlimitedCredits = !!(company as any).demoUnlimitedCredits;
+      const isDemoCompanyForCredits = demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
+
+      if (!isDemoCompanyForCredits && currentCredits < creditsRequired) {
         return res.status(402).json({
           error: "Insufficient route credits",
           creditsRequired,
@@ -4095,7 +4193,9 @@ Return ONLY valid JSON, no markdown.`,
         await storage.updateServicePlan(plan.id, companyId, { stopOrder: result.orderedIds.length + 1 });
       }
 
-      await storage.updateCompany(companyId, { routeCredits: currentCredits - creditsRequired } as any);
+      if (!isDemoCompanyForCredits) {
+        await storage.updateCompany(companyId, { routeCredits: currentCredits - creditsRequired } as any);
+      }
 
       const optimizedMapbox = await getMapboxRouteMetrics(optimizedStops, startPoint);
       const optimizedDistance = optimizedMapbox?.distance ?? result.totalDistance;
@@ -4129,8 +4229,8 @@ Return ONLY valid JSON, no markdown.`,
         geocodedCount: stops.length,
         hasStartPoint: !!startPoint,
         order: result.orderedIds,
-        creditsUsed: creditsRequired,
-        creditsRemaining: currentCredits - creditsRequired,
+        creditsUsed: isDemoCompanyForCredits ? 0 : creditsRequired,
+        creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - creditsRequired,
         routingEngine: optimizedMapbox ? "mapbox" : "haversine",
       });
     } catch (err) { handleError(res, err); }
@@ -17173,6 +17273,11 @@ Return ONLY valid JSON, no markdown.`,
   import("./jobs/demo-auto-complete").then(({ runDemoAutoComplete }) => {
     setTimeout(() => runDemoAutoComplete().catch(console.error), 45000);
     setInterval(() => runDemoAutoComplete().catch(console.error), 60 * 60 * 1000);
+  });
+
+  import("./jobs/demo-auto-pay").then(({ runDemoAutoPay }) => {
+    setTimeout(() => runDemoAutoPay().catch(console.error), 60000);
+    setInterval(() => runDemoAutoPay().catch(console.error), 24 * 60 * 60 * 1000);
   });
 
   import("./jobs/trial-expiration").then(({ runTrialExpirationCheck }) => {
