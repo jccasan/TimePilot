@@ -40,7 +40,7 @@ export async function runDemoAutoPay() {
       if (Math.random() < 0.9) {
         await db.execute(sql`
           INSERT INTO invoice_payments (id, company_id, invoice_id, amount_cents, paid_at, method, source)
-          VALUES (gen_random_uuid(), ${companyId}, ${invoiceId}, ${amountCents}, NOW(), 'credit_card', 'manual')
+          VALUES (gen_random_uuid(), ${companyId}, ${invoiceId}, ${amountCents}, NOW(), 'card', 'manual')
           ON CONFLICT DO NOTHING
         `);
         await db.execute(sql`

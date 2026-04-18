@@ -2488,7 +2488,7 @@ Return ONLY valid JSON, no markdown.`,
       if ("error" in result) {
         return res.status(400).json({ error: result.error });
       }
-      auditLog(companyId, currentUserId, "user", targetUserId, "password_reset", { resetBy: currentUserId });
+      auditLog(companyId, currentUserId, "user", targetUserId, "update", { action: "password_reset", resetBy: currentUserId });
       res.json({ success: true, message: "Password has been updated." });
     } catch (err) { handleError(res, err); }
   });
@@ -7068,7 +7068,7 @@ Return ONLY valid JSON, no markdown.`,
         await storage.updateVisit(visitId as string, companyId, { invoiceId: invoice.id });
       }
 
-      auditLog(companyId, userId, "invoice", invoice.id, "consolidated", { consolidatedFrom: voidedIds, lineItemCount: allLineItems.length });
+      auditLog(companyId, userId, "invoice", invoice.id, "update", { action: "consolidated", consolidatedFrom: voidedIds, lineItemCount: allLineItems.length });
       res.json(invoice);
     } catch (err) { handleError(res, err); }
   });
@@ -13847,7 +13847,7 @@ Return ONLY valid JSON, no markdown.`,
         });
       });
       await storage.updateContact(req.params.id, companyId, { portalPasswordHash });
-      auditLog(companyId, userId, "contact", req.params.id, "portal_password_reset", { resetBy: userId });
+      auditLog(companyId, userId, "contact", req.params.id, "update", { action: "portal_password_reset", resetBy: userId });
       res.json({ success: true, message: "Client portal password has been updated." });
     } catch (err) { handleError(res, err); }
   });
@@ -17324,7 +17324,7 @@ Return ONLY valid JSON, no markdown.`,
       requireRole(role);
       const { disconnectQbo } = await import("./services/quickbooks");
       await disconnectQbo(companyId);
-      auditLog(companyId, (await getCompanyContext(req)).userId, "company", companyId, "qbo_disconnect");
+      auditLog(companyId, (await getCompanyContext(req)).userId, "company", companyId, "update", { action: "qbo_disconnect" });
       return res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -17335,7 +17335,7 @@ Return ONLY valid JSON, no markdown.`,
       requireRole(role);
       const { runFullSync } = await import("./services/quickbooks");
       const result = await runFullSync(companyId);
-      auditLog(companyId, (await getCompanyContext(req)).userId, "company", companyId, "qbo_full_sync", { result });
+      auditLog(companyId, (await getCompanyContext(req)).userId, "company", companyId, "update", { action: "qbo_full_sync", result });
       return res.json(result);
     } catch (err) { handleError(res, err); }
   });

@@ -565,7 +565,7 @@ async function migrateServicePlansToAgreementsAndJobs() {
         SELECT gen_random_uuid(), company_id, contact_id, frequency, price_per_visit, is_active, paused_at, start_date, end_date, ends_after_count, ends_after_unit, estimate_id, id, created_at, updated_at
         FROM service_plans
         WHERE id = ANY($1)
-        ON CONFLICT (service_plan_id) DO NOTHING
+        ON CONFLICT DO NOTHING
       `, [spIds]);
 
       console.log(`[Migration] Backfilled ${spIds.length} agreements`);
@@ -588,7 +588,7 @@ async function migrateServicePlansToAgreementsAndJobs() {
         FROM service_plans sp
         JOIN agreements a ON a.service_plan_id = sp.id
         WHERE sp.id = ANY($1)
-        ON CONFLICT (service_plan_id) DO NOTHING
+        ON CONFLICT DO NOTHING
       `, [spIds]);
 
       console.log(`[Migration] Backfilled ${spIds.length} jobs`);
