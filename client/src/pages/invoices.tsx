@@ -1584,7 +1584,7 @@ export default function Invoices() {
 
   const allUnpaidInvoices = useMemo(() => {
     if (!allInvoicesForStats) return [];
-    return allInvoicesForStats.filter(inv => ["pending", "sent"].includes(inv.status));
+    return allInvoicesForStats.filter(inv => ["draft", "pending", "sent"].includes(inv.status));
   }, [allInvoicesForStats]);
 
   const tabBadges = useMemo(() => {
