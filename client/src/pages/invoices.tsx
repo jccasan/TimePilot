@@ -1549,8 +1549,8 @@ export default function Invoices() {
         case "contact": {
           const ca = contactMap[a.contactId];
           const cb = contactMap[b.contactId];
-          const nameA = ca ? `${ca.lastName} ${ca.firstName}` : "";
-          const nameB = cb ? `${cb.lastName} ${cb.firstName}` : "";
+          const nameA = ca ? `${ca.firstName} ${ca.lastName}` : "";
+          const nameB = cb ? `${cb.firstName} ${cb.lastName}` : "";
           cmp = nameA.localeCompare(nameB);
           break;
         }
