@@ -1133,6 +1133,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteInvoice(id: string, companyId: string): Promise<void> {
+    await db.delete(invoicePayments).where(eq(invoicePayments.invoiceId, id));
     await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, id));
     await db.update(visits).set({ invoiceId: null }).where(eq(visits.invoiceId, id));
     await db.delete(invoices).where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
