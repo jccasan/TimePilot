@@ -13,9 +13,9 @@ import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard, Loader2, MessageSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Component, lazy, Suspense, useEffect, useState } from "react";
+import { Component, lazy, Suspense, useEffect, useState, useRef, useCallback } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-import RoverChatbot from "@/components/rover-chatbot";
+import RoverChatbot, { type RoverChatbotHandle } from "@/components/rover-chatbot";
 import BusinessOnboarding from "@/components/business-onboarding";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -131,6 +131,10 @@ function Router() {
 
 function AuthenticatedLayout() {
   const { logout, isLoggingOut, user } = useAuth();
+  const roverRef = useRef<RoverChatbotHandle>(null);
+  const openRover = useCallback(() => {
+    roverRef.current?.open();
+  }, []);
   const [setupState, setSetupState] = useState<"loading" | "ready" | "error">(
     (user as any)?.setupDone ? "ready" : "loading"
   );
@@ -235,7 +239,7 @@ function AuthenticatedLayout() {
     <TutorialProvider>
       <SidebarProvider>
         <div className="flex h-screen w-full">
-          <AppSidebar onStartTour={startTour} logout={logout} isLoggingOut={isLoggingOut} />
+          <AppSidebar onStartTour={startTour} logout={logout} isLoggingOut={isLoggingOut} onOpenRover={openRover} />
           <div className="flex flex-col flex-1 min-w-0">
             <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
               <div className="flex items-center gap-2">
@@ -265,6 +269,7 @@ function AuthenticatedLayout() {
         </div>
         <FeatureTourOverlay tour={activeTour} isRunning={isRunning} onCallback={handleCallback} />
       </SidebarProvider>
+      <RoverChatbot ref={roverRef} />
     </TutorialProvider>
   );
 }
@@ -359,6 +364,7 @@ function TechnicianLayout() {
           </Switch>
         </Suspense>
       </main>
+      <RoverChatbot />
     </div>
   );
 }
@@ -631,7 +637,6 @@ function App() {
             <AppContent />
             <Toaster />
             <PwaInstallPrompt />
-            <RoverChatbot />
           </TooltipProvider>
         </ThemeProvider>
       </QueryClientProvider>

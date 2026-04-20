@@ -36,6 +36,7 @@ import {
   Radio,
   HelpCircle,
   GraduationCap,
+  MessageCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -133,7 +134,7 @@ function useSectionCollapse() {
   return { collapsed, toggle };
 }
 
-export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?: (tourId: string) => void; logout?: () => void; isLoggingOut?: boolean }) {
+export function AppSidebar({ onStartTour, logout, isLoggingOut, onOpenRover }: { onStartTour?: (tourId: string) => void; logout?: () => void; isLoggingOut?: boolean; onOpenRover?: () => void }) {
   const [location, navigate] = useLocation();
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [generateInvoiceOpen, setGenerateInvoiceOpen] = useState(false);
@@ -310,6 +311,15 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut }: { onStartTour?
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-64">
+                {onOpenRover && (
+                  <>
+                    <DropdownMenuItem onClick={() => onOpenRover()} data-testid="button-help-ask-rover">
+                      <MessageCircle className="h-4 w-4 mr-2" />
+                      Ask Rover
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 {onStartTour && (
                   <>
                     <DropdownMenuLabel>Guided Tours</DropdownMenuLabel>

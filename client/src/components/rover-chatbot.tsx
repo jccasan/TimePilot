@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +34,14 @@ const PANEL_H = 520;
 function getStorageKey(userId: string) {
   return `rover_fab_pos_${userId}`;
 }
+
+function getDismissedKey(userId: string) {
+  return `rover_dismissed_${userId}`;
+}
+
+export type RoverChatbotHandle = {
+  open: () => void;
+};
 
 function clampPos(x: number, y: number, btnW: number, btnH?: number) {
   const vw = window.innerWidth;
@@ -116,10 +124,11 @@ function getPanelStyle(fabX: number, fabY: number, btnW: number, btnH?: number) 
   return { left, top, width: pw, height: ph };
 }
 
-export default function RoverChatbot() {
+const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const [view, setView] = useState<View>("chat");
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -140,7 +149,7 @@ export default function RoverChatbot() {
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
 
   const btnHeight = typeof window !== "undefined" && window.innerWidth < 640 ? BTN_SIZE_SM : BTN_SIZE;
-  const fabRef = useRef<HTMLButtonElement>(null);
+  const fabRef = useRef<HTMLDivElement>(null);
   const fabWidthRef = useRef(120);
   const [fabPos, setFabPos] = useState<{ x: number; y: number }>(() =>
     user ? loadPosition(user.id.toString(), fabWidthRef.current) : { x: window.innerWidth - fabWidthRef.current - EDGE_MARGIN, y: window.innerHeight - btnHeight - EDGE_MARGIN }
@@ -206,8 +215,20 @@ export default function RoverChatbot() {
   useEffect(() => {
     if (user) {
       setFabPos(loadPosition(user.id.toString(), fabWidthRef.current, btnHeight));
+      const stored = localStorage.getItem(getDismissedKey(user.id.toString()));
+      setDismissed(stored === "true");
     }
   }, [user, btnHeight]);
+
+  useImperativeHandle(ref, () => ({
+    open: () => {
+      if (user) {
+        localStorage.removeItem(getDismissedKey(user.id.toString()));
+      }
+      setDismissed(false);
+      setOpen(true);
+    },
+  }));
 
   useEffect(() => {
     const onResize = () => {
@@ -266,6 +287,12 @@ export default function RoverChatbot() {
   );
 
   if (!user) return null;
+
+  const dismissFAB = () => {
+    localStorage.setItem(getDismissedKey(user.id.toString()), "true");
+    setDismissed(true);
+    setOpen(false);
+  };
 
   const dismissIntro = () => {
     const key = `rover_intro_seen_${user.id}`;
@@ -595,8 +622,10 @@ export default function RoverChatbot() {
         </div>
       )}
 
-      {!open && !showIntro && (
-        <button
+      {!open && !showIntro && !dismissed && (
+        <div
+          role="button"
+          tabIndex={0}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -609,7 +638,7 @@ export default function RoverChatbot() {
             top: fabPos.y,
             height: btnHeight,
             paddingLeft: btnHeight <= BTN_SIZE_SM ? 12 : 14,
-            paddingRight: btnHeight <= BTN_SIZE_SM ? 14 : 16,
+            paddingRight: btnHeight <= BTN_SIZE_SM ? 6 : 8,
             cursor: draggingRef.current ? "grabbing" : "grab",
           }}
           data-testid="button-rover-open"
@@ -617,7 +646,18 @@ export default function RoverChatbot() {
         >
           <MessageCircle className="h-5 w-5 shrink-0" />
           <span className="text-sm font-medium whitespace-nowrap">Ask Rover</span>
-        </button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); dismissFAB(); }}
+            className="ml-0.5 flex items-center justify-center w-5 h-5 rounded-full hover:bg-primary-foreground/20 transition-colors shrink-0"
+            data-testid="button-rover-dismiss"
+            aria-label="Dismiss Rover"
+            tabIndex={0}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
       )}
 
       {open && (() => {
@@ -796,4 +836,6 @@ export default function RoverChatbot() {
       })()}
     </>
   );
-}
+});
+
+export default RoverChatbot;
