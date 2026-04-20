@@ -2113,14 +2113,14 @@ export default function Invoices() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem
-                onClick={() => { setGenerateDialogContactId(undefined); setGenerateDialogOpen(true); }}
+                onClick={() => { setTimeout(() => { setGenerateDialogContactId(undefined); setGenerateDialogOpen(true); }, 0); }}
                 data-testid="dropdown-generate-by-customer"
               >
                 <FileText className="mr-2 h-4 w-4" />
                 Generate by Customer
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => setGenerateByDateRangeOpen(true)}
+                onClick={() => { setTimeout(() => setGenerateByDateRangeOpen(true), 0); }}
                 data-testid="dropdown-generate-by-date"
               >
                 <Clock className="mr-2 h-4 w-4" />
@@ -2131,8 +2131,8 @@ export default function Invoices() {
                 disabled={selectedUninvoicedIds.size === 0}
                 onClick={() => {
                   if (selectedUninvoicedIds.size > 0) {
-                    setGenerateAllContactIds(Array.from(selectedUninvoicedIds));
-                    setConfirmGenerateAll(true);
+                    const ids = Array.from(selectedUninvoicedIds);
+                    setTimeout(() => { setGenerateAllContactIds(ids); setConfirmGenerateAll(true); }, 0);
                   }
                 }}
                 data-testid="dropdown-generate-selected"
