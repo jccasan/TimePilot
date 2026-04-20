@@ -356,6 +356,7 @@ export default function PortalClient() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [autoPayEnabled, setAutoPayEnabled] = useState(false);
+  const [confirmDisableAutoPay, setConfirmDisableAutoPay] = useState(false);
   const [addingCard, setAddingCard] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralCount, setReferralCount] = useState(0);
@@ -740,13 +741,25 @@ export default function PortalClient() {
   };
 
   const handleToggleAutoPay = async (enabled: boolean) => {
+    if (!enabled) {
+      setConfirmDisableAutoPay(true);
+      return;
+    }
     try {
-      await portalFetch("/api/portal/auto-pay", {
-        method: "PATCH",
-        body: JSON.stringify({ enabled }),
-      });
-      setAutoPayEnabled(enabled);
-      toast({ title: enabled ? "Auto-pay enabled" : "Auto-pay disabled" });
+      await portalFetch("/api/portal/auto-pay", { method: "PATCH", body: JSON.stringify({ enabled: true }) });
+      setAutoPayEnabled(true);
+      toast({ title: "Auto-pay enabled" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleConfirmDisableAutoPay = async () => {
+    try {
+      await portalFetch("/api/portal/auto-pay", { method: "PATCH", body: JSON.stringify({ enabled: false }) });
+      setAutoPayEnabled(false);
+      setConfirmDisableAutoPay(false);
+      toast({ title: "Auto-pay disabled", description: "You will need to pay invoices manually going forward." });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -1691,12 +1704,12 @@ export default function PortalClient() {
                   <Button variant="outline" className="w-full border-dashed gap-1.5" onClick={handleAddCard} disabled={addingCard} data-testid="button-add-card">
                     <Plus className="h-4 w-4" /> {addingCard ? "Setting up..." : "Add New Card"}
                   </Button>
-                  <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
+                  <div className={`flex items-center justify-between rounded-lg p-3 border ${autoPayEnabled ? "bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800" : "bg-muted/50 border-border"}`}>
                     <div className="flex items-center gap-3">
-                      <Shield className="h-5 w-5 text-primary" />
+                      <Shield className={`h-5 w-5 ${autoPayEnabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`} />
                       <div>
-                        <p className="text-sm font-medium">Auto-Pay</p>
-                        <p className="text-xs text-muted-foreground">Automatically pay invoices when due</p>
+                        <p className="text-sm font-medium">Auto-Pay {autoPayEnabled ? <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400 ml-1">· Active</span> : <span className="text-xs font-normal text-muted-foreground ml-1">· Off</span>}</p>
+                        <p className="text-xs text-muted-foreground">{autoPayEnabled ? "Invoices are charged automatically when due" : "You will receive invoices to pay manually"}</p>
                       </div>
                     </div>
                     <Switch checked={autoPayEnabled} onCheckedChange={handleToggleAutoPay} data-testid="switch-auto-pay" />
@@ -1725,6 +1738,25 @@ export default function PortalClient() {
                 </Card>
               </section>
             )}
+
+            <Dialog open={confirmDisableAutoPay} onOpenChange={(open) => { if (!open) setConfirmDisableAutoPay(false); }}>
+              <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Disable Auto-Pay?</DialogTitle>
+                  <DialogDescription>
+                    Auto-pay is enabled by default and ensures your invoices are paid on time without any action from you. If you turn it off, you'll need to log in and pay each invoice manually.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex gap-2 mt-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setConfirmDisableAutoPay(false)} data-testid="button-cancel-disable-autopay">
+                    Keep Auto-Pay On
+                  </Button>
+                  <Button variant="destructive" className="flex-1" onClick={handleConfirmDisableAutoPay} data-testid="button-confirm-disable-autopay">
+                    Turn Off Auto-Pay
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <Dialog open={!!tipDialogInvoice} onOpenChange={(open) => { if (!open) setTipDialogInvoice(null); }}>
               <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
