@@ -2526,6 +2526,27 @@ Return ONLY valid JSON, no markdown.`,
       const scheduledToday = todaysWorkload.filter(v => v.status === "scheduled").length;
       const inProgressToday = todaysWorkload.filter(v => v.status === "in_progress").length;
 
+      // Count distinct techs working today (via routes linked to today's visits)
+      const todayRouteIds = [...new Set(todaysVisitsList.map(v => v.routeId).filter(Boolean))] as string[];
+      let techsWorking = 0;
+      if (todayRouteIds.length > 0) {
+        const techResult = await db
+          .selectDistinct({ technicianId: routes.technicianId })
+          .from(routes)
+          .where(and(eq(routes.companyId, companyId), inArray(routes.id, todayRouteIds), isNotNull(routes.technicianId)));
+        techsWorking = techResult.length;
+      }
+
+      // Today's invoicing total (invoices created today)
+      const todayStart = new Date(today + "T00:00:00");
+      const tomorrowStart = new Date(today + "T00:00:00");
+      tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+      const todayInvoiceRows = await db
+        .select({ total: sql<string>`COALESCE(SUM(${invoices.total}::numeric), 0)` })
+        .from(invoices)
+        .where(and(eq(invoices.companyId, companyId), gte(invoices.createdAt, todayStart), lt(invoices.createdAt, tomorrowStart)));
+      const todayInvoiceTotal = parseFloat(todayInvoiceRows[0]?.total ?? "0");
+
       const allActivePlans = await storage.getServicePlans(companyId, { isActive: true });
       const activePlans = allActivePlans.filter(p => !p.isStopOnly);
 
@@ -2578,6 +2599,8 @@ Return ONLY valid JSON, no markdown.`,
         emailCountThisMonth,
         subscriptionTier: tier,
         tierName: tierInfo?.name ?? "Unknown",
+        techsWorking,
+        todayInvoiceTotal,
       });
     } catch (err) { handleError(res, err); }
   });

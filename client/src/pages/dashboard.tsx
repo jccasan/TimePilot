@@ -127,6 +127,8 @@ type CompanyStats = {
   emailCountThisMonth: number;
   subscriptionTier: string;
   tierName: string;
+  techsWorking: number;
+  todayInvoiceTotal: number;
 };
 
 type CompanyData = {
@@ -1281,7 +1283,7 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
   });
 
   return (
-    <div className="space-y-3" data-testid="section-business-performance">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" data-testid="section-business-performance">
       <Card data-testid="card-receivables">
         <CardHeader className="pb-1">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1552,6 +1554,8 @@ function CommandCenterShortcutWidget() {
   const completed = stats?.todaysVisitBreakdown?.completed ?? 0;
   const inProgress = stats?.todaysVisitBreakdown?.inProgress ?? 0;
   const scheduled = stats?.todaysVisitBreakdown?.scheduled ?? 0;
+  const techsWorking = stats?.techsWorking ?? 0;
+  const todayInvoiceTotal = stats?.todayInvoiceTotal ?? 0;
 
   return (
     <Card data-testid="card-command-center-shortcut">
@@ -1564,18 +1568,18 @@ function CommandCenterShortcutWidget() {
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
-          <div className="grid grid-cols-4 gap-3">
-            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-16 rounded-lg" />)}
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-16 rounded-lg" />)}
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
             <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="stat-total-visits">
               <div className="text-2xl font-bold">{total}</div>
-              <div className="text-xs text-muted-foreground mt-1">Total</div>
+              <div className="text-xs text-muted-foreground mt-1">Appointments</div>
             </div>
             <div className="text-center p-3 rounded-lg bg-green-50 dark:bg-green-950/30" data-testid="stat-completed-visits">
               <div className="text-2xl font-bold text-green-700 dark:text-green-400">{completed}</div>
-              <div className="text-xs text-muted-foreground mt-1">Done</div>
+              <div className="text-xs text-muted-foreground mt-1">Completed</div>
             </div>
             <div className="text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30" data-testid="stat-in-progress-visits">
               <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{inProgress}</div>
@@ -1584,6 +1588,16 @@ function CommandCenterShortcutWidget() {
             <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="stat-scheduled-visits">
               <div className="text-2xl font-bold">{scheduled}</div>
               <div className="text-xs text-muted-foreground mt-1">Pending</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30" data-testid="stat-techs-working">
+              <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">{techsWorking}</div>
+              <div className="text-xs text-muted-foreground mt-1">Techs Working</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30" data-testid="stat-today-invoiced">
+              <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">
+                ${todayInvoiceTotal.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">Invoiced Today</div>
             </div>
           </div>
         )}
@@ -2720,22 +2734,18 @@ export default function Dashboard() {
 
       <SystemMessagesCard />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <CommandCenterShortcutWidget />
-        </div>
+      <CommandCenterShortcutWidget />
 
-        <div>
-          {pipelineLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-40" />
-              <Skeleton className="h-24" />
-              <Skeleton className="h-24" />
-            </div>
-          ) : pipeline ? (
-            <BusinessPerformance data={pipeline} />
-          ) : null}
-        </div>
+      <div>
+        {pipelineLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+          </div>
+        ) : pipeline ? (
+          <BusinessPerformance data={pipeline} />
+        ) : null}
       </div>
 
       <RecentCommunications />
