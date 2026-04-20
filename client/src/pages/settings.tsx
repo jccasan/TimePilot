@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { getDismissedKey } from "@/components/rover-chatbot";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
@@ -2081,6 +2083,35 @@ const CHANNEL_OPTIONS = [
 const DEFAULT_TEMPLATE = "Hi {firstName}, your service with {companyName} is scheduled for tomorrow at {propertyAddress}. Thank you!";
 
 function ReminderSettingsSection({ company, toast }: { company: Company | null; toast: ReturnType<typeof useToast>["toast"] }) {
+  const { user } = useAuth();
+  const [roverVisible, setRoverVisible] = useState(() => {
+    if (typeof window === "undefined" || !user) return true;
+    return localStorage.getItem(getDismissedKey(user.id.toString())) !== "true";
+  });
+
+  useEffect(() => {
+    if (!user) return;
+    const stored = localStorage.getItem(getDismissedKey(user.id.toString()));
+    setRoverVisible(stored !== "true");
+  }, [user]);
+
+  const handleRoverVisibleChange = (checked: boolean) => {
+    if (!user) return;
+    if (checked) {
+      localStorage.removeItem(getDismissedKey(user.id.toString()));
+    } else {
+      localStorage.setItem(getDismissedKey(user.id.toString()), "true");
+    }
+    setRoverVisible(checked);
+    window.dispatchEvent(new Event("rover-dismissed-change"));
+    toast({
+      title: checked ? "Rover restored" : "Rover hidden",
+      description: checked
+        ? "The Rover assistant button is visible again."
+        : "The Rover button has been hidden. You can re-enable it here anytime.",
+    });
+  };
+
   const [rules, setRules] = useState<ReminderRule[]>([]);
   const [invoiceSettings, setInvoiceSettings] = useState<InvoiceReminderSettings>({
     preDueDays: [7, 2, 1, 0], overdueIntervalDays: 2, maxReminders: 10
@@ -2267,6 +2298,20 @@ function ReminderSettingsSection({ company, toast }: { company: Company | null; 
                     });
                 }}
                 data-testid="switch-rover-ai-enabled"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2 border-t pt-3">
+              <div>
+                <p className="text-sm font-medium">Show Rover Button</p>
+                <p className="text-xs text-muted-foreground">
+                  Show or hide the Rover assistant button on screen. Toggle back on anytime to bring it back.
+                </p>
+              </div>
+              <Switch
+                checked={roverVisible}
+                onCheckedChange={handleRoverVisibleChange}
+                data-testid="switch-rover-visible"
               />
             </div>
 

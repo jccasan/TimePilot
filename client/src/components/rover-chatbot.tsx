@@ -35,7 +35,7 @@ function getStorageKey(userId: string) {
   return `rover_fab_pos_${userId}`;
 }
 
-function getDismissedKey(userId: string) {
+export function getDismissedKey(userId: string) {
   return `rover_dismissed_${userId}`;
 }
 
@@ -238,6 +238,16 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
     return () => window.removeEventListener("resize", onResize);
   }, [btnHeight]);
 
+  useEffect(() => {
+    if (!user) return;
+    const onDismissedChange = () => {
+      const stored = localStorage.getItem(getDismissedKey(user.id.toString()));
+      setDismissed(stored === "true");
+    };
+    window.addEventListener("rover-dismissed-change", onDismissedChange);
+    return () => window.removeEventListener("rover-dismissed-change", onDismissedChange);
+  }, [user]);
+
   const savePosition = useCallback(
     (pos: { x: number; y: number }) => {
       if (user) {
@@ -292,6 +302,7 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
     localStorage.setItem(getDismissedKey(user.id.toString()), "true");
     setDismissed(true);
     setOpen(false);
+    window.dispatchEvent(new Event("rover-dismissed-change"));
   };
 
   const dismissIntro = () => {
