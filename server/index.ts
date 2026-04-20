@@ -885,10 +885,13 @@ async function seedExtraDemoContacts(pool: any, companyId: string) {
     ];
 
     const contactIds: string[] = [];
-    for (const [fn, ln, em, ph, st] of extraContacts) {
+    for (let i = 0; i < extraContacts.length; i++) {
+      const [fn, ln, em, ph, st] = extraContacts[i];
+      const autoPayEnabled = i % 10 !== 0;
+      const stripeCustomerId = autoPayEnabled ? `cus_demo_extra_${i}` : null;
       const r = await pool.query(
-        `INSERT INTO contacts (company_id, first_name, last_name, email, phone, status, has_portal_access, auto_pay_enabled, auto_invoice_enabled) VALUES ($1,$2,$3,$4,$5,$6,false,false,true) RETURNING id`,
-        [companyId, fn, ln, em, ph, st]
+        `INSERT INTO contacts (company_id, first_name, last_name, email, phone, status, has_portal_access, auto_pay_enabled, auto_invoice_enabled, stripe_customer_id) VALUES ($1,$2,$3,$4,$5,$6,false,$7,true,$8) RETURNING id`,
+        [companyId, fn, ln, em, ph, st, autoPayEnabled, stripeCustomerId]
       );
       contactIds.push(r.rows[0].id);
     }
@@ -1060,10 +1063,13 @@ async function seedScatteredDemoContacts(pool: any, companyId: string) {
     ];
 
     const contactIds: string[] = [];
-    for (const [fn, ln, em, ph] of scatteredContacts) {
+    for (let i = 0; i < scatteredContacts.length; i++) {
+      const [fn, ln, em, ph] = scatteredContacts[i];
+      const autoPayEnabled = i % 10 !== 0;
+      const stripeCustomerId = autoPayEnabled ? `cus_demo_scattered_${i}` : null;
       const r = await pool.query(
-        `INSERT INTO contacts (company_id, first_name, last_name, email, phone, status, has_portal_access, auto_pay_enabled, auto_invoice_enabled) VALUES ($1,$2,$3,$4,$5,'active',false,false,true) RETURNING id`,
-        [companyId, fn, ln, em, ph]
+        `INSERT INTO contacts (company_id, first_name, last_name, email, phone, status, has_portal_access, auto_pay_enabled, auto_invoice_enabled, stripe_customer_id) VALUES ($1,$2,$3,$4,$5,'active',false,$6,true,$7) RETURNING id`,
+        [companyId, fn, ln, em, ph, autoPayEnabled, stripeCustomerId]
       );
       contactIds.push(r.rows[0].id);
     }
@@ -1205,10 +1211,13 @@ async function seedDemoCompany() {
     ];
 
     const contactIds: string[] = [];
-    for (const [fn, ln, em, ph, st] of contactData) {
+    for (let i = 0; i < contactData.length; i++) {
+      const [fn, ln, em, ph, st] = contactData[i];
+      const autoPayEnabled = i % 10 !== 0;
+      const stripeCustomerId = autoPayEnabled ? `cus_demo_base_${i}` : null;
       const r = await pool.query(
-        `INSERT INTO contacts (company_id, first_name, last_name, email, phone, status, has_portal_access, auto_pay_enabled, auto_invoice_enabled) VALUES ($1,$2,$3,$4,$5,$6,false,false,true) RETURNING id`,
-        [companyId, fn, ln, em, ph, st]
+        `INSERT INTO contacts (company_id, first_name, last_name, email, phone, status, has_portal_access, auto_pay_enabled, auto_invoice_enabled, stripe_customer_id) VALUES ($1,$2,$3,$4,$5,$6,false,$7,true,$8) RETURNING id`,
+        [companyId, fn, ln, em, ph, st, autoPayEnabled, stripeCustomerId]
       );
       contactIds.push(r.rows[0].id);
     }
@@ -1614,6 +1623,60 @@ async function ensureVisitsUniqueConstraint() {
   }
 }
 
+async function applyDemoAutopayMigration() {
+  try {
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+    const demoCoRes = await pool.query(
+      `SELECT c.id FROM users u
+       JOIN company_users cu ON cu.user_id = u.id
+       JOIN companies c ON c.id = cu.company_id
+       WHERE u.email = 'demo@scoopilot.com'
+       LIMIT 1`
+    );
+
+    if (demoCoRes.rows.length === 0) {
+      await pool.end();
+      return;
+    }
+
+    const demoCoId = demoCoRes.rows[0].id;
+
+    const result = await pool.query(
+      `WITH all_contacts AS (
+         SELECT id,
+                ROW_NUMBER() OVER (ORDER BY id) AS rn,
+                COUNT(*) OVER ()                AS total
+         FROM contacts
+         WHERE company_id = $1
+       ),
+       target AS (
+         SELECT id FROM all_contacts
+         WHERE rn <= FLOOR(total * 0.9)
+       )
+       UPDATE contacts
+       SET auto_pay_enabled   = true,
+           stripe_customer_id = 'cus_demo_' || LEFT(contacts.id, 8)
+       FROM target
+       WHERE contacts.id = target.id
+         AND contacts.stripe_customer_id IS NULL
+       RETURNING contacts.id`,
+      [demoCoId]
+    );
+
+    if (result.rowCount && result.rowCount > 0) {
+      console.log(`[Migration] Set ${result.rowCount} demo contacts to autopay`);
+    } else {
+      console.log("[Migration] Demo autopay migration: no contacts needed updating");
+    }
+
+    await pool.end();
+  } catch (err) {
+    console.error("[Migration] Failed to apply demo autopay migration:", err);
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
@@ -1626,6 +1689,7 @@ async function ensureVisitsUniqueConstraint() {
   await ensureVisitsUniqueConstraint();
   await syncSubscriptionTiers();
   await seedDemoCompany();
+  await applyDemoAutopayMigration();
   await seedPoopScoopDemoData();
   setupSession(app);
   await registerRoutes(httpServer, app);
