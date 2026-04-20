@@ -1837,9 +1837,6 @@ export default function Invoices() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => setGenerateDialogOpen(true)} data-testid="button-generate-invoice">
-            <Zap className="mr-1 h-4 w-4" /> Generate from Completed Work
-          </Button>
           <Button variant="outline" onClick={() => {
                 if (invoiceTheme) setEditTheme({ ...invoiceTheme });
                 setThemeDialogOpen(true);
@@ -2118,7 +2115,6 @@ export default function Invoices() {
         <div className="flex items-center">
           <Button
             variant="default"
-            size="sm"
             onClick={() => {
               setGenerateAllContactIds(null);
               setConfirmGenerateAll(true);
@@ -2127,19 +2123,18 @@ export default function Invoices() {
             data-testid="button-persistent-generate"
             disabled={generateAllMutation.isPending}
           >
-            <Zap className="mr-1 h-3.5 w-3.5" />
+            <Zap className="mr-1 h-4 w-4" />
             Generate All Invoices
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="default"
-                size="sm"
                 className="rounded-l-none px-2"
                 data-testid="button-generate-dropdown-trigger"
                 disabled={generateAllMutation.isPending}
               >
-                <ChevronDown className="h-3.5 w-3.5" />
+                <ChevronDown className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
