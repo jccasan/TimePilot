@@ -1443,39 +1443,25 @@ export default function RoutesPage() {
   }, [routesForDay, stopsByRoute, properties, contacts]);
 
   const dayStopCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const d of DAYS) counts[d] = 0;
+    const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const buckets: Record<string, Set<string>> = {};
+    for (const d of DAYS) buckets[d] = new Set();
     const routeMap = new Map(allRoutes.map(r => [r.id, r]));
-    const dateRouteStopIds: Record<string, Set<string>> = {};
-    for (const d of DAYS) dateRouteStopIds[d] = new Set();
-    for (const plan of servicePlans) {
-      if (!plan.routeId) continue;
-      const route = routeMap.get(plan.routeId);
-      if (!route?.dayOfWeek) continue;
-      if (route.date) {
-        const rd = new Date(route.date + "T12:00:00");
-        if (rd >= currentWeekRange.start && rd <= currentWeekRange.end) {
-          dateRouteStopIds[route.dayOfWeek].add(plan.id);
-        }
-        continue;
-      }
-      counts[route.dayOfWeek] = (counts[route.dayOfWeek] || 0) + 1;
-    }
     for (const visit of weekVisits) {
       if (!visit.routeId) continue;
       const route = routeMap.get(visit.routeId);
-      if (!route?.dayOfWeek || !route.date) continue;
-      const rd = new Date(route.date + "T12:00:00");
-      if (rd >= currentWeekRange.start && rd <= currentWeekRange.end) {
-        const stopKey = visit.servicePlanId ?? visit.id;
-        dateRouteStopIds[route.dayOfWeek].add(stopKey);
+      if (!route) continue;
+      let dow = route.dayOfWeek;
+      if (route.date) {
+        const rd = new Date(route.date + "T12:00:00");
+        if (rd < currentWeekRange.start || rd > currentWeekRange.end) continue;
+        dow = DAY_NAMES[rd.getDay()];
       }
+      if (!dow || !buckets[dow]) continue;
+      buckets[dow].add(visit.servicePlanId ?? visit.id);
     }
-    for (const d of DAYS) {
-      counts[d] = (counts[d] || 0) + dateRouteStopIds[d].size;
-    }
-    return counts;
-  }, [allRoutes, servicePlans, weekVisits, currentWeekRange]);
+    return Object.fromEntries(DAYS.map(d => [d, buckets[d].size]));
+  }, [allRoutes, weekVisits, currentWeekRange]);
 
   const createRouteMutation = useMutation({
     mutationFn: async (data: { name: string; dayOfWeek: string; technicianId: string | null; color: string }) => {
