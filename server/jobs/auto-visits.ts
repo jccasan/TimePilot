@@ -141,7 +141,7 @@ async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], 
           const key = `${plan.id}_${dateStr}`;
           if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, plan.id, holdsByPlan)) {
             const routeId = await getRouteIdForDate(dateStr);
-            await storage.createVisit({
+            const newVisit = await storage.createVisit({
               companyId,
               servicePlanId: plan.id,
               propertyId: plan.propertyId,
@@ -149,7 +149,7 @@ async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], 
               scheduledDate: dateStr,
               status: "scheduled",
             });
-            created++;
+            if (newVisit) created++;
             existingKeys.add(key);
           }
         }
@@ -166,7 +166,7 @@ async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], 
         const key = `${plan.id}_${dateStr}`;
         if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, plan.id, holdsByPlan)) {
           const routeId = await getRouteIdForDate(dateStr);
-          await storage.createVisit({
+          const newVisit = await storage.createVisit({
             companyId,
             servicePlanId: plan.id,
             propertyId: plan.propertyId,
@@ -174,7 +174,7 @@ async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], 
             scheduledDate: dateStr,
             status: "scheduled",
           });
-          created++;
+          if (newVisit) created++;
           existingKeys.add(key);
         }
       }
@@ -204,7 +204,7 @@ async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], 
 
           if (shouldGenerate) {
             const routeId = await getRouteIdForDate(dateStr);
-            await storage.createVisit({
+            const newVisit = await storage.createVisit({
               companyId,
               servicePlanId: plan.id,
               propertyId: plan.propertyId,
@@ -212,7 +212,7 @@ async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], 
               scheduledDate: dateStr,
               status: "scheduled",
             });
-            created++;
+            if (newVisit) created++;
             existingKeys.add(key);
           }
         }

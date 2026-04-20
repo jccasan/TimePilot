@@ -1555,6 +1555,65 @@ async function backfillPropertyCoordinates() {
   }
 }
 
+async function ensureVisitsUniqueConstraint() {
+  try {
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const constraintCheck = await pool.query(`
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'visits_service_plan_id_scheduled_date_unique'
+        AND conrelid = 'visits'::regclass
+      `);
+      if (constraintCheck.rows.length > 0) {
+        console.log("[Migration] visits unique constraint already exists, skipping");
+        return;
+      }
+
+      await pool.query(`
+        DELETE FROM visits v
+        USING (
+          SELECT
+            service_plan_id,
+            scheduled_date,
+            (
+              SELECT id FROM visits inner_v
+              WHERE inner_v.service_plan_id = grp.service_plan_id
+                AND inner_v.scheduled_date = grp.scheduled_date
+              ORDER BY
+                CASE WHEN inner_v.status = 'cancelled' THEN 1 ELSE 0 END ASC,
+                CASE
+                  WHEN inner_v.status IN ('completed', 'in_progress') THEN 0
+                  ELSE 1
+                END ASC,
+                inner_v.id ASC
+              LIMIT 1
+            ) AS keep_id
+          FROM (
+            SELECT DISTINCT service_plan_id, scheduled_date FROM visits
+            GROUP BY service_plan_id, scheduled_date HAVING COUNT(*) > 1
+          ) grp
+        ) duplicates
+        WHERE v.service_plan_id = duplicates.service_plan_id
+          AND v.scheduled_date = duplicates.scheduled_date
+          AND v.id != duplicates.keep_id
+      `);
+      console.log("[Migration] Deduplicated visits rows");
+
+      await pool.query(`
+        ALTER TABLE visits
+        ADD CONSTRAINT visits_service_plan_id_scheduled_date_unique
+        UNIQUE (service_plan_id, scheduled_date)
+      `);
+      console.log("[Migration] Added unique constraint on visits(service_plan_id, scheduled_date)");
+    } finally {
+      await pool.end();
+    }
+  } catch (err) {
+    console.error("[Migration] ensureVisitsUniqueConstraint failed:", err);
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
@@ -1564,6 +1623,7 @@ async function backfillPropertyCoordinates() {
   await ensureCanadaMarketColumns();
   await migrateServicePlansToAgreementsAndJobs();
   await repairServicePlanDayOfWeek();
+  await ensureVisitsUniqueConstraint();
   await syncSubscriptionTiers();
   await seedDemoCompany();
   await seedPoopScoopDemoData();

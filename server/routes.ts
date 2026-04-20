@@ -5423,7 +5423,7 @@ Return ONLY valid JSON, no markdown.`,
           continue;
         }
 
-        await storage.createVisit({
+        const newVisit = await storage.createVisit({
           companyId,
           servicePlanId: plan.id,
           propertyId: plan.propertyId,
@@ -5431,7 +5431,7 @@ Return ONLY valid JSON, no markdown.`,
           scheduledDate: targetDate,
           status: "scheduled",
         });
-        created++;
+        if (newVisit) created++;
       }
 
       res.json({
@@ -6251,6 +6251,7 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId } = await getCompanyContext(req);
       const parsed = insertVisitSchema.parse({ ...req.body, companyId });
       const visit = await storage.createVisit(parsed);
+      if (!visit) return res.status(409).json({ error: "A visit for this plan on that date already exists" });
       res.status(201).json(visit);
     } catch (err) { handleError(res, err); }
   });
@@ -6789,7 +6790,7 @@ Return ONLY valid JSON, no markdown.`,
                   scheduledDate: dateStr,
                   status: "scheduled",
                 });
-                created.push(visit);
+                if (visit) created.push(visit);
                 existingKeys.add(key);
               }
             }

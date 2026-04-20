@@ -186,7 +186,7 @@ export interface IStorage {
   getVisits(companyId: string, filters?: { date?: string; routeId?: string; status?: string }): Promise<Visit[]>;
   getVisitsForDateRange(companyId: string, startDate: string, endDate: string): Promise<Visit[]>;
   getOverdueVisits(companyId: string, beforeDate: string): Promise<Visit[]>;
-  createVisit(data: InsertVisit): Promise<Visit>;
+  createVisit(data: InsertVisit): Promise<Visit | null>;
   updateVisit(id: string, companyId: string, data: Partial<InsertVisit>): Promise<Visit>;
   getTodaysVisitsCount(companyId: string, today: string): Promise<number>;
   getTodaysVisits(companyId: string, today: string): Promise<Visit[]>;
@@ -1018,9 +1018,13 @@ export class DatabaseStorage implements IStorage {
     )).orderBy(asc(visits.scheduledDate));
   }
 
-  async createVisit(data: InsertVisit): Promise<Visit> {
-    const [visit] = await db.insert(visits).values(data).returning();
-    return visit;
+  async createVisit(data: InsertVisit): Promise<Visit | null> {
+    const [visit] = await db
+      .insert(visits)
+      .values(data)
+      .onConflictDoNothing()
+      .returning();
+    return visit ?? null;
   }
 
   async updateVisit(id: string, companyId: string, data: Partial<InsertVisit>): Promise<Visit> {
