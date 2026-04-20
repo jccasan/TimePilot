@@ -1349,6 +1349,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAutomationRule(id: string, companyId?: string): Promise<void> {
+    await db.delete(automationEventLogs).where(eq(automationEventLogs.ruleId, id));
     const conditions = companyId ? and(eq(automationRules.id, id), eq(automationRules.companyId, companyId)) : eq(automationRules.id, id);
     await db.delete(automationRules).where(conditions);
   }
