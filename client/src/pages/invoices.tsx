@@ -1289,11 +1289,16 @@ export default function Invoices() {
     try {
       if (isDemo) {
         await new Promise(r => setTimeout(r, 1200));
-        const totalAmount = autopayEligibleInvoices
-          .filter(inv => ids.includes(inv.id))
-          .reduce((sum, inv) => sum + Number(inv.total), 0);
+        const eligible = autopayEligibleInvoices.filter(inv => ids.includes(inv.id));
+        const totalAmount = eligible.reduce((sum, inv) => sum + Number(inv.total), 0);
+        await Promise.all(eligible.map(inv =>
+          apiRequest("PATCH", `/api/invoices/${inv.id}`, { status: "paid", paidAt: new Date().toISOString() }).catch(() => {})
+        ));
+        queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+        queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
         toast({
-          title: `${ids.length} invoice${ids.length !== 1 ? "s" : ""} charged`,
+          title: `${eligible.length} invoice${eligible.length !== 1 ? "s" : ""} charged`,
           description: `$${totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} collected via autopay.`,
         });
         setSelectedIds(new Set());
