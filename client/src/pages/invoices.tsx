@@ -1001,6 +1001,11 @@ export default function Invoices() {
     queryKey: ["/api/stripe/config"],
   });
 
+  const { data: demoStatus } = useQuery<{ isDemo: boolean }>({
+    queryKey: ["/api/demo/status"],
+  });
+  const isDemo = !!demoStatus?.isDemo;
+
   interface InvoiceTheme {
     primaryColor: string;
     accentColor: string;
@@ -1281,8 +1286,20 @@ export default function Invoices() {
 
   async function batchCharge(ids: string[]) {
     setBatchPending(true);
-    let charged = 0; let failed = 0;
     try {
+      if (isDemo) {
+        await new Promise(r => setTimeout(r, 1200));
+        const totalAmount = autopayEligibleInvoices
+          .filter(inv => ids.includes(inv.id))
+          .reduce((sum, inv) => sum + Number(inv.total), 0);
+        toast({
+          title: `${ids.length} invoice${ids.length !== 1 ? "s" : ""} charged`,
+          description: `$${totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} collected via autopay.`,
+        });
+        setSelectedIds(new Set());
+        return;
+      }
+      let charged = 0; let failed = 0;
       await Promise.all(ids.map(id =>
         apiRequest("POST", `/api/invoices/${id}/charge`).then(() => { charged++; }).catch(() => { failed++; })
       ));
@@ -1627,11 +1644,14 @@ export default function Invoices() {
 
   const autopayEligibleInvoices = useMemo(() => {
     if (!allInvoicesForStats || !contacts) return [];
+    if (isDemo) {
+      return allInvoicesForStats.filter(inv => ["draft", "pending", "sent"].includes(inv.status));
+    }
     const contactsWithAutopay = new Set(contacts.filter(c => c.autoPayEnabled && c.stripeCustomerId).map(c => c.id));
     return allInvoicesForStats.filter(inv =>
       ["pending", "sent"].includes(inv.status) && contactsWithAutopay.has(inv.contactId)
     );
-  }, [allInvoicesForStats, contacts]);
+  }, [allInvoicesForStats, contacts, isDemo]);
 
   function renderInvoiceRows(list: Invoice[], testPrefix?: string) {
     return list.map((invoice) => {
@@ -2172,7 +2192,7 @@ export default function Invoices() {
           )}
         </Button>
 
-        {stripeConfig?.configured && (
+        {(stripeConfig?.configured || isDemo) && (
           <Button
             variant="outline"
             size="sm"
@@ -2225,7 +2245,7 @@ export default function Invoices() {
               <SendHorizonal className="mr-1 h-3.5 w-3.5" />
               Send All
             </Button>
-            {stripeConfig?.configured && (
+            {(stripeConfig?.configured || isDemo) && (
               <Button
                 size="sm"
                 variant="outline"
