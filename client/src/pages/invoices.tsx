@@ -1597,8 +1597,8 @@ export default function Invoices() {
     const paid: Invoice[] = [];
     for (const inv of sortedInvoices) {
       if (inv.status === "paid") { paid.push(inv); continue; }
-      if (inv.status === "draft") { draft.push(inv); continue; }
       if (inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now) { overdue.push(inv); continue; }
+      if (inv.status === "draft") { draft.push(inv); continue; }
       unpaid.push(inv);
     }
     return { overdue, unpaid, draft, paid };
