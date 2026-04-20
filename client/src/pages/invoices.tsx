@@ -27,6 +27,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -790,6 +800,7 @@ export default function Invoices() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceWithLineItems | null>(null);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
 
   const [contactId, setContactId] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -1720,7 +1731,7 @@ export default function Invoices() {
               )}
               {invoice.status !== "paid" && (
                 <Button variant="ghost" size="icon" className="h-8 w-8"
-                  onClick={() => { if (window.confirm("Permanently delete this invoice?")) deleteMutation.mutate(invoice.id); }}
+                  onClick={() => setInvoiceToDelete(invoice.id)}
                   disabled={deleteMutation.isPending}
                   title="Delete invoice"
                 >
@@ -2868,11 +2879,7 @@ export default function Invoices() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => {
-                              if (window.confirm("Permanently delete this invoice? This cannot be undone.")) {
-                                deleteMutation.mutate(invoice.id);
-                              }
-                            }}
+                            onClick={() => setInvoiceToDelete(invoice.id)}
                             disabled={deleteMutation.isPending}
                             data-testid={`button-delete-invoice-${invoice.id}`}
                             title="Delete invoice"
@@ -3538,6 +3545,30 @@ export default function Invoices() {
         open={generateByDateRangeOpen}
         onOpenChange={setGenerateByDateRangeOpen}
       />
+
+      <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => { if (!open) setInvoiceToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete invoice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the invoice and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-invoice">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-invoice"
+              onClick={() => {
+                if (invoiceToDelete) deleteMutation.mutate(invoiceToDelete);
+                setInvoiceToDelete(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
