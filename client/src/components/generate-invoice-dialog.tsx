@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, CheckCircle, DollarSign, Calendar, Filter } from "lucide-react";
+import { FileText, CheckCircle, DollarSign, Calendar, Filter, Zap } from "lucide-react";
 
 type UninvoicedVisit = Visit & {
   servicePlanName: string;
@@ -403,6 +403,167 @@ export function GenerateInvoiceDialog({
             </div>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Generate by Date Range Dialog ───────────────────────────────────────────
+
+interface GenerateByDateRangeDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDateRangeDialogProps) {
+  const tz = useCompanyTimezone();
+  const { toast } = useToast();
+  const [dateFilter, setDateFilter] = useState<string>("0");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+
+  const resolvedRange = useMemo(() => {
+    if (dateFilter === "custom") {
+      return { start: customStart, end: customEnd };
+    }
+    const monthsAgo = parseInt(dateFilter);
+    if (!isNaN(monthsAgo)) return getMonthRange(monthsAgo, tz);
+    return { start: "", end: "" };
+  }, [dateFilter, customStart, customEnd, tz]);
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = {};
+      if (resolvedRange.start) body.startDate = resolvedRange.start;
+      if (resolvedRange.end) body.endDate = resolvedRange.end;
+      const res = await apiRequest("POST", "/api/invoices/generate-all-from-uninvoiced", body);
+      return res.json();
+    },
+    onSuccess: (data: { created: number; totalDollars: number }) => {
+      queryClient.invalidateQueries({ predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      if (data.created > 0) {
+        const dollarStr = data.totalDollars.toFixed(2);
+        toast({
+          title: `$${dollarStr} in invoices generated`,
+          description: `${data.created} invoice${data.created !== 1 ? "s" : ""} created`,
+        });
+      } else {
+        toast({ title: "No invoices generated", description: "No uninvoiced completed work found in this date range." });
+      }
+      onOpenChange(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      setDateFilter("0");
+      setCustomStart("");
+      setCustomEnd("");
+    }
+    onOpenChange(isOpen);
+  };
+
+  const canGenerate = dateFilter !== "custom" || (!!customStart && !!customEnd);
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-md" data-testid="dialog-generate-by-date-range">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Generate Invoices by Date Range
+          </DialogTitle>
+          <DialogDescription>
+            Generate invoices for all completed, uninvoiced work within a specific period.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">Select period</Label>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <Button
+                variant={dateFilter === "0" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDateFilter("0")}
+                data-testid="button-dr-this-month"
+              >
+                {getMonthRange(0, tz).label}
+              </Button>
+              <Button
+                variant={dateFilter === "1" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDateFilter("1")}
+                data-testid="button-dr-last-month"
+              >
+                {getMonthRange(1, tz).label}
+              </Button>
+              <Button
+                variant={dateFilter === "2" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDateFilter("2")}
+                data-testid="button-dr-2-months"
+              >
+                {getMonthRange(2, tz).label}
+              </Button>
+              <Button
+                variant={dateFilter === "custom" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDateFilter("custom")}
+                data-testid="button-dr-custom"
+              >
+                Custom
+              </Button>
+            </div>
+
+            {dateFilter === "custom" && (
+              <div className="flex items-center gap-2 pt-1">
+                <Input
+                  type="date"
+                  value={customStart}
+                  onChange={e => setCustomStart(e.target.value)}
+                  className="w-auto"
+                  data-testid="input-dr-start"
+                />
+                <span className="text-sm text-muted-foreground">to</span>
+                <Input
+                  type="date"
+                  value={customEnd}
+                  onChange={e => setCustomEnd(e.target.value)}
+                  className="w-auto"
+                  data-testid="input-dr-end"
+                />
+              </div>
+            )}
+
+            {dateFilter !== "custom" && resolvedRange.start && (
+              <p className="text-xs text-muted-foreground">
+                {formatDate(resolvedRange.start)} – {formatDate(resolvedRange.end)}
+              </p>
+            )}
+          </div>
+
+          <p className="text-sm text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+            One invoice will be created per customer for all their completed, uninvoiced visits that fall within this period.
+          </p>
+
+          <Button
+            className="w-full"
+            disabled={!canGenerate || generateMutation.isPending}
+            onClick={() => generateMutation.mutate()}
+            data-testid="button-dr-generate"
+          >
+            <Zap className="mr-2 h-4 w-4" />
+            {generateMutation.isPending ? "Generating…" : "Generate Invoices"}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

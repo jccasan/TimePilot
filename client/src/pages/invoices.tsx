@@ -51,7 +51,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
-import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
+import { GenerateInvoiceDialog, GenerateByDateRangeDialog } from "@/components/generate-invoice-dialog";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
 
@@ -969,6 +969,7 @@ export default function Invoices() {
   const [expandedUninvoicedIds, setExpandedUninvoicedIds] = useState<Set<string>>(new Set());
   const [previewSheetOpen, setPreviewSheetOpen] = useState(false);
   const [generateDialogContactId, setGenerateDialogContactId] = useState<string | undefined>(undefined);
+  const [generateByDateRangeOpen, setGenerateByDateRangeOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
   const [editInvoiceReminders, setEditInvoiceReminders] = useState<{
     preDueDays: number[];
@@ -2119,7 +2120,7 @@ export default function Invoices() {
                 Generate by Customer
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => { setGenerateDialogContactId(undefined); setGenerateDialogOpen(true); }}
+                onClick={() => setGenerateByDateRangeOpen(true)}
                 data-testid="dropdown-generate-by-date"
               >
                 <Clock className="mr-2 h-4 w-4" />
@@ -3531,6 +3532,11 @@ export default function Invoices() {
         }}
         contactId={generateDialogContactId}
         showContactPicker={!generateDialogContactId}
+      />
+
+      <GenerateByDateRangeDialog
+        open={generateByDateRangeOpen}
+        onOpenChange={setGenerateByDateRangeOpen}
       />
     </div>
   );

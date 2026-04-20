@@ -7146,7 +7146,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/invoices/generate-all-from-uninvoiced", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId: auditUserId } = await getCompanyContext(req);
-      const { contactIds, sendAfterGenerate } = req.body;
+      const { contactIds, sendAfterGenerate, startDate, endDate } = req.body;
 
       const summary = await storage.getUninvoicedSummary(companyId);
       if (summary.count === 0) {
@@ -7176,7 +7176,16 @@ Return ONLY valid JSON, no markdown.`,
       for (const contactEntry of targetContacts) {
         try {
           const result = await storage.getUninvoicedVisitsForContact(companyId, contactEntry.contactId);
-          const visitsToInvoice = result.visits;
+          let visitsToInvoice = result.visits;
+
+          // Filter by date range when generating by date range
+          if (startDate && typeof startDate === "string") {
+            visitsToInvoice = visitsToInvoice.filter(v => v.scheduledDate >= startDate);
+          }
+          if (endDate && typeof endDate === "string") {
+            visitsToInvoice = visitsToInvoice.filter(v => v.scheduledDate <= endDate);
+          }
+
           if (visitsToInvoice.length === 0) continue;
 
           const plans = await storage.getServicePlans(companyId, { contactId: contactEntry.contactId });
