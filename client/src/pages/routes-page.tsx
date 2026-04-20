@@ -1307,9 +1307,12 @@ export default function RoutesPage() {
       const rd = new Date(r.date + "T12:00:00");
       return rd >= currentWeekRange.start && rd <= currentWeekRange.end;
     });
-    if (dateSpecific.length > 0) return dateSpecific;
+    const dateSpecificWithVisits = dateSpecific.filter(r =>
+      dayVisits.some(v => v.routeId === r.id)
+    );
+    if (dateSpecificWithVisits.length > 0) return dateSpecific;
     return forDay.filter(r => !r.date);
-  }, [allRoutes, selectedDay, currentWeekRange]);
+  }, [allRoutes, selectedDay, currentWeekRange, dayVisits]);
 
   const routeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
