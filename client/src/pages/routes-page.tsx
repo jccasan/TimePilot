@@ -1300,25 +1300,28 @@ export default function RoutesPage() {
     return { start: monday, end: sunday };
   }, [weekOffset]);
 
-  const routesForDay = useMemo(() => allRoutes.filter(r => {
-    if (r.dayOfWeek !== selectedDay) return false;
-    if (r.date) {
+  const routesForDay = useMemo(() => {
+    const forDay = allRoutes.filter(r => r.dayOfWeek === selectedDay);
+    const dateSpecific = forDay.filter(r => {
+      if (!r.date) return false;
       const rd = new Date(r.date + "T12:00:00");
       return rd >= currentWeekRange.start && rd <= currentWeekRange.end;
-    }
-    return true;
-  }), [allRoutes, selectedDay, currentWeekRange]);
+    });
+    if (dateSpecific.length > 0) return dateSpecific;
+    return forDay.filter(r => !r.date);
+  }, [allRoutes, selectedDay, currentWeekRange]);
 
   const routeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const d of DAYS) counts[d] = allRoutes.filter(r => {
-      if (r.dayOfWeek !== d) return false;
-      if (r.date) {
+    for (const d of DAYS) {
+      const forDay = allRoutes.filter(r => r.dayOfWeek === d);
+      const dateSpecific = forDay.filter(r => {
+        if (!r.date) return false;
         const rd = new Date(r.date + "T12:00:00");
         return rd >= currentWeekRange.start && rd <= currentWeekRange.end;
-      }
-      return true;
-    }).length;
+      });
+      counts[d] = dateSpecific.length > 0 ? dateSpecific.length : forDay.filter(r => !r.date).length;
+    }
     return counts;
   }, [allRoutes, currentWeekRange]);
 
