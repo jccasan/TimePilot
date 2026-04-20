@@ -540,6 +540,7 @@ export const visits = pgTable("visits", {
   index("idx_visits_route").on(table.routeId),
   index("idx_visits_job").on(table.jobId),
   index("idx_visits_invoice").on(table.invoiceId),
+  unique("visits_service_plan_id_scheduled_date_unique").on(table.servicePlanId, table.scheduledDate),
 ]);
 
 export const invoices = pgTable("invoices", {
