@@ -2519,12 +2519,11 @@ Return ONLY valid JSON, no markdown.`,
         storage.getVisitsForDateRange(companyId, monthStart, monthEnd),
       ]);
 
-      const todaysWorkload = [...overdueVisits, ...todaysVisitsList];
-      const todaysVisits = todaysWorkload.length;
+      const todaysVisits = todaysVisitsList.length;
 
       const completedToday = todaysVisitsList.filter(v => v.status === "completed").length;
-      const scheduledToday = todaysWorkload.filter(v => v.status === "scheduled").length;
-      const inProgressToday = todaysWorkload.filter(v => v.status === "in_progress").length;
+      const scheduledToday = todaysVisitsList.filter(v => v.status === "scheduled").length;
+      const inProgressToday = todaysVisitsList.filter(v => v.status === "in_progress").length;
 
       // Count distinct techs working today (via routes linked to today's visits)
       const todayRouteIds = [...new Set(todaysVisitsList.map(v => v.routeId).filter(Boolean))] as string[];
