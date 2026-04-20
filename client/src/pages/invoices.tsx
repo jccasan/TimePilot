@@ -1593,15 +1593,13 @@ export default function Invoices() {
     const now = new Date();
     const overdue: Invoice[] = [];
     const unpaid: Invoice[] = [];
-    const draft: Invoice[] = [];
     const paid: Invoice[] = [];
     for (const inv of sortedInvoices) {
       if (inv.status === "paid") { paid.push(inv); continue; }
-      if (inv.status === "draft") { draft.push(inv); continue; }
       if (inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now) { overdue.push(inv); continue; }
       unpaid.push(inv);
     }
-    return { overdue, unpaid, draft, paid };
+    return { overdue, unpaid, draft: [], paid };
   }, [sortedInvoices]);
 
   const allUnpaidInvoices = useMemo(() => {
@@ -2734,12 +2732,8 @@ export default function Invoices() {
             "bg-red-50/80 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-b"
           )}
           {renderGroupedSection(
-            "Unpaid / Sent", groupedInvoices.unpaid, "unpaid",
+            "Unpaid", groupedInvoices.unpaid, "unpaid",
             "bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-b"
-          )}
-          {renderGroupedSection(
-            "Draft", groupedInvoices.draft, "draft",
-            "bg-muted/40 text-muted-foreground border-b"
           )}
           {renderGroupedSection(
             "Paid", groupedInvoices.paid, "paid",
