@@ -1593,18 +1593,20 @@ export default function Invoices() {
     const now = new Date();
     const overdue: Invoice[] = [];
     const unpaid: Invoice[] = [];
+    const draft: Invoice[] = [];
     const paid: Invoice[] = [];
     for (const inv of sortedInvoices) {
       if (inv.status === "paid") { paid.push(inv); continue; }
+      if (inv.status === "draft") { draft.push(inv); continue; }
       if (inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now) { overdue.push(inv); continue; }
       unpaid.push(inv);
     }
-    return { overdue, unpaid, draft: [], paid };
+    return { overdue, unpaid, draft, paid };
   }, [sortedInvoices]);
 
   const allUnpaidInvoices = useMemo(() => {
     if (!allInvoicesForStats) return [];
-    return allInvoicesForStats.filter(inv => ["draft", "pending", "sent"].includes(inv.status));
+    return allInvoicesForStats.filter(inv => inv.status === "draft");
   }, [allInvoicesForStats]);
 
   const tabBadges = useMemo(() => {
@@ -2182,7 +2184,7 @@ export default function Invoices() {
           className="flex items-center gap-1.5"
         >
           <SendHorizonal className="h-3.5 w-3.5 text-blue-500" />
-          Send All Unpaid
+          Send All Drafts
           {allUnpaidInvoices.length > 0 && (
             <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0 h-4">
               {allUnpaidInvoices.length}
@@ -2281,9 +2283,9 @@ export default function Invoices() {
       <Dialog open={confirmSendAll} onOpenChange={setConfirmSendAll}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Send {allUnpaidInvoices.length} Unpaid Invoices?</DialogTitle>
+            <DialogTitle>Send {allUnpaidInvoices.length} Draft Invoices?</DialogTitle>
             <DialogDescription>
-              This will email all {allUnpaidInvoices.length} unpaid invoice{allUnpaidInvoices.length !== 1 ? "s" : ""} to their respective clients.
+              This will email all {allUnpaidInvoices.length} draft invoice{allUnpaidInvoices.length !== 1 ? "s" : ""} to their respective clients.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-2 mt-2">
@@ -2731,8 +2733,12 @@ export default function Invoices() {
             "Overdue", groupedInvoices.overdue, "overdue",
             "bg-red-50/80 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-b"
           )}
+          {groupedInvoices.draft.length > 0 && renderGroupedSection(
+            "Draft", groupedInvoices.draft, "draft",
+            "bg-muted/40 text-muted-foreground border-b"
+          )}
           {renderGroupedSection(
-            "Unpaid", groupedInvoices.unpaid, "unpaid",
+            "Unpaid / Sent", groupedInvoices.unpaid, "unpaid",
             "bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-b"
           )}
           {renderGroupedSection(
