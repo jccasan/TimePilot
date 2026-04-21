@@ -1,3 +1,4 @@
+import { useState, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -29,6 +30,9 @@ import {
   Building2,
   Target,
   ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from "lucide-react";
 import {
   LineChart,
@@ -48,6 +52,47 @@ interface CostBreakdown {
   overheadCostCents: number;
 }
 
+interface CalcBreakdown {
+  serviceMinutes: number;
+  travelMinutes: number;
+  adjustedTravelMinutes: number;
+  densityMultiplier: number;
+  laborCostCents: number;
+  travelCostCents: number;
+  adjustedTravelCostCents: number;
+  equipmentCostCents: number;
+  overheadPerVisitCents: number;
+}
+
+interface CalcDerived {
+  jobMinutes: number;
+  profitAtRecommendedCents: number;
+  profitPerHourAtRecommendedCents: number;
+  clusterDiscountAppliedPct: number;
+  marketAnchorClamped: boolean;
+  isEstimated: boolean;
+}
+
+interface CalcInputsUsed {
+  yardSizeAcres: number;
+  dogCount: number;
+  serviceFrequency: string;
+  yardDifficulty: string;
+  distanceFromNearestStopMiles: number;
+  routeStopsPerMile?: number;
+  currentPriceCents?: number;
+  configSnapshot: Record<string, number | string | boolean | null>;
+}
+
+interface CalculatorResult {
+  minimumPriceCents: number;
+  recommendedPriceCents: number;
+  premiumPriceCents: number;
+  inputsUsed: CalcInputsUsed;
+  breakdown: CalcBreakdown;
+  derived: CalcDerived;
+}
+
 interface PropertyProfitability {
   propertyId: string;
   propertyAddress: string;
@@ -63,6 +108,7 @@ interface PropertyProfitability {
   profitPerHourCents: number;
   recommendedPriceCents: number;
   costBreakdown: CostBreakdown;
+  calculatorResult?: CalculatorResult;
 }
 
 interface CustomerProfitabilityData {
@@ -154,7 +200,244 @@ function getDifficultyLabel(diff: string): string {
   }
 }
 
+function fmtMin(min: number): string {
+  return `${Math.round(min)} min`;
+}
+
+function fmtDollars(cents: number): string {
+  return `$${(Math.abs(cents) / 100).toFixed(2)}`;
+}
+
+function fmtMult(mult: number): string {
+  return `×${mult.toFixed(3).replace(/\.?0+$/, "")}`;
+}
+
+function CalcRow({ label, value, formula, indent }: { label: string; value: string; formula?: string; indent?: boolean }) {
+  return (
+    <div className={`flex items-baseline justify-between gap-2 py-0.5 ${indent ? "pl-4" : ""}`}>
+      <span className="text-xs text-muted-foreground min-w-0 flex-1 truncate" title={formula || label}>
+        {formula ? (
+          <>
+            <span className="text-foreground/70">{label}</span>
+            <span className="ml-1 text-[10px] font-mono opacity-60">({formula})</span>
+          </>
+        ) : (
+          <span className="text-foreground/70">{label}</span>
+        )}
+      </span>
+      <span className="text-xs font-mono font-medium shrink-0">{value}</span>
+    </div>
+  );
+}
+
+function CalcSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function ShowCalculationPanel({ calc }: { calc: CalculatorResult }) {
+  const { breakdown: bd, derived: dv, inputsUsed: inp } = calc;
+  const cfg = inp.configSnapshot as Record<string, number>;
+
+  const freqMultMap: Record<string, string> = {
+    weekly: "weeklyMultiplier",
+    biweekly: "biweeklyMultiplier",
+    monthly: "monthlyMultiplier",
+    onetime: "oneTimeMultiplier",
+  };
+  const diffMultMap: Record<string, string> = {
+    flat: "difficultyFlat",
+    moderate: "difficultyModerate",
+    difficult: "difficultyDifficult",
+  };
+
+  const freqMultKey = freqMultMap[inp.serviceFrequency] || "weeklyMultiplier";
+  const diffMultKey = diffMultMap[inp.yardDifficulty] || "difficultyFlat";
+  const freqMult = typeof cfg[freqMultKey] === "number" ? cfg[freqMultKey] : 1;
+  const diffMult = typeof cfg[diffMultKey] === "number" ? cfg[diffMultKey] : 1;
+
+  const burdenedRateCents = (cfg.techHourlyWageCents || 0) * (cfg.burdenMultiplier || 1);
+  const baseServiceMin = (inp.yardSizeAcres / 0.1) * (cfg.baseTimePerTenthAcreMinutes || 0);
+  const extraDogMin = Math.max(inp.dogCount - 1, 0) * (cfg.extraDogMinutesAfterFirst || 0);
+
+  const vehicleCostPerMile = cfg.vehicleCostPerMileCents > 0
+    ? cfg.vehicleCostPerMileCents
+    : cfg.vehicleMPG && cfg.vehicleMPG > 0
+      ? (cfg.averageGasPriceCentsPerGallon || 0) / cfg.vehicleMPG
+      : 65;
+
+  const monthlyOverhead = (cfg.advertisingCents || 0) +
+    (cfg.payrollProviderCents || 0) +
+    (cfg.benefitsCents || 0) +
+    (cfg.insuranceCents || 0) +
+    (cfg.softwareCents || 0) +
+    (cfg.otherOverheadCents || 0);
+
+  const freqLabel = { weekly: "Weekly", biweekly: "Bi-Weekly", monthly: "Monthly", onetime: "One-Time" }[inp.serviceFrequency] || inp.serviceFrequency;
+  const diffLabel = { flat: "Flat", moderate: "Moderate", difficult: "Difficult" }[inp.yardDifficulty] || inp.yardDifficulty;
+
+  return (
+    <div className="mt-3 rounded-md border border-dashed bg-muted/30 p-3 space-y-3 text-xs">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+        <Calculator className="h-3.5 w-3.5" />
+        <span>Calculation Workbook</span>
+        {dv.isEstimated && (
+          <span className="ml-auto text-[10px] font-normal text-amber-600 dark:text-amber-400 flex items-center gap-1">
+            <Info className="h-3 w-3" />estimated distance
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <CalcSection title="1 · Service Time">
+          <CalcRow
+            label="Base time"
+            formula={`${inp.yardSizeAcres.toFixed(3)} ac ÷ 0.1 × ${cfg.baseTimePerTenthAcreMinutes ?? "?"}min`}
+            value={fmtMin(baseServiceMin)}
+          />
+          {inp.dogCount > 1 && (
+            <CalcRow
+              label="Extra dogs"
+              formula={`(${inp.dogCount}−1) × ${cfg.extraDogMinutesAfterFirst ?? "?"}min`}
+              value={`+${fmtMin(extraDogMin)}`}
+              indent
+            />
+          )}
+          {cfg.minimumServiceMinutesFloor > 0 && (
+            <CalcRow label="Minimum floor" value={fmtMin(cfg.minimumServiceMinutesFloor)} indent />
+          )}
+          <CalcRow
+            label={`${freqLabel} multiplier`}
+            formula={fmtMult(freqMult)}
+            value={fmtMin(bd.serviceMinutes / diffMult)}
+            indent
+          />
+          <CalcRow
+            label={`${diffLabel} multiplier`}
+            formula={fmtMult(diffMult)}
+            value={fmtMin(bd.serviceMinutes)}
+            indent
+          />
+          <div className="border-t mt-1 pt-1">
+            <CalcRow label="Service minutes" value={fmtMin(bd.serviceMinutes)} />
+          </div>
+        </CalcSection>
+
+        <CalcSection title="2 · Travel Time">
+          <CalcRow
+            label="Drive time"
+            formula={`${inp.distanceFromNearestStopMiles.toFixed(2)} mi ÷ ${cfg.driveSpeedAverageMph ?? "?"}mph`}
+            value={fmtMin(bd.travelMinutes)}
+          />
+          {bd.densityMultiplier !== 1 && (
+            <CalcRow
+              label="Density factor"
+              formula={fmtMult(bd.densityMultiplier)}
+              value={fmtMin(bd.adjustedTravelMinutes)}
+              indent
+            />
+          )}
+          <div className="border-t mt-1 pt-1">
+            <CalcRow label="Total job time" formula={`${fmtMin(bd.serviceMinutes)} + ${fmtMin(bd.adjustedTravelMinutes)}`} value={fmtMin(dv.jobMinutes)} />
+          </div>
+        </CalcSection>
+
+        <CalcSection title="3 · Labor Cost">
+          <CalcRow
+            label="Hourly wage"
+            value={fmtDollars(cfg.techHourlyWageCents || 0) + "/hr"}
+          />
+          <CalcRow
+            label="Burden multiplier"
+            formula={fmtMult(cfg.burdenMultiplier || 1)}
+            value={fmtDollars(burdenedRateCents) + "/hr"}
+            indent
+          />
+          <div className="border-t mt-1 pt-1">
+            <CalcRow
+              label="Labor cost"
+              formula={`${fmtMin(dv.jobMinutes)} ÷ 60 × ${fmtDollars(burdenedRateCents)}/hr`}
+              value={fmtDollars(bd.laborCostCents)}
+            />
+          </div>
+        </CalcSection>
+
+        <CalcSection title="4 · Travel Cost">
+          <CalcRow
+            label="Vehicle cost/mile"
+            value={fmtDollars(vehicleCostPerMile) + "/mi"}
+          />
+          <CalcRow
+            label="Travel cost"
+            formula={`${inp.distanceFromNearestStopMiles.toFixed(2)} mi × ${fmtDollars(vehicleCostPerMile)}/mi`}
+            value={fmtDollars(bd.travelCostCents)}
+            indent
+          />
+          {bd.densityMultiplier !== 1 && (
+            <CalcRow
+              label="Density adjusted"
+              formula={fmtMult(bd.densityMultiplier)}
+              value={fmtDollars(bd.adjustedTravelCostCents)}
+              indent
+            />
+          )}
+        </CalcSection>
+
+        <CalcSection title="5 · Supplies">
+          <CalcRow label="Disinfectant" value={fmtDollars(cfg.disinfectantCents || 0)} indent />
+          <CalcRow label="Deodorizer" value={fmtDollars(cfg.deodorizerCents || 0)} indent />
+          <CalcRow label="Bags" value={fmtDollars(cfg.bagsCents || 0)} indent />
+          <div className="border-t mt-1 pt-1">
+            <CalcRow label="Supplies total" value={fmtDollars(bd.equipmentCostCents)} />
+          </div>
+        </CalcSection>
+
+        <CalcSection title="6 · Overhead / Visit">
+          {monthlyOverhead > 0 && (
+            <CalcRow label="Monthly overhead" value={fmtDollars(monthlyOverhead)} />
+          )}
+          <CalcRow
+            label="Estimated monthly stops"
+            value={`${cfg.estimatedMonthlyStops ?? "?"}`}
+          />
+          <div className="border-t mt-1 pt-1">
+            <CalcRow
+              label="Overhead/visit"
+              formula={monthlyOverhead > 0 ? `${fmtDollars(monthlyOverhead)} ÷ ${cfg.estimatedMonthlyStops ?? "?"}` : "override"}
+              value={fmtDollars(bd.overheadPerVisitCents)}
+            />
+          </div>
+        </CalcSection>
+      </div>
+
+      <div className="border-t pt-2 space-y-0.5">
+        <CalcRow
+          label="Total cost/visit"
+          formula={`Labor + Travel + Supplies + Overhead`}
+          value={fmtDollars(bd.laborCostCents + bd.adjustedTravelCostCents + bd.equipmentCostCents + bd.overheadPerVisitCents)}
+        />
+        {dv.clusterDiscountAppliedPct > 0 && (
+          <CalcRow label={`Cluster discount`} formula={`−${dv.clusterDiscountAppliedPct}%`} value={`applied`} />
+        )}
+        {dv.marketAnchorClamped && (
+          <CalcRow label="Market anchor" value="price clamped to local market range" />
+        )}
+        <CalcRow
+          label="Recommended price"
+          formula={`cost ÷ (1 − ${cfg.targetProfitMarginPct ?? "?"}% margin)`}
+          value={fmtDollars(calc.recommendedPriceCents)}
+        />
+      </div>
+    </div>
+  );
+}
+
 function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contactId: string }) {
+  const [showCalc, setShowCalc] = useState(false);
   const isUnprofitable = prop.profitMarginPct < 0;
   const isMarginal = prop.profitMarginPct >= 0 && prop.profitMarginPct <= 15;
   const priceDiff = prop.recommendedPriceCents - prop.revenuePerVisitCents;
@@ -303,7 +586,23 @@ function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contac
               Price Calculator
             </Link>
           </Button>
+          {prop.calculatorResult && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowCalc(v => !v)}
+              data-testid={`button-show-calc-${prop.propertyId}`}
+              className="ml-auto text-muted-foreground"
+            >
+              {showCalc ? <ChevronUp className="h-3.5 w-3.5 mr-1" /> : <ChevronDown className="h-3.5 w-3.5 mr-1" />}
+              {showCalc ? "Hide calculation" : "Show calculation"}
+            </Button>
+          )}
         </div>
+
+        {showCalc && prop.calculatorResult && (
+          <ShowCalculationPanel calc={prop.calculatorResult} />
+        )}
       </CardContent>
     </Card>
   );
