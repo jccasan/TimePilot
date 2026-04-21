@@ -15005,6 +15005,47 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/admin/companies/:id/reactivate", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const company = await storage.getCompany(req.params.id);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!(company as any).cancelAtPeriodEnd) {
+        return res.status(400).json({ error: "Account does not have a scheduled cancellation to undo" });
+      }
+      if (company.stripeSubscriptionId) {
+        const stripeKey = process.env.STRIPE_SECRET_KEY;
+        if (stripeKey) {
+          try {
+            const StripeLib = (await import("stripe")).default;
+            const stripeInstance = new StripeLib(stripeKey, { apiVersion: "2026-01-28.clover" as any });
+            await stripeInstance.subscriptions.update(company.stripeSubscriptionId, { cancel_at_period_end: false });
+            console.log(`[Admin] Reversed scheduled cancellation for Stripe subscription ${company.stripeSubscriptionId} for company "${company.name}"`);
+          } catch (stripeErr: any) {
+            if (stripeErr?.code === "resource_missing") {
+              console.warn(`[Admin] Stripe subscription not found for ${company.name}, clearing local state only`);
+            } else {
+              console.error(`[Admin] Stripe reactivate failed for ${company.name}:`, stripeErr.message);
+              return res.status(502).json({ error: "Failed to reverse cancellation in Stripe. Please try again or contact support." });
+            }
+          }
+        }
+        await db.update(companies)
+          .set({ cancelAtPeriodEnd: false, cancelAt: null } as any)
+          .where(eq(companies.id, req.params.id));
+      } else {
+        await storage.updateCompanySubscription(req.params.id, company.subscriptionTier || "free_trial", {
+          subscriptionStatus: "active",
+        });
+        await db.update(companies)
+          .set({ cancelAtPeriodEnd: false, cancelAt: null, canceledAt: null } as any)
+          .where(eq(companies.id, req.params.id));
+      }
+      await logAdminAudit(req, "reactivate_account", "company", req.params.id, {});
+      console.log(`[Admin] Account "${company.name}" (${req.params.id}) reactivated by ${(req as any).adminUser?.email}`);
+      return res.json({ ok: true, companyName: company.name });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/admin/companies/:id/users/:userId/reset-password", isAdmin, async (req: Request, res: Response) => {
     try {
       const { id: companyId, userId } = req.params;

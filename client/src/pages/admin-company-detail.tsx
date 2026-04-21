@@ -88,6 +88,7 @@ export default function AdminCompanyDetail() {
 
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [reactivateOpen, setReactivateOpen] = useState(false);
 
   const [customTrialOpen, setCustomTrialOpen] = useState(false);
   const defaultTrialDate = () => {
@@ -170,6 +171,25 @@ export default function AdminCompanyDetail() {
       toast({ title: "Account cancelled", description: "Subscription has been cancelled and Stripe notified." });
     },
     onError: (err: any) => toast({ title: "Cancel failed", description: err.message, variant: "destructive" }),
+  });
+
+  const reactivateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminRequest("POST", `/api/admin/companies/${id}/reactivate`, {});
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to reactivate account");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setReactivateOpen(false);
+      toast({ title: "Account reactivated", description: "The scheduled cancellation has been reversed." });
+    },
+    onError: (err: any) => toast({ title: "Reactivation failed", description: err.message, variant: "destructive" }),
   });
 
   const addNoteMutation = useMutation({
@@ -653,16 +673,27 @@ export default function AdminCompanyDetail() {
                       </Button>
                       {company.subscriptionStatus !== "cancelled" && (
                         (company as any).cancelAtPeriodEnd ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full gap-1.5 text-xs text-amber-700 border-amber-300 dark:text-amber-400 dark:border-amber-700 opacity-70 cursor-not-allowed"
-                            data-testid="button-cancel-account"
-                            disabled
-                          >
-                            <XCircle className="h-3.5 w-3.5" />
-                            Cancellation Scheduled
-                          </Button>
+                          <div className="space-y-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full gap-1.5 text-xs text-amber-700 border-amber-300 dark:text-amber-400 dark:border-amber-700 opacity-70 cursor-not-allowed"
+                              data-testid="button-cancellation-scheduled"
+                              disabled
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              Cancellation Scheduled
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full gap-1.5 text-xs text-green-700 border-green-300 hover:border-green-500 dark:text-green-400 dark:border-green-700"
+                              data-testid="button-reactivate-account"
+                              onClick={() => setReactivateOpen(true)}
+                            >
+                              Reactivate Account
+                            </Button>
+                          </div>
                         ) : (
                           <Button
                             variant="outline"
@@ -1090,6 +1121,29 @@ export default function AdminCompanyDetail() {
               data-testid="button-confirm-cancel-account"
             >
               {cancelMutation.isPending ? "Cancelling…" : "Yes, Cancel Account"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reactivateOpen} onOpenChange={setReactivateOpen}>
+        <DialogContent data-testid="dialog-reactivate-account">
+          <DialogHeader>
+            <DialogTitle>Reactivate Account</DialogTitle>
+            <DialogDescription>
+              This will reverse the scheduled cancellation for <strong>{company?.name}</strong>. Their subscription will continue as normal and the cancellation date will be removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReactivateOpen(false)} data-testid="button-reactivate-dialog-close">
+              Keep Scheduled
+            </Button>
+            <Button
+              onClick={() => reactivateMutation.mutate()}
+              disabled={reactivateMutation.isPending}
+              data-testid="button-confirm-reactivate-account"
+            >
+              {reactivateMutation.isPending ? "Reactivating…" : "Yes, Reactivate"}
             </Button>
           </DialogFooter>
         </DialogContent>
