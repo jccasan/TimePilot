@@ -31,6 +31,10 @@ import {
   Target,
   ArrowRight,
   Info,
+  CheckCircle2,
+  XCircle,
+  Zap,
+  Route,
 } from "lucide-react";
 import {
   LineChart,
@@ -112,6 +116,12 @@ interface PropertyProfitability {
   recommendedPriceCents: number;
   costBreakdown: CostBreakdown;
   calculatorResult?: CalculatorResult;
+  jobEconomicsResult?: CalculatorResult;
+  jobCostPerVisitCents?: number;
+  jobProfitPerVisitCents?: number;
+  jobProfitMarginPct?: number;
+  jobProfitPerHourCents?: number;
+  standardTravelMinutesUsed?: number;
 }
 
 interface CustomerProfitabilityData {
@@ -448,6 +458,53 @@ function ShowCalculationPanel({ calc }: { calc: CalculatorResult }) {
   );
 }
 
+type DiagnosticType = "strong-strong" | "strong-weak" | "weak-strong" | "weak-weak";
+
+function getDiagnostic(jobMarginPct: number, routeMarginPct: number): DiagnosticType {
+  const strongJob = jobMarginPct >= 15;
+  const strongRoute = routeMarginPct >= 15;
+  if (strongJob && strongRoute) return "strong-strong";
+  if (strongJob && !strongRoute) return "strong-weak";
+  if (!strongJob && strongRoute) return "weak-strong";
+  return "weak-weak";
+}
+
+interface DiagnosticInfo {
+  label: string;
+  detail: string;
+  color: string;
+  icon: typeof CheckCircle2;
+}
+
+function getDiagnosticInfo(type: DiagnosticType): DiagnosticInfo {
+  switch (type) {
+    case "strong-strong": return {
+      label: "Strong job, strong route",
+      detail: "This stop is performing well both as a unit and operationally.",
+      color: "text-green-600 dark:text-green-400",
+      icon: CheckCircle2,
+    };
+    case "strong-weak": return {
+      label: "Strong job, weak route placement",
+      detail: "Good job economics — route density or sequencing is the issue, not pricing.",
+      color: "text-amber-600 dark:text-amber-400",
+      icon: AlertTriangle,
+    };
+    case "weak-strong": return {
+      label: "Weak job, efficient route",
+      detail: "Route is not the problem. Review pricing, scope, or labor model.",
+      color: "text-orange-600 dark:text-orange-400",
+      icon: AlertTriangle,
+    };
+    case "weak-weak": return {
+      label: "Weak job, weak route",
+      detail: "Both unit economics and route placement need attention.",
+      color: "text-red-600 dark:text-red-400",
+      icon: XCircle,
+    };
+  }
+}
+
 function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contactId: string }) {
   const isUnprofitable = prop.profitMarginPct < 0;
   const isMarginal = prop.profitMarginPct >= 0 && prop.profitMarginPct <= 15;
@@ -492,35 +549,95 @@ function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contac
         </Badge>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Revenue/Visit</p>
-            <p className="text-sm font-medium" data-testid={`text-revenue-${prop.propertyId}`}>
-              {formatCents(prop.revenuePerVisitCents)}
+        {prop.jobProfitMarginPct !== undefined && (() => {
+          const diagType = getDiagnostic(prop.jobProfitMarginPct, prop.profitMarginPct);
+          const diag = getDiagnosticInfo(diagType);
+          const DiagIcon = diag.icon;
+          return (
+            <div className={`flex items-start gap-2 p-2.5 rounded-md border text-sm ${
+              diagType === "strong-strong" ? "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800" :
+              diagType === "strong-weak" ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" :
+              diagType === "weak-strong" ? "bg-orange-50 border-orange-200 dark:bg-orange-950/20 dark:border-orange-800" :
+              "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800"
+            }`} data-testid={`diagnostic-${prop.propertyId}`}>
+              <DiagIcon className={`h-4 w-4 shrink-0 mt-0.5 ${diag.color}`} />
+              <div>
+                <p className={`font-semibold leading-tight ${diag.color}`}>{diag.label}</p>
+                <p className="text-muted-foreground text-xs mt-0.5">{diag.detail}</p>
+              </div>
+            </div>
+          );
+        })()}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+              <Zap className="h-3.5 w-3.5" />
+              Job Economics
+              {prop.standardTravelMinutesUsed !== undefined && (
+                <span className="normal-case font-normal">({prop.standardTravelMinutesUsed} min target travel)</span>
+              )}
             </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[11px] text-muted-foreground">Revenue/Visit</p>
+                <p className="text-sm font-medium">{formatCents(prop.revenuePerVisitCents)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Cost/Visit</p>
+                <p className="text-sm font-medium">{formatCents(prop.jobCostPerVisitCents ?? prop.costPerVisitCents)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Profit/Visit</p>
+                <p className={`text-sm font-medium ${(prop.jobProfitPerVisitCents ?? prop.profitPerVisitCents) < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}
+                  data-testid={`text-job-profit-${prop.propertyId}`}>
+                  {formatCents(prop.jobProfitPerVisitCents ?? prop.profitPerVisitCents)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Margin / Ideal $/hr</p>
+                <p className={`text-sm font-medium ${(prop.jobProfitMarginPct ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}
+                  data-testid={`text-job-profit-hour-${prop.propertyId}`}>
+                  {formatPct(prop.jobProfitMarginPct ?? 0)} · {formatCents(prop.jobProfitPerHourCents ?? 0)}/hr
+                </p>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Cost/Visit</p>
-            <p className="text-sm font-medium" data-testid={`text-cost-${prop.propertyId}`}>
-              {formatCents(prop.costPerVisitCents)}
+
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+              <Route className="h-3.5 w-3.5" />
+              Current Route Impact
             </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Profit/Visit</p>
-            <p className={`text-sm font-medium ${prop.profitPerVisitCents < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`} data-testid={`text-profit-${prop.propertyId}`}>
-              {formatCents(prop.profitPerVisitCents)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Profit/Hour</p>
-            <p className={`text-sm font-medium ${prop.profitPerHourCents < 0 ? "text-red-600 dark:text-red-400" : ""}`} data-testid={`text-profit-hour-${prop.propertyId}`}>
-              {formatCents(prop.profitPerHourCents)}
-            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[11px] text-muted-foreground">Revenue/Visit</p>
+                <p className="text-sm font-medium" data-testid={`text-revenue-${prop.propertyId}`}>{formatCents(prop.revenuePerVisitCents)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Cost/Visit</p>
+                <p className="text-sm font-medium" data-testid={`text-cost-${prop.propertyId}`}>{formatCents(prop.costPerVisitCents)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Profit/Visit</p>
+                <p className={`text-sm font-medium ${prop.profitPerVisitCents < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}
+                  data-testid={`text-profit-${prop.propertyId}`}>
+                  {formatCents(prop.profitPerVisitCents)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Margin / Actual $/hr</p>
+                <p className={`text-sm font-medium ${prop.profitPerHourCents < 0 ? "text-red-600 dark:text-red-400" : ""}`}
+                  data-testid={`text-profit-hour-${prop.propertyId}`}>
+                  {formatPct(prop.profitMarginPct)} · {formatCents(prop.profitPerHourCents)}/hr
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
         <div>
-          <p className="text-xs text-muted-foreground mb-2">Cost Breakdown</p>
+          <p className="text-xs text-muted-foreground mb-2">Cost Breakdown (Current Route)</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="flex items-center gap-1.5">
               <DollarSign className="h-3.5 w-3.5 text-muted-foreground shrink-0" />

@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import {
   calculatePrice,
+  getEffectivePricingConfig,
   yardSizeLabelToAcres,
   sqftToAcres,
   parseLotSizeStringToAcres,
@@ -35,6 +36,12 @@ export interface CustomerPropertyProfitability {
     overheadCostCents: number;
   };
   calculatorResult: PriceCalculatorResult;
+  jobEconomicsResult: PriceCalculatorResult;
+  jobCostPerVisitCents: number;
+  jobProfitPerVisitCents: number;
+  jobProfitMarginPct: number;
+  jobProfitPerHourCents: number;
+  standardTravelMinutesUsed: number;
 }
 
 export interface CustomerProfitability {
@@ -159,6 +166,15 @@ export async function calculateCustomerProfitability(
 
     const result = calculatePrice(inputs, effectivePricingConfig, effectiveOverhead, costOverrides?.overheadAllocationCents);
 
+    // Job-level economics: standardized travel time instead of actual route data
+    const fullConfig = getEffectivePricingConfig(effectivePricingConfig);
+    const standardTravelMins = fullConfig.standardTravelMinutesPerStop ?? 3;
+    const jobInputs: PriceCalculatorInputs = {
+      ...inputs,
+      overrideAdjustedTravelMinutes: standardTravelMins,
+    };
+    const jobResult = calculatePrice(jobInputs, effectivePricingConfig, effectiveOverhead, costOverrides?.overheadAllocationCents);
+
     const revenuePerVisitCents = totalPerVisitCents;
     const costPerVisitCents = result.minimumPriceCents;
     const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;
@@ -168,6 +184,16 @@ export async function calculateCustomerProfitability(
     const jobMinutes = result.derived.jobMinutes;
     const profitPerHourCents = jobMinutes > 0
       ? (profitPerVisitCents / jobMinutes) * 60
+      : 0;
+
+    const jobCostPerVisitCents = jobResult.minimumPriceCents;
+    const jobProfitPerVisitCents = revenuePerVisitCents - jobCostPerVisitCents;
+    const jobProfitMarginPct = revenuePerVisitCents > 0
+      ? (jobProfitPerVisitCents / revenuePerVisitCents) * 100
+      : 0;
+    const jobResultMinutes = jobResult.derived.jobMinutes;
+    const jobProfitPerHourCents = jobResultMinutes > 0
+      ? (jobProfitPerVisitCents / jobResultMinutes) * 60
       : 0;
 
     propertyResults.push({
@@ -191,6 +217,12 @@ export async function calculateCustomerProfitability(
         overheadCostCents: result.breakdown.overheadPerVisitCents,
       },
       calculatorResult: result,
+      jobEconomicsResult: jobResult,
+      jobCostPerVisitCents,
+      jobProfitPerVisitCents,
+      jobProfitMarginPct: Math.round(jobProfitMarginPct * 100) / 100,
+      jobProfitPerHourCents: Math.round(jobProfitPerHourCents),
+      standardTravelMinutesUsed: standardTravelMins,
     });
   }
 
@@ -311,12 +343,26 @@ export async function calculateAllCustomerProfitability(
       };
 
       const result = calculatePrice(inputs, contactPricingConfig, contactOverhead, contactOverrides?.overheadAllocationCents);
+      const contactFullConfig = getEffectivePricingConfig(contactPricingConfig);
+      const contactStandardTravelMins = contactFullConfig.standardTravelMinutesPerStop ?? 3;
+      const contactJobInputs: PriceCalculatorInputs = {
+        ...inputs,
+        overrideAdjustedTravelMinutes: contactStandardTravelMins,
+      };
+      const contactJobResult = calculatePrice(contactJobInputs, contactPricingConfig, contactOverhead, contactOverrides?.overheadAllocationCents);
+
       const revenuePerVisitCents = totalPerVisitCents;
       const costPerVisitCents = result.minimumPriceCents;
       const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;
       const profitMarginPct = revenuePerVisitCents > 0 ? (profitPerVisitCents / revenuePerVisitCents) * 100 : 0;
       const jobMinutes = result.derived.jobMinutes;
       const profitPerHourCents = jobMinutes > 0 ? (profitPerVisitCents / jobMinutes) * 60 : 0;
+
+      const contactJobCostPerVisitCents = contactJobResult.minimumPriceCents;
+      const contactJobProfitPerVisitCents = revenuePerVisitCents - contactJobCostPerVisitCents;
+      const contactJobProfitMarginPct = revenuePerVisitCents > 0 ? (contactJobProfitPerVisitCents / revenuePerVisitCents) * 100 : 0;
+      const contactJobResultMinutes = contactJobResult.derived.jobMinutes;
+      const contactJobProfitPerHourCents = contactJobResultMinutes > 0 ? (contactJobProfitPerVisitCents / contactJobResultMinutes) * 60 : 0;
 
       propertyResults.push({
         propertyId: property.id,
@@ -339,6 +385,12 @@ export async function calculateAllCustomerProfitability(
           overheadCostCents: result.breakdown.overheadPerVisitCents,
         },
         calculatorResult: result,
+        jobEconomicsResult: contactJobResult,
+        jobCostPerVisitCents: contactJobCostPerVisitCents,
+        jobProfitPerVisitCents: contactJobProfitPerVisitCents,
+        jobProfitMarginPct: Math.round(contactJobProfitMarginPct * 100) / 100,
+        jobProfitPerHourCents: Math.round(contactJobProfitPerHourCents),
+        standardTravelMinutesUsed: contactStandardTravelMins,
       });
     }
 

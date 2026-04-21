@@ -106,6 +106,7 @@ const pricingConfigSchema = z.object({
   clusterDiscountPct: z.coerce.number().min(0).max(100),
   clusterDiscountPct2: z.coerce.number().min(0).max(100),
   estimatedMonthlyStops: z.coerce.number().min(1),
+  standardTravelMinutesPerStop: z.coerce.number().min(0).max(30),
 });
 
 function configToFormValues(config: PricingConfig) {
@@ -141,6 +142,7 @@ function configToFormValues(config: PricingConfig) {
     clusterDiscountPct: config.clusterDiscountPct,
     clusterDiscountPct2: config.clusterDiscountPct2,
     estimatedMonthlyStops: config.estimatedMonthlyStops,
+    standardTravelMinutesPerStop: config.standardTravelMinutesPerStop ?? 3,
   };
 }
 
@@ -179,6 +181,7 @@ function formValuesToConfig(values: z.infer<typeof pricingConfigSchema>): Pricin
     clusterDiscountPct: values.clusterDiscountPct,
     clusterDiscountPct2: values.clusterDiscountPct2,
     estimatedMonthlyStops: values.estimatedMonthlyStops,
+    standardTravelMinutesPerStop: values.standardTravelMinutesPerStop,
   };
 }
 
@@ -597,6 +600,15 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
                       <LabelWithInfo label="Estimated Monthly Stops" info="How many total service stops you do in a typical month across all customers. Overhead costs get divided by this number to figure out how much each stop needs to cover." />
                     </FormLabel>
                     <FormControl><Input type="number" {...field} data-testid="input-monthly-stops" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="standardTravelMinutesPerStop" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      <LabelWithInfo label="Target Travel Time (min/stop)" info="The standardized travel time per stop used for job-level profitability analysis. This represents your target route density — e.g. 3 minutes if you want stops close together. Job economics use this instead of actual current drive time so pricing stays stable." />
+                    </FormLabel>
+                    <FormControl><Input type="number" step="0.5" {...field} data-testid="input-standard-travel-minutes" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />

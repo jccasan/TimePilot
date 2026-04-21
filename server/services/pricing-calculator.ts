@@ -9,6 +9,7 @@ export interface PriceCalculatorInputs {
   routeStopsPerMile?: number;
   currentPriceCents?: number;
   hasYardDeodorizing?: boolean;
+  overrideAdjustedTravelMinutes?: number;
 }
 
 export interface PriceBreakdown {
@@ -97,28 +98,48 @@ export function calculatePrice(
   serviceMinutes *= getFrequencyMultiplier(config, inputs.serviceFrequency);
   serviceMinutes *= getDifficultyMultiplier(config, inputs.yardDifficulty);
 
-  const travelMinutes = (inputs.distanceFromNearestStopMiles / config.driveSpeedAverageMph) * 60;
+  let adjustedTravelMinutes: number;
+  let travelMinutes: number;
+  let densityMultiplier: number;
+  let adjustedTravelCostCents: number;
+  const isEstimated = !inputs.routeStopsPerMile && !inputs.overrideAdjustedTravelMinutes;
 
-  let densityMultiplier = 1.0;
-  const isEstimated = !inputs.routeStopsPerMile;
-  if (inputs.routeStopsPerMile && inputs.routeStopsPerMile > 0) {
-    const baselineStopsPerMile = config.estimatedMonthlyStops > 0 ? config.estimatedMonthlyStops / 30 : 3;
-    densityMultiplier = baselineStopsPerMile / Math.max(inputs.routeStopsPerMile, SMALL_EPSILON);
-    densityMultiplier = Math.max(0.6, Math.min(1.8, densityMultiplier));
-  }
-
-  const adjustedTravelMinutes = travelMinutes * densityMultiplier;
-
-  let travelCostCents: number;
-  if (config.vehicleCostPerMileCents > 0) {
-    travelCostCents = inputs.distanceFromNearestStopMiles * config.vehicleCostPerMileCents;
-  } else if (config.vehicleMPG && config.vehicleMPG > 0) {
-    const fuelCostPerMileCents = config.averageGasPriceCentsPerGallon / config.vehicleMPG;
-    travelCostCents = inputs.distanceFromNearestStopMiles * fuelCostPerMileCents;
+  if (inputs.overrideAdjustedTravelMinutes !== undefined) {
+    // Job-level economics: use standardized travel time, bypassing actual route data
+    adjustedTravelMinutes = inputs.overrideAdjustedTravelMinutes;
+    travelMinutes = adjustedTravelMinutes;
+    densityMultiplier = 1.0;
+    // Derive standardized distance from the travel time and average speed
+    const standardizedMiles = (adjustedTravelMinutes / 60) * config.driveSpeedAverageMph;
+    if (config.vehicleCostPerMileCents > 0) {
+      adjustedTravelCostCents = standardizedMiles * config.vehicleCostPerMileCents;
+    } else if (config.vehicleMPG && config.vehicleMPG > 0) {
+      const fuelCostPerMileCents = config.averageGasPriceCentsPerGallon / config.vehicleMPG;
+      adjustedTravelCostCents = standardizedMiles * fuelCostPerMileCents;
+    } else {
+      adjustedTravelCostCents = standardizedMiles * 65;
+    }
   } else {
-    travelCostCents = inputs.distanceFromNearestStopMiles * 65;
+    // Route-level economics: use actual distance and density data
+    travelMinutes = (inputs.distanceFromNearestStopMiles / config.driveSpeedAverageMph) * 60;
+    densityMultiplier = 1.0;
+    if (inputs.routeStopsPerMile && inputs.routeStopsPerMile > 0) {
+      const baselineStopsPerMile = config.estimatedMonthlyStops > 0 ? config.estimatedMonthlyStops / 30 : 3;
+      densityMultiplier = baselineStopsPerMile / Math.max(inputs.routeStopsPerMile, SMALL_EPSILON);
+      densityMultiplier = Math.max(0.6, Math.min(1.8, densityMultiplier));
+    }
+    adjustedTravelMinutes = travelMinutes * densityMultiplier;
+    let travelCostCents: number;
+    if (config.vehicleCostPerMileCents > 0) {
+      travelCostCents = inputs.distanceFromNearestStopMiles * config.vehicleCostPerMileCents;
+    } else if (config.vehicleMPG && config.vehicleMPG > 0) {
+      const fuelCostPerMileCents = config.averageGasPriceCentsPerGallon / config.vehicleMPG;
+      travelCostCents = inputs.distanceFromNearestStopMiles * fuelCostPerMileCents;
+    } else {
+      travelCostCents = inputs.distanceFromNearestStopMiles * 65;
+    }
+    adjustedTravelCostCents = travelCostCents * densityMultiplier;
   }
-  const adjustedTravelCostCents = travelCostCents * densityMultiplier;
 
   const fullyBurdenedRateCentsPerHour = config.techHourlyWageCents * config.burdenMultiplier;
   const jobMinutes = serviceMinutes + adjustedTravelMinutes;
