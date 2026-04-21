@@ -1839,6 +1839,13 @@ export default function Invoices() {
             tutorialId="tutorial_invoice_creation"
             onStart={startTutorial}
             isCompleted={isTutorialCompleted("tutorial_invoice_creation")}
+            label="Manual Invoice"
+          />
+          <LearnHowButton
+            tutorialId="tutorial_generate_invoices"
+            onStart={startTutorial}
+            isCompleted={isTutorialCompleted("tutorial_generate_invoices")}
+            label="Generate Invoices"
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">

@@ -75,7 +75,7 @@ const WELCOME_TOUR: TourDefinition = {
     {
       target: '[data-testid="link-invoices"]',
       title: "Invoices",
-      content: "Create, send, and track invoices with a live revenue dashboard. Use batch actions — Send All, Charge All, or Mark Paid — across your outstanding invoices at once.",
+      content: "Create, send, and track invoices with a live revenue dashboard. Use the Generate button to bill clients for completed visits, batch-send or charge all outstanding invoices at once, and monitor autopay health from the Billing Health tab.",
       placement: "right",
       disableBeacon: true,
     },
@@ -190,6 +190,34 @@ const WHATS_NEW_TOURS: TourDefinition[] = [
         target: '[data-testid="link-command-center"]',
         title: "Command Center",
         content: "Admins now have a real-time Command Center showing all active routes, technician locations, and today's visit status across the entire team. Available under Operations in the sidebar.",
+        placement: "right",
+        disableBeacon: true,
+      },
+    ],
+  },
+  {
+    id: "whats_new_v4",
+    version: "4.0",
+    title: "What's New",
+    steps: [
+      {
+        target: '[data-testid="link-invoices"]',
+        title: "Generate Invoices from Completed Work",
+        content: "The new Generate button on the Invoices page lets you bill any client for their completed, uninvoiced visits in seconds. Filter by date range — this month, last month, or a custom window — pick which visits to include, and create the invoice with one click. Use the Uninvoiced tab to quickly spot clients ready to bill.",
+        placement: "right",
+        disableBeacon: true,
+      },
+      {
+        target: '[data-testid="link-invoices"]',
+        title: "Billing Health Dashboard",
+        content: "The new Billing Health tab on the Invoices page shows your full autopay picture in one place: which clients are enrolled, who's missing a payment method, upcoming scheduled charges, and any failed payments — all with quick-action buttons to fix issues immediately.",
+        placement: "right",
+        disableBeacon: true,
+      },
+      {
+        target: '[data-testid="link-profitability"]',
+        title: "Calculation Workbook — See Your Math",
+        content: "Every property on the Profitability page now shows a full Calculation Workbook: a step-by-step breakdown of exactly how the price was derived — service time, travel time, labor cost, travel cost, supplies, and overhead per visit. Know your true margin on every job.",
         placement: "right",
         disableBeacon: true,
       },
