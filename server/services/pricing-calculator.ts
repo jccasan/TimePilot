@@ -254,3 +254,29 @@ export function yardSizeLabelToAcres(label: string | null | undefined): number {
   if (numMatch) return parseFloat(numMatch[0]);
   return 0.1;
 }
+
+/**
+ * Parse a free-text lot/yard size string into acres.
+ * Handles formats like: "0.18 acres", "7,840 sqft", "2,500 sq ft", "0.5 acre", "8500sf"
+ * Returns null if the string cannot be meaningfully parsed to a positive area.
+ */
+export function parseLotSizeStringToAcres(lotSize: string | null | undefined): number | null {
+  if (!lotSize || !lotSize.trim()) return null;
+  const s = lotSize.trim().toLowerCase().replace(/,/g, "");
+  // Extract the leading number
+  const numMatch = s.match(/^([\d.]+)/);
+  if (!numMatch) return null;
+  const value = parseFloat(numMatch[1]);
+  if (!isFinite(value) || value <= 0) return null;
+  // Determine unit
+  if (s.includes("sqft") || s.includes("sq ft") || s.includes("sq.ft") || s.includes(" sf") || s.endsWith("sf")) {
+    return value / 43560;
+  }
+  if (s.includes("acre") || s.includes(" ac") || s.endsWith("ac")) {
+    return value; // already acres
+  }
+  // If just a bare number, treat as sqft if > 2 (no property is 2 acres with bare number entry)
+  // and as acres if ≤ 2 (common to enter "0.18" meaning 0.18 acres)
+  if (value <= 2) return value;       // assume acres
+  return value / 43560;               // assume sqft
+}

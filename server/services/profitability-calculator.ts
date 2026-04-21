@@ -3,6 +3,7 @@ import {
   calculatePrice,
   yardSizeLabelToAcres,
   sqftToAcres,
+  parseLotSizeStringToAcres,
   type PriceCalculatorInputs,
   type PriceCalculatorResult,
 } from "./pricing-calculator";
@@ -125,9 +126,12 @@ export async function calculateCustomerProfitability(
 
     let yardSizeAcres: number;
     if (property.measuredYardSqft) {
+      // Most precise: actual map-measured yard area
       yardSizeAcres = sqftToAcres(property.measuredYardSqft);
     } else {
-      yardSizeAcres = yardSizeLabelToAcres(property.yardSize);
+      // Try to parse the text "Yard Size" field (e.g. "0.18 acres", "7,840 sqft")
+      const parsed = parseLotSizeStringToAcres((property as any).lotSize);
+      yardSizeAcres = parsed !== null ? parsed : yardSizeLabelToAcres(property.yardSize);
     }
 
     const dogCount = property.numberOfDogs ?? 1;
@@ -273,9 +277,12 @@ export async function calculateAllCustomerProfitability(
 
       let yardSizeAcres: number;
       if (property.measuredYardSqft) {
+        // Most precise: actual map-measured yard area
         yardSizeAcres = sqftToAcres(property.measuredYardSqft);
       } else {
-        yardSizeAcres = yardSizeLabelToAcres(property.yardSize);
+        // Try to parse the text "Yard Size" field (e.g. "0.18 acres", "7,840 sqft")
+        const parsed = parseLotSizeStringToAcres((property as any).lotSize);
+        yardSizeAcres = parsed !== null ? parsed : yardSizeLabelToAcres(property.yardSize);
       }
       const dogCount = property.numberOfDogs ?? 1;
 

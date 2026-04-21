@@ -8,7 +8,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, lt, gte, isNotNull, like, or, inArray, desc } from "drizzle-orm";
 import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable, stripeEvents, automationRules, automationEventLogs, quoteFormEvents } from "@shared/schema";
-import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
+import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, parseLotSizeStringToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
@@ -8508,7 +8508,12 @@ Return ONLY valid JSON, no markdown.`,
       if (!acres && body.propertyId) {
         const prop = await storage.getProperty(body.propertyId, companyId);
         if (prop) {
-          acres = prop.measuredYardSqft ? sqftToAcres(prop.measuredYardSqft) : yardSizeLabelToAcres(prop.yardSize);
+          if (prop.measuredYardSqft) {
+            acres = sqftToAcres(prop.measuredYardSqft);
+          } else {
+            const parsed = parseLotSizeStringToAcres((prop as any).lotSize);
+            acres = parsed !== null ? parsed : yardSizeLabelToAcres(prop.yardSize);
+          }
         }
       }
       if (!acres) acres = 0.1;
@@ -8547,7 +8552,12 @@ Return ONLY valid JSON, no markdown.`,
       if (!acres && body.propertyId) {
         const prop = await storage.getProperty(body.propertyId, companyId);
         if (prop) {
-          acres = prop.measuredYardSqft ? sqftToAcres(prop.measuredYardSqft) : yardSizeLabelToAcres(prop.yardSize);
+          if (prop.measuredYardSqft) {
+            acres = sqftToAcres(prop.measuredYardSqft);
+          } else {
+            const parsed = parseLotSizeStringToAcres((prop as any).lotSize);
+            acres = parsed !== null ? parsed : yardSizeLabelToAcres(prop.yardSize);
+          }
         }
       }
       if (!acres) acres = 0.1;
