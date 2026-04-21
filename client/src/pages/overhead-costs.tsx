@@ -33,6 +33,7 @@ import {
   Route,
   HardHat,
   Clock,
+  Package,
 } from "lucide-react";
 
 type OverheadCostItem = {
@@ -709,6 +710,42 @@ export default function OverheadCosts() {
         companyData={companyData}
         onSave={(updates) => fuelMutation.mutate(updates)}
       />
+
+      <Card className="border-primary/20 bg-primary/[0.02]" data-testid="card-per-stop-supply">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Package className="h-4 w-4 text-primary" />
+            <span className="font-medium text-sm">Per-Stop Supply Costs</span>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between py-1.5 border-b border-muted/60" data-testid="row-supply-disinfectant">
+              <div>
+                <span className="text-sm">Disinfectant/Deodorizer</span>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  ${((companyData?.pricingConfig?.disinfectantCents ?? 1) / 100).toFixed(2)}/stop flat · deodorizer add-on adds $7.00/acre when active
+                </p>
+              </div>
+              <span className="text-sm font-mono tabular-nums" data-testid="text-supply-disinfectant-cost">
+                ${((companyData?.pricingConfig?.disinfectantCents ?? 1) / 100).toFixed(2)}/stop
+              </span>
+            </div>
+            <div className="flex items-center justify-between py-1.5" data-testid="row-supply-bags">
+              <div>
+                <span className="text-sm">Bags</span>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  ceil(dogs ÷ 2) bags × ${((companyData?.pricingConfig?.bagsCents ?? 12) / 100).toFixed(2)}/bag (e.g. 1–2 dogs = 1 bag, 3–4 = 2 bags)
+                </p>
+              </div>
+              <span className="text-sm font-mono tabular-nums" data-testid="text-supply-bags-cost">
+                ${((companyData?.pricingConfig?.bagsCents ?? 12) / 100).toFixed(2)}/bag
+              </span>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-3">
+            Configure disinfectant and bag unit costs in the Pricing Calculator settings.
+          </p>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
