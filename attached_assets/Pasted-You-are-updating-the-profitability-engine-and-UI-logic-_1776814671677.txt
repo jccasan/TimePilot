@@ -1,0 +1,571 @@
+You are updating the profitability engine and UI logic for a route-based service business SaaS. The current system incorrectly mixes job economics with current route conditions. The goal is to separate those concepts cleanly so pricing decisions are not distorted by bad routing, while still showing actual operational performance.
+
+Build this in a task/subtask format and follow the intent exactly.
+
+PROJECT GOAL
+
+We need to split profitability into multiple layers:
+
+1. Job profitability
+2. Route profitability
+3. Overall system profitability
+
+The key principle is this:
+
+A job can be a good job but currently sitting in a bad route.
+
+Example:
+- A property may produce strong profit under ideal route density
+- But look weak if it currently has 20 minutes of drive time around it
+- That does NOT mean the job itself is bad
+- It means the route assignment or density is bad
+
+So the software must stop judging job quality solely based on current route travel time.
+
+CORE BUSINESS LOGIC
+
+We need at least 2 primary metrics for each job:
+
+A. JOB METRIC
+This is the standardized unit economics of the job itself.
+It should ignore the current route assignment and instead use ideal or target assumptions.
+
+Purpose:
+- Pricing decisions
+- Recommended price logic
+- Determining whether a customer/job is worth selling at all
+- Understanding per-unit economics
+
+B. CURRENT ROUTE METRIC
+This is the actual profitability of the job as currently scheduled and routed.
+
+Purpose:
+- Operations decisions
+- Route health
+- Whether the route is inefficient
+- Whether this stop is currently dragging down hourly profit
+
+Then we also need:
+
+C. OVERALL PROFITABILITY
+Rollup views across routes and the business overall.
+
+Purpose:
+- Business health
+- Average actual profit/hour
+- Route comparison
+- Staffing and expansion decisions
+
+IMPORTANT INTENT
+
+Do NOT let current bad routing make a good job appear fundamentally bad.
+
+We need to separate:
+- “Is this a good job to have?”
+from
+- “Is this job in a good route right now?”
+
+Those are different questions and must be calculated separately.
+
+==================================================
+TASK 1: REDESIGN THE PROFITABILITY MODEL
+==================================================
+
+Create a new profitability model with three layers:
+
+1. Job-Level Profitability
+2. Route-Level Profitability
+3. System-Level Profitability
+
+--------------------------------------------------
+SUBTASK 1.1: JOB-LEVEL PROFITABILITY MODEL
+--------------------------------------------------
+
+Create a standardized job economics model that ignores current route conditions.
+
+This should use:
+- Service time
+- Supplies cost
+- Labor burden
+- Standardized or target travel assumption
+- Optional standard overhead allocation
+
+This should NOT use:
+- Actual current route drive time
+- Actual current route sequencing
+- Current stop placement in a route
+
+This metric is intended to answer:
+“Under normal/target density conditions, is this job profitable enough?”
+
+Required job-level outputs:
+- Revenue per visit
+- Service minutes
+- Standardized travel minutes
+- Total standardized minutes
+- Labor cost based on standardized minutes
+- Supplies cost
+- Overhead allocation
+- Total job cost
+- Profit per visit
+- Profit margin
+- Ideal profit per hour
+- Recommended price based on target margin
+
+Notes:
+- Standardized travel time should be configurable, not hardcoded
+- Example target travel time might be 2 to 3 minutes
+- This metric should be stable and comparable across all jobs
+- This is the metric that pricing decisions should rely on
+
+Important:
+This is the “unit economics” view of the property/job.
+
+--------------------------------------------------
+SUBTASK 1.2: ROUTE-LEVEL PROFITABILITY MODEL
+--------------------------------------------------
+
+Create a second model that uses the job as it currently exists inside its assigned route.
+
+This should use:
+- Actual drive time before the stop
+- Actual route sequencing
+- Actual service time
+- Actual travel cost
+- Actual labor time consumed due to route placement
+- Actual overhead allocation if applicable
+
+This metric is intended to answer:
+“How profitable is this stop as it currently sits in the route today?”
+
+Required route-level outputs:
+- Revenue per visit
+- Actual drive time
+- Actual service time
+- Total actual minutes
+- Actual labor cost
+- Actual travel cost
+- Supplies cost
+- Overhead allocation
+- Total actual cost
+- Actual profit per visit
+- Actual margin
+- Actual profit per hour
+- Stops per hour equivalent based on actual route conditions
+
+Important:
+This metric is operational, not strategic pricing logic.
+
+--------------------------------------------------
+SUBTASK 1.3: SYSTEM-LEVEL PROFITABILITY MODEL
+--------------------------------------------------
+
+Create rollups for the whole business.
+
+Required system-level outputs:
+- Total revenue
+- Total cost
+- Total profit
+- Average ideal profit/hour across jobs
+- Average actual profit/hour across routes
+- Route-by-route profit/hour
+- Total drive time
+- Total service time
+- Productive time percentage
+- Non-productive time percentage
+- Stops per hour by route
+- Overall stops per hour
+- Highest-performing and lowest-performing routes
+
+Important:
+This should make it obvious whether the business has:
+- a pricing problem
+- a route density problem
+- an operations problem
+
+==================================================
+TASK 2: DEFINE THE BUSINESS RULES CLEARLY
+==================================================
+
+Implement these business rules exactly.
+
+--------------------------------------------------
+SUBTASK 2.1: SEPARATE JOB QUALITY FROM ROUTE QUALITY
+--------------------------------------------------
+
+The system must distinguish between:
+- Job quality
+- Route quality
+
+Definitions:
+
+Job quality:
+How profitable the stop is under standardized, target-density assumptions.
+
+Route quality:
+How profitable the stop is in its current real-world route placement.
+
+Rule:
+A job must not be marked as weak simply because it is in a bad route.
+
+Example:
+- Ideal profit/hour = strong
+- Actual route profit/hour = weak
+
+Interpretation:
+- Good job
+- Bad route placement
+
+The UI and logic should preserve that distinction.
+
+--------------------------------------------------
+SUBTASK 2.2: PRICING MUST USE JOB-LEVEL ECONOMICS
+--------------------------------------------------
+
+Recommended price and minimum price logic should be based primarily on job-level profitability, not current route assignment.
+
+Reason:
+Current routes change.
+If pricing is based on a temporary bad route, the system will overreact and misprice jobs.
+
+Exception:
+If a property is structurally isolated and will almost always require high travel regardless of route density, allow an optional “isolation/travel penalty” adjustment.
+
+This should be a separate property-level or territory-level factor, not mixed into every route calculation by default.
+
+--------------------------------------------------
+SUBTASK 2.3: ROUTE OPTIMIZATION MUST USE ACTUAL PROFITABILITY
+--------------------------------------------------
+
+Operations views and route management should use actual profitability and actual route time.
+
+Reason:
+We need to know how the business is performing today, not under ideal assumptions.
+
+Use route-level metrics for:
+- Route comparison
+- Route optimization decisions
+- Identifying poorly clustered stops
+- Reassignment opportunities
+- Capacity planning
+
+==================================================
+TASK 3: ADD UI/UX CHANGES
+==================================================
+
+The interface must clearly show both the ideal job economics and the current route economics.
+
+Do not bury this in backend-only calculations. The whole point is visibility.
+
+--------------------------------------------------
+SUBTASK 3.1: JOB/PROPERTY DETAIL VIEW
+--------------------------------------------------
+
+On the per-property breakdown page, add a clearly separated section for:
+
+1. Job Economics
+2. Current Route Impact
+
+Job Economics section should show:
+- Revenue per visit
+- Service minutes
+- Standard travel assumption
+- Standard total time
+- Standard labor cost
+- Supplies
+- Overhead
+- Total job cost
+- Profit per visit
+- Margin
+- Ideal profit/hour
+- Recommended price
+
+Current Route Impact section should show:
+- Assigned route
+- Actual drive time
+- Actual service time
+- Actual total time
+- Actual labor cost
+- Actual travel cost
+- Actual total cost
+- Actual profit per visit
+- Actual margin
+- Actual profit/hour
+
+Also show a clear comparison indicator like:
+- “Good job, weak route placement”
+- “Strong job economics, current route underperforming”
+- “Weak job economics even under ideal conditions”
+- “Strong both ideally and operationally”
+
+This should be rules-based and easy to understand.
+
+--------------------------------------------------
+SUBTASK 3.2: ROUTE VIEW
+--------------------------------------------------
+
+In the route view, add route profitability metrics:
+
+Per route show:
+- Total route revenue
+- Total route cost
+- Total route profit
+- Profit/hour
+- Stops/hour
+- Drive time %
+- Service time %
+- Avg profit/stop
+- Avg minutes/stop
+
+For each stop in the route, show:
+- Revenue
+- Actual time consumed
+- Actual profit
+- Actual profit/hour equivalent
+- Optionally: ideal profit/hour for comparison
+
+This should make route inefficiency obvious.
+
+--------------------------------------------------
+SUBTASK 3.3: DASHBOARDS / SUMMARY CARDS
+--------------------------------------------------
+
+Create dashboard cards for:
+
+Business-level:
+- Total revenue
+- Total profit
+- Actual avg profit/hour
+- Ideal avg profit/hour
+- Productive time %
+- Non-productive time %
+
+Route-level:
+- Best route by profit/hour
+- Worst route by profit/hour
+- Most efficient route
+- Least efficient route
+
+Job-level:
+- Strongest jobs by ideal profit/hour
+- Weakest jobs by ideal profit/hour
+- Jobs currently hurt by route placement
+
+==================================================
+TASK 4: ADD DIAGNOSTIC LABELS / INTERPRETATION LAYER
+==================================================
+
+Add a simple diagnostic engine so the software can explain what is happening instead of just showing numbers.
+
+--------------------------------------------------
+SUBTASK 4.1: DIAGNOSTIC STATES
+--------------------------------------------------
+
+Create logic to classify each stop into one of these types:
+
+1. Strong job, strong route
+2. Strong job, weak route
+3. Weak job, strong route
+4. Weak job, weak route
+
+Interpretation:
+
+Strong job, strong route:
+- Keep as is
+- This is what “good” looks like
+
+Strong job, weak route:
+- Do not blame the price
+- Improve route density or sequencing
+
+Weak job, strong route:
+- Route is not the problem
+- Price, scope, or labor model may be wrong
+
+Weak job, weak route:
+- Both problems exist
+- Candidate for repricing, relocation, or dropping
+
+--------------------------------------------------
+SUBTASK 4.2: DENSITY / EFFICIENCY SIGNALS
+--------------------------------------------------
+
+Add route efficiency metrics such as:
+- Stops/hour
+- Drive time as % of total time
+- Service time as % of total time
+- Route operating efficiency score
+
+Optional but recommended:
+Create a “density score” or “route efficiency score” that indicates how close the route is to target productivity.
+
+Example concept:
+- Target stops/hour = configurable
+- Actual stops/hour = calculated
+- Efficiency score = actual / target
+
+This should not be fake precision. Keep it simple and useful.
+
+==================================================
+TASK 5: DATA MODEL CHANGES
+==================================================
+
+Update the data structures so this can be supported cleanly.
+
+Each property/job should support:
+- Revenue per visit
+- Service minutes
+- Supply costs
+- Standard travel minutes assumption
+- Target margin
+- Recommended price inputs
+- Optional isolation flag or travel penalty category
+
+Each route-stop assignment should support:
+- Actual drive time
+- Actual route order
+- Actual mileage
+- Actual travel cost
+- Actual total time
+- Actual route profitability outputs
+
+Each route should support:
+- Aggregate revenue
+- Aggregate cost
+- Aggregate profit
+- Total drive time
+- Total service time
+- Profit/hour
+- Stops/hour
+- Efficiency score
+
+==================================================
+TASK 6: CONFIGURATION / SETTINGS
+==================================================
+
+Make the following configurable in admin/settings:
+
+- Default standardized travel time per stop
+- Default target stops per hour
+- Default target margin
+- Labor rate
+- Labor burden multiplier
+- Vehicle cost per mile
+- Overhead allocation method
+- Isolation/travel penalty logic
+- Whether recommended price uses job-only economics or includes optional isolation factors
+
+==================================================
+TASK 7: IMPORTANT IMPLEMENTATION GUARDRAILS
+==================================================
+
+Follow these rules carefully:
+
+1. Do not remove actual route profitability
+We still need actual route profitability for operations.
+
+2. Do not use actual current route time as the only profitability metric
+That is the current problem.
+
+3. Do not let recommended pricing swing wildly because a route happens to be temporarily bad
+Pricing should be stable and based on standardized assumptions.
+
+4. Keep both views visible
+Users should be able to understand:
+- what the job should produce
+- what it is producing right now
+
+5. Make comparisons obvious
+The UI should clearly expose the delta between:
+- ideal job economics
+- actual route economics
+
+==================================================
+TASK 8: OUTPUT / DELIVERABLES
+==================================================
+
+Build the following:
+
+1. Updated calculation engine
+- supports job-level, route-level, and system-level profitability
+
+2. Updated per-property profitability UI
+- shows both job economics and current route impact
+
+3. Updated route profitability UI
+- shows actual route performance clearly
+
+4. Updated dashboard summaries
+- business, route, and job performance
+
+5. Diagnostic labels
+- strong/weak job vs strong/weak route classification
+
+6. Clean code structure
+- separate calculation modules for:
+  - job economics
+  - route economics
+  - system rollups
+  - diagnostic interpretation
+
+==================================================
+TASK 9: SUGGESTED FORMULAS / CALCULATION INTENT
+==================================================
+
+Use this intent unless existing architecture requires small adaptation.
+
+JOB-LEVEL
+
+standard_total_minutes =
+service_minutes + standard_travel_minutes
+
+standard_labor_cost =
+(standard_total_minutes / 60) * burdened_hourly_rate
+
+job_total_cost =
+standard_labor_cost + supplies_cost + overhead_per_visit + any_standardized_travel_cost_if_used
+
+job_profit_per_visit =
+revenue_per_visit - job_total_cost
+
+job_profit_per_hour =
+job_profit_per_visit / (standard_total_minutes / 60)
+
+ROUTE-LEVEL
+
+actual_total_minutes =
+actual_drive_minutes + actual_service_minutes
+
+actual_labor_cost =
+(actual_total_minutes / 60) * burdened_hourly_rate
+
+actual_travel_cost =
+actual_miles * vehicle_cost_per_mile
+
+actual_total_cost =
+actual_labor_cost + actual_travel_cost + supplies_cost + overhead_per_visit
+
+actual_profit_per_visit =
+revenue_per_visit - actual_total_cost
+
+actual_profit_per_hour =
+actual_profit_per_visit / (actual_total_minutes / 60)
+
+SYSTEM-LEVEL
+
+aggregate using sums and weighted averages where appropriate, especially for profit/hour and minutes.
+
+==================================================
+TASK 10: FINAL INTENT CHECK
+==================================================
+
+Before building, make sure the system reflects this philosophy:
+
+- A property is a unit of revenue with its own economic value
+- A route is an operational container that can improve or damage realized profitability
+- The business must measure both separately
+- Pricing decisions should rely on job economics
+- Routing decisions should rely on route economics
+- Overall profitability should roll up both without confusing them
+
+Build accordingly.
