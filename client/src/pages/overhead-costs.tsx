@@ -521,6 +521,104 @@ function FuelVehicleCard({ companyData, onSave }: {
   );
 }
 
+function SupplyCard({
+  companyData,
+  onSave,
+  isSaving,
+}: {
+  companyData: any;
+  onSave: (updates: Record<string, unknown>) => void;
+  isSaving: boolean;
+}) {
+  const config = companyData?.pricingConfig || {};
+  const disinfectantCents = config.disinfectantCents ?? 1;
+  const bagsCents = config.bagsCents ?? 12;
+
+  const [disinfectant, setDisinfectant] = useState((disinfectantCents / 100).toFixed(2));
+  const [bags, setBags] = useState((bagsCents / 100).toFixed(2));
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setDisinfectant((disinfectantCents / 100).toFixed(2));
+    setBags((bagsCents / 100).toFixed(2));
+    setDirty(false);
+  }, [disinfectantCents, bagsCents]);
+
+  const disinfectantParsed = parseFloat(disinfectant);
+  const bagsParsed = parseFloat(bags);
+  const validDisinfectant = !isNaN(disinfectantParsed) && disinfectantParsed >= 0;
+  const validBags = !isNaN(bagsParsed) && bagsParsed >= 0;
+
+  const handleSave = () => {
+    const updates: Record<string, unknown> = {};
+    if (validDisinfectant) updates.disinfectantCents = Math.round(disinfectantParsed * 100);
+    if (validBags) updates.bagsCents = Math.round(bagsParsed * 100);
+    onSave(updates);
+    setDirty(false);
+  };
+
+  return (
+    <Card className="border-primary/20 bg-primary/[0.02]" data-testid="card-per-stop-supply">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Package className="h-4 w-4 text-primary" />
+          <span className="font-medium text-sm">Per-Stop Supply Costs</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+          <div data-testid="row-supply-disinfectant">
+            <label className="text-xs text-muted-foreground block mb-1">Disinfectant/Deodorizer ($/stop)</label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                className="h-9 pl-6 text-sm tabular-nums"
+                value={disinfectant}
+                onChange={(e) => { setDisinfectant(e.target.value); setDirty(true); }}
+                data-testid="input-supply-disinfectant"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Flat rate per stop
+            </p>
+          </div>
+          <div data-testid="row-supply-bags">
+            <label className="text-xs text-muted-foreground block mb-1">Bag Unit Cost ($/bag)</label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                className="h-9 pl-6 text-sm tabular-nums"
+                value={bags}
+                onChange={(e) => { setBags(e.target.value); setDirty(true); }}
+                data-testid="input-supply-bags"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              ceil(dogs ÷ 2) bags per stop
+            </p>
+          </div>
+          <div className="col-span-2 flex justify-end items-end">
+            {dirty && (
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={!validDisinfectant || !validBags || isSaving}
+                data-testid="button-save-supply"
+              >
+                Save
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function OverheadCosts() {
   const { toast } = useToast();
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
@@ -598,6 +696,18 @@ export default function OverheadCosts() {
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs/monthly-fuel"] });
       toast({ title: "Fuel & vehicle settings saved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to save", variant: "destructive" });
+    },
+  });
+
+  const supplyMutation = useMutation({
+    mutationFn: (updates: Record<string, unknown>) =>
+      apiRequest("PATCH", "/api/pricing-config", updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Supply cost rates saved" });
     },
     onError: () => {
       toast({ title: "Failed to save", variant: "destructive" });
@@ -711,41 +821,11 @@ export default function OverheadCosts() {
         onSave={(updates) => fuelMutation.mutate(updates)}
       />
 
-      <Card className="border-primary/20 bg-primary/[0.02]" data-testid="card-per-stop-supply">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Package className="h-4 w-4 text-primary" />
-            <span className="font-medium text-sm">Per-Stop Supply Costs</span>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between py-1.5 border-b border-muted/60" data-testid="row-supply-disinfectant">
-              <div>
-                <span className="text-sm">Disinfectant/Deodorizer</span>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  ${((companyData?.pricingConfig?.disinfectantCents ?? 1) / 100).toFixed(2)}/stop flat · deodorizer add-on adds $7.00/acre when active
-                </p>
-              </div>
-              <span className="text-sm font-mono tabular-nums" data-testid="text-supply-disinfectant-cost">
-                ${((companyData?.pricingConfig?.disinfectantCents ?? 1) / 100).toFixed(2)}/stop
-              </span>
-            </div>
-            <div className="flex items-center justify-between py-1.5" data-testid="row-supply-bags">
-              <div>
-                <span className="text-sm">Bags</span>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  ceil(dogs ÷ 2) bags × ${((companyData?.pricingConfig?.bagsCents ?? 12) / 100).toFixed(2)}/bag (e.g. 1–2 dogs = 1 bag, 3–4 = 2 bags)
-                </p>
-              </div>
-              <span className="text-sm font-mono tabular-nums" data-testid="text-supply-bags-cost">
-                ${((companyData?.pricingConfig?.bagsCents ?? 12) / 100).toFixed(2)}/bag
-              </span>
-            </div>
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-3">
-            Configure disinfectant and bag unit costs in the Pricing Calculator settings.
-          </p>
-        </CardContent>
-      </Card>
+      <SupplyCard
+        companyData={companyData}
+        onSave={(updates) => supplyMutation.mutate(updates)}
+        isSaving={supplyMutation.isPending}
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
