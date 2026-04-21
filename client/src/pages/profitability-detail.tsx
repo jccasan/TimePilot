@@ -30,8 +30,6 @@ import {
   Building2,
   Target,
   ArrowRight,
-  ChevronDown,
-  ChevronUp,
   Info,
 } from "lucide-react";
 import {
@@ -437,7 +435,6 @@ function ShowCalculationPanel({ calc }: { calc: CalculatorResult }) {
 }
 
 function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contactId: string }) {
-  const [showCalc, setShowCalc] = useState(false);
   const isUnprofitable = prop.profitMarginPct < 0;
   const isMarginal = prop.profitMarginPct >= 0 && prop.profitMarginPct <= 15;
   const priceDiff = prop.recommendedPriceCents - prop.revenuePerVisitCents;
@@ -542,6 +539,10 @@ function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contac
           </div>
         </div>
 
+        {prop.calculatorResult && (
+          <ShowCalculationPanel calc={prop.calculatorResult} />
+        )}
+
         {(isUnprofitable || isMarginal) && (
           <div className="border-t pt-3 space-y-2">
             <div className="flex items-center gap-1.5 text-sm">
@@ -586,23 +587,7 @@ function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contac
               Price Calculator
             </Link>
           </Button>
-          {prop.calculatorResult && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowCalc(v => !v)}
-              data-testid={`button-show-calc-${prop.propertyId}`}
-              className="ml-auto text-muted-foreground"
-            >
-              {showCalc ? <ChevronUp className="h-3.5 w-3.5 mr-1" /> : <ChevronDown className="h-3.5 w-3.5 mr-1" />}
-              {showCalc ? "Hide calculation" : "Show calculation"}
-            </Button>
-          )}
         </div>
-
-        {showCalc && prop.calculatorResult && (
-          <ShowCalculationPanel calc={prop.calculatorResult} />
-        )}
       </CardContent>
     </Card>
   );
