@@ -137,8 +137,10 @@ export async function calculateCustomerProfitability(
     const dogCount = property.numberOfDogs ?? 1;
 
     const planAddOns = await storage.getServicePlanAddOns(plan.id);
-    const addOnsCents = planAddOns.filter(a => a.isActive).reduce((s, a) => s + Math.round((parseFloat(a.price) || 0) * 100), 0);
+    const activeAddOns = planAddOns.filter(a => a.isActive);
+    const addOnsCents = activeAddOns.reduce((s, a) => s + Math.round((parseFloat(a.price) || 0) * 100), 0);
     const totalPerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100) + addOnsCents;
+    const hasYardDeodorizing = activeAddOns.some(a => a.name.toLowerCase().includes("deodor"));
 
     const distanceMiles = costOverrides?.distanceFromNearestStopMiles !== undefined
       ? costOverrides.distanceFromNearestStopMiles
@@ -152,6 +154,7 @@ export async function calculateCustomerProfitability(
       distanceFromNearestStopMiles: distanceMiles,
       routeStopsPerMile: effectiveConfig.routeStopsPerMile,
       currentPriceCents: totalPerVisitCents,
+      hasYardDeodorizing,
     };
 
     const result = calculatePrice(inputs, effectivePricingConfig, effectiveOverhead, costOverrides?.overheadAllocationCents);
@@ -287,8 +290,10 @@ export async function calculateAllCustomerProfitability(
       const dogCount = property.numberOfDogs ?? 1;
 
       const planAddOns = allAddOnsMap.get(plan.id) || [];
-      const addOnsCents = planAddOns.filter(a => a.isActive).reduce((s, a) => s + Math.round((parseFloat(a.price) || 0) * 100), 0);
+      const activeAddOns = planAddOns.filter(a => a.isActive);
+      const addOnsCents = activeAddOns.reduce((s, a) => s + Math.round((parseFloat(a.price) || 0) * 100), 0);
       const totalPerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100) + addOnsCents;
+      const hasYardDeodorizing = activeAddOns.some(a => a.name.toLowerCase().includes("deodor"));
 
       const distanceMiles = contactOverrides?.distanceFromNearestStopMiles !== undefined
         ? contactOverrides.distanceFromNearestStopMiles
@@ -302,6 +307,7 @@ export async function calculateAllCustomerProfitability(
         distanceFromNearestStopMiles: distanceMiles,
         routeStopsPerMile: effectiveConfig.routeStopsPerMile,
         currentPriceCents: totalPerVisitCents,
+        hasYardDeodorizing,
       };
 
       const result = calculatePrice(inputs, contactPricingConfig, contactOverhead, contactOverrides?.overheadAllocationCents);

@@ -8,6 +8,7 @@ export interface PriceCalculatorInputs {
   distanceFromNearestStopMiles: number;
   routeStopsPerMile?: number;
   currentPriceCents?: number;
+  hasYardDeodorizing?: boolean;
 }
 
 export interface PriceBreakdown {
@@ -119,7 +120,13 @@ export function calculatePrice(
   const jobMinutes = serviceMinutes + adjustedTravelMinutes;
   const laborCostCents = (jobMinutes / 60) * fullyBurdenedRateCentsPerHour;
 
-  const equipmentCostCents = config.disinfectantCents + config.deodorizerCents + config.bagsCents;
+  // Disinfectant: flat $0.01/stop regardless of config
+  const disinfectantCostCents = 1;
+  // Deodorizer: $7/acre only when yard deodorizing service is requested
+  const deodorizerCostCents = inputs.hasYardDeodorizing
+    ? Math.round(inputs.yardSizeAcres * 700)
+    : 0;
+  const equipmentCostCents = disinfectantCostCents + deodorizerCostCents + config.bagsCents;
 
   let overheadPerVisitCents: number;
   if (overridePerVisitOverheadCents !== undefined) {
