@@ -206,6 +206,8 @@ export const companies = pgTable("companies", {
   frozenAt: timestamp("frozen_at"),
   trialEndsAt: timestamp("trial_ends_at"),
   canceledAt: timestamp("canceled_at"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  cancelAt: timestamp("cancel_at"),
   subscriptionUpdatedAt: timestamp("subscription_updated_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
   churnNotes: text("churn_notes"),

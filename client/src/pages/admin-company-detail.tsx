@@ -608,6 +608,14 @@ export default function AdminCompanyDetail() {
                       <span className="text-sm text-muted-foreground">Status</span>
                       <Badge variant="outline" data-testid="badge-subscription-status">{company.subscriptionStatus}</Badge>
                     </div>
+                    {(company as any).cancelAtPeriodEnd && (company as any).cancelAt && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-muted-foreground">Cancels On</span>
+                        <Badge className="bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700" data-testid="badge-cancel-at-period-end">
+                          {new Date((company as any).cancelAt).toLocaleDateString()}
+                        </Badge>
+                      </div>
+                    )}
                     {company.trialEndsAt && (
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-muted-foreground">Trial Ends</span>
@@ -644,16 +652,29 @@ export default function AdminCompanyDetail() {
                         Custom Trial Plan
                       </Button>
                       {company.subscriptionStatus !== "cancelled" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full gap-1.5 text-xs text-destructive hover:text-destructive border-destructive/30 hover:border-destructive/60"
-                          data-testid="button-cancel-account"
-                          onClick={() => { setCancelReason(""); setCancelOpen(true); }}
-                        >
-                          <XCircle className="h-3.5 w-3.5" />
-                          Cancel Account
-                        </Button>
+                        (company as any).cancelAtPeriodEnd ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full gap-1.5 text-xs text-amber-700 border-amber-300 dark:text-amber-400 dark:border-amber-700 opacity-70 cursor-not-allowed"
+                            data-testid="button-cancel-account"
+                            disabled
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            Cancellation Scheduled
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full gap-1.5 text-xs text-destructive hover:text-destructive border-destructive/30 hover:border-destructive/60"
+                            data-testid="button-cancel-account"
+                            onClick={() => { setCancelReason(""); setCancelOpen(true); }}
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            Cancel Account
+                          </Button>
+                        )
                       )}
                     </div>
                     <div className="flex items-center justify-between gap-2">

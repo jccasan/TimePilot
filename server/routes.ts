@@ -11384,7 +11384,7 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       if (event.type === "customer.subscription.updated") {
-        const subscription = event.data.object as { id: string; status: string; metadata: Record<string, string>; trial_end?: number | null; items?: { data?: Array<{ id: string; price?: { id: string } }> } };
+        const subscription = event.data.object as { id: string; status: string; metadata: Record<string, string>; trial_end?: number | null; cancel_at_period_end?: boolean; cancel_at?: number | null; items?: { data?: Array<{ id: string; price?: { id: string } }> } };
         const stripeSubId = subscription.id;
         const meta = subscription.metadata || {};
 
@@ -11454,8 +11454,16 @@ Return ONLY valid JSON, no markdown.`,
               if (subscription.trial_end) {
                 updates.trialEndsAt = new Date(subscription.trial_end * 1000);
               }
+              // Sync cancel_at_period_end state from Stripe
+              if (subscription.cancel_at_period_end) {
+                updates.cancelAtPeriodEnd = true;
+                updates.cancelAt = subscription.cancel_at ? new Date(subscription.cancel_at * 1000) : null;
+              } else {
+                updates.cancelAtPeriodEnd = false;
+                updates.cancelAt = null;
+              }
               await storage.updateCompany(company.id, updates as Partial<typeof companies.$inferInsert>);
-              console.log(`[Stripe Subscription] Updated company "${company.name}" status=${newStatus}`);
+              console.log(`[Stripe Subscription] Updated company "${company.name}" status=${newStatus} cancelAtPeriodEnd=${!!subscription.cancel_at_period_end}`);
               break;
             }
           }
@@ -11488,8 +11496,8 @@ Return ONLY valid JSON, no markdown.`,
                 console.log(`[Stripe Subscription] Skipping stale subscription.deleted for company "${company.name}" (event ${event.id} ts=${event.created})`);
                 break;
               }
-              await storage.updateCompany(company.id, { subscriptionStatus: "cancelled", canceledAt: new Date(), subscriptionUpdatedAt: eventTs } as Partial<typeof companies.$inferInsert>);
-              console.log(`[Stripe Subscription] Company "${company.name}" subscription cancelled`);
+              await storage.updateCompany(company.id, { subscriptionStatus: "cancelled", canceledAt: new Date(), subscriptionUpdatedAt: eventTs, cancelAtPeriodEnd: false, cancelAt: null } as Partial<typeof companies.$inferInsert>);
+              console.log(`[Stripe Subscription] Company "${company.name}" subscription cancelled (period end reached)`);
               break;
             }
           }
@@ -14958,28 +14966,41 @@ Return ONLY valid JSON, no markdown.`,
       if (company.subscriptionStatus === "cancelled") {
         return res.status(400).json({ error: "Account is already cancelled" });
       }
-      // Cancel Stripe subscription if one exists
+      if ((company as any).cancelAtPeriodEnd) {
+        return res.status(400).json({ error: "Account cancellation is already scheduled" });
+      }
+      // Cancel Stripe subscription if one exists — schedule at period end so tenant keeps access
       if (company.stripeSubscriptionId) {
+        let scheduledCancelAt: Date | null = null;
         try {
           const StripeLib = (await import("stripe")).default;
           const stripeKey = process.env.STRIPE_SECRET_KEY;
           if (stripeKey) {
             const stripeInstance = new StripeLib(stripeKey, { apiVersion: "2026-01-28.clover" as any });
-            await stripeInstance.subscriptions.cancel(company.stripeSubscriptionId);
-            console.log(`[Admin] Cancelled Stripe subscription ${company.stripeSubscriptionId} for company "${company.name}"`);
+            const updated = await stripeInstance.subscriptions.update(company.stripeSubscriptionId, { cancel_at_period_end: true });
+            if (updated.cancel_at) scheduledCancelAt = new Date(updated.cancel_at * 1000);
+            console.log(`[Admin] Scheduled Stripe subscription ${company.stripeSubscriptionId} for cancellation at period end (${scheduledCancelAt?.toISOString()}) for company "${company.name}"`);
           }
         } catch (stripeErr: any) {
           if (stripeErr?.code !== "resource_missing") {
-            console.warn(`[Admin] Stripe cancel failed for ${company.name}:`, stripeErr.message);
+            console.warn(`[Admin] Stripe cancel_at_period_end failed for ${company.name}:`, stripeErr.message);
           }
         }
+        // Mark as pending cancellation in DB — status stays active so tenant keeps access
+        await db.update(companies)
+          .set({ cancelAtPeriodEnd: true, cancelAt: scheduledCancelAt } as any)
+          .where(eq(companies.id, req.params.id));
+        await logAdminAudit(req, "cancel_account_scheduled", "company", req.params.id, { reason: req.body.reason || null, cancelAt: scheduledCancelAt });
+        console.log(`[Admin] Account "${company.name}" (${req.params.id}) scheduled for cancellation at period end by ${(req as any).adminUser?.email}`);
+        return res.json({ ok: true, companyName: company.name, scheduledCancelAt });
       }
+      // No Stripe subscription — immediately cancel (manual billing)
       await storage.updateCompanySubscription(req.params.id, company.subscriptionTier || "free_trial", {
         subscriptionStatus: "cancelled",
       });
       await db.update(companies).set({ canceledAt: new Date() }).where(eq(companies.id, req.params.id));
       await logAdminAudit(req, "cancel_account", "company", req.params.id, { reason: req.body.reason || null });
-      console.log(`[Admin] Account "${company.name}" (${req.params.id}) cancelled by ${(req as any).adminUser?.email}`);
+      console.log(`[Admin] Account "${company.name}" (${req.params.id}) cancelled immediately (no Stripe sub) by ${(req as any).adminUser?.email}`);
       res.json({ ok: true, companyName: company.name });
     } catch (err) { handleError(res, err); }
   });
