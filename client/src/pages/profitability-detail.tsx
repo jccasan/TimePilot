@@ -60,6 +60,10 @@ interface CalcBreakdown {
   adjustedTravelCostCents: number;
   equipmentCostCents: number;
   overheadPerVisitCents: number;
+  disinfectantCostCents: number;
+  deodorizerCostCents: number;
+  bagCount: number;
+  bagsCostCents: number;
 }
 
 interface CalcDerived {
@@ -79,6 +83,7 @@ interface CalcInputsUsed {
   distanceFromNearestStopMiles: number;
   routeStopsPerMile?: number;
   currentPriceCents?: number;
+  hasYardDeodorizing?: boolean;
   configSnapshot: Record<string, number | string | boolean | null>;
 }
 
@@ -357,8 +362,8 @@ function ShowCalculationPanel({ calc }: { calc: CalculatorResult }) {
           />
           <div className="border-t mt-1 pt-1">
             <CalcRow
-              label="Labor cost"
-              formula={`${fmtMin(dv.jobMinutes)} ÷ 60 × ${fmtDollars(burdenedRateCents)}/hr`}
+              label="Yard labor"
+              formula={`${fmtMin(bd.serviceMinutes)} ÷ 60 × ${fmtDollars(burdenedRateCents)}/hr`}
               value={fmtDollars(bd.laborCostCents)}
             />
           </div>
@@ -386,9 +391,18 @@ function ShowCalculationPanel({ calc }: { calc: CalculatorResult }) {
         </CalcSection>
 
         <CalcSection title="5 · Supplies">
-          <CalcRow label="Disinfectant" value={fmtDollars(cfg.disinfectantCents || 0)} indent />
-          <CalcRow label="Deodorizer" value={fmtDollars(cfg.deodorizerCents || 0)} indent />
-          <CalcRow label="Bags" value={fmtDollars(cfg.bagsCents || 0)} indent />
+          <CalcRow
+            label="Disinfectant/Deodorizer"
+            formula={inp.hasYardDeodorizing ? `$7.00/acre × ${inp.yardSizeAcres.toFixed(3)} ac` : "$0.01/stop"}
+            value={fmtDollars(bd.disinfectantCostCents + bd.deodorizerCostCents)}
+            indent
+          />
+          <CalcRow
+            label="Bags"
+            formula={`${bd.bagCount} bag${bd.bagCount !== 1 ? "s" : ""} × ${fmtDollars(cfg.bagsCents || 0)}/bag`}
+            value={fmtDollars(bd.bagsCostCents)}
+            indent
+          />
           <div className="border-t mt-1 pt-1">
             <CalcRow label="Supplies total" value={fmtDollars(bd.equipmentCostCents)} />
           </div>

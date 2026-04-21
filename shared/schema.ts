@@ -125,7 +125,7 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
   otherOverheadCents: 0,
   disinfectantCents: 1,
   deodorizerCents: 0,
-  bagsCents: 10,
+  bagsCents: 12,  // $0.12 per bag; actual cost = ceil(dogCount/2) * bagsCents
   localMarketAverageWeeklyPriceCents: null,
   marketAnchorTolerancePct: 35,
   targetProfitMarginPct: 30,

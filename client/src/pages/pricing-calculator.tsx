@@ -97,7 +97,6 @@ const pricingConfigSchema = z.object({
   softwareDollars: z.coerce.number().min(0),
   otherOverheadDollars: z.coerce.number().min(0),
   disinfectantDollars: z.coerce.number().min(0),
-  deodorizerDollars: z.coerce.number().min(0),
   bagsDollars: z.coerce.number().min(0),
   localMarketAverageWeeklyDollars: z.coerce.number().nullable(),
   marketAnchorTolerancePct: z.coerce.number().min(0).max(100),
@@ -133,7 +132,6 @@ function configToFormValues(config: PricingConfig) {
     softwareDollars: config.softwareCents / 100,
     otherOverheadDollars: config.otherOverheadCents / 100,
     disinfectantDollars: config.disinfectantCents / 100,
-    deodorizerDollars: config.deodorizerCents / 100,
     bagsDollars: config.bagsCents / 100,
     localMarketAverageWeeklyDollars: config.localMarketAverageWeeklyPriceCents ? config.localMarketAverageWeeklyPriceCents / 100 : null,
     marketAnchorTolerancePct: config.marketAnchorTolerancePct,
@@ -171,7 +169,7 @@ function formValuesToConfig(values: z.infer<typeof pricingConfigSchema>): Pricin
     softwareCents: dollarsToCents(values.softwareDollars),
     otherOverheadCents: dollarsToCents(values.otherOverheadDollars),
     disinfectantCents: dollarsToCents(values.disinfectantDollars),
-    deodorizerCents: dollarsToCents(values.deodorizerDollars),
+    deodorizerCents: 0,  // now dynamic: $7/acre when yard deodorizing add-on is active
     bagsCents: dollarsToCents(values.bagsDollars),
     localMarketAverageWeeklyPriceCents: values.localMarketAverageWeeklyDollars ? dollarsToCents(values.localMarketAverageWeeklyDollars) : null,
     marketAnchorTolerancePct: values.marketAnchorTolerancePct,
@@ -615,29 +613,20 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
             </AccordionTrigger>
             <AccordionContent>
               <p className="text-sm text-muted-foreground mb-3">The cost of consumable supplies you use on each visit.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <FormField control={form.control} name="disinfectantDollars" render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      <LabelWithInfo label="Disinfectant ($)" info="Cost of disinfectant spray or solution used per visit to sanitize the yard." />
+                      <LabelWithInfo label="Disinfectant/Deodorizer ($/stop)" info="Base cost of disinfectant/deodorizer spray per stop ($0.01 default). When a yard deodorizing add-on is active, an additional $7.00/acre is added automatically." />
                     </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-disinfectant" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="deodorizerDollars" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      <LabelWithInfo label="Deodorizer ($)" info="Cost of deodorizer applied per visit to reduce yard odor." />
-                    </FormLabel>
-                    <FormControl><Input type="number" step="0.01" {...field} data-testid="input-deodorizer" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="bagsDollars" render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      <LabelWithInfo label="Bags ($)" info="Cost of waste bags used per visit." />
+                      <LabelWithInfo label="Bags ($/bag)" info="Cost per waste bag. Bags used = 1 per 2 dogs, rounded up (e.g. 1–2 dogs = 1 bag, 3–4 dogs = 2 bags)." />
                     </FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} data-testid="input-bags" /></FormControl>
                     <FormMessage />

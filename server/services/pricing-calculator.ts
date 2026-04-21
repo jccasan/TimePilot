@@ -21,6 +21,10 @@ export interface PriceBreakdown {
   adjustedTravelCostCents: number;
   equipmentCostCents: number;
   overheadPerVisitCents: number;
+  disinfectantCostCents: number;
+  deodorizerCostCents: number;
+  bagCount: number;
+  bagsCostCents: number;
 }
 
 export interface PriceDerived {
@@ -118,15 +122,19 @@ export function calculatePrice(
 
   const fullyBurdenedRateCentsPerHour = config.techHourlyWageCents * config.burdenMultiplier;
   const jobMinutes = serviceMinutes + adjustedTravelMinutes;
-  const laborCostCents = (jobMinutes / 60) * fullyBurdenedRateCentsPerHour;
+  // Labor covers yard service time only; travel labor is absorbed at the route level
+  const laborCostCents = (serviceMinutes / 60) * fullyBurdenedRateCentsPerHour;
 
-  // Disinfectant: flat $0.01/stop regardless of config
+  // Disinfectant/Deodorizer: flat $0.01/stop for standard use
   const disinfectantCostCents = 1;
-  // Deodorizer: $7/acre only when yard deodorizing service is requested
+  // Deodorizer uplift: $7/acre only when yard deodorizing service is requested
   const deodorizerCostCents = inputs.hasYardDeodorizing
     ? Math.round(inputs.yardSizeAcres * 700)
     : 0;
-  const equipmentCostCents = disinfectantCostCents + deodorizerCostCents + config.bagsCents;
+  // Bags: 1 bag per 2 dogs (rounded up), at the configured per-bag price
+  const bagCount = Math.ceil(inputs.dogCount / 2);
+  const bagsCostCents = bagCount * config.bagsCents;
+  const equipmentCostCents = disinfectantCostCents + deodorizerCostCents + bagsCostCents;
 
   let overheadPerVisitCents: number;
   if (overridePerVisitOverheadCents !== undefined) {
@@ -201,6 +209,10 @@ export function calculatePrice(
     adjustedTravelCostCents: Math.round(adjustedTravelCostCents),
     equipmentCostCents: Math.round(equipmentCostCents),
     overheadPerVisitCents: Math.round(overheadPerVisitCents),
+    disinfectantCostCents,
+    deodorizerCostCents,
+    bagCount,
+    bagsCostCents: Math.round(bagsCostCents),
   };
 
   const derived: PriceDerived = {
