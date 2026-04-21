@@ -14951,6 +14951,39 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/admin/companies/:id/cancel", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const company = await storage.getCompany(req.params.id);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (company.subscriptionStatus === "cancelled") {
+        return res.status(400).json({ error: "Account is already cancelled" });
+      }
+      // Cancel Stripe subscription if one exists
+      if (company.stripeSubscriptionId) {
+        try {
+          const StripeLib = (await import("stripe")).default;
+          const stripeKey = process.env.STRIPE_SECRET_KEY;
+          if (stripeKey) {
+            const stripeInstance = new StripeLib(stripeKey, { apiVersion: "2026-01-28.clover" as any });
+            await stripeInstance.subscriptions.cancel(company.stripeSubscriptionId);
+            console.log(`[Admin] Cancelled Stripe subscription ${company.stripeSubscriptionId} for company "${company.name}"`);
+          }
+        } catch (stripeErr: any) {
+          if (stripeErr?.code !== "resource_missing") {
+            console.warn(`[Admin] Stripe cancel failed for ${company.name}:`, stripeErr.message);
+          }
+        }
+      }
+      await storage.updateCompanySubscription(req.params.id, company.subscriptionTier || "free_trial", {
+        subscriptionStatus: "cancelled",
+      });
+      await db.update(companies).set({ canceledAt: new Date() }).where(eq(companies.id, req.params.id));
+      await logAdminAudit(req, "cancel_account", "company", req.params.id, { reason: req.body.reason || null });
+      console.log(`[Admin] Account "${company.name}" (${req.params.id}) cancelled by ${(req as any).adminUser?.email}`);
+      res.json({ ok: true, companyName: company.name });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/admin/companies/:id/users/:userId/reset-password", isAdmin, async (req: Request, res: Response) => {
     try {
       const { id: companyId, userId } = req.params;

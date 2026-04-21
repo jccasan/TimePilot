@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X, MessageSquare, Phone, Activity, Download, Clock, Filter, Database, FlaskConical } from "lucide-react";
+import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X, MessageSquare, Phone, Activity, Download, Clock, Filter, Database, FlaskConical, XCircle } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
@@ -86,6 +86,9 @@ export default function AdminCompanyDetail() {
 
   const [activeTab, setActiveTab] = useState<"overview" | "audit">("overview");
 
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+
   const [customTrialOpen, setCustomTrialOpen] = useState(false);
   const defaultTrialDate = () => {
     const d = new Date();
@@ -152,6 +155,21 @@ export default function AdminCompanyDetail() {
       toast({ title: "Custom trial plan applied" });
     },
     onError: () => toast({ title: "Failed to apply trial plan", variant: "destructive" }),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      return adminRequest("POST", `/api/admin/companies/${id}/cancel`, { reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setCancelOpen(false);
+      setCancelReason("");
+      toast({ title: "Account cancelled", description: "Subscription has been cancelled and Stripe notified." });
+    },
+    onError: (err: any) => toast({ title: "Cancel failed", description: err.message, variant: "destructive" }),
   });
 
   const addNoteMutation = useMutation({
@@ -604,7 +622,7 @@ export default function AdminCompanyDetail() {
                         <Badge variant="secondary" data-testid="badge-custom-max-users">Custom: {company.customMaxUsers} users</Badge>
                       </div>
                     )}
-                    <div className="pt-1">
+                    <div className="pt-1 space-y-1.5">
                       <Button
                         variant="outline"
                         size="sm"
@@ -625,6 +643,18 @@ export default function AdminCompanyDetail() {
                         <FlaskConical className="h-3.5 w-3.5" />
                         Custom Trial Plan
                       </Button>
+                      {company.subscriptionStatus !== "cancelled" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full gap-1.5 text-xs text-destructive hover:text-destructive border-destructive/30 hover:border-destructive/60"
+                          data-testid="button-cancel-account"
+                          onClick={() => { setCancelReason(""); setCancelOpen(true); }}
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Cancel Account
+                        </Button>
+                      )}
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm text-muted-foreground">Created</span>
@@ -1002,6 +1032,43 @@ export default function AdminCompanyDetail() {
               data-testid="button-apply-custom-trial"
             >
               {customTrialMutation.isPending ? "Applying…" : "Apply Trial Plan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <DialogContent data-testid="dialog-cancel-account">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <XCircle className="h-5 w-5" />
+              Cancel Account
+            </DialogTitle>
+            <DialogDescription>
+              This will immediately cancel <strong>{company?.name}</strong>'s subscription. Their Stripe subscription will be terminated and their account status set to cancelled. This cannot be undone without manually reactivating.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <Label className="text-sm">Cancellation reason (optional)</Label>
+            <Textarea
+              placeholder="e.g. Customer requested cancellation, non-payment, churned..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              rows={3}
+              data-testid="input-cancel-reason"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelOpen(false)} data-testid="button-cancel-dialog-close">
+              Keep Account
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => cancelMutation.mutate(cancelReason)}
+              disabled={cancelMutation.isPending}
+              data-testid="button-confirm-cancel-account"
+            >
+              {cancelMutation.isPending ? "Cancelling…" : "Yes, Cancel Account"}
             </Button>
           </DialogFooter>
         </DialogContent>
