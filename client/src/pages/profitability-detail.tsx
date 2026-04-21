@@ -811,6 +811,13 @@ export default function ProfitabilityDetail() {
         </Card>
       </div>
 
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold" data-testid="text-properties-heading">Per-Property Breakdown</h2>
+        {profitData.properties.map((prop) => (
+          <PropertyCard key={prop.propertyId} prop={prop} contactId={profitData.contactId} />
+        ))}
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg" data-testid="text-trend-heading">Profitability Trend</CardTitle>
@@ -819,13 +826,6 @@ export default function ProfitabilityDetail() {
           <ProfitTrendChart contactId={contactId!} />
         </CardContent>
       </Card>
-
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold" data-testid="text-properties-heading">Per-Property Breakdown</h2>
-        {profitData.properties.map((prop) => (
-          <PropertyCard key={prop.propertyId} prop={prop} contactId={profitData.contactId} />
-        ))}
-      </div>
 
       {unprofitableProps.length > 0 && (
         <Card>
