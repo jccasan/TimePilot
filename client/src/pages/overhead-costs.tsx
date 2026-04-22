@@ -707,6 +707,7 @@ export default function OverheadCosts() {
       apiRequest("PATCH", "/api/pricing-config", updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
       toast({ title: "Supply cost rates saved" });
     },
     onError: () => {

@@ -275,6 +275,7 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
       toast({ title: "Settings saved", description: "Pricing configuration updated successfully." });
       onSaved();
     },
