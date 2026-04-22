@@ -15999,6 +15999,110 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Document Import (AI Categorization) ================
+
+  const DOCUMENT_CATEGORIES = [
+    "Invoice",
+    "Service Record",
+    "Contract",
+    "License",
+    "Insurance Certificate",
+    "Photo",
+    "Other",
+  ] as const;
+
+  app.post("/api/documents/classify", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      await getCompanyContext(req);
+      const { fileName, mimeType } = req.body;
+      if (!fileName) return res.status(400).json({ error: "fileName is required" });
+
+      const OpenAI = (await import("openai")).default;
+      const ai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+      const prompt = `You are helping classify a document being imported into a field service management system.
+Given the file name and MIME type, determine the most appropriate document category.
+
+File name: ${fileName}
+MIME type: ${mimeType || "unknown"}
+
+Categories: ${DOCUMENT_CATEGORIES.join(", ")}
+
+Respond with exactly one category from the list above and nothing else.`;
+
+      const completion = await ai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 20,
+        temperature: 0,
+      });
+
+      const raw = completion.choices[0]?.message?.content?.trim() || "";
+      const category = DOCUMENT_CATEGORIES.find(c => raw.toLowerCase().includes(c.toLowerCase())) || "Other";
+      res.json({ category });
+    } catch (err) { handleError(res, err); }
+  });
+
+  const ALLOWED_DOCUMENT_CATEGORIES = ["Invoice", "Service Record", "Contract", "License", "Insurance Certificate", "Photo", "Other"] as const;
+
+  app.post("/api/documents", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { fileName, fileUrl, fileType, fileSize, documentCategory, notes, contactId } = req.body;
+      if (!fileName) return res.status(400).json({ error: "fileName is required" });
+      if (!fileUrl) return res.status(400).json({ error: "fileUrl is required" });
+      if (documentCategory && !ALLOWED_DOCUMENT_CATEGORIES.includes(documentCategory)) {
+        return res.status(400).json({ error: `Invalid documentCategory. Allowed values: ${ALLOWED_DOCUMENT_CATEGORIES.join(", ")}` });
+      }
+
+      let resolvedContactId: string | null = null;
+      if (contactId) {
+        const contact = await storage.getContact(contactId, companyId);
+        if (!contact) return res.status(400).json({ error: "Contact not found or does not belong to this company" });
+        resolvedContactId = contact.id;
+      }
+
+      const doc = await storage.createDocument({
+        companyId,
+        fileName,
+        fileUrl,
+        fileType: fileType || null,
+        fileSize: fileSize || null,
+        documentCategory: documentCategory || null,
+        notes: notes || null,
+        contactId: resolvedContactId,
+        propertyId: null,
+        visitId: null,
+      });
+      res.json(doc);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/documents", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const docs = await storage.getDocumentImports(companyId);
+      const contactIds = [...new Set(docs.filter(d => d.contactId).map(d => d.contactId!))];
+      const contactMap: Record<string, { firstName: string; lastName: string; email: string | null }> = {};
+      if (contactIds.length > 0) {
+        const contactRecords = await storage.getContacts(companyId);
+        for (const c of contactRecords) {
+          if (contactIds.includes(c.id)) {
+            contactMap[c.id] = { firstName: c.firstName, lastName: c.lastName, email: c.email ?? null };
+          }
+        }
+      }
+      const result = docs.map(d => ({
+        ...d,
+        contactName: d.contactId && contactMap[d.contactId]
+          ? `${contactMap[d.contactId].firstName} ${contactMap[d.contactId].lastName}`.trim()
+          : null,
+        contactEmail: d.contactId ? (contactMap[d.contactId]?.email ?? null) : null,
+      }));
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/imports/ai-map", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);

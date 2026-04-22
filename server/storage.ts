@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, like, ilike, or, gte, lte, lt, inArray, count, isNull } from "drizzle-orm";
+import { eq, and, desc, asc, sql, like, ilike, or, gte, lte, lt, inArray, count, isNull, isNotNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   companies, companyUsers, contacts, tags, contactTags, leadSources,
@@ -241,6 +241,8 @@ export interface IStorage {
   // Attachments
   createAttachment(data: InsertAttachment): Promise<Attachment>;
   getAttachments(companyId: string, filters?: { contactId?: string; propertyId?: string; visitId?: string }): Promise<Attachment[]>;
+  createDocument(data: InsertAttachment): Promise<Attachment>;
+  getDocumentImports(companyId: string): Promise<Attachment[]>;
 
   // Service Pricing
   getServicePricing(companyId: string, category?: string): Promise<ServicePricingItem[]>;
@@ -1428,6 +1430,23 @@ export class DatabaseStorage implements IStorage {
     if (filters?.visitId) conditions.push(eq(attachments.visitId, filters.visitId));
     return db.select().from(attachments).where(and(...conditions)).orderBy(desc(attachments.createdAt));
   }
+
+  async createDocument(data: InsertAttachment): Promise<Attachment> {
+    const [attachment] = await db.insert(attachments).values(data).returning();
+    return attachment;
+  }
+
+  async getDocumentImports(companyId: string): Promise<Attachment[]> {
+    return db.select().from(attachments)
+      .where(and(
+        eq(attachments.companyId, companyId),
+        isNull(attachments.visitId),
+        isNull(attachments.propertyId),
+        isNotNull(attachments.documentCategory),
+      ))
+      .orderBy(desc(attachments.createdAt));
+  }
+
   // ================ Service Pricing ================
   async getServicePricing(companyId: string, category?: string): Promise<ServicePricingItem[]> {
     const conditions = [eq(servicePricing.companyId, companyId)];

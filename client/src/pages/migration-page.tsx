@@ -27,6 +27,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Upload,
   FileText,
@@ -43,6 +53,13 @@ import {
   Mail,
   Phone,
   Dog,
+  File,
+  FileImage,
+  X,
+  FolderOpen,
+  Sparkles,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react";
 
 interface ParsedInvoicePreview {
@@ -962,6 +979,429 @@ function InvoicesTab() {
   );
 }
 
+const DOCUMENT_CATEGORIES = [
+  "Invoice",
+  "Service Record",
+  "Contract",
+  "License",
+  "Insurance Certificate",
+  "Photo",
+  "Other",
+] as const;
+
+type DocumentCategory = typeof DOCUMENT_CATEGORIES[number];
+
+interface PendingDocument {
+  id: string;
+  file: File;
+  category: DocumentCategory | "";
+  contactId: string;
+  notes: string;
+  classifying: boolean;
+  uploading: boolean;
+  saved: boolean;
+  objectPath: string | null;
+}
+
+interface ContactOption {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+}
+
+interface SavedDocument {
+  id: string;
+  fileName: string;
+  documentCategory: string | null;
+  notes: string | null;
+  contactId: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
+  createdAt: string | null;
+}
+
+function ContactCombobox({
+  value,
+  onChange,
+  contacts,
+  testId,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  contacts: ContactOption[];
+  testId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = contacts.find(c => c.id === value);
+  const label = selected
+    ? `${selected.firstName} ${selected.lastName}${selected.email ? ` (${selected.email})` : ""}`
+    : "None";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full h-9 justify-between font-normal"
+          data-testid={testId}
+        >
+          <span className="truncate">{label}</span>
+          <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[300px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search contacts…" data-testid={`${testId}-search`} />
+          <CommandList>
+            <CommandEmpty>No contacts found.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__none__"
+                onSelect={() => { onChange(""); setOpen(false); }}
+              >
+                <Check className={`mr-2 h-4 w-4 ${!value ? "opacity-100" : "opacity-0"}`} />
+                None
+              </CommandItem>
+              {contacts.map(c => {
+                const display = `${c.firstName} ${c.lastName}${c.email ? ` (${c.email})` : ""}`;
+                return (
+                  <CommandItem
+                    key={c.id}
+                    value={display}
+                    onSelect={() => { onChange(c.id); setOpen(false); }}
+                  >
+                    <Check className={`mr-2 h-4 w-4 ${value === c.id ? "opacity-100" : "opacity-0"}`} />
+                    {display}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function fileIcon(file: File) {
+  if (file.type.startsWith("image/")) return <FileImage className="h-5 w-5 text-blue-500" />;
+  if (file.type === "application/pdf") return <FileText className="h-5 w-5 text-red-500" />;
+  return <File className="h-5 w-5 text-muted-foreground" />;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function DocumentsTab() {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [pendingDocs, setPendingDocs] = useState<PendingDocument[]>([]);
+
+  const { data: contacts } = useQuery<ContactOption[]>({
+    queryKey: ["/api/contacts"],
+    select: (data: ContactOption[]) => data.map(c => ({ id: c.id, firstName: c.firstName, lastName: c.lastName, email: c.email ?? null })),
+  });
+
+  const { data: savedDocs, refetch: refetchDocs } = useQuery<SavedDocument[]>({
+    queryKey: ["/api/documents"],
+  });
+
+  const classifyMutation = useMutation({
+    mutationFn: async ({ docId, fileName, mimeType }: { docId: string; fileName: string; mimeType: string }) => {
+      const res = await apiRequest("POST", "/api/documents/classify", { fileName, mimeType });
+      return { docId, ...(await res.json() as { category: string }) };
+    },
+    onSuccess: ({ docId, category }) => {
+      setPendingDocs(prev => prev.map(d =>
+        d.id === docId ? { ...d, classifying: false, category: (DOCUMENT_CATEGORIES.includes(category as DocumentCategory) ? category : "Other") as DocumentCategory } : d
+      ));
+    },
+    onError: (_err, { docId }) => {
+      setPendingDocs(prev => prev.map(d =>
+        d.id === docId ? { ...d, classifying: false, category: "Other" } : d
+      ));
+    },
+  });
+
+  const addFiles = useCallback((files: File[]) => {
+    const allowed = files.filter(f => {
+      const ext = f.name.toLowerCase();
+      return ext.endsWith(".pdf") || ext.endsWith(".docx") || ext.endsWith(".jpg") || ext.endsWith(".jpeg") || ext.endsWith(".png");
+    });
+    if (allowed.length < files.length) {
+      toast({ title: "Some files skipped", description: "Only PDF, DOCX, JPG, and PNG files are supported.", variant: "destructive" });
+    }
+    const newDocs: PendingDocument[] = allowed.map(file => ({
+      id: `${Date.now()}-${Math.random()}`,
+      file,
+      category: "",
+      contactId: "",
+      notes: "",
+      classifying: true,
+      uploading: false,
+      saved: false,
+      objectPath: null,
+    }));
+    setPendingDocs(prev => [...prev, ...newDocs]);
+    for (const doc of newDocs) {
+      classifyMutation.mutate({ docId: doc.id, fileName: doc.file.name, mimeType: doc.file.type });
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) addFiles(files);
+  }, [addFiles]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length) addFiles(files);
+    e.target.value = "";
+  }, [addFiles]);
+
+  const updateDoc = (id: string, patch: Partial<PendingDocument>) => {
+    setPendingDocs(prev => prev.map(d => d.id === id ? { ...d, ...patch } : d));
+  };
+
+  const removeDoc = (id: string) => {
+    setPendingDocs(prev => prev.filter(d => d.id !== id));
+  };
+
+  const saveDoc = async (doc: PendingDocument) => {
+    updateDoc(doc.id, { uploading: true });
+    try {
+      const token = localStorage.getItem("sessionToken");
+      const hdrs: Record<string, string> = {};
+      if (token) hdrs["Authorization"] = `Bearer ${token}`;
+      const formData = new FormData();
+      formData.append("file", doc.file);
+      const uploadRes = await fetch("/api/uploads/direct", {
+        method: "POST",
+        credentials: "include",
+        headers: hdrs,
+        body: formData,
+      });
+      if (!uploadRes.ok) throw new Error("Upload failed");
+      const { objectPath } = await uploadRes.json();
+
+      await apiRequest("POST", "/api/documents", {
+        fileName: doc.file.name,
+        fileUrl: objectPath,
+        fileType: doc.file.type || null,
+        fileSize: doc.file.size || null,
+        documentCategory: doc.category || null,
+        notes: doc.notes || null,
+        contactId: doc.contactId || null,
+      });
+      updateDoc(doc.id, { uploading: false, saved: true, objectPath });
+      refetchDocs();
+      toast({ title: "Document saved", description: `${doc.file.name} has been imported.` });
+    } catch (err: unknown) {
+      updateDoc(doc.id, { uploading: false });
+      const message = err instanceof Error ? err.message : "Failed to save document.";
+      toast({ title: "Save failed", description: message, variant: "destructive" });
+    }
+  };
+
+  const unsavedDocs = pendingDocs.filter(d => !d.saved);
+  const savedPendingDocs = pendingDocs.filter(d => d.saved);
+
+  return (
+    <div className="space-y-6">
+      <Alert>
+        <FolderOpen className="h-4 w-4" />
+        <AlertTitle>Import Documents</AlertTitle>
+        <AlertDescription>
+          Upload PDF, DOCX, JPG, or PNG files from Jobber or Sweep & Go. AI will suggest a category for each file based on its name and type.
+        </AlertDescription>
+      </Alert>
+
+      <div
+        className={`border-2 border-dashed rounded-md p-10 text-center cursor-pointer transition-colors ${
+          isDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/40"
+        }`}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={() => setIsDragOver(false)}
+        onClick={() => fileInputRef.current?.click()}
+        data-testid="dropzone-documents"
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.docx,.jpg,.jpeg,.png"
+          multiple
+          className="hidden"
+          onChange={handleFileInput}
+          data-testid="input-document-files"
+        />
+        <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+        <p className="text-sm font-medium">Drop files here or click to browse</p>
+        <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, JPG, PNG — multiple files supported</p>
+      </div>
+
+      {unsavedDocs.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-muted-foreground">{unsavedDocs.length} file{unsavedDocs.length !== 1 ? "s" : ""} ready to import</p>
+          {unsavedDocs.map(doc => (
+            <Card key={doc.id} data-testid={`card-document-${doc.id}`}>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <div className="mt-0.5 flex-shrink-0">{fileIcon(doc.file)}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate" data-testid={`text-doc-name-${doc.id}`}>{doc.file.name}</p>
+                      <p className="text-xs text-muted-foreground">{formatBytes(doc.file.size)}</p>
+
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            Document Type
+                          </label>
+                          {doc.classifying ? (
+                            <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-muted/50">
+                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">AI analyzing…</span>
+                            </div>
+                          ) : (
+                            <Select
+                              value={doc.category}
+                              onValueChange={(val) => updateDoc(doc.id, { category: val as DocumentCategory })}
+                            >
+                              <SelectTrigger data-testid={`select-category-${doc.id}`} className="h-9">
+                                <SelectValue placeholder="Select type…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {DOCUMENT_CATEGORIES.map(cat => (
+                                  <SelectItem key={cat} value={cat} data-testid={`option-category-${cat}`}>{cat}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">Link to Contact (optional)</label>
+                          <ContactCombobox
+                            value={doc.contactId}
+                            onChange={(val) => updateDoc(doc.id, { contactId: val })}
+                            contacts={contacts || []}
+                            testId={`combobox-contact-${doc.id}`}
+                          />
+                        </div>
+
+                        <div className="space-y-1 sm:col-span-2">
+                          <label className="text-xs font-medium text-muted-foreground">Notes (optional)</label>
+                          <Textarea
+                            value={doc.notes}
+                            onChange={(e) => updateDoc(doc.id, { notes: e.target.value })}
+                            placeholder="e.g. Jobber March invoice for Smith account"
+                            className="h-16 resize-none text-sm"
+                            data-testid={`textarea-notes-${doc.id}`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex sm:flex-col gap-2 items-center sm:items-end justify-end sm:justify-start flex-shrink-0">
+                    <Button
+                      size="sm"
+                      onClick={() => saveDoc(doc)}
+                      disabled={doc.classifying || doc.uploading || !doc.category}
+                      data-testid={`button-save-doc-${doc.id}`}
+                    >
+                      {doc.uploading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                      {doc.uploading ? "Saving…" : "Save"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => removeDoc(doc.id)}
+                      disabled={doc.uploading}
+                      data-testid={`button-remove-doc-${doc.id}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {savedPendingDocs.length > 0 && (
+        <Alert>
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertTitle>{savedPendingDocs.length} document{savedPendingDocs.length !== 1 ? "s" : ""} imported successfully</AlertTitle>
+          <AlertDescription>They now appear in the import history below.</AlertDescription>
+        </Alert>
+      )}
+
+      {savedDocs && savedDocs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Previously Imported Documents</CardTitle>
+            <CardDescription>{savedDocs.length} document{savedDocs.length !== 1 ? "s" : ""} on file</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table data-testid="table-saved-documents">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>File Name</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Linked Contact</TableHead>
+                    <TableHead>Notes</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {savedDocs.map((doc) => (
+                    <TableRow key={doc.id} data-testid={`row-saved-doc-${doc.id}`}>
+                      <TableCell className="text-sm font-medium max-w-[160px] truncate">{doc.fileName}</TableCell>
+                      <TableCell>
+                        {doc.documentCategory ? (
+                          <Badge variant="secondary" className="text-xs">{doc.documentCategory}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">
+                        {doc.contactName || "—"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">{doc.notes || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function ContactsTab() {
   const { toast } = useToast();
   return (
@@ -986,9 +1426,15 @@ function ContactsTab() {
 }
 
 function ImportHistory() {
-  const { data: imports, isLoading } = useQuery<ImportRun[]>({
+  const { data: imports, isLoading: importsLoading } = useQuery<ImportRun[]>({
     queryKey: ["/api/imports"],
   });
+
+  const { data: docImports, isLoading: docsLoading } = useQuery<SavedDocument[]>({
+    queryKey: ["/api/documents"],
+  });
+
+  const isLoading = importsLoading || docsLoading;
 
   if (isLoading) {
     return (
@@ -1000,7 +1446,10 @@ function ImportHistory() {
     );
   }
 
-  if (!imports || imports.length === 0) {
+  const hasImports = imports && imports.length > 0;
+  const hasDocs = docImports && docImports.length > 0;
+
+  if (!hasImports && !hasDocs) {
     return (
       <p className="text-sm text-muted-foreground py-4" data-testid="text-no-imports">
         No import history yet. Upload a file above to get started.
@@ -1014,16 +1463,14 @@ function ImportHistory() {
         <TableHeader>
           <TableRow>
             <TableHead>Type</TableHead>
-            <TableHead>File</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Total</TableHead>
-            <TableHead className="text-right">Imported</TableHead>
-            <TableHead className="text-right">Skipped</TableHead>
+            <TableHead>File / Name</TableHead>
+            <TableHead>Category / Status</TableHead>
+            <TableHead className="text-right">Count</TableHead>
             <TableHead>Date</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {imports.map((run) => (
+          {(imports || []).map((run) => (
             <TableRow key={run.id} data-testid={`row-import-${run.id}`}>
               <TableCell>
                 <Badge variant="secondary" className="text-xs">{run.type}</Badge>
@@ -1037,11 +1484,35 @@ function ImportHistory() {
                   {run.status}
                 </Badge>
               </TableCell>
-              <TableCell className="text-right">{run.totalRows ?? 0}</TableCell>
               <TableCell className="text-right">{run.importedRows ?? 0}</TableCell>
-              <TableCell className="text-right">{run.skippedRows ?? 0}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {run.createdAt ? new Date(run.createdAt).toLocaleDateString() : "---"}
+              </TableCell>
+            </TableRow>
+          ))}
+          {(docImports || []).map((doc) => (
+            <TableRow key={doc.id} data-testid={`row-import-doc-${doc.id}`}>
+              <TableCell>
+                <Badge variant="outline" className="text-xs">Document</Badge>
+              </TableCell>
+              <TableCell className="text-sm">
+                <div className="max-w-[180px]">
+                  <p className="truncate font-medium">{doc.fileName}</p>
+                  {doc.contactName && (
+                    <p className="truncate text-xs text-muted-foreground" data-testid={`text-doc-contact-${doc.id}`}>{doc.contactName}</p>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                {doc.documentCategory ? (
+                  <Badge variant="secondary" className="text-xs">{doc.documentCategory}</Badge>
+                ) : (
+                  <span className="text-muted-foreground text-xs">—</span>
+                )}
+              </TableCell>
+              <TableCell className="text-right">1</TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : "---"}
               </TableCell>
             </TableRow>
           ))}
@@ -1076,6 +1547,10 @@ export default function MigrationPage() {
               <FileText className="h-4 w-4 mr-1.5" />
               Invoices
             </TabsTrigger>
+            <TabsTrigger value="documents" data-testid="tab-documents">
+              <FolderOpen className="h-4 w-4 mr-1.5" />
+              Documents
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="transfer" className="mt-6">
             <TransferTab />
@@ -1085,6 +1560,9 @@ export default function MigrationPage() {
           </TabsContent>
           <TabsContent value="invoices" className="mt-6">
             <InvoicesTab />
+          </TabsContent>
+          <TabsContent value="documents" className="mt-6">
+            <DocumentsTab />
           </TabsContent>
         </Tabs>
 

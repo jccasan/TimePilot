@@ -698,6 +698,8 @@ export const attachments = pgTable("attachments", {
   fileUrl: text("file_url").notNull(),
   fileType: varchar("file_type", { length: 50 }),
   fileSize: integer("file_size"),
+  documentCategory: varchar("document_category", { length: 100 }),
+  notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
