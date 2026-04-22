@@ -102,6 +102,7 @@ export function calculatePrice(
   let travelMinutes: number;
   let densityMultiplier: number;
   let adjustedTravelCostCents: number;
+  let travelCostCents: number;
   const isEstimated = !inputs.routeStopsPerMile && !inputs.overrideAdjustedTravelMinutes;
 
   if (inputs.overrideAdjustedTravelMinutes !== undefined) {
@@ -112,13 +113,14 @@ export function calculatePrice(
     // Derive standardized distance from the travel time and average speed
     const standardizedMiles = (adjustedTravelMinutes / 60) * config.driveSpeedAverageMph;
     if (config.vehicleCostPerMileCents > 0) {
-      adjustedTravelCostCents = standardizedMiles * config.vehicleCostPerMileCents;
+      travelCostCents = standardizedMiles * config.vehicleCostPerMileCents;
     } else if (config.vehicleMPG && config.vehicleMPG > 0) {
       const fuelCostPerMileCents = config.averageGasPriceCentsPerGallon / config.vehicleMPG;
-      adjustedTravelCostCents = standardizedMiles * fuelCostPerMileCents;
+      travelCostCents = standardizedMiles * fuelCostPerMileCents;
     } else {
-      adjustedTravelCostCents = standardizedMiles * 65;
+      travelCostCents = standardizedMiles * 65;
     }
+    adjustedTravelCostCents = travelCostCents;
   } else {
     // Route-level economics: use actual distance and density data
     travelMinutes = (inputs.distanceFromNearestStopMiles / config.driveSpeedAverageMph) * 60;
@@ -129,7 +131,6 @@ export function calculatePrice(
       densityMultiplier = Math.max(0.6, Math.min(1.8, densityMultiplier));
     }
     adjustedTravelMinutes = travelMinutes * densityMultiplier;
-    let travelCostCents: number;
     if (config.vehicleCostPerMileCents > 0) {
       travelCostCents = inputs.distanceFromNearestStopMiles * config.vehicleCostPerMileCents;
     } else if (config.vehicleMPG && config.vehicleMPG > 0) {
