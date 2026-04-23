@@ -1794,7 +1794,8 @@ function VisitChip({ visit, contacts, properties, routes, servicePlans, compact,
   const property = properties?.find((p) => p.id === visit.propertyId);
   const route = routes?.find((r) => r.id === visit.routeId);
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation();
     if (onVisitClick) onVisitClick(visit);
   };
 
@@ -1807,7 +1808,7 @@ function VisitChip({ visit, contacts, properties, routes, servicePlans, compact,
         onClick={handleClick}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(); } }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(e); } }}
       >
         <div className="flex items-center justify-between gap-1">
           <Badge variant="secondary" className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`}>
@@ -1833,7 +1834,7 @@ function VisitChip({ visit, contacts, properties, routes, servicePlans, compact,
       onClick={handleClick}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(); } }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(e); } }}
     >
       <CardContent className="p-3 space-y-1">
         <div className="flex items-center justify-between gap-2">
