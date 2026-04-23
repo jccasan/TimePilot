@@ -1377,12 +1377,20 @@ export default function RoutesPage() {
   const stopsByRoute = useMemo(() => {
     const map: Record<string, ServicePlan[]> = {};
     for (const r of allRoutes) map[r.id] = [];
+    // Build plan → today's visit route lookup so date-specific routes take priority
+    const planToVisitRoute = new Map<string, string>();
+    for (const v of dayVisits) {
+      if (v.servicePlanId && v.routeId) planToVisitRoute.set(v.servicePlanId, v.routeId);
+    }
     for (const sp of visiblePlans) {
-      if (!sp.routeId || !map[sp.routeId]) continue;
-      map[sp.routeId].push(sp);
+      const visitRouteId = planToVisitRoute.get(sp.id);
+      // Prefer the visit's route (date-specific) if it exists in the map; fall back to plan's route
+      const routeId = (visitRouteId && map[visitRouteId] !== undefined) ? visitRouteId : sp.routeId;
+      if (!routeId || !(routeId in map)) continue;
+      map[routeId].push(sp);
     }
     return map;
-  }, [allRoutes, visiblePlans]);
+  }, [allRoutes, visiblePlans, dayVisits]);
 
   const fetchRouteMetrics = useCallback(async (routeId: string) => {
     try {
@@ -1407,7 +1415,11 @@ export default function RoutesPage() {
   }, [routesForDay, stopsByRoute, routeMetrics, fetchRouteMetrics]);
 
   const unassignedPlans = useMemo(() => {
-    return visiblePlans.filter(sp => !sp.routeId).filter(sp => {
+    // Plans routed via their visit's route should not appear here as unassigned
+    const routedViaVisit = new Set(
+      dayVisits.filter(v => v.routeId && v.servicePlanId).map(v => v.servicePlanId as string)
+    );
+    return visiblePlans.filter(sp => !sp.routeId && !routedViaVisit.has(sp.id)).filter(sp => {
       if (!unassignedSearch) return true;
       const contact = contacts.find(c => c.id === sp.contactId);
       const property = properties.find(p => p.id === sp.propertyId);
@@ -1417,7 +1429,7 @@ export default function RoutesPage() {
         (property && property.streetAddress?.toLowerCase().includes(search))
       );
     });
-  }, [visiblePlans, unassignedSearch, contacts, properties]);
+  }, [visiblePlans, dayVisits, unassignedSearch, contacts, properties]);
 
   const activeDragStop = useMemo(() => {
     if (!activeDragId) return null;
