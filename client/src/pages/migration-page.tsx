@@ -36,7 +36,12 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Upload,
   FileText,
@@ -1021,6 +1026,11 @@ interface SavedDocument {
   createdAt: string | null;
 }
 
+// Dialog is used here instead of Popover intentionally.
+// Radix UI's focus-trap causes Popovers to fail to open when rendered inside a
+// Sheet or Drawer (a known issue on Android and some desktop browsers). Using a
+// Dialog avoids the nested-focus-trap conflict and keeps this picker safe to
+// embed in any context, including Sheets, as the app grows.
 function ContactCombobox({
   value,
   onChange,
@@ -1039,50 +1049,57 @@ function ContactCombobox({
     : "None";
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full h-9 justify-between font-normal"
-          data-testid={testId}
-        >
-          <span className="truncate">{label}</span>
-          <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search contacts…" data-testid={`${testId}-search`} />
-          <CommandList>
-            <CommandEmpty>No contacts found.</CommandEmpty>
-            <CommandGroup>
-              <CommandItem
-                value="__none__"
-                onSelect={() => { onChange(""); setOpen(false); }}
-              >
-                <Check className={`mr-2 h-4 w-4 ${!value ? "opacity-100" : "opacity-0"}`} />
-                None
-              </CommandItem>
-              {contacts.map(c => {
-                const display = `${c.firstName} ${c.lastName}${c.email ? ` (${c.email})` : ""}`;
-                return (
-                  <CommandItem
-                    key={c.id}
-                    value={display}
-                    onSelect={() => { onChange(c.id); setOpen(false); }}
-                  >
-                    <Check className={`mr-2 h-4 w-4 ${value === c.id ? "opacity-100" : "opacity-0"}`} />
-                    {display}
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        role="combobox"
+        aria-expanded={open}
+        className="w-full h-9 justify-between font-normal"
+        data-testid={testId}
+        onClick={() => setOpen(true)}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 text-muted-foreground" />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md p-0 gap-0" data-testid={`${testId}-dialog`}>
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle>Select a contact</DialogTitle>
+          </DialogHeader>
+          <Command>
+            <div className="px-2 pb-2">
+              <CommandInput placeholder="Search contacts…" autoFocus data-testid={`${testId}-search`} />
+            </div>
+            <CommandList className="max-h-72 overflow-y-auto px-2 pb-2">
+              <CommandEmpty>No contacts found.</CommandEmpty>
+              <CommandGroup>
+                <CommandItem
+                  value="__none__"
+                  onSelect={() => { onChange(""); setOpen(false); }}
+                >
+                  <Check className={`mr-2 h-4 w-4 ${!value ? "opacity-100" : "opacity-0"}`} />
+                  None
+                </CommandItem>
+                {contacts.map(c => {
+                  const display = `${c.firstName} ${c.lastName}${c.email ? ` (${c.email})` : ""}`;
+                  return (
+                    <CommandItem
+                      key={c.id}
+                      value={display}
+                      onSelect={() => { onChange(c.id); setOpen(false); }}
+                    >
+                      <Check className={`mr-2 h-4 w-4 ${value === c.id ? "opacity-100" : "opacity-0"}`} />
+                      {display}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
