@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { MapPin, Eye, Layers, ChevronRight, ChevronDown, DollarSign, TrendingUp, AlertTriangle, Map as MapIcon, Sparkles, X, ArrowRight, Fuel, Clock, Route, Loader2, ArrowLeftRight, CheckCircle, Download, Send, Bell, MessageSquare, Mail, XCircle } from "lucide-react";
+import { MapPin, Eye, Layers, ChevronRight, ChevronDown, DollarSign, Map as MapIcon, Sparkles, X, ArrowRight, Fuel, Clock, Route, Loader2, ArrowLeftRight, CheckCircle, Download, Send, Bell, MessageSquare, Mail, XCircle } from "lucide-react";
 import ProfitabilityMap, { type MapRoute, type MapStop } from "@/components/profitability-map";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";

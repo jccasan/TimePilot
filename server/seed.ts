@@ -4,7 +4,7 @@ import {
   routes, servicePlans, visits, invoices, invoiceLineItems,
   automationRules,
 } from "@shared/schema";
-import { addDays, subDays, nextDay, format, previousDay, isBefore } from "date-fns";
+import { addDays, subDays, format, isBefore } from "date-fns";
 import { count } from "drizzle-orm";
 
 async function seed() {

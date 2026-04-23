@@ -14,7 +14,7 @@ type ServicePricingItem = {
   unit: string;
   isActive: boolean;
 };
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,7 +29,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Briefcase, Plus, Search, CheckCircle, Clock, Loader2,
+  Briefcase, Plus, Search, CheckCircle, Loader2,
   Edit2, Trash2, Eye, ChevronDown, ChevronUp, Filter,
   User, Calendar,
 } from "lucide-react";

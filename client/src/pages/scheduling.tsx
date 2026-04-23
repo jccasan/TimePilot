@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
@@ -26,7 +26,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Command,
@@ -47,7 +46,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, CalendarDays, CalendarRange,
   CheckCircle, XCircle, Ban, Clock, MapPin, DollarSign, User, CalendarCheck, Loader2, GripVertical,
-  Send, MessageSquare, Trash2, Search, Eye, EyeOff, Pencil, ChevronDown, Check, ChevronsUpDown,
+  Send, MessageSquare, Trash2, Search, Eye, EyeOff, Pencil, ChevronsUpDown,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -74,7 +73,6 @@ const visitStatusLabels: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 type ViewMode = "day" | "week" | "month";
@@ -139,13 +137,6 @@ interface JobFormPayload {
   endsAfterUnit?: string | null;
   endDate?: string | null;
 }
-
-const frequencyLabels: Record<string, string> = {
-  weekly: "Weekly",
-  biweekly: "Every 2 Weeks",
-  monthly: "Monthly",
-  onetime: "One-Time",
-};
 
 const dayOfWeekLabels: Record<string, string> = {
   monday: "Monday",

@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { eq, and, sql, gte, lte, count } from "drizzle-orm";
-import { companies, visits, invoices, smsMessages, emailsSent, contacts, agreements } from "@shared/schema";
+import { visits, invoices, smsMessages, emailsSent, contacts, agreements } from "@shared/schema";
 import { storage } from "../storage";
 
 export async function runNightlyRollup() {

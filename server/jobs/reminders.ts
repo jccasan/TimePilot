@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { eq, and, lte, sql, isNull, lt, inArray, desc } from "drizzle-orm";
+import { eq, and, lte, sql } from "drizzle-orm";
 import { contacts, visits, invoices, jobs, agreements, properties, routes, reminderLogs, type ReminderRule, type InvoiceReminderSettings } from "@shared/schema";
 import { storage } from "../storage";
 import { sendEmail } from "../services/email";

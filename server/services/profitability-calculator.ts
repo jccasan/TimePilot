@@ -439,7 +439,6 @@ export async function generateProfitabilitySnapshots(
 
   for (const customer of allProfitability) {
     for (const prop of customer.properties) {
-      const plan = customer.properties.find(p => p.servicePlanId === prop.servicePlanId);
       const visitsPerMonth = getFrequencyVisitsPerMonth(prop.frequency);
 
       const snapshot: InsertProfitabilitySnapshot = {

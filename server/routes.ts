@@ -6,7 +6,7 @@ import path from "path";
 import multer from "multer";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql, eq, and, lt, gte, isNotNull, like, or, inArray, desc } from "drizzle-orm";
+import { sql, eq, and, lt, gte, isNotNull, or, inArray, desc } from "drizzle-orm";
 import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable, stripeEvents, automationRules, automationEventLogs, quoteFormEvents } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, parseLotSizeStringToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
@@ -14,14 +14,13 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
 import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, logEmailSent } from "./services/email";
-import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd, getCompanyDayOfWeek } from "./utils/company-date";
+import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd } from "./utils/company-date";
 import { sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "./services/sms";
 import {
   isStripeConfigured,
   createStripeCustomer,
   createSetupIntent,
   getCustomerPaymentMethods,
-  createPaymentIntent,
   chargeInvoiceAutomatically,
   constructWebhookEvent,
   createCheckoutSession,
@@ -45,7 +44,7 @@ import {
 import { seedRetellKnowledgeBase, provisionRetellNumber } from "./services/retell";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress } from "./services/geocode";
-import { computeInvoice, formatUSD } from "./invoice-engine/invoice.compute";
+import { computeInvoice } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import { calculateQuotePricing, renderResidentialProposalHtml, renderCommercialProposalHtml, renderQuoteSmsText, type ResidentialQuoteInput, type CommercialQuoteInput } from "./services/quote-pricing";
 import { generateQuotePdf, generateQuoteDocx } from "./services/quote-document";
@@ -340,8 +339,6 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   registerObjectStorageRoutes(app, isAuthenticated);
-
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
   validateStripeConfig();
   fetchStripePrices().catch((err: unknown) => {
@@ -1803,7 +1800,7 @@ export async function registerRoutes(
 
   app.post("/api/onboarding/scrape-website", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId, role } = await getCompanyContext(req);
+      const { role } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
       let { websiteUrl } = req.body;
       if (!websiteUrl || typeof websiteUrl !== "string") return res.status(400).json({ error: "Website URL is required" });
@@ -2511,7 +2508,7 @@ Return ONLY valid JSON, no markdown.`,
       const monthStart = getCompanyMonthStart(tz);
       const monthEnd = getCompanyMonthEnd(tz);
 
-      const [todaysVisitsList, overdueVisits, failedPayments, activeUsers, overdueInvoices, invoiceMonthRevenue, smsCountThisMonth, emailCountThisMonth, monthVisitsForRevenue] = await Promise.all([
+      const [todaysVisitsList, , failedPayments, activeUsers, overdueInvoices, invoiceMonthRevenue, smsCountThisMonth, emailCountThisMonth, monthVisitsForRevenue] = await Promise.all([
         storage.getTodaysVisits(companyId, today),
         storage.getOverdueVisits(companyId, today),
         storage.getFailedPaymentsCount(companyId),
@@ -5797,7 +5794,7 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      const { addOns: addOnsData, ...rawBody } = req.body;
+      const { addOns: addOnsData } = req.body;
       const updateBody = body;
       const plan = await storage.updateServicePlan(req.params.id, companyId, updateBody);
       const { userId } = await getCompanyContext(req);
@@ -11795,7 +11792,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/quotes/generate-yard-image", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { propertyId, zoom: requestedZoom, caption, polygon: directPolygon, lat: directLat, lng: directLng, sqft: directSqft } = req.body;
+      const { propertyId, caption, polygon: directPolygon, lat: directLat, lng: directLng, sqft: directSqft } = req.body;
 
       let polygon: number[][] | null = null;
       let lat: number | null = null;
@@ -13375,7 +13372,7 @@ Return ONLY valid JSON, no markdown.`,
         try {
           const today = new Date().toISOString().split("T")[0];
           const portalSvcName = `${tier.charAt(0).toUpperCase() + tier.slice(1)} Service (Quote #${quoteNumber || quoteId})`;
-          const portalSp = await storage.createServicePlan({
+          await storage.createServicePlan({
             companyId,
             contactId,
             propertyId,
@@ -15825,7 +15822,6 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/migrations/sweepandgo/parse-invoices", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
       const { csvText } = req.body;
       if (!csvText || typeof csvText !== "string") return res.status(400).json({ error: "csvText is required" });
 
@@ -16644,7 +16640,7 @@ Respond with exactly one category from the list above and nothing else.`;
 
       const tempPassword = crypto.randomBytes(6).toString("base64url");
 
-      const { user, company } = await db.transaction(async (tx) => {
+      const { company } = await db.transaction(async (tx) => {
         const txUser = await createUserWithTempPassword(record.email, record.firstName, record.lastName || "", tempPassword);
 
         const baseSlug = (record.companyName || "company").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
@@ -17538,7 +17534,6 @@ Respond with exactly one category from the list above and nothing else.`;
           (async () => {
             try {
               const safeCompanyName = escapeHtml(companyName);
-              const safeFirstName = escapeHtml(firstName);
               const defaultEmailSubject = "Your Quote from {companyName}";
               const subject = mergeReplace(company.quoteFollowUpEmailSubject || defaultEmailSubject);
               const priceDisplay = callForQuote ? "Custom Quote" : `$${priceDollars}/visit`;

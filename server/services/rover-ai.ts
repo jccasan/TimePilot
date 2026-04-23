@@ -375,8 +375,6 @@ async function getRecentActivity(companyId: string): Promise<string> {
   const today = new Date().toISOString().split("T")[0];
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
-  const weekStart = weekAgo.toISOString().split("T")[0];
-
   const [completedToday] = await db
     .select({ count: count() })
     .from(visits)

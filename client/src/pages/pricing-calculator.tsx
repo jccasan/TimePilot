@@ -63,11 +63,6 @@ import {
 } from "lucide-react";
 import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
 
-function centsToDollars(cents: number | null | undefined): string {
-  if (cents === null || cents === undefined) return "";
-  return (cents / 100).toFixed(2);
-}
-
 function dollarsToCents(dollars: number | string): number {
   const val = typeof dollars === "string" ? parseFloat(dollars) : dollars;
   if (isNaN(val)) return 0;

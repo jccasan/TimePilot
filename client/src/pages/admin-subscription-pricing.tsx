@@ -22,14 +22,6 @@ interface SubscriptionTier {
   updatedAt: string;
 }
 
-const tierKeyLabels: Record<string, string> = {
-  free_trial: "Free Trial",
-  tier_1: "Solo",
-  tier_1_3: "Walk",
-  tier_3_5: "Run",
-  tier_6_10: "Grow",
-  tier_10_plus: "Enterprise (inactive)",
-};
 
 const tierColors: Record<string, string> = {
   free_trial: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
@@ -96,7 +88,6 @@ export default function AdminSubscriptionPricing() {
   }
 
   const activeTiers = tiers?.filter(t => t.isActive) || [];
-  const totalMRR = activeTiers.reduce((s, t) => s + parseFloat(t.price), 0);
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6" data-testid="admin-subscription-pricing-page">

@@ -1,11 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -33,10 +32,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Target,
   ArrowUpRight,
   ArrowDownRight,
   Minus,
@@ -189,7 +184,7 @@ export default function AIPricingOptimizer() {
     queryKey: ["/api/pricing-simulator/zip-codes"],
   });
 
-  const { data: competitors, isLoading: competitorsLoading } = useQuery<CompetitorEntry[]>({
+  const { data: competitors } = useQuery<CompetitorEntry[]>({
     queryKey: ["/api/competitor-pricing"],
   });
 

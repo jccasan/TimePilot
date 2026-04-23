@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   TrendingUp, DollarSign, Users, FileText,
-  CalendarCheck, BarChart3, BookOpen, TrendingDown,
+  CalendarCheck, BarChart3, BookOpen,
 } from "lucide-react";
 import Analytics from "@/pages/analytics";
 

@@ -78,18 +78,17 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetFooter,
 } from "@/components/ui/sheet";
 import {
   DollarSign, CalendarCheck, AlertTriangle, UserCheck,
   Plus, Eye, Users, ClipboardList, TrendingUp,
   FileText, Clock,
-  MessageSquare, Mail, Sliders, ChevronUp, ChevronDown,
+  MessageSquare, Mail, Sliders,
   CheckCircle, XCircle, MapPin, BarChart3, Activity,
   StickyNote, Route, GripVertical, X, LayoutGrid,
   Inbox, ArrowRight, RotateCcw, Cloud, MapPinned,
   Sun, CloudRain, CloudSnow, CloudLightning, CloudDrizzle,
-  Cloudy, Snowflake, Wind, GripHorizontal, Bell, Info, AlertOctagon, List,
+  Cloudy, Snowflake, GripHorizontal, Bell, Info, AlertOctagon, List,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";

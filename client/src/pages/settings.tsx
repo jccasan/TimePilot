@@ -191,16 +191,6 @@ const roleLabels: Record<string, string> = {
 type ImportRow = Record<string, string>;
 type ColumnMapping = { csvHeader: string; mappedField: string };
 
-type ValidationResult = {
-  totalRows: number;
-  validCount: number;
-  invalidCount: number;
-  issues: { row: number; field: string; message: string }[];
-  newLeadSources: string[];
-  headers: string[];
-  columnMapping: ColumnMapping[];
-  rows: ImportRow[];
-};
 
 const CONTACT_FIELDS = [
   { key: "firstName", label: "First Name" },
@@ -2868,7 +2858,7 @@ export default function Settings() {
   const [resetPasswordMember, setResetPasswordMember] = useState<TeamMember | null>(null);
   const [resetNewPassword, setResetNewPassword] = useState("");
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
+  const [, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [importRows, setImportRows] = useState<ImportRow[]>([]);

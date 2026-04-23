@@ -125,11 +125,6 @@ function formatDollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function formatDollarsShort(cents: number): string {
-  const dollars = cents / 100;
-  if (Math.abs(dollars) >= 1000) return `$${(dollars / 1000).toFixed(1)}k`;
-  return `$${dollars.toFixed(0)}`;
-}
 
 function statusBadge(status: "profitable" | "marginal" | "unprofitable") {
   const variants: Record<string, { label: string; className: string }> = {
@@ -180,7 +175,6 @@ export default function Profitability() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortField, setSortField] = useState<SortField>("profit");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -238,13 +232,6 @@ export default function Profitability() {
     }
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
 
   const filtered = (customers ?? [])
     .filter(c => {

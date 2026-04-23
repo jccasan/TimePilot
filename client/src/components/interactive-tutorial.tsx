@@ -662,7 +662,6 @@ export function TutorialOverlay({
     };
 
     const handler = (e: Event) => {
-      const targetEl = (e.target as HTMLElement) || el;
       if (step.action === "click") {
         if (passesValidation(el)) {
           setActionDetected(true);

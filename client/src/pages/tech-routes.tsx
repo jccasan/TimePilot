@@ -11,8 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin, Dog, Phone, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp, Satellite, Play, SkipForward, Navigation, Loader2, ShieldAlert } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
-import { getYardCategory, formatArea } from "@/components/yard-measure-tool";
-import { Link } from "wouter";
 import { useOffline } from "@/hooks/use-offline";
 import { OfflineStatusBar } from "@/components/offline-status-bar";
 import { cacheRouteData, getCachedRouteData, addPendingMutation } from "@/lib/offline-store";

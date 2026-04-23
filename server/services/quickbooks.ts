@@ -333,8 +333,6 @@ export async function syncInvoiceToQbo(companyId: string, invoiceId: string): Pr
 
   const lineItems = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId));
 
-  const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
-
   let serviceItemRef = { value: "1", name: "Services" };
   try {
     const itemQuery = await qboRequest(companyId, "GET",
@@ -402,7 +400,7 @@ export async function syncInvoiceToQbo(companyId: string, invoiceId: string): Pr
     }
 
     if (existingQboInvoice) {
-      const updateRes = await qboRequest(companyId, "POST", `/invoice`, {
+      await qboRequest(companyId, "POST", `/invoice`, {
         Id: invoice.qboInvoiceId,
         SyncToken: existingQboInvoice.SyncToken,
         sparse: true,

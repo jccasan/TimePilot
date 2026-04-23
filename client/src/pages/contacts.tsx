@@ -49,16 +49,6 @@ type ImportRow = Record<string, string>;
 
 type ColumnMapping = { csvHeader: string; mappedField: string };
 
-type ValidationResult = {
-  totalRows: number;
-  validCount: number;
-  invalidCount: number;
-  issues: { row: number; field: string; message: string }[];
-  newLeadSources: string[];
-  headers: string[];
-  columnMapping: ColumnMapping[];
-  rows: ImportRow[];
-};
 
 const CONTACT_FIELDS = [
   { key: "firstName", label: "First Name" },
@@ -89,7 +79,7 @@ export default function Contacts() {
   const [importStep, setImportStep] = useState<"idle" | "mapping" | "review">("idle");
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [rawCsvRows, setRawCsvRows] = useState<string[][]>([]);
-  const [rawCsvHeaders, setRawCsvHeaders] = useState<string[]>([]);
+  const [, setRawCsvHeaders] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState<ColumnMapping[]>([]);
   const [newLeadSources, setNewLeadSources] = useState<string[]>([]);
   const [isValidating, setIsValidating] = useState(false);
@@ -106,9 +96,6 @@ export default function Contacts() {
     queryKey: ["/api/contacts" + (queryString ? `?${queryString}` : "")],
   });
 
-  const { data: leadSources = [] } = useQuery<{ id: string; name: string }[]>({
-    queryKey: ["/api/lead-sources"],
-  });
 
   const { data: tagsList = [] } = useQuery<Tag[]>({
     queryKey: ["/api/tags"],

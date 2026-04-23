@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { eq, and, lt, sql, count, inArray } from "drizzle-orm";
+import { eq, and, lt, inArray } from "drizzle-orm";
 import { companies, messages, messageAttachments, smsMessages } from "@shared/schema";
 
 export async function runMessageCleanup() {

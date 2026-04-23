@@ -38,7 +38,6 @@ function getYardCategory(sqft: number): { label: string; color: string } {
 
 function formatArea(sqft: number): string {
   const acres = sqft / 43560;
-  const pctAcre = acres * 100;
   if (acres >= 1) {
     return `${sqft.toLocaleString()} sq ft / ${acres.toFixed(2)} acres`;
   }

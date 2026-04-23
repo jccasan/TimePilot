@@ -34,7 +34,6 @@ import {
   Calendar,
   MapPin,
   CheckCircle2,
-  Circle,
   ArrowRight,
   Loader2,
   PartyPopper,
@@ -459,9 +458,6 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
     },
   });
 
-  const completedCount = onboarding.steps.filter(s => s.completed).length + 
-    (activeStep > onboarding.steps.findIndex(s => !s.completed) ? 
-      activeStep - onboarding.steps.findIndex(s => !s.completed) : 0);
   const effectiveCompleted = Math.min(activeStep, 5);
   const progress = (effectiveCompleted / 5) * 100;
 

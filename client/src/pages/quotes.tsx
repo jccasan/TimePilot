@@ -6,7 +6,7 @@ import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { Quote, Contact, Property } from "@shared/schema";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,8 +26,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   Plus, Send, Eye, Trash2, Pencil, ClipboardCheck, Search,
-  DollarSign, Home, Building2, Dog, Loader2, CheckCircle2, XCircle,
-  Clock, FileText, MapPin, Camera, X, Ruler, Download,
+  DollarSign, Home, Building2, Loader2, CheckCircle2,
+  Clock, FileText, X, Ruler, Download,
 } from "lucide-react";
 import { YardMeasureTool } from "@/components/yard-measure-tool";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
@@ -742,8 +742,6 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts, prefilledC
       }
     }
   };
-
-  const selectedProperty = contactProperties?.find(p => p.id === propertyId);
 
   const handleAddressSelect = useCallback((parsed: { streetAddress: string; city: string; state: string; zipCode: string; latitude: string; longitude: string }) => {
     if (parsed.streetAddress) setPropertyAddress(parsed.streetAddress);

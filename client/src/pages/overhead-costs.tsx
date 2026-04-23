@@ -759,9 +759,6 @@ export default function OverheadCosts() {
     .filter((i) => i.type === "variable")
     .reduce((s, i) => s + i.monthlyCostCents, 0);
 
-  const { data: statsData } = useQuery<{ mrr: number; todaysVisits: number }>({
-    queryKey: ["/api/company/stats"],
-  });
 
   const { data: companyData } = useQuery<any>({
     queryKey: ["/api/company"],

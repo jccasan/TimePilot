@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, like, ilike, or, gte, lte, lt, inArray, count, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, desc, asc, sql, ilike, or, gte, lte, lt, inArray, count, isNull, isNotNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   companies, companyUsers, contacts, tags, contactTags, leadSources,
@@ -22,10 +22,10 @@ import {
   type Route, type InsertRoute,
   type Agreement, type InsertAgreement,
   type Job, type InsertJob,
-  type JobAddOn, type InsertJobAddOn,
+  type JobAddOn,
   type JobWithAgreement,
   type ServicePlan, type InsertServicePlan,
-  type ServicePlanAddOn, type InsertServicePlanAddOn,
+  type ServicePlanAddOn,
   servicePlanAddOns,
   type VacationHold, type InsertVacationHold,
   type Visit, type InsertVisit,
@@ -46,7 +46,7 @@ import {
   type EmailSent, type InsertEmailSent,
   type AccountDailyMetric, type InsertAccountDailyMetric,
   type SaasCostMonthly, type InsertSaasCostMonthly,
-  type CostConfigItem, type InsertCostConfig,
+  type CostConfigItem,
   type TimeEntry, type InsertTimeEntry,
   type ActivityLog, type InsertActivityLog,
   type WebhookDelivery, type InsertWebhookDelivery,
@@ -54,7 +54,6 @@ import {
   type ImportRun, type InsertImportRun,
   type InvoicePayment, type InsertInvoicePayment,
   type PriceRecommendation, type InsertPriceRecommendation,
-  type PricingConfig,
   type ProfitabilitySnapshot, type InsertProfitabilitySnapshot,
   type OverheadCost, type InsertOverheadCost,
   type CompetitorPricing, type InsertCompetitorPricing,
@@ -2082,7 +2081,7 @@ export class DatabaseStorage implements IStorage {
 
   // ================ Bulk Operations ================
   async bulkUpdateContacts(ids: string[], companyId: string, data: Partial<any>): Promise<number> {
-    const result = await db.update(contacts)
+    await db.update(contacts)
       .set({ ...data, updatedAt: new Date() })
       .where(and(inArray(contacts.id, ids), eq(contacts.companyId, companyId)));
     return ids.length;

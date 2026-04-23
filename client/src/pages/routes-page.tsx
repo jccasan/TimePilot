@@ -34,15 +34,13 @@ import {
 import {
   MapPin, Dog, GripVertical, Plus, Pencil, Trash2, Route as RouteIcon,
   Navigation, AlertCircle, User, Search, Loader2, Send, Coins, TrendingDown,
-  Clock, ShoppingCart, RotateCcw, Map as MapIcon, List, Save, ChevronDown, ChevronUp,
+  Clock, ShoppingCart, RotateCcw, Map as MapIcon, List, Save,
   CheckCircle, XCircle, SkipForward, MoreVertical, Car, Ban, CalendarCheck,
   CalendarDays, DollarSign, Play, ArrowUpDown, ShieldAlert, Lock, Unlock,
-  Sparkles, ArrowRight, Check, X, ToggleLeft, Calendar,
+  Sparkles, X,
   Camera, DoorClosed, ChevronLeft, ChevronRight, Info
 } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { WeeklyOptimizerPanel } from "@/components/WeeklyOptimizerPanel";
 import { Link } from "wouter";
 import { LearnHowButton } from "@/components/interactive-tutorial";
@@ -1313,20 +1311,6 @@ export default function RoutesPage() {
     return forDay.filter(r => !r.date);
   }, [allRoutes, selectedDay, currentWeekRange, dayVisits]);
 
-  const routeCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const d of DAYS) {
-      const forDay = allRoutes.filter(r => r.dayOfWeek === d);
-      const dateSpecific = forDay.filter(r => {
-        if (!r.date) return false;
-        const rd = new Date(r.date + "T12:00:00");
-        return rd >= currentWeekRange.start && rd <= currentWeekRange.end;
-      });
-      counts[d] = dateSpecific.length > 0 ? dateSpecific.length : forDay.filter(r => !r.date).length;
-    }
-    return counts;
-  }, [allRoutes, currentWeekRange]);
-
   const weekStartStr = useMemo(() => toLocalDateString(currentWeekRange.start, tz), [currentWeekRange, tz]);
   const weekEndStr = useMemo(() => toLocalDateString(currentWeekRange.end, tz), [currentWeekRange, tz]);
 
@@ -1346,14 +1330,6 @@ export default function RoutesPage() {
       return res.json();
     },
   });
-
-  const weekPlanIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const v of weekVisits) {
-      if (v.servicePlanId) ids.add(v.servicePlanId);
-    }
-    return ids;
-  }, [weekVisits]);
 
   const dayPlanIds = useMemo(() => {
     const ids = new Set<string>();

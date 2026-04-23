@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 
 export const BILLING_CADENCE_LABELS: Record<string, string> = {
   per_visit: "Per Visit",

@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Message, Contact } from "@shared/schema";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mail, MessageSquare, Send, ArrowUpRight, ArrowDownLeft, AlertCircle, CheckCircle2, ArrowLeft, User, Loader2, Paperclip, X, Image as ImageIcon } from "lucide-react";
+import { Mail, MessageSquare, Send, ArrowUpRight, ArrowDownLeft, AlertCircle, ArrowLeft, User, Loader2, Paperclip, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useLocation } from "wouter";
 import { compressImage, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/image-compress";
@@ -69,27 +69,6 @@ type Conversation = {
   subject: string;
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    sent: "default",
-    delivered: "default",
-    received: "secondary",
-    queued: "outline",
-    failed: "destructive",
-  };
-  const icons: Record<string, typeof CheckCircle2> = {
-    sent: CheckCircle2,
-    delivered: CheckCircle2,
-    failed: AlertCircle,
-  };
-  const Icon = icons[status];
-  return (
-    <Badge variant={variants[status] || "outline"} data-testid={`badge-status-${status}`}>
-      {Icon && <Icon className="h-3 w-3 mr-1" />}
-      {status}
-    </Badge>
-  );
-}
 
 function DirectionIcon({ direction }: { direction: string }) {
   if (direction === "outbound") return <ArrowUpRight className="h-4 w-4 text-blue-500 dark:text-blue-400" />;
@@ -998,8 +977,6 @@ export default function Communications() {
     const contact = contacts?.find(c => c.id === contactId);
     if (contact?.phone) smsForm.setValue("to", contact.phone);
   };
-
-  const channelFilter = activeTab === "all" ? undefined : activeTab;
 
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExternalLink, FileText, CreditCard, Calendar, Copy, CheckCircle, PauseCircle, PlayCircle, Link2 } from "lucide-react";
+import { ExternalLink, FileText, CreditCard, Calendar, Copy, CheckCircle, PauseCircle, Link2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 

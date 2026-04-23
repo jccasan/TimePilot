@@ -13,13 +13,6 @@ export function normalizePhone(value: string): string {
   return digits;
 }
 
-const DATE_FORMATS = [
-  /^(\d{4})-(\d{2})-(\d{2})$/,
-  /^(\d{2})\/(\d{2})\/(\d{4})$/,
-  /^(\d{2})-(\d{2})-(\d{4})$/,
-  /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/,
-];
-
 export function parseDate(value: string): string | null {
   if (!value) return null;
   const trimmed = value.trim();

@@ -33,7 +33,7 @@ export default function VoiceSignup() {
   const slug = useMemo(() => extractSlugFromPath(), []);
   const { toast } = useToast();
   const [email, setEmail] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [success] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
   const isSuccess = urlParams.get("success") === "1";

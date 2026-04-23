@@ -2913,8 +2913,6 @@ function ServicePlansCard({ contactId, contact, properties }: { contactId: strin
       </CardHeader>
       <CardContent>
         {servicePlans && servicePlans.length > 0 ? (() => {
-          const activeServices = servicePlans.filter(p => p.jobStatus !== "cancelled" && p.isActive);
-          const pausedServices = servicePlans.filter(p => !!p.pausedAt && p.jobStatus !== "cancelled");
           const cancelledServices = servicePlans.filter(p => p.jobStatus === "cancelled");
           const currentServices = servicePlans.filter(p => p.jobStatus !== "cancelled");
           return (

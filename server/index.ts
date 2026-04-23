@@ -1336,13 +1336,11 @@ async function seedDemoCompany() {
 
     const activeContacts = [0, 1, 2, 4, 5, 7, 10, 14];
     const prices = [25, 20, 35, 18, 28, 40, 26, 32];
-    const addrs2 = ['1204 Charles St', '810 William St', '305 Hanover St', '2108 Fall Hill Ave', '904 Kenmore Ave', '1700 Plank Rd', '508 Sophia St', '1303 Sunken Rd'];
     let invNum = 1;
 
     for (let i = 0; i < activeContacts.length; i++) {
       const cid = contactIds[activeContacts[i]];
       const price = prices[i];
-      const addr = addrs2[i];
 
       const paidTotal = (price * 4).toFixed(2);
       const paidInvNum = `INV-${String(invNum++).padStart(5, '0')}`;
@@ -1353,7 +1351,7 @@ async function seedDemoCompany() {
 
       const draftTotal = (price * 2).toFixed(2);
       const draftInvNum = `INV-${String(invNum++).padStart(5, '0')}`;
-      const draftRes = await pool.query(
+      await pool.query(
         `INSERT INTO invoices (company_id, contact_id, invoice_number, due_date, subtotal, tax, total, status, auto_generated, payment_attempts) VALUES ($1,$2,$3,'2026-04-01',$4,'0',$4,'draft',true,0) RETURNING id`,
         [companyId, cid, draftInvNum, draftTotal]
       );

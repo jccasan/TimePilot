@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { eq, and, gte, lte, count, sql, desc, asc, lt, or, isNull } from "drizzle-orm";
+import { eq, and, gte, lte, count, sql, desc, lt, or } from "drizzle-orm";
 import { db } from "./db";
 import { storage } from "./storage";
 import {
@@ -40,10 +40,6 @@ function monthStart(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
-function monthEnd(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-}
-
 export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
 
   // 1. Executive Overview
@@ -51,7 +47,6 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
     try {
       const now = new Date();
       const thisMonthStart = monthStart(now);
-      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
       const allCompanies = await db.select().from(companies);
@@ -142,8 +137,6 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split("T")[0];
-
       let allCompanies = await db.select().from(companies);
 
       const allActive = allCompanies.filter(c => c.subscriptionStatus === "active");
@@ -936,7 +929,6 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
       if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
         return res.status(400).json({ error: "Invalid month format (expected YYYY-MM with valid month 01-12)" });
       }
-      const centFields = [hostingCents, dbCents, emailPlatformCents, smsPlatformCents, monitoringCents, otherCents, supportLaborCents];
       const toInt = (v: any) => { const n = Number(v ?? 0); return isFinite(n) ? Math.round(n) : 0; };
       const result = await storage.upsertSaasCosts({
         month,

@@ -1,11 +1,9 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageSquare, Mail, HardDrive, AlertTriangle, Trash2, Loader2, Building2, Clock, ArrowRight } from "lucide-react";
+import { MessageSquare, HardDrive, AlertTriangle, Trash2, Loader2, Building2, Clock, ArrowRight } from "lucide-react";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";

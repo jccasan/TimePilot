@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, Calculator, RefreshCw, ArrowRight, TrendingUp, TrendingDown, DollarSign, Info } from "lucide-react";
+import { AlertTriangle, Calculator, RefreshCw, ArrowRight, TrendingUp, Info } from "lucide-react";
 import type { Property, ServicePlan } from "@shared/schema";
 
 interface PriceCalculatorCardProps {

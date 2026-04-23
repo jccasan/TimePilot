@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  WidthType, AlignmentType, BorderStyle, HeadingLevel, ShadingType,
+  WidthType, AlignmentType, HeadingLevel, ShadingType,
   ImageRun, convertInchesToTwip,
 } from "docx";
 

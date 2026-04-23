@@ -44,7 +44,6 @@ const InvoicePayPage = lazy(() => import("@/pages/invoice-pay"));
 const Pricing = lazy(() => import("@/pages/pricing"));
 const Communications = lazy(() => import("@/pages/communications"));
 const Reports = lazy(() => import("@/pages/reports"));
-const Analytics = lazy(() => import("@/pages/analytics"));
 const AdminDashboard = lazy(() => import("@/pages/admin-dashboard"));
 const AdminTenants = lazy(() => import("@/pages/admin-tenants"));
 const AdminCompanyDetail = lazy(() => import("@/pages/admin-company-detail"));
@@ -60,7 +59,6 @@ const Profitability = lazy(() => import("@/pages/profitability"));
 const ProfitabilityDetail = lazy(() => import("@/pages/profitability-detail"));
 const RouteProfitMaps = lazy(() => import("@/pages/route-profit-maps"));
 const FieldView = lazy(() => import("@/pages/field-view"));
-const AIPricingOptimizer = lazy(() => import("@/pages/ai-pricing-optimizer"));
 const OverheadCosts = lazy(() => import("@/pages/overhead-costs"));
 const MigrationPage = lazy(() => import("@/pages/migration-page"));
 const CommandCenter = lazy(() => import("@/pages/command-center"));
@@ -139,7 +137,7 @@ function AuthenticatedLayout() {
   const [setupState, setSetupState] = useState<"loading" | "ready" | "error">(
     (user as any)?.setupDone ? "ready" : "loading"
   );
-  const { activeTour, isRunning, startTour, handleCallback, hasCompletedWelcome, getUnseenTours, isTourStatusLoaded } = useFeatureTour();
+  const { activeTour, isRunning, startTour, handleCallback, getUnseenTours, isTourStatusLoaded } = useFeatureTour();
   const [autoTourChecked, setAutoTourChecked] = useState(false);
   const { data: onboardingStatus } = useQuery<{ isComplete: boolean }>({
     queryKey: ["/api/onboarding/status"],

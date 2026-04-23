@@ -43,7 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, DollarSign, Clock, CheckCircle2, ChevronDown, ChevronRight, SendHorizonal, RefreshCw, Square, CheckSquare, Bell, Settings, X, History, Eye, ShieldCheck, Users, Calendar, AlertCircle, Activity } from "lucide-react";
+import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, Clock, CheckCircle2, ChevronDown, ChevronRight, SendHorizonal, RefreshCw, Bell, Settings, X, History, Eye, ShieldCheck, Users, Calendar, AlertCircle, Activity } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   DropdownMenu,

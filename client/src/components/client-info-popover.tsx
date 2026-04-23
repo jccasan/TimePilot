@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
   User, MapPin, Phone, Mail, Dog, DollarSign,
-  Calendar, ExternalLink, Home, Clock
+  Calendar, ExternalLink, Home
 } from "lucide-react";
 
 const statusColors: Record<string, string> = {

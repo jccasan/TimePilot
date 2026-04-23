@@ -56,8 +56,6 @@ import {
   RefreshCw,
   MapPin,
   Mail,
-  Phone,
-  Dog,
   File,
   FileImage,
   X,

@@ -1,17 +1,13 @@
 import { storage } from "../storage";
 import {
   calculatePrice,
-  yardSizeLabelToAcres,
-  sqftToAcres,
   getEffectivePricingConfig,
   type PriceCalculatorInputs,
 } from "./pricing-calculator";
 import {
   calculateAllCustomerProfitability,
-  type CustomerProfitability,
-  type CustomerPropertyProfitability,
 } from "./profitability-calculator";
-import type { PricingConfig, CompetitorPricing } from "@shared/schema";
+import type { PricingConfig } from "@shared/schema";
 
 export interface SimulationParams {
   targetMarginPct: number;
@@ -152,11 +148,7 @@ export async function runPricingSimulation(
     : undefined;
 
   const allProfitability = await calculateAllCustomerProfitability(companyId);
-  const allContacts = await storage.getContacts(companyId, { status: "active" });
   const allProperties = await storage.getProperties(companyId);
-  const allPlans = await storage.getServicePlans(companyId);
-
-  const contactMap = new Map(allContacts.map(c => [c.id, c]));
   const propertyMap = new Map(allProperties.map(p => [p.id, p]));
 
   const simulatedProperties: SimulatedProperty[] = [];

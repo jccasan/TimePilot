@@ -111,7 +111,6 @@ export function parseSweepAndGoInvoices(csvText: string): InvoiceParseResult {
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const rowNum = i + 2;
 
     const get = (field: string): string => {
       const idx = colMap[field];
