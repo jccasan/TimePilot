@@ -56,7 +56,6 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { ClientInfoPopover } from "@/components/client-info-popover";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, TouchSensor,

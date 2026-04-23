@@ -36,7 +36,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Mail, MessageSquare, Send, ArrowUpRight, ArrowDownLeft, AlertCircle, CheckCircle2, ArrowLeft, User, Loader2, Paperclip, X, Image as ImageIcon } from "lucide-react";
-import { ClientInfoPopover } from "@/components/client-info-popover";
 import { formatDistanceToNow } from "date-fns";
 import { useLocation } from "wouter";
 import { compressImage, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/image-compress";

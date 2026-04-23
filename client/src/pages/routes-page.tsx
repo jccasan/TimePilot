@@ -45,7 +45,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { WeeklyOptimizerPanel } from "@/components/WeeklyOptimizerPanel";
 import { Link } from "wouter";
-import { ClientInfoPopover } from "@/components/client-info-popover";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
 import type { RouteStop } from "@/components/route-map-view";
