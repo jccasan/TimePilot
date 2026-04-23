@@ -12401,7 +12401,7 @@ Return ONLY valid JSON, no markdown.`,
       for (const company of allCompanies) {
         const companyContacts = await storage.getContacts(company.id, { search: email });
         const match = companyContacts.find(
-          (c) => c.email?.toLowerCase() === email && c.hasPortalAccess
+          (c) => (c.email || "").toLowerCase().split(",").map(e => e.trim()).includes(email) && c.hasPortalAccess
         );
         if (match) {
           if (match.portalPasswordHash) {
@@ -12478,7 +12478,7 @@ Return ONLY valid JSON, no markdown.`,
       for (const company of allCompanies) {
         const companyContacts = await storage.getContacts(company.id, { search: normalizedEmail });
         const match = companyContacts.find(
-          (c) => c.email?.toLowerCase() === normalizedEmail && c.hasPortalAccess
+          (c) => (c.email || "").toLowerCase().split(",").map(e => e.trim()).includes(normalizedEmail) && c.hasPortalAccess
         );
         if (match) {
           foundContact = match;
@@ -12503,9 +12503,11 @@ Return ONLY valid JSON, no markdown.`,
       const companyName = company?.name || "Your Service Provider";
 
       const { sendEmail } = await import("./services/email");
+      // Use the exact email the user typed in case the contact has multiple emails stored
+      const resetEmailTo = normalizedEmail;
       sendEmail({
         companyId: company.id,
-        to: foundContact.email!,
+        to: resetEmailTo,
         subject: `Reset your ${companyName} portal password`,
         senderName: company?.name || undefined,
         replyTo: company?.email || undefined,
