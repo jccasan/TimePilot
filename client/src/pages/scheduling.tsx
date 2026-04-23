@@ -364,59 +364,41 @@ function ScheduleJobForm({
           {activeServices.length > 0 ? (
             <div>
               {selectedServices.length === 0 ? (
-                <Popover open={serviceComboOpen} onOpenChange={setServiceComboOpen}>
-                  <PopoverTrigger asChild>
-                    <Button type="button" variant="outline" className="w-full justify-between" data-testid="button-open-service-picker">
-                      <span className="text-muted-foreground">Select a service...</span>
-                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search services..." data-testid="input-service-search" />
-                      <CommandList>
-                        <CommandEmpty>No services found.</CommandEmpty>
-                        {groupedServices.map(group => (
-                          <CommandGroup key={group.category} heading={group.category}>
-                            {group.items.map(svc => (
-                              <CommandItem key={svc.id} value={svc.name} onSelect={() => handleAddService(svc)} data-testid={`service-option-${svc.id}`}>
-                                <span className="flex-1">{svc.name}</span>
-                                <span className="text-muted-foreground text-sm tabular-nums">${parseFloat(svc.basePrice).toFixed(2)}</span>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        ))}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <Button type="button" variant="outline" className="w-full justify-between" onClick={() => setServiceComboOpen(true)} data-testid="button-open-service-picker">
+                  <span className="text-muted-foreground">Select a service...</span>
+                  <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                </Button>
               ) : (
-                <Popover open={serviceComboOpen} onOpenChange={setServiceComboOpen}>
-                  <PopoverTrigger asChild>
-                    <button type="button" className="text-sm text-primary hover:underline font-medium" data-testid="button-add-another-service">
-                      + Add another service
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80 p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search services..." data-testid="input-service-search-more" />
-                      <CommandList>
-                        <CommandEmpty>No services found.</CommandEmpty>
-                        {groupedServices.map(group => (
-                          <CommandGroup key={group.category} heading={group.category}>
-                            {group.items.map(svc => (
-                              <CommandItem key={svc.id} value={svc.name} onSelect={() => handleAddService(svc)} data-testid={`service-option-more-${svc.id}`}>
-                                <span className="flex-1">{svc.name}</span>
-                                <span className="text-muted-foreground text-sm tabular-nums">${parseFloat(svc.basePrice).toFixed(2)}</span>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        ))}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <button type="button" className="text-sm text-primary hover:underline font-medium" onClick={() => setServiceComboOpen(true)} data-testid="button-add-another-service">
+                  + Add another service
+                </button>
               )}
+
+              <Dialog open={serviceComboOpen} onOpenChange={setServiceComboOpen}>
+                <DialogContent className="sm:max-w-md p-0 gap-0" data-testid="dialog-service-picker">
+                  <DialogHeader className="px-4 pt-4 pb-2">
+                    <DialogTitle>Select a service</DialogTitle>
+                  </DialogHeader>
+                  <Command>
+                    <div className="px-2 pb-2">
+                      <CommandInput placeholder="Search services..." autoFocus data-testid="input-service-search" />
+                    </div>
+                    <CommandList className="max-h-72 overflow-y-auto px-2 pb-2">
+                      <CommandEmpty>No services found.</CommandEmpty>
+                      {groupedServices.map(group => (
+                        <CommandGroup key={group.category} heading={group.category}>
+                          {group.items.map(svc => (
+                            <CommandItem key={svc.id} value={svc.name} onSelect={() => handleAddService(svc)} data-testid={`service-option-${svc.id}`}>
+                              <span className="flex-1">{svc.name}</span>
+                              <span className="text-muted-foreground text-sm tabular-nums">${parseFloat(svc.basePrice).toFixed(2)}</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      ))}
+                    </CommandList>
+                  </Command>
+                </DialogContent>
+              </Dialog>
             </div>
           ) : (
             <div className="space-y-2">
