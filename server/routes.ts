@@ -741,10 +741,14 @@ export async function registerRoutes(
       updateData.stripePaymentIntentId = result.paymentIntentId;
       notify(companyId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
       qboAutoSync(companyId, invoice.id, "payment");
+    } else if (result.status === "no_payment_method") {
+      // No card on file — leave the invoice in its current status so it can still be paid via link
+      updateData.status = invoice.status === "draft" ? "draft" : "sent";
+      notify(companyId, "payment_failed", "No Payment Method", `No payment method on file for ${contactName} (invoice #${invoice.invoiceNumber}). Send them a payment link to collect their card.`, `/invoices`);
     } else {
       updateData.status = "failed";
       if (result.paymentIntentId) updateData.stripePaymentIntentId = result.paymentIntentId;
-      notify(companyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}.`, `/invoices`);
+      notify(companyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}. The card on file was declined.`, `/invoices`);
     }
     const updated = await storage.updateInvoice(invoice.id, companyId, updateData as Parameters<typeof storage.updateInvoice>[2]);
     auditLog(companyId, userId, "invoice", invoice.id, "update", {
@@ -10817,10 +10821,13 @@ Return ONLY valid JSON, no markdown.`,
         updateData.stripePaymentIntentId = result.paymentIntentId;
         notify(companyId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
         qboAutoSync(companyId, invoice.id, "payment");
+      } else if (result.status === "no_payment_method") {
+        updateData.status = invoice.status === "draft" ? "draft" : "sent";
+        notify(companyId, "payment_failed", "No Payment Method", `No payment method on file for ${contactName} (invoice #${invoice.invoiceNumber}). Send them a payment link to collect their card.`, `/invoices`);
       } else {
         updateData.status = "failed";
         if (result.paymentIntentId) updateData.stripePaymentIntentId = result.paymentIntentId;
-        notify(companyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}.`, `/invoices`);
+        notify(companyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}. The card on file was declined.`, `/invoices`);
       }
 
       const updated = await storage.updateInvoice(invoice.id, companyId, updateData);
