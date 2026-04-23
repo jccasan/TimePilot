@@ -40,6 +40,7 @@ const PortalResetPassword = lazy(() => import("@/pages/portal-reset-password"));
 const PortalVerifyEmail = lazy(() => import("@/pages/portal-verify-email"));
 const PortalClient = lazy(() => import("@/pages/portal-client"));
 const PortalQuoteView = lazy(() => import("@/pages/portal-quote-view"));
+const InvoicePayPage = lazy(() => import("@/pages/invoice-pay"));
 const Pricing = lazy(() => import("@/pages/pricing"));
 const Communications = lazy(() => import("@/pages/communications"));
 const Reports = lazy(() => import("@/pages/reports"));
@@ -526,6 +527,9 @@ function AppContent() {
   const isVoiceSignupPath = typeof window !== "undefined" &&
     window.location.pathname.startsWith("/voice-signup/");
 
+  const isInvoicePayPath = typeof window !== "undefined" &&
+    /^\/invoice\/[^/]+\/pay$/.test(window.location.pathname);
+
   const isPrivacyPolicyPath = typeof window !== "undefined" &&
     window.location.pathname === "/privacy-policy";
 
@@ -550,6 +554,10 @@ function AppContent() {
 
   if (isVoiceSignupPath) {
     return <Suspense fallback={<PageLoader />}><VoiceSignup /></Suspense>;
+  }
+
+  if (isInvoicePayPath) {
+    return <Suspense fallback={<PageLoader />}><InvoicePayPage /></Suspense>;
   }
 
   if (isPortalPath) {

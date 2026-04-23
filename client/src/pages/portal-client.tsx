@@ -1806,20 +1806,34 @@ export default function PortalClient() {
                       </div>
                     </div>
                     <Separator />
-                    <div className="flex justify-between text-sm font-semibold">
-                      <span>Total Charge</span>
-                      <span data-testid="text-tip-total-charge">
-                        ${(Number(tipDialogInvoice.total) + (customTip ? parseFloat(customTip) || 0 : selectedTip)).toFixed(2)}
-                      </span>
-                    </div>
-                    <Button
-                      className="w-full"
-                      onClick={handleConfirmPayWithTip}
-                      disabled={actionPending}
-                      data-testid="button-confirm-pay-with-tip"
-                    >
-                      {actionPending ? "Processing..." : "Continue to Payment"}
-                    </Button>
+                    {(() => {
+                      const tipVal = customTip ? parseFloat(customTip) || 0 : selectedTip;
+                      const totalCharge = Number(tipDialogInvoice.total) + tipVal;
+                      const isBelowMinimum = totalCharge < 0.5;
+                      return (
+                        <>
+                          <div className="flex justify-between text-sm font-semibold">
+                            <span>Total Charge</span>
+                            <span data-testid="text-tip-total-charge">${totalCharge.toFixed(2)}</span>
+                          </div>
+                          {isBelowMinimum && (
+                            <p className="text-xs text-amber-600 text-center">
+                              {Number(tipDialogInvoice.total) === 0
+                                ? "Please add a tip of at least $0.50 to pay online."
+                                : "Minimum charge is $0.50."}
+                            </p>
+                          )}
+                          <Button
+                            className="w-full"
+                            onClick={handleConfirmPayWithTip}
+                            disabled={actionPending || isBelowMinimum}
+                            data-testid="button-confirm-pay-with-tip"
+                          >
+                            {actionPending ? "Processing..." : "Continue to Payment"}
+                          </Button>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </DialogContent>

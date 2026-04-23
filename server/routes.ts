@@ -7278,33 +7278,40 @@ Return ONLY valid JSON, no markdown.`,
               const emailShowServiceAddr = emailServiceAddr && emailServiceLine && emailServiceLine !== emailBillingLine;
 
               let paymentUrl: string | undefined;
-              if (isStripeConfigured() && parseFloat(invoice.total) > 0) {
-                try {
-                  const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-                  const contactName = `${contact.firstName} ${contact.lastName}`.trim();
-                  const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
-                    currentCustomerId: contact.stripeCustomerId,
-                    stripeAccount: connectAccountId,
-                    email: contact.email || undefined,
-                    name: contactName,
-                    metadata: { contactId: contact.id, companyId },
-                  });
-                  if (wasRecreated) {
-                    await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustId });
-                  }
+              if (isStripeConfigured()) {
+                const invoiceTotal = parseFloat(invoice.total);
+                const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+                if (invoiceTotal > 0) {
+                  try {
+                    const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+                    const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
+                      currentCustomerId: contact.stripeCustomerId,
+                      stripeAccount: connectAccountId,
+                      email: contact.email || undefined,
+                      name: contactName,
+                      metadata: { contactId: contact.id, companyId },
+                    });
+                    if (wasRecreated) {
+                      await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustId });
+                    }
+                    const baseUrl = getBaseUrl(req);
+                    const checkoutResult = await createCheckoutSession({
+                      customerId: resolvedCustId,
+                      invoiceId: invoice.id,
+                      invoiceNumber: invoice.invoiceNumber,
+                      amount: invoiceTotal,
+                      successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
+                      cancelUrl: `${baseUrl}/portal`,
+                      stripeConnectAccountId: connectAccountId,
+                      tenantId: companyId,
+                    });
+                    paymentUrl = checkoutResult.url;
+                  } catch {}
+                } else {
+                  // $0 invoice — link to tip page so customers can leave a tip
                   const baseUrl = getBaseUrl(req);
-                  const checkoutResult = await createCheckoutSession({
-                    customerId: resolvedCustId,
-                    invoiceId: invoice.id,
-                    invoiceNumber: invoice.invoiceNumber,
-                    amount: parseFloat(invoice.total),
-                    successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
-                    cancelUrl: `${baseUrl}/portal`,
-                    stripeConnectAccountId: connectAccountId,
-                    tenantId: companyId,
-                  });
-                  paymentUrl = checkoutResult.url;
-                } catch {}
+                  paymentUrl = `${baseUrl}/invoice/${invoice.id}/pay`;
+                }
               }
 
               const invoiceData = {
@@ -10446,37 +10453,44 @@ Return ONLY valid JSON, no markdown.`,
       const lineItems = await storage.getInvoiceLineItems(invoice.id);
 
       let paymentUrl: string | undefined;
-      if (isStripeConfigured() && parseFloat(invoice.total) > 0) {
-        try {
-          let stripeCustomerId = contact.stripeCustomerId;
-          const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-          const contactName = `${contact.firstName} ${contact.lastName}`.trim();
-          const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
-            currentCustomerId: contact.stripeCustomerId,
-            stripeAccount: connectAccountId,
-            email: contact.email || undefined,
-            name: contactName,
-            metadata: { contactId: contact.id, companyId },
-          });
-          if (wasRecreated) {
-            await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustId });
-          }
-          stripeCustomerId = resolvedCustId;
+      if (isStripeConfigured()) {
+        const invoiceTotal = parseFloat(invoice.total);
+        const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+        if (invoiceTotal > 0) {
+          try {
+            let stripeCustomerId = contact.stripeCustomerId;
+            const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+            const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
+              currentCustomerId: contact.stripeCustomerId,
+              stripeAccount: connectAccountId,
+              email: contact.email || undefined,
+              name: contactName,
+              metadata: { contactId: contact.id, companyId },
+            });
+            if (wasRecreated) {
+              await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustId });
+            }
+            stripeCustomerId = resolvedCustId;
 
+            const baseUrl = getBaseUrl(req);
+            const checkoutResult = await createCheckoutSession({
+              customerId: stripeCustomerId,
+              invoiceId: invoice.id,
+              invoiceNumber: invoice.invoiceNumber,
+              amount: invoiceTotal,
+              successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
+              cancelUrl: `${baseUrl}/portal`,
+              stripeConnectAccountId: connectAccountId,
+              tenantId: companyId,
+            });
+            paymentUrl = checkoutResult.url;
+          } catch (stripeErr: any) {
+            console.error("[send-email] Could not generate Stripe checkout URL, sending without payment link:", stripeErr?.message || stripeErr);
+          }
+        } else {
+          // $0 invoice — link to tip page so customers can leave a tip
           const baseUrl = getBaseUrl(req);
-          const checkoutResult = await createCheckoutSession({
-            customerId: stripeCustomerId,
-            invoiceId: invoice.id,
-            invoiceNumber: invoice.invoiceNumber,
-            amount: parseFloat(invoice.total),
-            successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
-            cancelUrl: `${baseUrl}/portal`,
-            stripeConnectAccountId: connectAccountId,
-            tenantId: companyId,
-          });
-          paymentUrl = checkoutResult.url;
-        } catch (stripeErr: any) {
-          console.error("[send-email] Could not generate Stripe checkout URL, sending without payment link:", stripeErr?.message || stripeErr);
+          paymentUrl = `${baseUrl}/invoice/${invoice.id}/pay`;
         }
       }
 
@@ -16837,6 +16851,76 @@ Respond with exactly one category from the list above and nothing else.`;
         hasZones: true,
         zoneSurchargePercent: matchingZone?.priceSurchargePercent ?? 0,
       });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Public Invoice Pay (tip-enabled checkout for sent invoices) ================
+
+  app.get("/api/public/invoices/:id", async (req: Request, res: Response) => {
+    try {
+      const invoice = await storage.getInvoiceById(req.params.id);
+      if (!invoice || invoice.status === "draft") return res.status(404).json({ error: "Invoice not found" });
+      const company = await storage.getCompany(invoice.companyId);
+      const contact = invoice.contactId ? await storage.getContactById(invoice.contactId) : null;
+      const stripeEnabled = isStripeConfigured() && !!(company?.stripeConnectOnboarded && company.stripeConnectAccountId);
+      res.json({
+        invoiceNumber: invoice.invoiceNumber,
+        total: invoice.total,
+        status: invoice.status,
+        dueDate: invoice.dueDate,
+        companyName: company?.name || "",
+        logoUrl: company?.logoUrl || "",
+        contactName: contact ? `${contact.firstName} ${contact.lastName || ""}`.trim() : "",
+        stripeEnabled,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/public/invoices/:id/pay", async (req: Request, res: Response) => {
+    try {
+      const invoice = await storage.getInvoiceById(req.params.id);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+      if (invoice.status === "draft") return res.status(400).json({ error: "Invoice not yet sent" });
+      if (invoice.status === "voided") return res.status(400).json({ error: "Invoice has been voided" });
+      if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
+
+      const tipAmount = Math.round(parseFloat(req.body?.tipAmount || "0") * 100) / 100;
+      if (isNaN(tipAmount) || tipAmount < 0) return res.status(400).json({ error: "Invalid tip amount" });
+      if (tipAmount > 500) return res.status(400).json({ error: "Tip exceeds maximum" });
+
+      const baseAmount = parseFloat(invoice.total);
+      const chargeAmount = baseAmount + tipAmount;
+      if (chargeAmount < 0.5) return res.status(400).json({ error: "Minimum payment is $0.50. Please add a tip to continue." });
+
+      const company = await storage.getCompany(invoice.companyId);
+      const contact = invoice.contactId ? await storage.getContactById(invoice.contactId) : null;
+      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+
+      const contactName = contact ? `${contact.firstName} ${contact.lastName || ""}`.trim() : "Customer";
+      const { customerId: stripeCustomerId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact?.stripeCustomerId || null,
+        stripeAccount: connectAcct,
+        email: contact?.email || undefined,
+        name: contactName,
+        metadata: { companyId: invoice.companyId, ...(contact ? { contactId: contact.id } : {}) },
+      });
+      if (wasRecreated && contact) {
+        await storage.updateContact(contact.id, invoice.companyId, { stripeCustomerId });
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const result = await createCheckoutSession({
+        customerId: stripeCustomerId,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        amount: chargeAmount,
+        successUrl: `${baseUrl}/invoice/${invoice.id}/pay?paid=1`,
+        cancelUrl: `${baseUrl}/invoice/${invoice.id}/pay`,
+        tipAmount: tipAmount.toFixed(2),
+        stripeConnectAccountId: connectAcct,
+        tenantId: invoice.companyId,
+      });
+      res.json(result);
     } catch (err) { handleError(res, err); }
   });
 

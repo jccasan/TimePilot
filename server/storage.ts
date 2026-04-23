@@ -196,6 +196,7 @@ export interface IStorage {
 
   // Invoices
   getInvoice(id: string, companyId: string): Promise<Invoice | undefined>;
+  getInvoiceById(id: string): Promise<Invoice | undefined>;
   getInvoices(companyId: string, filters?: { contactId?: string; status?: string }): Promise<Invoice[]>;
   createInvoice(data: InsertInvoice): Promise<Invoice>;
   updateInvoice(id: string, companyId: string, data: Partial<InsertInvoice>): Promise<Invoice>;
@@ -1071,6 +1072,11 @@ export class DatabaseStorage implements IStorage {
   // ================ Invoices ================
   async getInvoice(id: string, companyId: string): Promise<Invoice | undefined> {
     const [invoice] = await db.select().from(invoices).where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
+    return invoice;
+  }
+
+  async getInvoiceById(id: string): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
     return invoice;
   }
 
