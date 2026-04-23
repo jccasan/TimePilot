@@ -724,7 +724,7 @@ export default function Scheduling() {
   const [overDateKey, setOverDateKey] = useState<string | null>(null);
 
   const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 5 } });
-  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } });
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 500, tolerance: 8 } });
   const sensors = useSensors(pointerSensor, touchSensor);
 
   const rescheduleMutation = useMutation({

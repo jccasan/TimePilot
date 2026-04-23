@@ -979,7 +979,7 @@ export default function RoutesPage() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 500, tolerance: 8 } }),
   );
 
   const { data: allRoutes = [], isLoading: routesLoading } = useQuery<RouteWithOptStatus[]>({ queryKey: ["/api/routes"] });
