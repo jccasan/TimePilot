@@ -43,11 +43,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, CalendarDays, CalendarRange,
@@ -1757,30 +1752,31 @@ function OverflowVisitsPopover({ dayVisits, dateKey, contacts, properties, route
   servicePlans?: ServicePlan[];
   onVisitClick?: (visit: Visit) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const overflowCount = dayVisits.length - 3;
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          className="text-[10px] text-primary font-medium text-center w-full hover:underline cursor-pointer py-0.5"
-          data-testid={`button-more-visits-${dateKey}`}
-          data-visit-chip
-          onClick={(e) => e.stopPropagation()}
-        >
-          +{overflowCount} more
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-2 max-h-[300px] overflow-y-auto" align="start">
-        <p className="text-xs font-medium text-muted-foreground mb-2">
-          All visits ({dayVisits.length}) — {new Date(dateKey + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-        </p>
-        <div className="space-y-1">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <button
+        className="text-[10px] text-primary font-medium text-center w-full hover:underline cursor-pointer py-0.5"
+        data-testid={`button-more-visits-${dateKey}`}
+        data-visit-chip
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+      >
+        +{overflowCount} more
+      </button>
+      <DialogContent className="sm:max-w-sm p-0 gap-0" data-testid={`dialog-more-visits-${dateKey}`}>
+        <DialogHeader className="px-4 pt-4 pb-2">
+          <DialogTitle className="text-sm">
+            All visits ({dayVisits.length}) — {new Date(dateKey + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="px-4 pb-4 space-y-1 max-h-[60vh] overflow-y-auto">
           {dayVisits.map((v) => (
-            <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={onVisitClick} />
+            <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={(visit) => { setOpen(false); onVisitClick?.(visit); }} />
           ))}
         </div>
-      </PopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
   );
 }
 
