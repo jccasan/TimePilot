@@ -61,6 +61,13 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 ### Data Model
 The scheduling data model is refactored into three layers: `agreements` (billing), `jobs` (work/routing), and `visits` (instance). Dual-write strategy ensures backward compatibility during migration.
 
+### UI Component Rules
+**Never nest a Radix `<Popover>` inside a Radix `<Sheet>` or `<Drawer>`.** Radix UI's focus-trap on Sheet/Drawer conflicts with Popover's own focus management, causing focus to be stolen and the picker to close immediately on Android and some desktop browsers.
+
+- Comboboxes/pickers that appear inside a Sheet or Drawer **must** use the Dialog-based picker pattern instead (see `client/src/pages/scheduling.tsx` `ScheduleJobForm`, lines 377–401 for the reference implementation).
+- Hover-detail Popovers (e.g., `ClientInfoPopover`) should not be placed inside Sheet/Drawer content either; prefer a linked navigation target or an inline expansion.
+- This rule was validated by a project-wide audit (Task #311, April 2026). All current Popovers are outside Sheet/Drawer contexts.
+
 ## External Dependencies
 - **PostgreSQL**: Primary database.
 - **Object Storage**: For file uploads.
