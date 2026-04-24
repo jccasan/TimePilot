@@ -593,6 +593,15 @@ function AppContent() {
   return <AuthenticatedLayout />;
 }
 
+function isChunkLoadError(error: Error | null): boolean {
+  if (!error) return false;
+  return (
+    error.message?.includes("Failed to fetch dynamically imported module") ||
+    error.message?.includes("Loading chunk") ||
+    error.name === "ChunkLoadError"
+  );
+}
+
 class ErrorBoundary extends Component<
   { children: ReactNode },
   { hasError: boolean; error: Error | null }
@@ -608,10 +617,33 @@ class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("[ErrorBoundary]", error, errorInfo);
+    if (isChunkLoadError(error)) {
+      const key = "scoopilot_chunk_reload";
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        window.location.reload();
+      }
+    }
   }
 
   render() {
     if (this.state.hasError) {
+      if (isChunkLoadError(this.state.error)) {
+        return (
+          <div style={{ padding: 40, fontFamily: "sans-serif" }}>
+            <h1 style={{ color: "#dc2626" }}>Something went wrong</h1>
+            <p style={{ color: "#333", marginTop: 16 }}>
+              A new version of the app is available. Click below to refresh.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{ marginTop: 16, padding: "8px 16px", cursor: "pointer" }}
+            >
+              Reload
+            </button>
+          </div>
+        );
+      }
       return (
         <div style={{ padding: 40, fontFamily: "sans-serif" }}>
           <h1 style={{ color: "#dc2626" }}>Something went wrong</h1>
@@ -635,6 +667,10 @@ class ErrorBoundary extends Component<
 }
 
 function App() {
+  useEffect(() => {
+    sessionStorage.removeItem("scoopilot_chunk_reload");
+  }, []);
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
