@@ -2090,7 +2090,6 @@ export default function RoutesPage() {
                   <input
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     ref={gateFileInputRef}
                     className="hidden"
                     onChange={handleGatePhotoCapture}
@@ -2122,7 +2121,7 @@ export default function RoutesPage() {
                       data-testid="button-capture-gate-photo"
                     >
                       <Camera className="mr-2 h-5 w-5" />
-                      Take Proof Photo
+                      Take Photo or Choose from Library
                     </Button>
                   )}
                 </div>
@@ -2132,7 +2131,6 @@ export default function RoutesPage() {
                   <input
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     ref={extraFileInputRef}
                     className="hidden"
                     onChange={handleExtraPhotoCapture}
