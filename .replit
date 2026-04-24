@@ -100,6 +100,9 @@ QBO_WEBHOOK = "https://scoopilot.com/api/webhooks/quickbooks"
 [userenv.development]
 DISABLE_EMAIL_SENDING = "true"
 
+[userenv.production]
+QBO_REDIRECT_URI = "https://app.scoopilot.com/api/qbo/callback"
+
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 60000

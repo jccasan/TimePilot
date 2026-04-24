@@ -17617,7 +17617,7 @@ Respond with exactly one category from the list above and nothing else.`;
         return res.status(503).json({ error: "QuickBooks integration is not configured. Please add QBO_CLIENT_ID and QBO_CLIENT_SECRET." });
       }
       const baseUrl = getBaseUrl(req);
-      const redirectUri = `${baseUrl}/api/qbo/callback`;
+      const redirectUri = process.env.QBO_REDIRECT_URI || `${baseUrl}/api/qbo/callback`;
       const state = createOAuthState(companyId);
       const authUrl = getQboAuthUrl(redirectUri, state);
       return res.json({ url: authUrl });
@@ -17636,7 +17636,7 @@ Respond with exactly one category from the list above and nothing else.`;
         return res.redirect("/settings?qbo=error&msg=invalid_or_expired_state");
       }
       const baseUrl = getBaseUrl(req);
-      const redirectUri = `${baseUrl}/api/qbo/callback`;
+      const redirectUri = process.env.QBO_REDIRECT_URI || `${baseUrl}/api/qbo/callback`;
       const tokens = await exchangeQboCode(code, redirectUri);
 
       await db.update(companies).set({
