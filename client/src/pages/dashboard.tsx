@@ -1393,21 +1393,28 @@ function RevenueChartWidget() {
         <BarChart3 className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">Revenue Trend (6 months)</span>
       </div>
-      <div className="flex-1 flex items-end gap-1.5 min-h-0 pb-1">
+      {/* items-stretch (default) lets each column take the full container height,
+          enabling flex-ratio sizing of spacer + bar inside each column */}
+      <div className="flex-1 flex gap-1.5 min-h-0">
         {(chartData || []).map((item, idx) => {
-          const height = maxRevenue > 0 ? Math.max((item.revenue / maxRevenue) * 100, 4) : 4;
+          const barRatio = maxRevenue > 0 ? Math.max(item.revenue / maxRevenue, 0.04) : 0.04;
+          const spaceRatio = 1 - barRatio;
           return (
-            <div key={idx} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-              <span className="text-[10px] tabular-nums text-muted-foreground truncate w-full text-center">
-                ${item.revenue >= 1000 ? `${(item.revenue / 1000).toFixed(1)}k` : fmtInt(item.revenue)}
-              </span>
+            <div key={idx} className="flex-1 flex flex-col min-w-0 pb-1">
+              {/* Spacer — shrinks as bar grows; value label sits at its bottom */}
+              <div style={{ flex: spaceRatio }} className="flex flex-col justify-end items-center pb-0.5 min-h-0">
+                <span className="text-[10px] tabular-nums text-muted-foreground truncate w-full text-center">
+                  ${item.revenue >= 1000 ? `${(item.revenue / 1000).toFixed(1)}k` : fmtInt(item.revenue)}
+                </span>
+              </div>
+              {/* Bar — grows proportionally with revenue */}
               <div
-                className="w-full rounded-t bg-primary/80 hover:bg-primary transition-colors min-h-[4px]"
-                style={{ height: `${height}%` }}
+                className="w-full rounded-t bg-primary/80 hover:bg-primary transition-colors"
+                style={{ flex: barRatio, minHeight: 4 }}
                 title={`${item.month}: $${fmt(item.revenue)}`}
                 data-testid={`bar-revenue-${idx}`}
               />
-              <span className="text-[10px] text-muted-foreground">{item.month}</span>
+              <span className="text-[10px] text-muted-foreground text-center mt-1">{item.month}</span>
             </div>
           );
         })}
