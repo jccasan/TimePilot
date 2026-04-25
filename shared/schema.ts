@@ -323,6 +323,7 @@ export const contacts = pgTable("contacts", {
   reviewRequestSentCount: integer("review_request_sent_count").notNull().default(0),
   lastReviewRequestSentAt: timestamp("last_review_request_sent_at"),
   googleReviewLeft: boolean("google_review_left").notNull().default(false),
+  dismissedOpportunities: jsonb("dismissed_opportunities").$type<string[]>().default(sql`'[]'::jsonb`),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

@@ -295,6 +295,7 @@ const WIDGET_DEFS: {
   { id: "weather_forecast", label: "Weather Forecast", icon: Cloud, description: "5-day weather forecast for your area", defaultW: 6, defaultH: 3, minW: 4, minH: 3, category: "insights" },
   { id: "route_map_preview", label: "Route Map", icon: MapPinned, description: "Map preview of today's routes", defaultW: 6, defaultH: 5, minW: 4, minH: 4, category: "insights" },
   { id: "todays_appointments", label: "Today's Appointments", icon: CalendarCheck, description: "Full list of today's visits with status controls", defaultW: 8, defaultH: 5, minW: 6, minH: 4, category: "insights" },
+  { id: "growth_opportunities", label: "Growth Opportunities", icon: TrendingUp, description: "Top clients flagged as upgrade or add-on candidates", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
 ];
 
 const DEFAULT_WIDGET_IDS = [
@@ -302,6 +303,7 @@ const DEFAULT_WIDGET_IDS = [
   "overdue_invoices", "todays_visits", "active_clients",
   "service_plans", "team_size", "texts_sent",
   "quick_actions", "emails_sent", "current_plan",
+  "growth_opportunities",
 ];
 
 function generateDefaultLayout(widgetIds: string[]): LayoutItem[] {
@@ -1834,6 +1836,112 @@ function WeatherForecastWidget() {
   );
 }
 
+type GrowthOpportunity = {
+  key: string;
+  label: string;
+  detail: string;
+  estimatedMonthlyUplift: number;
+};
+
+type GrowthOpportunityContact = {
+  contactId: string;
+  contactName: string;
+  topOpportunity: GrowthOpportunity;
+  totalUplift: number;
+  count: number;
+};
+
+type GrowthOpportunitiesData = {
+  contacts: GrowthOpportunityContact[];
+  totalCount: number;
+  totalUplift: number;
+};
+
+function GrowthOpportunitiesWidget() {
+  const { data, isLoading } = useQuery<GrowthOpportunitiesData>({
+    queryKey: ["/api/company/growth-opportunities"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="h-full flex flex-col" data-testid="widget-growth-opportunities-loading">
+        <div className="flex items-center gap-2 mb-3">
+          <TrendingUp className="h-4 w-4 text-amber-500" />
+          <span className="text-sm font-medium">Growth Opportunities</span>
+        </div>
+        <div className="space-y-2 flex-1">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  const contacts = data?.contacts ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const totalUplift = data?.totalUplift ?? 0;
+
+  return (
+    <div className="h-full flex flex-col" data-testid="widget-growth-opportunities-content">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-amber-500" />
+          <span className="text-sm font-medium">Growth Opportunities</span>
+          {totalCount > 0 && (
+            <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-opportunity-count">
+              {totalCount}
+            </Badge>
+          )}
+        </div>
+        {totalUplift > 0 && (
+          <span className="text-xs text-green-700 dark:text-green-400 font-medium" data-testid="text-total-uplift">
+            ~${totalUplift.toFixed(0)}/mo potential
+          </span>
+        )}
+      </div>
+      {contacts.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-xs text-muted-foreground text-center" data-testid="text-no-opportunities">
+            No open opportunities right now.
+          </p>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto space-y-1.5" data-testid="opportunity-list">
+          {contacts.map((c) => (
+            <Link href={`/contacts/${c.contactId}`} key={c.contactId}>
+              <div
+                className="flex items-start gap-3 p-2.5 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer group"
+                data-testid={`opportunity-row-${c.contactId}`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium truncate" data-testid={`opportunity-name-${c.contactId}`}>
+                      {c.contactName}
+                    </span>
+                    {c.count > 1 && (
+                      <Badge variant="outline" className="text-[10px] shrink-0">+{c.count - 1} more</Badge>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground truncate mt-0.5" data-testid={`opportunity-label-${c.contactId}`}>
+                    {c.topOpportunity.label}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-medium text-green-700 dark:text-green-400" data-testid={`opportunity-uplift-${c.contactId}`}>
+                    ~${c.totalUplift.toFixed(0)}/mo
+                  </p>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-auto mt-0.5" />
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type RouteMapData = {
   routes: {
     id: string;
@@ -2662,6 +2770,14 @@ export default function Dashboard() {
           <Card className="h-full overflow-auto" data-testid="widget-todays-appointments">
             <CardContent className="p-4 h-full">
               <TodaysAppointments visits={pipeline?.todaysVisits ?? []} />
+            </CardContent>
+          </Card>
+        );
+      case "growth_opportunities":
+        return (
+          <Card className="h-full" data-testid="widget-growth-opportunities">
+            <CardContent className="p-4 h-full">
+              <GrowthOpportunitiesWidget />
             </CardContent>
           </Card>
         );

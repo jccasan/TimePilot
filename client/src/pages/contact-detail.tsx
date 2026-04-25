@@ -666,6 +666,8 @@ export default function ContactDetail() {
 
       <VisitHistoryCard contactId={id!} />
 
+      <SuggestionsCard contactId={id!} />
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-lg">Properties</CardTitle>
@@ -3801,6 +3803,121 @@ type UninvoicedResult = {
   visits: UninvoicedVisitRow[];
   totalDollars: number;
 };
+
+type Opportunity = {
+  key: string;
+  label: string;
+  detail: string;
+  estimatedMonthlyUplift: number;
+};
+
+function SuggestionsCard({ contactId }: { contactId: string }) {
+  const { toast } = useToast();
+  const [collapsed, setCollapsed] = useState(false);
+
+  const { data: opportunities = [], isLoading, refetch } = useQuery<Opportunity[]>({
+    queryKey: ["/api/contacts", contactId, "opportunities"],
+    queryFn: async () => {
+      const res = await fetch(`/api/contacts/${contactId}/opportunities`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load");
+      return res.json();
+    },
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: async (key: string) => {
+      const res = await fetch(`/api/contacts/${contactId}/dismiss-opportunity`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+      if (!res.ok) throw new Error("Failed to dismiss");
+    },
+    onSuccess: () => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/company/growth-opportunities"] });
+      toast({ title: "Suggestion dismissed", description: "This suggestion won't appear again for this contact." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <Card data-testid="section-suggestions">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Star className="h-4 w-4 text-amber-500" />
+            Suggestions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-16 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (opportunities.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card data-testid="section-suggestions">
+      <CardHeader
+        className="flex flex-row items-center justify-between cursor-pointer select-none pb-3"
+        onClick={() => setCollapsed(c => !c)}
+      >
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Star className="h-4 w-4 text-amber-500" />
+          Suggestions
+          <Badge variant="secondary" className="ml-1 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-suggestion-count">
+            {opportunities.length}
+          </Badge>
+        </CardTitle>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
+      </CardHeader>
+      {!collapsed && (
+        <CardContent className="space-y-3 pt-0" data-testid="suggestions-list">
+          {opportunities.map((opp) => (
+            <div
+              key={opp.key}
+              className="flex items-start justify-between gap-3 p-3 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+              data-testid={`suggestion-${opp.key}`}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground" data-testid={`suggestion-label-${opp.key}`}>
+                  {opp.label}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5" data-testid={`suggestion-detail-${opp.key}`}>
+                  {opp.detail}
+                </p>
+                {opp.estimatedMonthlyUplift > 0 && (
+                  <p className="text-xs font-medium text-green-700 dark:text-green-400 mt-1" data-testid={`suggestion-uplift-${opp.key}`}>
+                    ~${opp.estimatedMonthlyUplift.toFixed(0)}/mo potential uplift
+                  </p>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0 h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={() => dismissMutation.mutate(opp.key)}
+                disabled={dismissMutation.isPending}
+                title="Dismiss suggestion"
+                data-testid={`button-dismiss-suggestion-${opp.key}`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
 
 function BillingHistoryCard({ contactId }: { contactId: string }) {
   const [generateOpen, setGenerateOpen] = useState(false);

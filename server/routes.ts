@@ -2879,6 +2879,17 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/company/growth-opportunities", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { getGrowthOpportunities } = await import("./services/opportunity-engine");
+      const results = await getGrowthOpportunities(companyId, 10);
+      const totalCount = results.reduce((s, r) => s + r.count, 0);
+      const totalUplift = results.reduce((s, r) => s + r.totalUplift, 0);
+      res.json({ contacts: results, totalCount, totalUplift });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/company/pipeline", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -4121,6 +4132,33 @@ Return ONLY valid JSON, no markdown.`,
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const contactTags = await storage.getContactTags(req.params.id);
       res.json(contactTags);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/contacts/:id/opportunities", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const { getOpportunitiesForContact } = await import("./services/opportunity-engine");
+      const opps = await getOpportunitiesForContact(req.params.id, companyId);
+      res.json(opps);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/contacts/:id/dismiss-opportunity", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const { key } = req.body;
+      if (!key || typeof key !== "string") return res.status(400).json({ error: "key is required" });
+      const current: string[] = (contact.dismissedOpportunities as string[] | null) ?? [];
+      if (!current.includes(key)) {
+        const updated = [...current, key];
+        await storage.updateContact(req.params.id, companyId, { dismissedOpportunities: updated });
+      }
+      res.json({ ok: true });
     } catch (err) { handleError(res, err); }
   });
 

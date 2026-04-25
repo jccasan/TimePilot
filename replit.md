@@ -57,6 +57,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Business Intelligence**: Overhead cost tracking, customer profitability, route profit maps, pricing simulation, and per-customer cost overrides.
 - **Subscription Management**: DB-backed subscription tiers, Stripe Checkout, free trial, account freezing for failed payments, and usage metering. Includes a Voice Plan Add-on.
 - **Voice Agent Scheduling API**: Platform-agnostic REST API for AI voice agents to manage services and retrieve call logs.
+- **Cross-sell Opportunities Engine**: Rules-based engine that surfaces upgrade/add-on suggestions for contacts based on dog count, service frequency, tenure, and visit completion rate. A "Growth Opportunities" dashboard widget lists top upgrade candidates company-wide; contact detail pages show a collapsible "Suggestions" section with per-suggestion dismiss (persisted via `dismissed_opportunities` JSONB on contacts). Rules: biweekly→weekly (4+ dogs), monthly→biweekly (2+ dogs), deodorizer add-on (3+ dogs), loyalty upsell (12+ months), reliable client upgrade (90%+ completion, 10+ visits). API: `GET /api/contacts/:id/opportunities`, `PATCH /api/contacts/:id/dismiss-opportunity`, `GET /api/company/growth-opportunities`.
 
 ### Data Model
 The scheduling data model is refactored into three layers: `agreements` (billing), `jobs` (work/routing), and `visits` (instance). Dual-write strategy ensures backward compatibility during migration.
