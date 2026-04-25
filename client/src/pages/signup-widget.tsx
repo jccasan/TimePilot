@@ -532,7 +532,6 @@ export default function SignupWidget() {
         setZipError(null);
         setZipVerified(true);
         track("zip_passed", 1, zipCode.trim().slice(0, 5));
-        if (!isSingleLayout) setCurrentStep(2);
       } else {
         setZipVerified(false);
         track("zip_failed", 1, zipCode.trim().slice(0, 5));
@@ -606,8 +605,8 @@ export default function SignupWidget() {
 
   const hasLotAddons = parsed && parsed.lotAddons.length > 0;
   const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!lastCleanup;
-  const isStep3Valid = formData.firstName.trim().length > 0 &&
-    formData.streetAddress.trim().length > 0 &&
+  const isStep1Valid = zipVerified && formData.firstName.trim().length > 0;
+  const isStep3Valid = formData.streetAddress.trim().length > 0 &&
     formData.city.trim().length > 0 &&
     formData.state.trim().length > 0;
 
@@ -722,7 +721,7 @@ export default function SignupWidget() {
   }
 
   if (isSingleLayout) {
-    const singleFormValid = zipVerified && isStep2Valid && isStep3Valid;
+    const singleFormValid = zipVerified && formData.firstName.trim().length > 0 && isStep2Valid && isStep3Valid;
     return (
       <div className={isEmbed ? "" : "min-h-screen flex items-center justify-center p-4"} style={isEmbed ? {} : { background: `linear-gradient(to bottom, ${brandStyles.gradientFrom}, white)` }}>
         <div className={`w-full ${isEmbed ? "" : "max-w-lg"}`}>
@@ -758,7 +757,7 @@ export default function SignupWidget() {
                 <div className="space-y-4" data-testid="section-zip-single">
                   <div className="flex items-center gap-2">
                     <div className="h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold text-white" style={{ backgroundColor: brandStyles.accentText }}>1</div>
-                    <h2 className="text-lg font-bold">Service Area</h2>
+                    <h2 className="text-lg font-bold">Your Information</h2>
                   </div>
                   <div className="space-y-3">
                     <Label htmlFor="zipCodeSingle" className="text-sm font-medium">ZIP Code *</Label>
@@ -807,6 +806,26 @@ export default function SignupWidget() {
                         <p className="text-sm text-red-700">{zipError}</p>
                       </div>
                     )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="firstNameSingle">First Name *</Label>
+                      <Input id="firstNameSingle" value={formData.firstName} onChange={(e) => updateField("firstName", e.target.value)} required data-testid="input-first-name" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="lastNameSingle">Last Name</Label>
+                      <Input id="lastNameSingle" value={formData.lastName} onChange={(e) => updateField("lastName", e.target.value)} data-testid="input-last-name" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="emailSingle">Email</Label>
+                      <Input id="emailSingle" type="email" value={formData.email} onChange={(e) => updateField("email", e.target.value)} data-testid="input-email" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="phoneSingle">Phone</Label>
+                      <Input id="phoneSingle" type="tel" value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} data-testid="input-phone" />
+                    </div>
                   </div>
                 </div>
 
@@ -958,29 +977,9 @@ export default function SignupWidget() {
                 <div className="border-t pt-6 space-y-4" data-testid="section-contact-single">
                   <div className="flex items-center gap-2">
                     <div className="h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold text-white" style={{ backgroundColor: brandStyles.accentText }}>3</div>
-                    <h2 className="text-lg font-bold">Contact Information</h2>
+                    <h2 className="text-lg font-bold">Service Address</h2>
                   </div>
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="firstNameSingle">First Name *</Label>
-                        <Input id="firstNameSingle" value={formData.firstName} onChange={(e) => updateField("firstName", e.target.value)} required data-testid="input-first-name" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="lastNameSingle">Last Name</Label>
-                        <Input id="lastNameSingle" value={formData.lastName} onChange={(e) => updateField("lastName", e.target.value)} data-testid="input-last-name" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="emailSingle">Email</Label>
-                        <Input id="emailSingle" type="email" value={formData.email} onChange={(e) => updateField("email", e.target.value)} data-testid="input-email" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="phoneSingle">Phone</Label>
-                        <Input id="phoneSingle" type="tel" value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} data-testid="input-phone" />
-                      </div>
-                    </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="streetAddressSingle">Street Address *</Label>
                       <Input id="streetAddressSingle" value={formData.streetAddress} onChange={(e) => updateField("streetAddress", e.target.value)} required data-testid="input-street-address" />
@@ -1087,31 +1086,58 @@ export default function SignupWidget() {
                   <div className="h-16 w-16 rounded-full mx-auto flex items-center justify-center" style={{ backgroundColor: brandStyles.lightBg }}>
                     <MapPin className="h-8 w-8" style={{ color: brandStyles.accentText }} />
                   </div>
-                  <h2 className="text-xl font-bold">Check Your Service Area</h2>
+                  <h2 className="text-xl font-bold">Get Started</h2>
                   <p className="text-sm text-muted-foreground">Enter your ZIP code to see if we service your area</p>
                 </div>
 
                 <div className="space-y-3">
                   <Label htmlFor="zipCode" className="text-sm font-medium">ZIP Code</Label>
-                  <Input
-                    id="zipCode"
-                    placeholder="Enter your ZIP code"
-                    value={zipCode}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, "").slice(0, 5);
-                      setZipCode(val);
-                      setZipError(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        checkZipMutation.mutate();
-                      }
-                    }}
-                    maxLength={5}
-                    className="text-center text-lg h-12"
-                    data-testid="input-zip-code"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="zipCode"
+                      placeholder="Enter your ZIP code"
+                      value={zipCode}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 5);
+                        setZipCode(val);
+                        setZipError(null);
+                        setZipVerified(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (!zipVerified) checkZipMutation.mutate();
+                        }
+                      }}
+                      maxLength={5}
+                      className="text-lg h-12 flex-1"
+                      data-testid="input-zip-code"
+                    />
+                    <Button
+                      type="button"
+                      className="text-white h-12 px-4"
+                      style={{ backgroundColor: brandStyles.buttonBg }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonHover)}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonBg)}
+                      disabled={zipCode.length < 5 || checkZipMutation.isPending || zipVerified}
+                      onClick={() => checkZipMutation.mutate()}
+                      data-testid="button-check-zip"
+                    >
+                      {checkZipMutation.isPending ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : zipVerified ? (
+                        <CheckCircle2 className="h-5 w-5" />
+                      ) : (
+                        "Check"
+                      )}
+                    </Button>
+                  </div>
+
+                  {zipVerified && (
+                    <div className="flex items-center gap-2 text-sm font-medium" style={{ color: brandStyles.accentText }} data-testid="text-zip-verified">
+                      <CheckCircle2 className="h-4 w-4" /> We service your area!
+                    </div>
+                  )}
 
                   {zipError && (
                     <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200" data-testid="text-zip-error">
@@ -1119,23 +1145,66 @@ export default function SignupWidget() {
                       <p className="text-sm text-red-700">{zipError}</p>
                     </div>
                   )}
-
-                  <Button
-                    className="w-full text-white h-12 text-base font-semibold"
-                    style={{ backgroundColor: brandStyles.buttonBg }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonHover)}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonBg)}
-                    disabled={zipCode.length < 5 || checkZipMutation.isPending}
-                    onClick={() => checkZipMutation.mutate()}
-                    data-testid="button-check-zip"
-                  >
-                    {checkZipMutation.isPending ? (
-                      <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Checking...</>
-                    ) : (
-                      <><ArrowRight className="h-5 w-5 mr-2" /> Check Service Area</>
-                    )}
-                  </Button>
                 </div>
+
+                {zipVerified && (
+                  <div className="space-y-4 animate-in fade-in duration-300" data-testid="section-contact-step1">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="firstName">First Name *</Label>
+                        <Input
+                          id="firstName"
+                          value={formData.firstName}
+                          onChange={(e) => updateField("firstName", e.target.value)}
+                          required
+                          data-testid="input-first-name"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="lastName">Last Name</Label>
+                        <Input
+                          id="lastName"
+                          value={formData.lastName}
+                          onChange={(e) => updateField("lastName", e.target.value)}
+                          data-testid="input-last-name"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => updateField("email", e.target.value)}
+                          data-testid="input-email"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="phone">Phone</Label>
+                        <Input
+                          id="phone"
+                          type="tel"
+                          value={formData.phone}
+                          onChange={(e) => updateField("phone", e.target.value)}
+                          data-testid="input-phone"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      className="w-full text-white h-12 text-base font-semibold"
+                      style={{ backgroundColor: brandStyles.buttonBg }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonHover)}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = brandStyles.buttonBg)}
+                      disabled={!isStep1Valid}
+                      onClick={() => { track("step1_completed", 1); setCurrentStep(2); }}
+                      data-testid="button-next-step2"
+                    >
+                      <ArrowRight className="h-5 w-5 mr-2" /> Continue
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1378,8 +1447,8 @@ export default function SignupWidget() {
               <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300" data-testid="step-3-contact">
                 <StepTracker track={track} />
                 <div className="text-center space-y-1">
-                  <h2 className="text-xl font-bold">Contact Information</h2>
-                  <p className="text-sm text-muted-foreground">Almost done! Tell us how to reach you</p>
+                  <h2 className="text-xl font-bold">Service Address</h2>
+                  <p className="text-sm text-muted-foreground">Almost done! Where should we scoop?</p>
                 </div>
 
                 <form
@@ -1392,51 +1461,6 @@ export default function SignupWidget() {
                   }}
                   className="space-y-4"
                 >
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="firstName">First Name *</Label>
-                      <Input
-                        id="firstName"
-                        value={formData.firstName}
-                        onChange={(e) => updateField("firstName", e.target.value)}
-                        required
-                        data-testid="input-first-name"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="lastName">Last Name</Label>
-                      <Input
-                        id="lastName"
-                        value={formData.lastName}
-                        onChange={(e) => updateField("lastName", e.target.value)}
-                        data-testid="input-last-name"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => updateField("email", e.target.value)}
-                        data-testid="input-email"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="phone">Phone</Label>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => updateField("phone", e.target.value)}
-                        data-testid="input-phone"
-                      />
-                    </div>
-                  </div>
-
                   <div className="space-y-1.5">
                     <Label htmlFor="streetAddress">Street Address *</Label>
                     <Input
