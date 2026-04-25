@@ -1413,11 +1413,72 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
           {onboardingCompleted
-            ? "This client has completed their onboarding form. Dog names, gate codes, and access notes are saved to their property."
+            ? `Completed on ${new Date(firstProperty!.onboardingCompletedAt!).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
             : onboardingPending
               ? "An onboarding link has been sent. Waiting for the client to complete the form."
               : "Send the client a form to collect dog details, gate codes, access instructions, and contact preferences before their first visit."}
         </p>
+        {onboardingCompleted && (
+          <div className="space-y-3 pt-1">
+            {(firstProperty?.dogNames || firstProperty?.dogBreeds) && (
+              <div>
+                <p className="text-xs font-medium text-foreground mb-1">Dogs</p>
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  {firstProperty.dogNames && (
+                    <p data-testid="text-dog-names"><span className="font-medium text-foreground">Names:</span> {firstProperty.dogNames}</p>
+                  )}
+                  {firstProperty.dogBreeds && (
+                    <p data-testid="text-dog-breeds"><span className="font-medium text-foreground">Breeds:</span> {firstProperty.dogBreeds}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {firstProperty?.hasDangerousDog && (
+              <div className="flex items-start gap-2 p-2 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div className="text-xs">
+                  <p className="font-medium text-amber-800 dark:text-amber-200" data-testid="text-dangerous-dog-flag">Dangerous dog on property</p>
+                  {firstProperty.dangerousDogNotes && (
+                    <p className="text-amber-700 dark:text-amber-300 mt-0.5" data-testid="text-dangerous-dog-notes">{firstProperty.dangerousDogNotes}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {firstProperty?.gateCode && (
+              <div>
+                <p className="text-xs font-medium text-foreground mb-1">Gate Code</p>
+                <p className="text-xs text-muted-foreground font-mono" data-testid="text-gate-code">{firstProperty.gateCode}</p>
+              </div>
+            )}
+            {firstProperty?.specialInstructions && (
+              <div>
+                <p className="text-xs font-medium text-foreground mb-1">Access Instructions</p>
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap" data-testid="text-access-instructions">{firstProperty.specialInstructions}</p>
+              </div>
+            )}
+            {(() => {
+              const prefs = contact.reminderPreferences as Record<string, unknown> | null | undefined;
+              const contactMethod = prefs?.contactMethod as string | undefined;
+              const bestContactTime = prefs?.bestContactTime as string | undefined;
+              if (!contactMethod && !bestContactTime) return null;
+              const methodLabels: Record<string, string> = { phone: "Phone", email: "Email", text: "Text / SMS" };
+              const timeLabels: Record<string, string> = { morning: "Morning", afternoon: "Afternoon", evening: "Evening" };
+              return (
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-1">Contact Preferences</p>
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    {contactMethod && (
+                      <p data-testid="text-preferred-contact-method"><span className="font-medium text-foreground">Preferred method:</span> {methodLabels[contactMethod] ?? contactMethod}</p>
+                    )}
+                    {bestContactTime && (
+                      <p data-testid="text-best-contact-time"><span className="font-medium text-foreground">Best time:</span> {timeLabels[bestContactTime] ?? bestContactTime}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
         {!onboardingCompleted && (
           <div className="flex flex-wrap gap-2">
             <Button
