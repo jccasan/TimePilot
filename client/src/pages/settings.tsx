@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical, Rocket, Zap, PlayCircle, DollarSign } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical, Rocket, Zap, PlayCircle, DollarSign, Star } from "lucide-react";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -87,6 +87,10 @@ type Company = {
   billingTrigger: string;
   defaultPaymentBehavior: string;
   settingsLayout?: any;
+  reviewRequestEnabled?: boolean;
+  googleReviewUrl?: string | null;
+  reviewRequestAfterVisits?: number;
+  reviewRequestCustomMessage?: string | null;
 };
 
 type SettingsLayoutItem = {
@@ -115,6 +119,7 @@ const SETTINGS_BLOCK_DEFS: { id: string; label: string; defaultW: number; defaul
   { id: "webhook_lead", label: "Webhook Lead", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "sms_quote_template", label: "SMS Quote Template", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "quote_auto_follow_up", label: "Quote Auto-Follow-Up", defaultW: 6, defaultH: 5, minW: 4, minH: 3 },
+  { id: "google_reviews", label: "Google Reviews", defaultW: 6, defaultH: 5, minW: 4, minH: 3 },
   { id: "auto_visit_generation", label: "Auto Visit Generation", defaultW: 6, defaultH: 3, minW: 4, minH: 2 },
   { id: "lead_sources", label: "Lead Sources", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "audit_log", label: "Audit Log", defaultW: 12, defaultH: 5, minW: 6, minH: 4 },
@@ -131,7 +136,8 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "change_password", "voice_api_docs",
   "data_import_export", "signup_widget",
   "webhook_lead", "sms_quote_template",
-  "quote_auto_follow_up", "auto_visit_generation",
+  "quote_auto_follow_up", "google_reviews",
+  "auto_visit_generation",
   "lead_sources", "developer_tools",
   "audit_log", "demo_mode",
   "billing_defaults",
@@ -2028,6 +2034,173 @@ function QuoteAutoFollowUpSection({ company }: { company: Company | null }) {
   );
 }
 
+function GoogleReviewsSection({ company }: { company: Company | null }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: stats } = useQuery<{ totalSent: number; sentThisMonth: number }>({
+    queryKey: ["/api/company/review-request-stats"],
+  });
+
+  const [reviewUrl, setReviewUrl] = useState(company?.googleReviewUrl || "");
+  const [afterVisits, setAfterVisits] = useState(company?.reviewRequestAfterVisits ?? 3);
+  const [customMsg, setCustomMsg] = useState(company?.reviewRequestCustomMessage || "");
+
+  useEffect(() => {
+    if (company?.googleReviewUrl) setReviewUrl(company.googleReviewUrl);
+    if (company?.reviewRequestAfterVisits) setAfterVisits(company.reviewRequestAfterVisits);
+    if (company?.reviewRequestCustomMessage) setCustomMsg(company.reviewRequestCustomMessage);
+  }, [company?.googleReviewUrl, company?.reviewRequestAfterVisits, company?.reviewRequestCustomMessage]);
+
+  const toggleMutation = useMutation({
+    mutationFn: (checked: boolean) => apiRequest("PATCH", "/api/company", { reviewRequestEnabled: checked }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/company"] }); },
+    onError: () => toast({ title: "Error", description: "Could not update setting", variant: "destructive" }),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (data: { googleReviewUrl?: string; reviewRequestAfterVisits?: number; reviewRequestCustomMessage?: string }) =>
+      apiRequest("PATCH", "/api/company", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Saved", description: "Google Reviews settings saved" });
+    },
+    onError: () => toast({ title: "Error", description: "Could not save settings", variant: "destructive" }),
+  });
+
+  const isEnabled = company?.reviewRequestEnabled ?? false;
+  const defaultMsg = `Hi {firstName}! We'd love to hear about your experience with {companyName}. Would you mind leaving us a quick Google review? It really helps! {reviewLink}`;
+  const previewMsg = (customMsg || defaultMsg)
+    .replace(/\{firstName\}/g, "Alex")
+    .replace(/\{companyName\}/g, company?.name || "Your Company")
+    .replace(/\{reviewLink\}/g, reviewUrl || "https://g.page/r/your-review-link");
+
+  const hasChanges =
+    reviewUrl !== (company?.googleReviewUrl || "") ||
+    afterVisits !== (company?.reviewRequestAfterVisits ?? 3) ||
+    customMsg !== (company?.reviewRequestCustomMessage || "");
+
+  return (
+    <Card data-testid="card-google-reviews">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Star className="h-5 w-5 text-yellow-500" />
+              Google Reviews Automation
+            </CardTitle>
+            <CardDescription>
+              Automatically ask satisfied customers for a Google review after a set number of completed visits
+            </CardDescription>
+          </div>
+          <Switch
+            checked={isEnabled}
+            onCheckedChange={(checked) => toggleMutation.mutate(checked)}
+            data-testid="switch-review-request-enabled"
+          />
+        </div>
+      </CardHeader>
+      {isEnabled && (
+        <CardContent className="space-y-6">
+          {stats && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-muted rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold">{stats.sentThisMonth}</p>
+                <p className="text-xs text-muted-foreground">Sent this month</p>
+              </div>
+              <div className="bg-muted rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold">{stats.totalSent}</p>
+                <p className="text-xs text-muted-foreground">Total sent</p>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="google-review-url">Google Review Link</Label>
+            <Input
+              id="google-review-url"
+              placeholder="https://g.page/r/..."
+              value={reviewUrl}
+              onChange={(e) => setReviewUrl(e.target.value)}
+              data-testid="input-google-review-url"
+            />
+            <p className="text-xs text-muted-foreground">
+              Find your link in Google Business Profile → Get more reviews → Share review form
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="after-visits">Send request after every</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="after-visits"
+                type="number"
+                min={1}
+                max={20}
+                value={afterVisits}
+                onChange={(e) => setAfterVisits(parseInt(e.target.value) || 1)}
+                className="w-24"
+                data-testid="input-review-after-visits"
+              />
+              <span className="text-sm text-muted-foreground">completed visits</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Each customer's visit count resets after a review request is sent
+            </p>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              <Label className="font-medium">SMS Message Template</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">Leave blank to use the default message</p>
+            <Textarea
+              placeholder={defaultMsg}
+              value={customMsg}
+              onChange={(e) => setCustomMsg(e.target.value)}
+              rows={3}
+              className="font-mono text-sm"
+              data-testid="textarea-review-custom-message"
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {["{firstName}", "{companyName}", "{reviewLink}"].map((field) => (
+                <Badge
+                  key={field}
+                  variant="secondary"
+                  className="text-xs cursor-pointer"
+                  onClick={() => setCustomMsg((m) => (m || defaultMsg) + field)}
+                  data-testid={`badge-review-${field.replace(/[{}]/g, "")}`}
+                >
+                  {field}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Preview</Label>
+            <div className="bg-muted rounded-md p-3 text-sm" data-testid="text-review-preview">
+              {previewMsg}
+            </div>
+          </div>
+
+          <Button
+            onClick={() => saveMutation.mutate({ googleReviewUrl: reviewUrl, reviewRequestAfterVisits: afterVisits, reviewRequestCustomMessage: customMsg || undefined })}
+            disabled={saveMutation.isPending || !hasChanges}
+            data-testid="button-save-review-settings"
+          >
+            {saveMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+            Save Settings
+          </Button>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 type ReminderRule = {
   id: string;
   timing: "24h_before" | "2h_before" | "morning_of" | "custom";
@@ -3031,7 +3204,20 @@ export default function Settings() {
     const raw = company.settingsLayout;
     if (raw === null || raw === undefined) return null;
     if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "object" && "i" in raw[0]) {
-      return raw as SettingsLayoutItem[];
+      const existing = raw as SettingsLayoutItem[];
+      const existingIds = new Set(existing.map((item) => item.i));
+      const missing: SettingsLayoutItem[] = [];
+      let maxY = existing.reduce((m, item) => Math.max(m, item.y + item.h), 0);
+      for (const id of DEFAULT_SETTINGS_BLOCK_IDS) {
+        if (!existingIds.has(id)) {
+          const def = SETTINGS_BLOCK_DEFS.find((b) => b.id === id);
+          if (def) {
+            missing.push({ i: id, x: 0, y: maxY, w: def.defaultW, h: def.defaultH, minW: def.minW, minH: def.minH });
+            maxY += def.defaultH;
+          }
+        }
+      }
+      return missing.length > 0 ? [...existing, ...missing] : existing;
     }
     return null;
   }, [company]);
@@ -3636,6 +3822,8 @@ export default function Settings() {
         return <div className="h-full overflow-auto"><SmsQuoteTemplateSection company={company ?? null} /></div>;
       case "quote_auto_follow_up":
         return <div className="h-full overflow-auto"><QuoteAutoFollowUpSection company={company ?? null} /></div>;
+      case "google_reviews":
+        return <div className="h-full overflow-auto"><GoogleReviewsSection company={company ?? null} /></div>;
       case "auto_visit_generation":
         return (
           <Card className="h-full overflow-auto">

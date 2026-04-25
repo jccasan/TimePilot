@@ -241,6 +241,10 @@ export const companies = pgTable("companies", {
   demoAutoCompleteToday: boolean("demo_auto_complete_today").notNull().default(false),
   demoAutoPayInvoices: boolean("demo_auto_pay_invoices").notNull().default(false),
   demoLivePlaybackEnabled: boolean("demo_live_playback_enabled").notNull().default(false),
+  reviewRequestEnabled: boolean("review_request_enabled").notNull().default(false),
+  googleReviewUrl: text("google_review_url"),
+  reviewRequestAfterVisits: integer("review_request_after_visits").notNull().default(3),
+  reviewRequestCustomMessage: text("review_request_custom_message"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -315,6 +319,9 @@ export const contacts = pgTable("contacts", {
   billingCadenceOverride: text("billing_cadence_override"),
   billingTriggerOverride: text("billing_trigger_override"),
   paymentBehaviorOverride: text("payment_behavior_override"),
+  visitsSinceLastReviewRequest: integer("visits_since_last_review_request").notNull().default(0),
+  reviewRequestSentCount: integer("review_request_sent_count").notNull().default(0),
+  lastReviewRequestSentAt: timestamp("last_review_request_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

@@ -2197,6 +2197,28 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/company/review-request-stats", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const [totalResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(reminderLogs)
+        .where(and(eq(reminderLogs.companyId, companyId), eq(reminderLogs.reminderType, "review_request")));
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+      const [monthResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(reminderLogs)
+        .where(and(
+          eq(reminderLogs.companyId, companyId),
+          eq(reminderLogs.reminderType, "review_request"),
+          gte(reminderLogs.sentAt, monthStart),
+        ));
+      res.json({ totalSent: totalResult?.count ?? 0, sentThisMonth: monthResult?.count ?? 0 });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.patch("/api/company", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role, userId } = await getCompanyContext(req);
@@ -2209,7 +2231,8 @@ Return ONLY valid JSON, no markdown.`,
         "quoteAutoFollowUpEnabled", "quoteFollowUpSmsTemplate", "quoteFollowUpEmailEnabled", "quoteFollowUpEmailSubject", "quoteFollowUpEmailBody", "quoteFormLayout",
         "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle", "maxStopsPerRoute",
         "country", "currency", "taxRatePercent",
-        "billingCadence", "billingTrigger", "defaultPaymentBehavior"];
+        "billingCadence", "billingTrigger", "defaultPaymentBehavior",
+        "reviewRequestEnabled", "googleReviewUrl", "reviewRequestAfterVisits", "reviewRequestCustomMessage"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -6293,6 +6316,56 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  async function maybeFireReviewRequest(companyId: string, contactId: string, visitId: string) {
+    try {
+      const company = await storage.getCompany(companyId);
+      if (!company?.reviewRequestEnabled || !company.googleReviewUrl) return;
+      const contact = await storage.getContact(contactId, companyId);
+      if (!contact) return;
+      const threshold = company.reviewRequestAfterVisits || 3;
+      const currentCount = contact.visitsSinceLastReviewRequest ?? 0;
+      const newCount = currentCount + 1;
+      if (newCount >= threshold) {
+        const customMsg = company.reviewRequestCustomMessage;
+        const message = customMsg
+          ? customMsg
+              .replace(/\{firstName\}/g, contact.firstName)
+              .replace(/\{companyName\}/g, company.name)
+              .replace(/\{reviewLink\}/g, company.googleReviewUrl)
+          : `Hi ${contact.firstName}! We'd love to hear about your experience with ${company.name}. Would you mind leaving us a quick Google review? It really helps! ${company.googleReviewUrl}`;
+        if (contact.phone) {
+          try {
+            await sendSmsForCompany({ to: contact.phone, body: message, companyId, contactId: contact.id });
+          } catch (smsErr) {
+            console.error("[ReviewRequest] SMS send failed:", smsErr);
+          }
+        }
+        await db.insert(reminderLogs).values({
+          companyId,
+          contactId,
+          visitId,
+          reminderType: "review_request",
+          channel: contact.phone ? "sms" : "none",
+          messagePreview: message.slice(0, 200),
+          deliveryStatus: "sent",
+          sentAt: new Date(),
+        });
+        await db.update(contacts).set({
+          visitsSinceLastReviewRequest: 0,
+          reviewRequestSentCount: sql`${contacts.reviewRequestSentCount} + 1`,
+          lastReviewRequestSentAt: new Date(),
+        }).where(eq(contacts.id, contactId));
+        console.log(`[ReviewRequest] Sent to contact ${contactId} (visit ${visitId})`);
+      } else {
+        await db.update(contacts).set({
+          visitsSinceLastReviewRequest: newCount,
+        }).where(eq(contacts.id, contactId));
+      }
+    } catch (err) {
+      console.error("[ReviewRequest] Error in maybeFireReviewRequest:", err);
+    }
+  }
+
   app.patch("/api/visits/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId, role } = await getCompanyContext(req);
@@ -6373,6 +6446,14 @@ Return ONLY valid JSON, no markdown.`,
           console.error("Auto-invoice generation failed:", autoErr);
         }
         notify(companyId, "visit_completed", "Visit Completed", `Visit on ${visit.scheduledDate} has been marked as completed.`, `/scheduling`);
+        try {
+          const planForReview = await storage.getServicePlan(visit.servicePlanId, companyId);
+          if (planForReview?.contactId) {
+            await maybeFireReviewRequest(companyId, planForReview.contactId, visit.id);
+          }
+        } catch (reviewErr) {
+          console.error("Review request check failed:", reviewErr);
+        }
       }
 
       res.json(visit);
@@ -6606,6 +6687,14 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       notify(companyId, "visit_completed", "Visit Completed", `Visit on ${visit.scheduledDate} has been marked as completed.`, `/scheduling`);
+
+      try {
+        if (plan?.contactId) {
+          await maybeFireReviewRequest(companyId, plan.contactId, visit.id);
+        }
+      } catch (reviewErr) {
+        console.error("Review request check failed:", reviewErr);
+      }
 
       let completionSmsResult: any = null;
       let etaSmsResult: any = null;
