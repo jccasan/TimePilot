@@ -381,6 +381,10 @@ export const properties = pgTable("properties", {
   yardDifficulty: yardDifficultyEnum("yard_difficulty").default("flat"),
   hasDangerousDog: boolean("has_dangerous_dog").default(false),
   dangerousDogNotes: text("dangerous_dog_notes"),
+  onboardingToken: varchar("onboarding_token", { length: 36 }).unique(),
+  onboardingCompletedAt: timestamp("onboarding_completed_at"),
+  dogNames: text("dog_names"),
+  dogBreeds: text("dog_breeds"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

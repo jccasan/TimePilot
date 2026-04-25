@@ -3854,9 +3854,24 @@ Return ONLY valid JSON, no markdown.`,
 
       const activePlans = await storage.getServicePlans(companyId, { isActive: true });
       const stopOnlyOnlyIds = getStopOnlyOnlyContactIds(activePlans);
+
+      const onboardingRows = await db.execute(sql`
+        SELECT DISTINCT ON (contact_id) contact_id,
+          onboarding_completed_at IS NULL AS pending,
+          onboarding_completed_at IS NOT NULL AS completed
+        FROM properties
+        WHERE company_id = ${companyId}
+        ORDER BY contact_id, onboarding_completed_at DESC NULLS LAST
+      `);
+      const onboardingMap = new Map<string, { pending: boolean; completed: boolean }>();
+      for (const row of onboardingRows.rows as { contact_id: string; pending: boolean; completed: boolean }[]) {
+        onboardingMap.set(row.contact_id, { pending: !!row.pending, completed: !!row.completed });
+      }
+
       const enriched = contactsList.map(c => ({
         ...c,
         isStopOnlyContact: stopOnlyOnlyIds.has(c.id),
+        onboardingStatus: onboardingMap.get(c.id) || null,
       }));
       res.json(enriched);
     } catch (err) { handleError(res, err); }
@@ -14153,6 +14168,200 @@ Return ONLY valid JSON, no markdown.`,
       }).catch((err) => console.error("Failed to send portal link email:", err));
 
       res.json({ success: true, message: "Portal link with new credentials has been emailed to the customer." });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Client Onboarding Form ================
+
+  app.post("/api/contacts/:id/send-onboarding", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role, userId } = await getCompanyContext(req);
+      requireRole(role);
+      const contact = await storage.getContact(req.params.id, companyId);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      const propertiesList = await storage.getProperties(companyId, req.params.id);
+      if (!propertiesList || propertiesList.length === 0) {
+        return res.status(400).json({ error: "This contact has no properties. Add a property before sending an onboarding form." });
+      }
+
+      const property = propertiesList[0];
+      let token = property.onboardingToken;
+
+      if (!token) {
+        token = crypto.randomUUID();
+        await storage.updateProperty(property.id, companyId, { onboardingToken: token });
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const onboardingUrl = `${baseUrl}/onboarding/${token}`;
+
+      storage.createActivityLog({
+        companyId,
+        contactId: req.params.id,
+        userId,
+        action: "email_sent",
+        details: { type: "onboarding_link_generated", url: onboardingUrl, propertyId: property.id },
+      }).catch(console.error);
+
+      if (contact.email) {
+        const company = await storage.getCompany(companyId);
+        sendEmail({
+          companyId,
+          to: contact.email,
+          subject: `${company?.name || "Your Service Provider"} — Please Complete Your Onboarding Form`,
+          senderName: company?.name || undefined,
+          replyTo: company?.email || undefined,
+          text: `Hi ${contact.firstName},\n\nWelcome! To prepare for your first service visit, please take a few minutes to fill out our onboarding form.\n\nOnboarding Form: ${onboardingUrl}\n\nThis helps our technicians know about your dogs, gate access, and how to best serve you.\n\nThank you!`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">${escapeHtml(company?.name || "Your Service Provider")}</h1>
+              </div>
+              <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                <p>Hi ${escapeHtml(contact.firstName)},</p>
+                <p>Welcome! To prepare for your first service visit, please take a few minutes to fill out our onboarding form.</p>
+                <p>This helps our technicians know about your dogs, gate access, and how to best serve you.</p>
+                <a href="${escapeHtml(onboardingUrl)}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Complete Onboarding Form</a>
+                <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${escapeHtml(onboardingUrl)}</p>
+              </div>
+            </div>
+          `,
+        }).catch((err) => console.error("Failed to send onboarding email:", err));
+      }
+
+      res.json({ success: true, url: onboardingUrl, emailed: !!contact.email });
+    } catch (err) { handleError(res, err); }
+  });
+
+  interface OnboardingGetRow {
+    id: string; contact_id: string; company_id: string;
+    street_address: string; city: string; state: string; zip_code: string;
+    number_of_dogs: number; gate_code: string | null; special_instructions: string | null;
+    has_dangerous_dog: boolean; dangerous_dog_notes: string | null;
+    dog_names: string | null; dog_breeds: string | null;
+    onboarding_completed_at: string | null;
+    first_name: string; last_name: string; email: string | null; phone: string | null;
+    company_name: string; logo_url: string | null;
+  }
+
+  app.get("/api/public/onboarding/:token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const rows = await db.execute(sql`
+        SELECT p.id, p.contact_id, p.company_id, p.street_address, p.city, p.state, p.zip_code,
+               p.number_of_dogs, p.gate_code, p.special_instructions,
+               p.has_dangerous_dog, p.dangerous_dog_notes, p.dog_names, p.dog_breeds,
+               p.onboarding_completed_at,
+               c.first_name, c.last_name, c.email, c.phone,
+               co.name as company_name, co.logo_url
+        FROM properties p
+        JOIN contacts c ON c.id = p.contact_id
+        JOIN companies co ON co.id = p.company_id
+        WHERE p.onboarding_token = ${token}
+        LIMIT 1
+      `);
+      if (!rows.rows.length) return res.status(404).json({ error: "Onboarding link not found or expired" });
+      const row = rows.rows[0] as OnboardingGetRow;
+      res.json({
+        contact: {
+          firstName: row.first_name,
+          lastName: row.last_name,
+          email: row.email,
+          phone: row.phone,
+        },
+        property: {
+          id: row.id,
+          streetAddress: row.street_address,
+          city: row.city,
+          state: row.state,
+          zipCode: row.zip_code,
+          numberOfDogs: row.number_of_dogs,
+          gateCode: row.gate_code,
+          specialInstructions: row.special_instructions,
+          hasDangerousDog: row.has_dangerous_dog,
+          dangerousDogNotes: row.dangerous_dog_notes,
+          dogNames: row.dog_names,
+          dogBreeds: row.dog_breeds,
+        },
+        company: {
+          name: row.company_name,
+          logoUrl: row.logo_url,
+          primaryColor: null,
+        },
+        alreadyCompleted: !!row.onboarding_completed_at,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/public/onboarding/:token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const rows = await db.execute(sql`
+        SELECT p.id, p.company_id, p.contact_id, p.onboarding_completed_at
+        FROM properties p
+        WHERE p.onboarding_token = ${token}
+        LIMIT 1
+      `);
+      if (!rows.rows.length) return res.status(404).json({ error: "Onboarding link not found" });
+      const row = rows.rows[0] as { id: string; company_id: string; contact_id: string; onboarding_completed_at: string | null };
+      if (row.onboarding_completed_at) {
+        return res.status(400).json({ error: "This onboarding form has already been submitted" });
+      }
+
+      const {
+        dogNames, dogBreeds, hasDangerousDog, dangerousDogNotes,
+        gateCode, specialInstructions, techInstructions,
+        preferredContactMethod, bestContactTime,
+      } = req.body;
+
+      const combinedInstructions = [
+        specialInstructions || "",
+        techInstructions ? `Technician notes: ${techInstructions}` : "",
+      ].filter(Boolean).join("\n\n") || null;
+
+      await db.execute(sql`
+        UPDATE properties SET
+          dog_names = ${dogNames || null},
+          dog_breeds = ${dogBreeds || null},
+          has_dangerous_dog = ${!!hasDangerousDog},
+          dangerous_dog_notes = ${dangerousDogNotes || null},
+          gate_code = ${gateCode || null},
+          special_instructions = ${combinedInstructions},
+          onboarding_completed_at = NOW(),
+          onboarding_token = NULL,
+          updated_at = NOW()
+        WHERE id = ${row.id}
+      `);
+
+      if (preferredContactMethod || bestContactTime) {
+        const contact = await storage.getContact(row.contact_id, row.company_id);
+        if (contact) {
+          const existing = (contact.reminderPreferences as Record<string, unknown>) || {};
+          const updated: Record<string, unknown> = { ...existing };
+          if (preferredContactMethod) {
+            updated.contactMethod = preferredContactMethod;
+            if (preferredContactMethod === "text") updated.preferredChannel = "sms";
+            else if (preferredContactMethod === "email") updated.preferredChannel = "email";
+          }
+          if (bestContactTime) {
+            updated.bestContactTime = bestContactTime;
+            if (bestContactTime === "morning") updated.preferredTiming = "morning_of";
+            else if (bestContactTime === "afternoon" || bestContactTime === "evening") updated.preferredTiming = "24h_before";
+          }
+          await storage.updateContact(row.contact_id, row.company_id, { reminderPreferences: updated });
+        }
+      }
+
+      storage.createActivityLog({
+        companyId: row.company_id,
+        contactId: row.contact_id,
+        userId: null,
+        action: "updated",
+        details: { type: "onboarding_completed", propertyId: row.id },
+      }).catch(console.error);
+
+      res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
 

@@ -56,7 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle, Star } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle, Star, ClipboardList, ClipboardCheck, Copy, ExternalLink } from "lucide-react";
 import { compressImage, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/image-compress";
 import { Switch } from "@/components/ui/switch";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
@@ -386,10 +386,26 @@ export default function ContactDetail() {
           <CardTitle className="text-xl" data-testid="text-contact-detail-name">
             {contact.firstName} {contact.lastName}
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="secondary" className={statusColors[contact.status] || ""} data-testid="badge-contact-status">
               {contact.status}
             </Badge>
+            {(() => {
+              const firstProp = (properties || [])[0];
+              if (!firstProp) return null;
+              if (firstProp.onboardingCompletedAt) {
+                return (
+                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex items-center gap-1" data-testid="badge-header-onboarding-complete">
+                    <ClipboardCheck className="h-3 w-3" /> Onboarded
+                  </Badge>
+                );
+              }
+              return (
+                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-header-onboarding-pending">
+                  Onboarding Pending
+                </Badge>
+              );
+            })()}
             {contact.phone && (
               <Button
                 variant="outline"
@@ -659,6 +675,8 @@ export default function ContactDetail() {
       <BillingOverrideSection contact={contact} contactId={id!} />
 
       <PortalAccessCard contact={contact} contactId={id!} />
+
+      <OnboardingCard contact={contact} contactId={id!} properties={properties || []} />
 
       <GoogleReviewToggle contact={contact} contactId={id!} />
 
@@ -1311,6 +1329,120 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function OnboardingCard({ contact, contactId, properties }: { contact: Contact; contactId: string; properties: Property[] }) {
+  const { toast } = useToast();
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [onboardingLink, setOnboardingLink] = useState<string | null>(null);
+
+  const firstProperty = properties[0] || null;
+  const onboardingCompleted = !!firstProperty?.onboardingCompletedAt;
+  const hasToken = !!firstProperty?.onboardingToken;
+  const onboardingPending = hasToken && !onboardingCompleted;
+
+  const sendOnboardingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/contacts/${contactId}/send-onboarding`);
+      return res.json();
+    },
+    onSuccess: (data: { url: string; emailed: boolean }) => {
+      setOnboardingLink(data.url);
+      queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      if (data.emailed) {
+        toast({ title: "Onboarding link sent", description: "An email with the onboarding form link has been sent to the client." });
+      } else {
+        toast({ title: "Onboarding link generated", description: "Copy the link below and share it with the client." });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleCopy = (url: string) => {
+    navigator.clipboard.writeText(url).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
+
+  if (properties.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <ClipboardList className="h-5 w-5" /> Client Onboarding
+        </CardTitle>
+        {onboardingCompleted && (
+          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex items-center gap-1" data-testid="badge-onboarding-complete">
+            <ClipboardCheck className="h-3.5 w-3.5" /> Onboarded
+          </Badge>
+        )}
+        {onboardingPending && (
+          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-onboarding-pending">
+            Onboarding Pending
+          </Badge>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          {onboardingCompleted
+            ? "This client has completed their onboarding form. Dog names, gate codes, and access notes are saved to their property."
+            : onboardingPending
+              ? "An onboarding link has been sent. Waiting for the client to complete the form."
+              : "Send the client a form to collect dog details, gate codes, access instructions, and contact preferences before their first visit."}
+        </p>
+        {!onboardingCompleted && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant={onboardingPending ? "outline" : "default"}
+              onClick={() => sendOnboardingMutation.mutate()}
+              disabled={sendOnboardingMutation.isPending}
+              data-testid="button-send-onboarding"
+            >
+              {sendOnboardingMutation.isPending ? (
+                <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Generating...</>
+              ) : onboardingPending ? (
+                <><Mail className="mr-1 h-4 w-4" /> Resend Link</>
+              ) : (
+                <><ClipboardList className="mr-1 h-4 w-4" /> Send Onboarding Form</>
+              )}
+            </Button>
+            {(onboardingLink || (hasToken && firstProperty)) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const url = onboardingLink || `${window.location.origin}/onboarding/${firstProperty?.onboardingToken}`;
+                  window.open(url, "_blank");
+                }}
+                data-testid="button-open-onboarding"
+              >
+                <ExternalLink className="mr-1 h-4 w-4" /> Fill Out for Client
+              </Button>
+            )}
+          </div>
+        )}
+        {onboardingLink && (
+          <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+            <p className="text-xs font-mono flex-1 truncate">{onboardingLink}</p>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => handleCopy(onboardingLink)}
+              data-testid="button-copy-onboarding-link"
+            >
+              <Copy className="h-4 w-4" /> {linkCopied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

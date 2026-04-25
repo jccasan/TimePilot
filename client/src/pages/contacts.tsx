@@ -37,6 +37,9 @@ import { AddContactDialog } from "@/components/add-contact-dialog";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
 
+type OnboardingStatus = { pending: boolean; completed: boolean } | null;
+type EnrichedContact = Contact & { onboardingStatus: OnboardingStatus };
+
 const statusColors: Record<string, string> = {
   lead: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   estimate: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
@@ -92,7 +95,7 @@ export default function Contacts() {
   if (search) queryParams.set("search", search);
   const queryString = queryParams.toString();
 
-  const { data: contacts, isLoading } = useQuery<(Contact & { isStopOnlyContact?: boolean })[]>({
+  const { data: contacts, isLoading } = useQuery<(EnrichedContact & { isStopOnlyContact?: boolean })[]>({
     queryKey: ["/api/contacts" + (queryString ? `?${queryString}` : "")],
   });
 
@@ -298,6 +301,22 @@ export default function Contacts() {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5">
+                      {contact.status === "active" && contact.onboardingStatus?.pending && (
+                        <Badge
+                          className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                          data-testid={`badge-onboarding-pending-${contact.id}`}
+                        >
+                          Onboarding Pending
+                        </Badge>
+                      )}
+                      {contact.onboardingStatus?.completed && (
+                        <Badge
+                          className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                          data-testid={`badge-onboarding-complete-${contact.id}`}
+                        >
+                          Onboarded
+                        </Badge>
+                      )}
                       {contact.isStopOnlyContact && (
                         <Badge
                           variant="outline"

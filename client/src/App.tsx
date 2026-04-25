@@ -68,6 +68,7 @@ const VoiceSignup = lazy(() => import("@/pages/voice-signup"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
 const SmsTerms = lazy(() => import("@/pages/sms-terms"));
 const Pipeline = lazy(() => import("@/pages/pipeline"));
+const OnboardingForm = lazy(() => import("@/pages/onboarding-form"));
 
 function PageLoader() {
   return (
@@ -522,6 +523,9 @@ function AppContent() {
   const isSignupPath = typeof window !== "undefined" &&
     window.location.pathname.startsWith("/signup/");
 
+  const isOnboardingPath = typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/onboarding/");
+
   const isVoiceSignupPath = typeof window !== "undefined" &&
     window.location.pathname.startsWith("/voice-signup/");
 
@@ -548,6 +552,10 @@ function AppContent() {
 
   if (isSignupPath) {
     return <Suspense fallback={<PageLoader />}><SignupWidget /></Suspense>;
+  }
+
+  if (isOnboardingPath) {
+    return <Suspense fallback={<PageLoader />}><OnboardingForm /></Suspense>;
   }
 
   if (isVoiceSignupPath) {
