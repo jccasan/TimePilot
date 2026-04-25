@@ -243,7 +243,7 @@ function parsePricingData(pricing: PricingItem[]) {
 
   const lotAddons: LotAddon[] = [];
   const lotItems = addons
-    .filter(p => p.name.toLowerCase().includes("lot size") || p.name.toLowerCase().includes("acre"))
+    .filter(p => (p.name.toLowerCase().includes("lot size") || p.name.toLowerCase().includes("acre")) && !p.name.toLowerCase().includes("deodorizing"))
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
   for (const item of lotItems) {
