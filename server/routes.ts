@@ -6322,6 +6322,10 @@ Return ONLY valid JSON, no markdown.`,
       if (!company?.reviewRequestEnabled || !company.googleReviewUrl) return;
       const contact = await storage.getContact(contactId, companyId);
       if (!contact) return;
+      if (contact.googleReviewLeft) {
+        console.log(`[ReviewRequest] Skipping contact ${contactId} — review already left`);
+        return;
+      }
       const threshold = company.reviewRequestAfterVisits || 3;
       const currentCount = contact.visitsSinceLastReviewRequest ?? 0;
       const newCount = currentCount + 1;

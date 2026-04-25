@@ -322,6 +322,7 @@ export const contacts = pgTable("contacts", {
   visitsSinceLastReviewRequest: integer("visits_since_last_review_request").notNull().default(0),
   reviewRequestSentCount: integer("review_request_sent_count").notNull().default(0),
   lastReviewRequestSentAt: timestamp("last_review_request_sent_at"),
+  googleReviewLeft: boolean("google_review_left").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

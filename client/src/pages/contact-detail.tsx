@@ -56,7 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle, Star } from "lucide-react";
 import { compressImage, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/image-compress";
 import { Switch } from "@/components/ui/switch";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
@@ -659,6 +659,8 @@ export default function ContactDetail() {
       <BillingOverrideSection contact={contact} contactId={id!} />
 
       <PortalAccessCard contact={contact} contactId={id!} />
+
+      <GoogleReviewToggle contact={contact} contactId={id!} />
 
       <BillingHistoryCard contactId={id!} />
 
@@ -1307,6 +1309,53 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function GoogleReviewToggle({ contact, contactId }: { contact: Contact; contactId: string }) {
+  const { toast } = useToast();
+  const toggleMutation = useMutation({
+    mutationFn: async (value: boolean) => {
+      await apiRequest("PATCH", `/api/contacts/${contactId}`, { googleReviewLeft: value });
+    },
+    onSuccess: (_data, value) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
+      toast({
+        title: value ? "Marked as reviewed" : "Review flag cleared",
+        description: value
+          ? `${contact.firstName} will no longer receive review requests.`
+          : `${contact.firstName} may receive review requests again.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Card data-testid="card-google-review-toggle">
+      <CardContent className="py-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Star className={`h-5 w-5 ${contact.googleReviewLeft ? "text-yellow-500 fill-yellow-400" : "text-muted-foreground"}`} />
+            <div>
+              <p className="text-sm font-medium">Has left a Google review</p>
+              <p className="text-xs text-muted-foreground">
+                {contact.googleReviewLeft
+                  ? "Review requests are permanently suppressed for this customer"
+                  : "When enabled, this customer will never be asked for a review again"}
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={contact.googleReviewLeft ?? false}
+            onCheckedChange={(checked) => toggleMutation.mutate(checked)}
+            disabled={toggleMutation.isPending}
+            data-testid="switch-google-review-left"
+          />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
