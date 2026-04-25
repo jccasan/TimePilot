@@ -2038,7 +2038,7 @@ function GoogleReviewsSection({ company }: { company: Company | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data: stats } = useQuery<{ totalSent: number; sentThisMonth: number }>({
+  const { data: stats } = useQuery<{ totalSent: number; sentThisMonth: number; totalReviewsLeft: number }>({
     queryKey: ["/api/company/review-request-stats"],
   });
 
@@ -2103,15 +2103,21 @@ function GoogleReviewsSection({ company }: { company: Company | null }) {
       {isEnabled && (
         <CardContent className="space-y-6">
           {stats && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="bg-muted rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold">{stats.sentThisMonth}</p>
+                <p className="text-2xl font-bold" data-testid="stat-review-sent-month">{stats.sentThisMonth}</p>
                 <p className="text-xs text-muted-foreground">Sent this month</p>
               </div>
               <div className="bg-muted rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold">{stats.totalSent}</p>
+                <p className="text-2xl font-bold" data-testid="stat-review-total-sent">{stats.totalSent}</p>
                 <p className="text-xs text-muted-foreground">Total sent</p>
               </div>
+              <Link href="/contacts?filter=reviewed">
+                <div className="bg-muted rounded-lg p-3 text-center cursor-pointer hover:bg-muted/70 transition-colors" data-testid="stat-review-left">
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.totalReviewsLeft}</p>
+                  <p className="text-xs text-muted-foreground">Customers reviewed</p>
+                </div>
+              </Link>
             </div>
           )}
 

@@ -2215,7 +2215,11 @@ Return ONLY valid JSON, no markdown.`,
           eq(reminderLogs.reminderType, "review_request"),
           gte(reminderLogs.sentAt, monthStart),
         ));
-      res.json({ totalSent: totalResult?.count ?? 0, sentThisMonth: monthResult?.count ?? 0 });
+      const [reviewsLeftResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(contacts)
+        .where(and(eq(contacts.companyId, companyId), eq(contacts.googleReviewLeft, true)));
+      res.json({ totalSent: totalResult?.count ?? 0, sentThisMonth: monthResult?.count ?? 0, totalReviewsLeft: reviewsLeftResult?.count ?? 0 });
     } catch (err) { handleError(res, err); }
   });
 
