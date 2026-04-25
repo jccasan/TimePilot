@@ -56,7 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle, Star, ClipboardList, ClipboardCheck, Copy, ExternalLink } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle, Star, ClipboardList, ClipboardCheck, Copy, ExternalLink, RefreshCw } from "lucide-react";
 import { compressImage, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/image-compress";
 import { Switch } from "@/components/ui/switch";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
@@ -1364,6 +1364,26 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
     },
   });
 
+  const regenerateOnboardingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/contacts/${contactId}/regenerate-onboarding`);
+      return res.json();
+    },
+    onSuccess: (data: { url: string; emailed: boolean }) => {
+      setOnboardingLink(data.url);
+      queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      if (data.emailed) {
+        toast({ title: "Link regenerated & sent", description: "The old link is now invalid. A new link has been emailed to the client." });
+      } else {
+        toast({ title: "Link regenerated", description: "The old link is now invalid. Copy the new link below." });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleCopy = (url: string) => {
     navigator.clipboard.writeText(url).then(() => {
       setLinkCopied(true);
@@ -1404,7 +1424,7 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
               size="sm"
               variant={onboardingPending ? "outline" : "default"}
               onClick={() => sendOnboardingMutation.mutate()}
-              disabled={sendOnboardingMutation.isPending}
+              disabled={sendOnboardingMutation.isPending || regenerateOnboardingMutation.isPending}
               data-testid="button-send-onboarding"
             >
               {sendOnboardingMutation.isPending ? (
@@ -1415,6 +1435,22 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
                 <><ClipboardList className="mr-1 h-4 w-4" /> Send Onboarding Form</>
               )}
             </Button>
+            {onboardingPending && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => regenerateOnboardingMutation.mutate()}
+                disabled={sendOnboardingMutation.isPending || regenerateOnboardingMutation.isPending}
+                data-testid="button-regenerate-onboarding"
+                title="Generate a new link and invalidate the current one"
+              >
+                {regenerateOnboardingMutation.isPending ? (
+                  <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Regenerating...</>
+                ) : (
+                  <><RefreshCw className="mr-1 h-4 w-4" /> Regenerate Link</>
+                )}
+              </Button>
+            )}
             {(onboardingLink || (hasToken && firstProperty)) && (
               <Button
                 size="sm"
