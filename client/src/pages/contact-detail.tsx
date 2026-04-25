@@ -1347,14 +1347,16 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
       const res = await apiRequest("POST", `/api/contacts/${contactId}/send-onboarding`);
       return res.json();
     },
-    onSuccess: (data: { url: string; emailed: boolean }) => {
+    onSuccess: (data: { url: string; emailed: boolean; noEmail?: boolean }) => {
       setOnboardingLink(data.url);
       queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${contactId}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       if (data.emailed) {
-        toast({ title: "Onboarding link sent", description: "An email with the onboarding form link has been sent to the client." });
+        toast({ title: "Onboarding email sent", description: "An email with the onboarding form link has been sent to the client." });
+      } else if (data.noEmail) {
+        toast({ title: "No email address on file", description: "This client has no email address. Copy the link below and share it manually.", variant: "destructive" });
       } else {
-        toast({ title: "Onboarding link generated", description: "Copy the link below and share it with the client." });
+        toast({ title: "Onboarding link generated", description: "The link was generated but could not be emailed. Copy it below and share manually." });
       }
     },
     onError: (error: Error) => {

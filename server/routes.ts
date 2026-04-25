@@ -14196,17 +14196,11 @@ Return ONLY valid JSON, no markdown.`,
       const baseUrl = getBaseUrl(req);
       const onboardingUrl = `${baseUrl}/onboarding/${token}`;
 
-      storage.createActivityLog({
-        companyId,
-        contactId: req.params.id,
-        userId,
-        action: "email_sent",
-        details: { type: "onboarding_link_generated", url: onboardingUrl, propertyId: property.id },
-      }).catch(console.error);
+      let emailed = false;
 
       if (contact.email) {
         const company = await storage.getCompany(companyId);
-        sendEmail({
+        const emailResult = await sendEmail({
           companyId,
           to: contact.email,
           subject: `${company?.name || "Your Service Provider"} — Please Complete Your Onboarding Form`,
@@ -14227,10 +14221,27 @@ Return ONLY valid JSON, no markdown.`,
               </div>
             </div>
           `,
-        }).catch((err) => console.error("Failed to send onboarding email:", err));
+        }).catch((err) => {
+          console.error("Failed to send onboarding email:", err);
+          return { success: false, error: String(err) };
+        });
+        emailed = emailResult.success === true;
       }
 
-      res.json({ success: true, url: onboardingUrl, emailed: !!contact.email });
+      storage.createActivityLog({
+        companyId,
+        contactId: req.params.id,
+        userId,
+        action: "email_sent",
+        details: {
+          type: emailed ? "onboarding_email_sent" : "onboarding_link_generated",
+          url: onboardingUrl,
+          propertyId: property.id,
+          ...(emailed && { sentTo: contact.email }),
+        },
+      }).catch(console.error);
+
+      res.json({ success: true, url: onboardingUrl, emailed, noEmail: !contact.email });
     } catch (err) { handleError(res, err); }
   });
 
