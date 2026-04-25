@@ -55,7 +55,7 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
   cancelled: { label: "Cancelled", variant: "outline" },
 };
 
-type TierPrices = Record<string, { name: string; price: number; maxUsers: number }>;
+type TierPrices = Record<string, { name: string; price: number; maxUsers: number; maxContacts?: number | null }>;
 
 const tierKeys = (Object.keys(TIER_CONFIG) as Array<keyof typeof TIER_CONFIG>).filter(k => k !== "free_trial" && TIER_CONFIG[k].visible);
 
@@ -238,6 +238,7 @@ export default function Billing() {
             const displayName = dynamic?.name ?? fallback.name;
             const displayPrice = dynamic?.price ?? fallback.price;
             const displayMaxUsers = dynamic?.maxUsers ?? fallback.maxUsers;
+            const displayMaxContacts = (dynamic?.maxContacts !== undefined ? dynamic.maxContacts : fallback.maxContacts) ?? null;
             const isCurrent = key === subscription?.tier;
             return (
               <Card
@@ -260,9 +261,15 @@ export default function Billing() {
                     ${displayPrice.toFixed(2)}
                     <span className="text-sm font-normal text-muted-foreground">/mo</span>
                   </p>
-                  <p className="text-sm text-muted-foreground">
-                    Up to {displayMaxUsers === 999 ? "unlimited" : displayMaxUsers} team members
-                  </p>
+                  {displayMaxContacts !== null ? (
+                    <p className="text-sm text-muted-foreground" data-testid={`text-max-contacts-${key}`}>
+                      Up to {displayMaxContacts} customers
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Up to {displayMaxUsers === 999 ? "unlimited" : displayMaxUsers} team members
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             );

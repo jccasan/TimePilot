@@ -437,6 +437,7 @@ export async function registerRoutes(
   // ================ Subscription Billing ================
 
   const TIER_PRICE_MAP: Record<string, string> = {
+    tier_starter: process.env.STRIPE_PRICE_TIER_STARTER || "",
     tier_1: process.env.STRIPE_PRICE_TIER_1 || "",
     tier_1_3: process.env.STRIPE_PRICE_TIER_1_3 || "",
     tier_3_5: process.env.STRIPE_PRICE_TIER_3_5 || "",
@@ -801,13 +802,14 @@ export async function registerRoutes(
       if (!stripePrices && isStripeConfigured()) {
         stripePrices = await fetchStripePrices();
       }
-      const result: Record<string, { name: string; price: number; maxUsers: number }> = {};
+      const result: Record<string, { name: string; price: number; maxUsers: number; maxContacts: number | null }> = {};
       for (const [tier, config] of Object.entries(TIER_CONFIG)) {
         if (!config.visible) continue;
         result[tier] = {
           name: config.name,
           price: stripePrices?.[tier] ?? config.price,
           maxUsers: config.maxUsers,
+          maxContacts: (config as any).maxContacts ?? null,
         };
       }
       res.json(result);
@@ -3619,6 +3621,18 @@ Return ONLY valid JSON, no markdown.`,
       const { rows } = req.body;
       if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ error: "No rows provided" });
 
+      const _importCompany = await storage.getCompany(companyId);
+      const _importTier = (_importCompany?.subscriptionTier || "tier_1") as keyof typeof TIER_CONFIG;
+      const _importMaxContacts = TIER_CONFIG[_importTier]?.maxContacts ?? null;
+      let _importCurrentCount = 0;
+      if (_importMaxContacts !== null) {
+        const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(contacts).where(eq(contacts.companyId, companyId));
+        _importCurrentCount = Number(total);
+        if (_importCurrentCount >= _importMaxContacts) {
+          return res.status(400).json({ error: `Contact limit reached (${_importCurrentCount}/${_importMaxContacts}). Upgrade your plan to import more customers.` });
+        }
+      }
+
       const existingSources = await storage.getLeadSources(companyId);
       const sourceNames = new Set(existingSources.map(s => s.name.toLowerCase()));
       const imported: any[] = [];
@@ -3711,6 +3725,17 @@ Return ONLY valid JSON, no markdown.`,
 
       const lines = csvText.split(/\r?\n/).filter((l: string) => l.trim());
       if (lines.length < 2) return res.status(400).json({ error: "CSV must have headers and at least one row" });
+
+      const _csvImportCompany = await storage.getCompany(companyId);
+      const _csvImportTier = (_csvImportCompany?.subscriptionTier || "tier_1") as keyof typeof TIER_CONFIG;
+      const _csvImportMaxContacts = TIER_CONFIG[_csvImportTier]?.maxContacts ?? null;
+      if (_csvImportMaxContacts !== null) {
+        const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(contacts).where(eq(contacts.companyId, companyId));
+        const _csvCurrentCount = Number(total);
+        if (_csvCurrentCount >= _csvImportMaxContacts) {
+          return res.status(400).json({ error: `Contact limit reached (${_csvCurrentCount}/${_csvImportMaxContacts}). Upgrade your plan to import more customers.` });
+        }
+      }
 
       const headers = parseCsvLine(lines[0]).map((h: string) => h.replace(/"/g, "").trim());
       const imported: any[] = [];
@@ -3811,6 +3836,17 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/contacts", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+
+      const _company = await storage.getCompany(companyId);
+      const _tier = (_company?.subscriptionTier || "tier_1") as keyof typeof TIER_CONFIG;
+      const _maxContacts = TIER_CONFIG[_tier]?.maxContacts ?? null;
+      if (_maxContacts !== null) {
+        const [{ total: _contactCount }] = await db.select({ total: sql<number>`count(*)` }).from(contacts).where(eq(contacts.companyId, companyId));
+        if (Number(_contactCount) >= _maxContacts) {
+          return res.status(400).json({ error: `Contact limit reached (${_contactCount}/${_maxContacts}). Upgrade your plan to add more customers.` });
+        }
+      }
+
       const parsed = insertContactSchema.parse({ ...req.body, companyId });
       const contact = await storage.createContact(parsed);
 
@@ -11266,6 +11302,7 @@ Return ONLY valid JSON, no markdown.`,
         const phone = meta.phone || "";
         const tierMap: Record<string, string> = {
           free_trial: "free_trial",
+          tier_starter: "tier_starter",
           tier_1: "tier_1",
           tier_1_3: "tier_1_3",
           tier_3_5: "tier_3_5",
@@ -11469,7 +11506,7 @@ Return ONLY valid JSON, no markdown.`,
               };
               const newStatus = statusMap[subscription.status] || "active";
               const tierMap: Record<string, string> = {
-                free_trial: "free_trial", tier_1: "tier_1", tier_1_3: "tier_1_3",
+                free_trial: "free_trial", tier_starter: "tier_starter", tier_1: "tier_1", tier_1_3: "tier_1_3",
                 tier_3_5: "tier_3_5", tier_6_10: "tier_6_10", tier_10_plus: "tier_10_plus",
               };
               const updates: Record<string, unknown> = { subscriptionStatus: newStatus, subscriptionUpdatedAt: eventTs };
@@ -11715,6 +11752,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const tierMap: Record<string, string> = {
         free_trial: "free_trial",
+        tier_starter: "tier_starter",
         tier_1: "tier_1",
         tier_1_3: "tier_1_3",
         tier_3_5: "tier_3_5",
@@ -14809,7 +14847,7 @@ Return ONLY valid JSON, no markdown.`,
       if (!emailRegex.test(ownerEmail)) {
         return res.status(400).json({ error: "Invalid email address" });
       }
-      const validTiers = ["free_trial", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
+      const validTiers = ["free_trial", "tier_starter", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
       const tier = validTiers.includes(subscriptionTier) ? subscriptionTier : "tier_1";
 
       let user = await getUserByEmail(ownerEmail);
@@ -14973,7 +15011,7 @@ Return ONLY valid JSON, no markdown.`,
   app.patch("/api/admin/companies/:id/subscription", isAdmin, async (req: Request, res: Response) => {
     try {
       const { tier, subscriptionStatus, trialEndsAt, customMaxUsers } = req.body;
-      const validTiers = ["free_trial", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
+      const validTiers = ["free_trial", "tier_starter", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
       if (!tier || !validTiers.includes(tier)) return res.status(400).json({ error: "Invalid tier" });
       const validStatuses = ["active", "trialing", "past_due", "cancelled", "suspended"];
       if (subscriptionStatus !== undefined && !validStatuses.includes(subscriptionStatus)) {

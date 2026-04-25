@@ -7,6 +7,7 @@ import { TIER_CONFIG } from "@shared/schema";
 import { adminFetchFn } from "@/lib/adminApi";
 
 const tierColors: Record<string, string> = {
+  tier_starter: "bg-teal-100 text-teal-800 dark:bg-teal-800 dark:text-teal-200",
   tier_1: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   tier_1_3: "bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200",
   tier_3_5: "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200",

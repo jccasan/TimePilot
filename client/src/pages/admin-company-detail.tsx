@@ -1073,6 +1073,7 @@ export default function AdminCompanyDetail() {
               />
               <p className="text-xs text-muted-foreground">
                 {TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG]?.name ?? trialForm.tier} default: {TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG]?.maxUsers ?? "—"} users
+                {(TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG] as any)?.maxContacts != null && ` · ${(TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG] as any).maxContacts} customers max`}
               </p>
             </div>
           </div>

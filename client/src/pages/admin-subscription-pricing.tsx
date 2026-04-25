@@ -25,6 +25,7 @@ interface SubscriptionTier {
 
 const tierColors: Record<string, string> = {
   free_trial: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  tier_starter: "bg-teal-100 text-teal-800 dark:bg-teal-800 dark:text-teal-200",
   tier_1: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200",
   tier_1_3: "bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200",
   tier_3_5: "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200",

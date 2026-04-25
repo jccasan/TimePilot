@@ -20,7 +20,7 @@ export const chargeTimingEnum = pgEnum("charge_timing", ["day_before", "weekly_b
 export const invoiceTimingEnum = pgEnum("invoice_timing", ["before_service", "after_service"]);
 export const invoiceFrequencyEnum = pgEnum("invoice_frequency", ["per_service", "per_week", "per_month"]);
 export const discountTypeEnum = pgEnum("discount_type", ["percent", "amount"]);
-export const subscriptionTierEnum = pgEnum("subscription_tier", ["free_trial", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"]);
+export const subscriptionTierEnum = pgEnum("subscription_tier", ["free_trial", "tier_starter", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "past_due", "cancelled", "trialing", "suspended"]);
 export const automationTriggerEnum = pgEnum("automation_trigger", ["lead_created", "service_completed", "payment_failed", "invoice_created", "quote_created"]);
 
@@ -139,12 +139,13 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
 };
 
 export const TIER_CONFIG = {
-  free_trial: { name: "Free Trial (14 days)", maxUsers: 1, price: 0, additionalUserPrice: 7, visible: true },
-  tier_1: { name: "Solo", maxUsers: 1, price: 29, additionalUserPrice: 7, visible: true },
-  tier_1_3: { name: "Walk", maxUsers: 3, price: 49, additionalUserPrice: 7, visible: true },
-  tier_3_5: { name: "Run", maxUsers: 6, price: 99, additionalUserPrice: 7, visible: true },
-  tier_6_10: { name: "Grow", maxUsers: 12, price: 149, additionalUserPrice: 7, visible: true },
-  tier_10_plus: { name: "Enterprise", maxUsers: 999, price: 599, additionalUserPrice: 7, visible: false },
+  free_trial:   { name: "Free Trial (14 days)", maxUsers: 1,   maxContacts: null as number | null, price: 0,   additionalUserPrice: 7, visible: true },
+  tier_starter: { name: "Starter",              maxUsers: 1,   maxContacts: 10 as number | null,   price: 10,  additionalUserPrice: 7, visible: true },
+  tier_1:       { name: "Solo",                 maxUsers: 1,   maxContacts: null as number | null, price: 29,  additionalUserPrice: 7, visible: true },
+  tier_1_3:     { name: "Walk",                 maxUsers: 3,   maxContacts: null as number | null, price: 49,  additionalUserPrice: 7, visible: true },
+  tier_3_5:     { name: "Run",                  maxUsers: 6,   maxContacts: null as number | null, price: 99,  additionalUserPrice: 7, visible: true },
+  tier_6_10:    { name: "Grow",                 maxUsers: 12,  maxContacts: null as number | null, price: 149, additionalUserPrice: 7, visible: true },
+  tier_10_plus: { name: "Enterprise",           maxUsers: 999, maxContacts: null as number | null, price: 599, additionalUserPrice: 7, visible: false },
 } as const;
 
 export const VOICE_PLAN_CONFIG = {
