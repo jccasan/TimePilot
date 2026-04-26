@@ -1699,6 +1699,164 @@ async function applyDemoAutopayMigration() {
   }
 }
 
+async function seedHistoricalDemoData() {
+  try {
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+    const compRes = await pool.query(`
+      SELECT c.id FROM companies c
+      JOIN company_users cu ON cu.company_id = c.id
+      JOIN users u ON u.id = cu.user_id
+      WHERE u.email = 'demo@scoopilot.com' LIMIT 1
+    `);
+    if (!compRes.rows.length) { await pool.end(); return; }
+    const companyId = compRes.rows[0].id;
+
+    const seededCheck = await pool.query(
+      `SELECT COUNT(*) FROM visits WHERE company_id = $1 AND scheduled_date < NOW() - INTERVAL '150 days'`,
+      [companyId]
+    );
+    if (parseInt(seededCheck.rows[0].count) > 0) {
+      console.log("[Migration] Historical demo data already seeded — skipping");
+      await pool.end();
+      return;
+    }
+
+    const plansRes = await pool.query(`
+      SELECT sp.id, sp.contact_id, sp.property_id, sp.frequency, sp.price_per_visit,
+             r.day_of_week
+      FROM service_plans sp
+      LEFT JOIN routes r ON r.id = sp.route_id
+      WHERE sp.company_id = $1 AND sp.is_active = true AND sp.is_stop_only = false
+      ORDER BY sp.created_at
+    `, [companyId]);
+
+    const plans = plansRes.rows;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const cutoffDate = new Date(now);
+    cutoffDate.setDate(cutoffDate.getDate() - 49);
+
+    const total = plans.length;
+    const boundaries = [
+      { months: 12, cumPct: 0.08 },
+      { months: 11, cumPct: 0.15 },
+      { months: 10, cumPct: 0.24 },
+      { months: 9,  cumPct: 0.36 },
+      { months: 8,  cumPct: 0.49 },
+      { months: 7,  cumPct: 0.66 },
+      { months: 6,  cumPct: 0.83 },
+    ];
+
+    const joinMonthsAgo: number[] = [];
+    for (let i = 0; i < total; i++) {
+      const pct = i / total;
+      let monthsAgo = 0;
+      for (const b of boundaries) {
+        if (pct < b.cumPct) { monthsAgo = b.months; break; }
+      }
+      joinMonthsAgo.push(monthsAgo);
+    }
+
+    const dayNums: Record<string, number> = {
+      monday: 1, tuesday: 2, wednesday: 3,
+      thursday: 4, friday: 5, saturday: 6, sunday: 0,
+    };
+    const monthNames = ['January','February','March','April','May','June',
+                        'July','August','September','October','November','December'];
+
+    const invNumRes = await pool.query(
+      `SELECT invoice_number FROM invoices WHERE company_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [companyId]
+    );
+    let nextInvNum = 300;
+    if (invNumRes.rows.length > 0) {
+      const m = invNumRes.rows[0].invoice_number.match(/\d+/);
+      if (m) nextInvNum = Math.max(nextInvNum, parseInt(m[0]) + 1);
+    }
+
+    let visitsCreated = 0;
+    let invoicesCreated = 0;
+
+    for (let pIdx = 0; pIdx < plans.length; pIdx++) {
+      const plan = plans[pIdx];
+      const monthsAgo = joinMonthsAgo[pIdx];
+      if (monthsAgo === 0) continue;
+
+      const joinDate = new Date(now);
+      joinDate.setMonth(joinDate.getMonth() - monthsAgo);
+      joinDate.setDate(1);
+
+      const dayNum = plan.day_of_week ? (dayNums[plan.day_of_week] ?? 1) : 1;
+      const price = parseFloat(plan.price_per_visit);
+
+      const d = new Date(joinDate);
+      while (d.getDay() !== dayNum) d.setDate(d.getDate() + 1);
+
+      const visitsByMonth: Record<string, { count: number }> = {};
+      let weekCount = 0;
+
+      while (d < cutoffDate) {
+        const shouldSkipBiweekly = plan.frequency === 'biweekly' && weekCount % 2 !== 0;
+        const shouldSkipMonthly = plan.frequency === 'monthly' && weekCount % 4 !== 0;
+        if (!shouldSkipBiweekly && !shouldSkipMonthly) {
+          const dateStr = d.toISOString().split('T')[0];
+          const status = Math.random() < 0.93 ? 'completed' : 'skipped';
+          const completedAt = status === 'completed' ? `${dateStr}T10:30:00Z` : null;
+          try {
+            await pool.query(
+              `INSERT INTO visits (company_id, service_plan_id, property_id, scheduled_date, status, completed_at)
+               VALUES ($1,$2,$3,$4,$5,$6)
+               ON CONFLICT ON CONSTRAINT visits_service_plan_id_scheduled_date_unique DO NOTHING`,
+              [companyId, plan.id, plan.property_id, dateStr, status, completedAt]
+            );
+            visitsCreated++;
+          } catch { /* skip */ }
+
+          if (status === 'completed') {
+            const mk = dateStr.substring(0, 7);
+            if (!visitsByMonth[mk]) visitsByMonth[mk] = { count: 0 };
+            visitsByMonth[mk].count++;
+          }
+        }
+        d.setDate(d.getDate() + 7);
+        weekCount++;
+      }
+
+      for (const [monthKey, data] of Object.entries(visitsByMonth)) {
+        if (data.count === 0) continue;
+        const [yr, mo] = monthKey.split('-').map(Number);
+        const issuedDate = `${yr}-${String(mo).padStart(2,'0')}-01`;
+        const dueDate = new Date(yr, mo, 5).toISOString().split('T')[0];
+        const paidAt = new Date(yr, mo - 1, 28, 9, 0, 0).toISOString();
+        const subtotal = (price * data.count).toFixed(2);
+        const invoiceNumber = `INV-${String(nextInvNum).padStart(5,'0')}`;
+        nextInvNum++;
+        try {
+          const invRes = await pool.query(
+            `INSERT INTO invoices (company_id, contact_id, invoice_number, due_date, subtotal, tax, total, status, paid_at, auto_generated, source, issued_date)
+             VALUES ($1,$2,$3,$4,$5,'0',$5,'paid',$6,true,'auto',$7) RETURNING id`,
+            [companyId, plan.contact_id, invoiceNumber, dueDate, subtotal, paidAt, issuedDate]
+          );
+          await pool.query(
+            `INSERT INTO invoice_line_items (invoice_id, description, quantity, unit_price, total)
+             VALUES ($1,$2,$3,$4,$5)`,
+            [invRes.rows[0].id, `${monthNames[mo-1]} ${yr} service`, data.count, price.toFixed(2), subtotal]
+          );
+          invoicesCreated++;
+        } catch { /* skip */ }
+      }
+    }
+
+    console.log(`[Migration] Historical demo data seeded: ${visitsCreated} visits, ${invoicesCreated} invoices across 6 months`);
+    await pool.end();
+  } catch (err) {
+    console.error("[Migration] Failed to seed historical demo data:", err);
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
@@ -1713,6 +1871,7 @@ async function applyDemoAutopayMigration() {
   await seedDemoCompany();
   await applyDemoAutopayMigration();
   await seedPoopScoopDemoData();
+  await seedHistoricalDemoData();
   setupSession(app);
   await registerRoutes(httpServer, app);
 
