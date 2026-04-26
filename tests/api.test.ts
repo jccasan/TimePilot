@@ -1163,14 +1163,15 @@ async function runTests() {
     assert(typeof r.data.totalDistance === "number", "Expected numeric totalDistance");
   });
 
-  await test("Route lifecycle: POST /api/routes/:id/optimize on empty route returns early (no credits consumed)", "Routes Extended", async () => {
+  await test("Route lifecycle: POST /api/routes/:id/optimize on empty route returns 200 early (no credits consumed)", "Routes Extended", async () => {
     if (!routeLifecycleId) return;
     const r = await req("POST", `/api/routes/${routeLifecycleId}/optimize`, {});
-    // Empty/unlocked route → 200 with optimized:false
-    assert(r.status === 200 || r.status === 402, `Expected 200 or 402, got ${r.status}: ${JSON.stringify(r.data)}`);
-    if (r.status === 200) {
-      assert(r.data.optimized === false, `Expected optimized:false for empty route, got ${r.data.optimized}`);
-    }
+    // Empty route (routePlans.length <= 1) hits the early return at line 4492 in routes.ts:
+    // res.json({ optimized: false, message: "Not enough stops to optimize", ... })
+    // This is before any credit-gating logic runs, so 200 is the ONLY valid response here.
+    assert(r.status === 200, `Expected 200 for empty route optimize (early return path), got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.optimized === false, `Expected optimized:false, got ${r.data.optimized}`);
+    assert(r.data.message && r.data.message.includes("Not enough stops"), `Expected 'Not enough stops' message, got ${r.data.message}`);
   });
 
   await test("Route lifecycle: cleanup route", "Routes Extended", async () => {
@@ -1406,112 +1407,128 @@ async function runTests() {
   // ==========================================
   // 17i. JOBS — FULL LIFECYCLE
   // ==========================================
+  // Strategy: create a deterministic draft job via the full estimate-approval flow.
+  // When a contact approves an estimate (portal), storage.createJobFromEstimate runs a
+  // transaction that inserts: service_plan (draft, isActive:false) + agreement + jobs-table
+  // row (jobStatus:"draft"). We then approve that specific jobs-table row via
+  // POST /api/jobs/:id/approve and assert the state machine transition.
 
   let jobsContactId = "";
   let jobsPropertyId = "";
+  let jobsEstimateId = "";
+  let jobsPortalToken = "";
   let jobsServicePlanId = "";
+  let draftJobId = "";
+  const jobsEmail = `jobsflow_${Date.now()}@example.com`;
+  const jobsPassword = "JobsFlow1!";
 
-  await test("Jobs lifecycle: setup fixture contact and property", "Jobs", async () => {
+  await test("Jobs lifecycle: setup fixture contact, property, and estimate", "Jobs", async () => {
+    // Contact (with email, for portal login)
     const cR = await req("POST", "/api/contacts", {
-      firstName: "JobsTest",
+      firstName: "JobsFlowTest",
       lastName: "Contact",
-      email: `jobstest_${Date.now()}@example.com`,
+      email: jobsEmail,
       status: "lead",
     });
     assert(cR.status === 200 || cR.status === 201, `Expected 200/201 for contact, got ${cR.status}`);
     jobsContactId = cR.data.id;
 
+    // Property (required so createJobFromEstimate inserts a jobs-table row)
     const pR = await req("POST", "/api/properties", {
       contactId: jobsContactId,
-      streetAddress: "456 Jobs Test Lane",
+      streetAddress: "789 Jobs Flow Lane",
       city: "Fredericksburg",
       state: "VA",
       zipCode: "22401",
     });
     assert(pR.status === 200 || pR.status === 201, `Expected 200/201 for property, got ${pR.status}`);
     jobsPropertyId = pR.data.id;
-  });
 
-  await test("Jobs lifecycle: POST /api/jobs creates job and returns servicePlanId", "Jobs", async () => {
-    if (!jobsContactId || !jobsPropertyId) return;
-    const today = new Date().toISOString().split("T")[0];
-    const r = await req("POST", "/api/jobs", {
+    // Estimate (operator creates, portal user approves → triggers draft-job creation)
+    const eR = await req("POST", "/api/estimates", {
       contactId: jobsContactId,
       propertyId: jobsPropertyId,
-      frequency: "onetime",
-      pricePerVisit: "39.99",
-      startDate: today,
-      jobStatus: "active",
+      description: "Regression test one-time cleanup",
+      items: [{ description: "Dog waste removal", quantity: 1, unitPrice: 4999 }],
+      totalCents: 4999,
     });
-    assert(r.status === 200 || r.status === 201, `Expected 200/201, got ${r.status}: ${JSON.stringify(r.data)}`);
-    assert(r.data.servicePlanId, "Expected servicePlanId in response");
-    jobsServicePlanId = r.data.servicePlanId;
+    assert(eR.status === 200 || eR.status === 201, `Expected 200/201 for estimate, got ${eR.status}: ${JSON.stringify(eR.data)}`);
+    jobsEstimateId = eR.data.id;
   });
 
-  await test("Jobs lifecycle: GET /api/jobs returns array", "Jobs", async () => {
+  await test("Jobs lifecycle: grant portal access to fixture contact and login", "Jobs", async () => {
+    if (!jobsContactId) return;
+    const gR = await req("POST", `/api/contacts/${jobsContactId}/portal-access`, {});
+    assert(gR.status === 200, `Expected 200 granting portal access, got ${gR.status}`);
+    const pwR = await req("POST", `/api/contacts/${jobsContactId}/portal-access/reset-password`, { newPassword: jobsPassword });
+    assert(pwR.status === 200, `Expected 200 resetting portal password, got ${pwR.status}`);
+    const loginR = await req("POST", "/api/portal/login", { email: jobsEmail, password: jobsPassword }, { Authorization: "" });
+    assert(loginR.status === 200, `Expected 200 for portal login, got ${loginR.status}: ${JSON.stringify(loginR.data)}`);
+    jobsPortalToken = loginR.data.token;
+    assert(jobsPortalToken, "Expected portal token");
+  });
+
+  await test("Jobs lifecycle: portal estimate approval creates draft job in jobs table", "Jobs", async () => {
+    if (!jobsPortalToken || !jobsEstimateId) return;
+    // Approving the estimate triggers storage.createJobFromEstimate which inserts a
+    // service_plan (draft) + jobs-table row (draft) in a single transaction
+    const approveR = await req("POST", `/api/portal/estimates/${jobsEstimateId}/approve`, { note: "Looks good" }, { Authorization: `Bearer ${jobsPortalToken}` });
+    assert(approveR.status === 200, `Expected 200 for estimate approval, got ${approveR.status}: ${JSON.stringify(approveR.data)}`);
+
+    // Find the newly created draft job by contactId filter
+    const jobsR = await req("GET", `/api/jobs?contactId=${jobsContactId}`);
+    assert(jobsR.status === 200, `Expected 200 from GET /api/jobs, got ${jobsR.status}`);
+    assert(Array.isArray(jobsR.data), "Expected array of jobs");
+    const draftJob = jobsR.data.find((j: any) => j.jobStatus === "draft");
+    assert(!!draftJob, `Expected at least one draft job after estimate approval, got: ${JSON.stringify(jobsR.data.map((j: any) => ({ id: j.id, status: j.jobStatus })))}`);
+    draftJobId = draftJob.id;
+    jobsServicePlanId = draftJob.servicePlanId;
+    assert(draftJobId, "Expected draft job ID");
+  });
+
+  await test("Jobs lifecycle: GET /api/jobs returns array including draft job", "Jobs", async () => {
     const r = await req("GET", "/api/jobs");
     assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
     assert(Array.isArray(r.data), "Expected array of jobs");
+    if (draftJobId) {
+      const found = r.data.find((j: any) => j.id === draftJobId);
+      assert(!!found, `Expected draft job ${draftJobId} to appear in GET /api/jobs`);
+    }
   });
 
-  await test("Jobs lifecycle: GET /api/jobs?contactId filters by contact and service plan appears", "Jobs", async () => {
-    if (!jobsContactId || !jobsServicePlanId) return;
-    // GET /api/jobs filters jobs-table rows by contactId
+  await test("Jobs lifecycle: GET /api/jobs?contactId filter returns jobs for contact", "Jobs", async () => {
+    if (!jobsContactId) return;
     const r = await req("GET", `/api/jobs?contactId=${jobsContactId}`);
     assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
     assert(Array.isArray(r.data), "Expected array");
-    // The service plan we created is accessible via GET /api/service-plans?contactId=
-    // (POST /api/jobs creates a service_plan row; the jobs table is populated via a different path)
-    const spR = await req("GET", `/api/service-plans?contactId=${jobsContactId}`);
-    assert(spR.status === 200, `Expected 200 from service-plans filter, got ${spR.status}`);
-    assert(Array.isArray(spR.data), "Expected array from service-plans");
-    const found = spR.data.find((sp: any) => sp.id === jobsServicePlanId);
-    assert(!!found, `Expected service plan ${jobsServicePlanId} to appear when filtering by contactId, got: ${JSON.stringify(spR.data.map((s: any) => s.id))}`);
-  });
-
-  await test("Jobs lifecycle: POST /api/jobs/:id/approve exercises the approve endpoint contract", "Jobs", async () => {
-    // The jobs table is populated from estimates; POST /api/jobs creates service_plans.
-    // We find any job in the company and exercise the approve endpoint deterministically.
-    // If the job is draft → expect 200 + jobStatus:active (full approval path).
-    // If the job is not draft → expect 400 + error message (status guard path).
-    // This guarantees the endpoint is always exercised, never silently skipped.
-    const listR = await req("GET", "/api/jobs");
-    assert(listR.status === 200, `Expected 200 from GET /api/jobs, got ${listR.status}`);
-    assert(Array.isArray(listR.data), "Expected array from GET /api/jobs");
-    if (listR.data.length === 0) {
-      // No jobs in company — assert the endpoint itself responds (404 for unknown ID)
-      const r = await req("POST", "/api/jobs/nonexistent-id/approve", {});
-      assert(r.status === 404 || r.status === 400, `Expected 404/400 for nonexistent job, got ${r.status}`);
-      return;
-    }
-    const draftJobs = listR.data.filter((j: any) => j.jobStatus === "draft");
-    if (draftJobs.length > 0) {
-      // Full approval path: draft → active
-      const job = draftJobs[0];
-      const r = await req("POST", `/api/jobs/${job.id}/approve`, {});
-      assert(r.status === 200, `Expected 200 approving draft job ${job.id}, got ${r.status}: ${JSON.stringify(r.data)}`);
-      assert(r.data.jobStatus === "active", `Expected jobStatus:active after approval, got ${r.data.jobStatus}`);
-    } else {
-      // Status guard path: non-draft job must return 400 with descriptive error
-      const job = listR.data[0];
-      const r = await req("POST", `/api/jobs/${job.id}/approve`, {});
-      assert(r.status === 400, `Expected 400 for already-active/non-draft job, got ${r.status}: ${JSON.stringify(r.data)}`);
-      assert(r.data.error && r.data.error.includes("Cannot approve"), `Expected 'Cannot approve' error, got ${JSON.stringify(r.data)}`);
+    if (draftJobId) {
+      const found = r.data.find((j: any) => j.id === draftJobId);
+      assert(!!found, `Expected draft job ${draftJobId} in contactId-filtered results`);
     }
   });
 
-  await test("Jobs lifecycle: PATCH /api/service-plans/:id updates status to completed", "Jobs", async () => {
-    if (!jobsServicePlanId) return;
-    const r = await req("PATCH", `/api/service-plans/${jobsServicePlanId}`, {
-      jobStatus: "completed",
-      isActive: false,
-    });
-    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
-    assert(r.data.jobStatus === "completed", `Expected jobStatus:completed, got ${r.data.jobStatus}`);
-    assert(r.data.isActive === false, `Expected isActive:false, got ${r.data.isActive}`);
+  await test("Jobs lifecycle: POST /api/jobs/:id/approve transitions draft → active (success path)", "Jobs", async () => {
+    if (!draftJobId) return;
+    const r = await req("POST", `/api/jobs/${draftJobId}/approve`, {});
+    assert(r.status === 200, `Expected 200 approving draft job ${draftJobId}, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.jobStatus === "active", `Expected jobStatus:active after approval, got ${r.data.jobStatus}`);
   });
 
-  await test("Jobs lifecycle: cleanup fixture service plan, property, contact", "Jobs", async () => {
+  await test("Jobs lifecycle: POST /api/jobs/:id/approve on already-active job returns 400 (guard path)", "Jobs", async () => {
+    if (!draftJobId) return;
+    // After approval above, the job is now active — re-approving must return 400
+    const r = await req("POST", `/api/jobs/${draftJobId}/approve`, {});
+    assert(r.status === 400, `Expected 400 for re-approving active job, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.error && r.data.error.includes("Cannot approve"), `Expected 'Cannot approve' error, got ${JSON.stringify(r.data)}`);
+  });
+
+  await test("Jobs lifecycle: cleanup fixture jobs, service plan, property, contact", "Jobs", async () => {
+    if (jobsPortalToken) {
+      await req("POST", "/api/portal/logout", {}, { Authorization: `Bearer ${jobsPortalToken}` });
+    }
+    if (jobsContactId) {
+      await req("DELETE", `/api/contacts/${jobsContactId}/portal-access`);
+    }
     if (jobsServicePlanId) {
       const r = await req("DELETE", `/api/service-plans/${jobsServicePlanId}`);
       assert(r.status < 500, `Service plan cleanup failed with ${r.status}`);
