@@ -207,3 +207,54 @@
     inset: -1px;
   }
 }
+
+@media print {
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  header,
+  aside,
+  [data-sidebar],
+  nav[aria-label="sidebar"],
+  .print\:hidden {
+    display: none !important;
+  }
+
+  main {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .business-overview-print-area {
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .print-report-meta {
+    display: block !important;
+  }
+
+  .recharts-wrapper,
+  .recharts-surface {
+    overflow: visible !important;
+  }
+
+  .grid {
+    break-inside: avoid;
+  }
+
+  [data-testid="card-ai-assessment"] {
+    break-before: page;
+  }
+}

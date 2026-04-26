@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DollarSign, Users, TrendingUp, TrendingDown, CheckCircle,
-  Sparkles, Loader2, AlertTriangle, Minus, Activity, LayoutDashboard, ArrowUp, ArrowDown,
+  Sparkles, Loader2, AlertTriangle, Minus, Activity, LayoutDashboard, ArrowUp, ArrowDown, Printer,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -216,8 +216,12 @@ export default function BusinessOverview() {
       ? "text-yellow-600 dark:text-yellow-400"
       : "text-red-600 dark:text-red-400";
 
+  function handlePrint() {
+    window.print();
+  }
+
   return (
-    <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
+    <div className="p-4 md:p-6 space-y-6 overflow-auto h-full business-overview-print-area">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-business-overview-heading">
@@ -226,6 +230,20 @@ export default function BusinessOverview() {
           </h1>
           <p className="text-muted-foreground">Key metrics and AI-powered health assessment for your business</p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handlePrint}
+          className="print:hidden"
+          data-testid="button-print-report"
+        >
+          <Printer className="mr-1.5 h-4 w-4" />
+          Print Report
+        </Button>
+      </div>
+      <div className="print-report-meta text-xs text-muted-foreground pb-2 border-b" style={{ display: "none" }}>
+        <span>ScooPilot — Business Overview Report</span>
+        <span className="ml-4">Generated: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</span>
       </div>
 
       {/* KPI Scorecard */}
@@ -427,6 +445,7 @@ export default function BusinessOverview() {
               }}
               disabled={isAssessmentLoading}
               data-testid="button-run-assessment"
+              className="print:hidden"
             >
               {isAssessmentLoading ? (
                 <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Analyzing...</>
