@@ -65,6 +65,8 @@ import {
   insertServicePricingSchema,
   insertServicePackageSchema,
   type InsertQuote,
+  type InsertJob,
+  type InsertAgreement,
 } from "@shared/schema";
 
 const CHANGE_PASSWORD_EXEMPT_PATHS = ["/api/auth/change-password", "/api/auth/user", "/api/auth/logout"];
@@ -5918,31 +5920,39 @@ Return ONLY valid JSON, no markdown.`,
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", req.params.id, "update", { old: { frequency: existing.frequency, dayOfWeek: existing.dayOfWeek, routeId: existing.routeId }, new: updateBody }, req.ip || undefined);
 
-      // Sync editable fields to the linked jobs-table row and agreement (if they exist).
-      // GET /api/jobs reads from the jobs table (joined with agreements), so changes
-      // made to the service plan must be propagated to both so the jobs list reflects
-      // the edit immediately — otherwise edits appear to have no effect.
+      // Propagate changes to the linked jobs and agreements rows so GET /api/jobs
+      // (which reads from those tables via INNER JOIN) reflects the edit immediately.
       const linkedJobForSync = await storage.getJobByServicePlanId(req.params.id);
       if (linkedJobForSync) {
-        const jobSyncFields: Record<string, any> = {};
-        const jobSyncableKeys = ["serviceName", "jobType", "jobStatus", "dayOfWeek", "routeId", "anytime", "startTime", "endTime", "visitInstructions", "assignedUserId", "stopOrder", "isStopOnly"];
-        for (const k of jobSyncableKeys) {
-          if (updateBody[k] !== undefined) jobSyncFields[k] = updateBody[k];
+        const jobSync: Partial<InsertJob> = {};
+        if (updateBody.serviceName !== undefined) jobSync.serviceName = updateBody.serviceName;
+        if (updateBody.jobType !== undefined) jobSync.jobType = updateBody.jobType;
+        if (updateBody.jobStatus !== undefined) jobSync.jobStatus = updateBody.jobStatus;
+        if (updateBody.dayOfWeek !== undefined) jobSync.dayOfWeek = updateBody.dayOfWeek;
+        if (updateBody.routeId !== undefined) jobSync.routeId = updateBody.routeId;
+        if (updateBody.anytime !== undefined) jobSync.anytime = updateBody.anytime;
+        if (updateBody.startTime !== undefined) jobSync.startTime = updateBody.startTime;
+        if (updateBody.endTime !== undefined) jobSync.endTime = updateBody.endTime;
+        if (updateBody.visitInstructions !== undefined) jobSync.visitInstructions = updateBody.visitInstructions;
+        if (updateBody.assignedUserId !== undefined) jobSync.assignedUserId = updateBody.assignedUserId;
+        if (updateBody.stopOrder !== undefined) jobSync.stopOrder = updateBody.stopOrder;
+        if (updateBody.isStopOnly !== undefined) jobSync.isStopOnly = updateBody.isStopOnly;
+        if (Object.keys(jobSync).length > 0) {
+          await storage.updateJob(linkedJobForSync.id, companyId, jobSync);
         }
-        if (Object.keys(jobSyncFields).length > 0) {
-          await storage.updateJob(linkedJobForSync.id, companyId, jobSyncFields as any);
-        }
-      }
-      // Also sync agreement fields (frequency, pricePerVisit, startDate, etc.) since
-      // getJobsWithAgreements surfaces these fields from the agreements table row.
-      if (linkedJobForSync?.agreementId) {
-        const agreementSyncFields: Record<string, any> = {};
-        const agreementSyncableKeys = ["frequency", "pricePerVisit", "startDate", "endDate", "endsAfterCount", "endsAfterUnit", "isActive", "pausedAt"];
-        for (const k of agreementSyncableKeys) {
-          if (updateBody[k] !== undefined) agreementSyncFields[k] = updateBody[k];
-        }
-        if (Object.keys(agreementSyncFields).length > 0) {
-          await storage.updateAgreement(linkedJobForSync.agreementId, companyId, agreementSyncFields as any);
+        if (linkedJobForSync.agreementId) {
+          const agreementSync: Partial<InsertAgreement> = {};
+          if (updateBody.frequency !== undefined) agreementSync.frequency = updateBody.frequency;
+          if (updateBody.pricePerVisit !== undefined) agreementSync.pricePerVisit = updateBody.pricePerVisit;
+          if (updateBody.startDate !== undefined) agreementSync.startDate = updateBody.startDate;
+          if (updateBody.endDate !== undefined) agreementSync.endDate = updateBody.endDate;
+          if (updateBody.endsAfterCount !== undefined) agreementSync.endsAfterCount = updateBody.endsAfterCount;
+          if (updateBody.endsAfterUnit !== undefined) agreementSync.endsAfterUnit = updateBody.endsAfterUnit;
+          if (updateBody.isActive !== undefined) agreementSync.isActive = updateBody.isActive;
+          if (updateBody.pausedAt !== undefined) agreementSync.pausedAt = updateBody.pausedAt;
+          if (Object.keys(agreementSync).length > 0) {
+            await storage.updateAgreement(linkedJobForSync.agreementId, companyId, agreementSync);
+          }
         }
       }
 
