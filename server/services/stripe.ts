@@ -474,6 +474,28 @@ export async function createSubscriptionCheckout(params: {
   return { url: session.url!, sessionId: session.id };
 }
 
+export async function retrievePaymentIntentFees(
+  paymentIntentId: string,
+  stripeAccount?: string | null
+): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
+  const stripe = getStripe();
+  const opts: Stripe.RequestOptions = {};
+  if (stripeAccount) {
+    opts.stripeAccount = stripeAccount;
+  }
+  const pi = await stripe.paymentIntents.retrieve(
+    paymentIntentId,
+    { expand: ["latest_charge.balance_transaction"] },
+    opts
+  );
+  const piData = pi as unknown as Record<string, unknown>;
+  const charge = piData.latest_charge as Record<string, unknown> | string | null;
+  if (!charge || typeof charge === "string") return null;
+  const bt = charge.balance_transaction as Record<string, unknown> | string | null;
+  if (!bt || typeof bt === "string") return null;
+  return { feeCents: bt.fee as number, netCents: bt.net as number, grossCents: bt.amount as number };
+}
+
 export async function createCustomerPortalSession(params: {
   customerId: string;
   returnUrl: string;

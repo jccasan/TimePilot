@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type Stripe from "stripe";
+import { retrievePaymentIntentFees } from "./stripe";
 import { db } from "../db";
 import { companies, contacts, invoices, invoiceLineItems, qboSyncLogs } from "@shared/schema";
 import { eq, and, desc, isNotNull } from "drizzle-orm";
@@ -474,21 +474,7 @@ async function lookupDefaultFeeAccount(companyId: string): Promise<string | null
 
 async function getStripeFeeForPayment(stripePaymentIntentId: string, stripeAccount?: string | null): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
   try {
-    const StripeSDK = (await import("stripe")).default;
-    type StripeType = InstanceType<typeof StripeSDK>;
-    const stripe: StripeType = new StripeSDK(process.env.STRIPE_SECRET_KEY!);
-    const retrieveParams: Stripe.PaymentIntentRetrieveParams = { expand: ["latest_charge.balance_transaction"] };
-    const requestOptions: Stripe.RequestOptions = {};
-    if (stripeAccount) {
-      requestOptions.stripeAccount = stripeAccount;
-    }
-    const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId, retrieveParams, requestOptions);
-    const piData = pi as unknown as Record<string, unknown>;
-    const charge = piData.latest_charge as Record<string, unknown> | string | null;
-    if (!charge || typeof charge === "string") return null;
-    const bt = charge.balance_transaction as Record<string, unknown> | string | null;
-    if (!bt || typeof bt === "string") return null;
-    return { feeCents: bt.fee as number, netCents: bt.net as number, grossCents: bt.amount as number };
+    return await retrievePaymentIntentFees(stripePaymentIntentId, stripeAccount);
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[QBO] Failed to retrieve Stripe fee for PI ${stripePaymentIntentId}: ${errMsg}`);
