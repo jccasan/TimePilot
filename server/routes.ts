@@ -14363,12 +14363,17 @@ Rules:
     const salt = crypto.randomBytes(16).toString("hex");
     const portalPasswordHash = await new Promise<string>((resolve, reject) => {
       crypto.scrypt(tempPassword, salt, 64, (err, key) => {
-        if (err) reject(err);
+        if (err) return reject(err);
         resolve(`${salt}:${key.toString("hex")}`);
       });
     });
 
-    await storage.updateContact(contactId, companyId, { hasPortalAccess: true, portalPasswordHash });
+    try {
+      await storage.updateContact(contactId, companyId, { hasPortalAccess: true, portalPasswordHash });
+    } catch (dbErr: any) {
+      console.error("[provisionPortalAccess] Failed to update contact:", { contactId, companyId, message: dbErr?.message, stack: dbErr?.stack });
+      throw new Error(`Failed to save portal credentials: ${dbErr?.message || String(dbErr)}`);
+    }
 
     const company = await storage.getCompany(companyId);
     const portalUrl = `${portalBaseUrl}/portal/login`;
@@ -14413,7 +14418,10 @@ Rules:
       await provisionPortalAccess(req.params.id, companyId, getBaseUrl(req));
 
       res.json({ success: true, message: "Portal access enabled. Temporary password has been emailed to the customer." });
-    } catch (err) { handleError(res, err); }
+    } catch (err: any) {
+      console.error("[portal-access/provision] Unhandled error:", { message: err?.message, stack: err?.stack, name: err?.name });
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/contacts/:id/portal-access", isAuthenticated, async (req: Request, res: Response) => {
@@ -14442,7 +14450,7 @@ Rules:
       const salt = crypto.randomBytes(16).toString("hex");
       const portalPasswordHash = await new Promise<string>((resolve, reject) => {
         crypto.scrypt(newPassword, salt, 64, (err, key) => {
-          if (err) reject(err);
+          if (err) return reject(err);
           resolve(`${salt}:${key.toString("hex")}`);
         });
       });
@@ -14458,19 +14466,24 @@ Rules:
       requireRole(role);
       const contact = await storage.getContact(req.params.id, companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (!contact.email) return res.status(400).json({ error: "Contact must have an email address" });
+      if (!contact.email) return res.status(400).json({ error: "Contact must have an email address to send a portal link" });
       if (!contact.hasPortalAccess) return res.status(400).json({ error: "Portal access is not enabled for this contact. Enable it first." });
 
       const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
       const salt = crypto.randomBytes(16).toString("hex");
       const portalPasswordHash = await new Promise<string>((resolve, reject) => {
         crypto.scrypt(tempPassword, salt, 64, (err, key) => {
-          if (err) reject(err);
+          if (err) return reject(err);
           resolve(`${salt}:${key.toString("hex")}`);
         });
       });
 
-      await storage.updateContact(req.params.id, companyId, { portalPasswordHash });
+      try {
+        await storage.updateContact(req.params.id, companyId, { portalPasswordHash });
+      } catch (dbErr: any) {
+        console.error("[portal-access/resend] Failed to update contact:", { contactId: req.params.id, companyId, message: dbErr?.message, stack: dbErr?.stack, name: dbErr?.name });
+        throw new Error(`Failed to save new portal credentials: ${dbErr?.message || String(dbErr)}`);
+      }
 
       const company = await storage.getCompany(companyId);
       const portalUrl = `${getBaseUrl(req)}/portal/login`;
@@ -14500,10 +14513,13 @@ Rules:
             </div>
           </div>
         `,
-      }).catch((err) => console.error("Failed to send portal link email:", err));
+      }).catch((err) => console.error("[portal-access/resend] Failed to send portal link email:", err));
 
       res.json({ success: true, message: "Portal link with new credentials has been emailed to the customer." });
-    } catch (err) { handleError(res, err); }
+    } catch (err: any) {
+      console.error("[portal-access/resend] Unhandled error:", { message: err?.message, stack: err?.stack, name: err?.name });
+      handleError(res, err);
+    }
   });
 
   // ================ Client Onboarding Form ================
