@@ -472,7 +472,8 @@ export interface IStorage {
 
   // Error Reports
   createErrorReport(data: InsertErrorReport): Promise<ErrorReport>;
-  listErrorReports(filters?: { status?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<ErrorReport[]>;
+  listErrorReports(filters?: { status?: string; message?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<ErrorReport[]>;
+  listGroupedErrorReports(filters?: { status?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<GroupedErrorReport[]>;
   getErrorReport(id: string): Promise<ErrorReport | undefined>;
   updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status">>): Promise<ErrorReport>;
   createErrorFixTask(data: InsertErrorFixTask): Promise<ErrorFixTask>;
@@ -480,6 +481,16 @@ export interface IStorage {
   getOpenErrorCount(): Promise<number>;
   getLatestErrorTimestamp(): Promise<Date | null>;
 }
+
+export type GroupedErrorReport = {
+  message: string;
+  errorType: "react" | "js" | "api";
+  status: "open" | "acknowledged" | "resolved";
+  count: number;
+  firstSeen: string;
+  lastSeen: string;
+  latestId: string;
+};
 
 export class DatabaseStorage implements IStorage {
   // ================ Companies ================
@@ -2884,18 +2895,62 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async listErrorReports(filters?: { status?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<ErrorReport[]> {
+  async listErrorReports(filters?: { status?: string; message?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<ErrorReport[]> {
     const status = filters?.status as "open" | "acknowledged" | "resolved" | undefined;
     return db.select()
       .from(errorReports)
       .where(and(
         status ? eq(errorReports.status, status) : undefined,
+        filters?.message ? eq(errorReports.message, filters.message) : undefined,
         filters?.fromDate ? gte(errorReports.createdAt, filters.fromDate) : undefined,
         filters?.toDate ? lte(errorReports.createdAt, filters.toDate) : undefined,
       ))
       .orderBy(desc(errorReports.createdAt))
       .limit(filters?.limit ?? 50)
       .offset(filters?.offset ?? 0);
+  }
+
+  async listGroupedErrorReports(filters?: { status?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<GroupedErrorReport[]> {
+    const { status, fromDate, toDate, limit = 50, offset = 0 } = filters ?? {};
+    const whereParts: ReturnType<typeof sql>[] = [];
+    if (status) whereParts.push(sql`status = ${status}`);
+    if (fromDate) whereParts.push(sql`created_at >= ${fromDate}`);
+    if (toDate) whereParts.push(sql`created_at <= ${toDate}`);
+    const whereClause = whereParts.length > 0
+      ? sql`WHERE ${sql.join(whereParts, sql` AND `)}`
+      : sql``;
+    const result = await db.execute(sql`
+      WITH grouped AS (
+        SELECT
+          message,
+          COUNT(*) AS cnt,
+          MIN(created_at) AS first_seen,
+          MAX(created_at) AS last_seen
+        FROM error_reports
+        ${whereClause}
+        GROUP BY message
+      ),
+      latest AS (
+        SELECT DISTINCT ON (message)
+          id, message, error_type, status
+        FROM error_reports
+        ${whereClause}
+        ORDER BY message, created_at DESC
+      )
+      SELECT
+        g.message,
+        g.cnt::int AS count,
+        g.first_seen AS "firstSeen",
+        g.last_seen AS "lastSeen",
+        l.id AS "latestId",
+        l.error_type AS "errorType",
+        l.status
+      FROM grouped g
+      JOIN latest l ON l.message = g.message
+      ORDER BY g.cnt DESC, g.last_seen DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+    return result.rows as GroupedErrorReport[];
   }
 
   async getErrorReport(id: string): Promise<ErrorReport | undefined> {

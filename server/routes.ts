@@ -19077,9 +19077,10 @@ Respond with exactly one category from the list above and nothing else.`;
 
   app.get("/api/admin/error-reports", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { status, limit, offset, fromDate, toDate } = req.query;
+      const { status, limit, offset, fromDate, toDate, message } = req.query;
       const reports = await storage.listErrorReports({
         status: status as string | undefined,
+        message: message ? String(message) : undefined,
         fromDate: fromDate ? new Date(String(fromDate)) : undefined,
         toDate: toDate ? new Date(String(toDate)) : undefined,
         limit: limit ? parseInt(String(limit)) : 50,
@@ -19088,6 +19089,22 @@ Respond with exactly one category from the list above and nothing else.`;
       const fixTasks = await Promise.all(reports.map(r => storage.getErrorFixTask(r.id)));
       const result = reports.map((r, i) => ({ ...r, fixTask: fixTasks[i] || null }));
       res.json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.get("/api/admin/error-reports/grouped", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { status, limit, offset, fromDate, toDate } = req.query;
+      const groups = await storage.listGroupedErrorReports({
+        status: status as string | undefined,
+        fromDate: fromDate ? new Date(String(fromDate)) : undefined,
+        toDate: toDate ? new Date(String(toDate)) : undefined,
+        limit: limit ? parseInt(String(limit)) : 50,
+        offset: offset ? parseInt(String(offset)) : 0,
+      });
+      res.json(groups);
     } catch (err) {
       handleError(res, err);
     }

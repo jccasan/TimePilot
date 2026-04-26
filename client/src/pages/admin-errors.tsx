@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Bug, ChevronRight, ChevronDown, Wrench, CheckCircle, Eye, X, ChevronLeft } from "lucide-react";
+import { Loader2, Bug, ChevronRight, ChevronDown, Wrench, CheckCircle, Eye, X, ChevronLeft, Layers, List } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const PAGE_SIZE = 50;
@@ -23,6 +23,16 @@ type ErrorReport = {
   status: "open" | "acknowledged" | "resolved";
   createdAt: string;
   fixTask: { id: string; title: string; createdAt: string } | null;
+};
+
+type GroupedErrorReport = {
+  message: string;
+  errorType: "react" | "js" | "api";
+  status: "open" | "acknowledged" | "resolved";
+  count: number;
+  firstSeen: string;
+  lastSeen: string;
+  latestId: string;
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -76,7 +86,7 @@ function parseOS(ua: string | null) {
   return "Unknown OS";
 }
 
-function buildQueryUrl(statusFilter: string, fromDate: string, toDate: string, page: number) {
+function buildQueryUrl(statusFilter: string, fromDate: string, toDate: string, page: number, grouped: boolean) {
   const params = new URLSearchParams();
   if (statusFilter !== "all") params.set("status", statusFilter);
   if (fromDate) params.set("fromDate", new Date(fromDate).toISOString());
@@ -87,7 +97,83 @@ function buildQueryUrl(statusFilter: string, fromDate: string, toDate: string, p
   }
   params.set("limit", String(PAGE_SIZE));
   params.set("offset", String(page * PAGE_SIZE));
+  const base = grouped ? "/api/admin/error-reports/grouped" : "/api/admin/error-reports";
+  return `${base}?${params.toString()}`;
+}
+
+function buildGroupDetailUrl(message: string, statusFilter: string, fromDate: string, toDate: string) {
+  const params = new URLSearchParams();
+  params.set("message", message);
+  if (statusFilter !== "all") params.set("status", statusFilter);
+  if (fromDate) params.set("fromDate", new Date(fromDate).toISOString());
+  if (toDate) {
+    const d = new Date(toDate);
+    d.setHours(23, 59, 59, 999);
+    params.set("toDate", d.toISOString());
+  }
+  params.set("limit", "100");
   return `/api/admin/error-reports?${params.toString()}`;
+}
+
+function ExpandedGroupRows({
+  message,
+  statusFilter,
+  fromDate,
+  toDate,
+  selectedId,
+  onSelect,
+}: {
+  message: string;
+  statusFilter: string;
+  fromDate: string;
+  toDate: string;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const url = buildGroupDetailUrl(message, statusFilter, fromDate, toDate);
+  const { data: reports = [], isLoading } = useQuery<ErrorReport[]>({
+    queryKey: ["/api/admin/error-reports", "group-expand", message, statusFilter, fromDate, toDate],
+    queryFn: adminFetchFn(url),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 px-10 py-2 text-[#858585] text-xs border-b border-[#2d2d2d] bg-[#1a1a1a]">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Loading…
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {reports.map((report) => (
+        <div
+          key={report.id}
+          className={`flex items-start gap-3 px-10 py-2.5 border-b border-[#2d2d2d] cursor-pointer transition-colors ${selectedId === report.id ? "bg-[#264f78]/30" : "bg-[#1a1a1a] hover:bg-[#222]"}`}
+          onClick={() => onSelect(report.id)}
+          data-testid={`error-subrow-${report.id}`}
+        >
+          <ChevronRight className="h-3 w-3 shrink-0 mt-0.5 text-[#555]" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-[10px] border px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[report.status] || ""}`}>
+                {report.status}
+              </span>
+              {report.fixTask && (
+                <span className="text-[10px] border px-1.5 py-0.5 rounded font-medium bg-purple-500/20 text-purple-400 border-purple-500/30">
+                  task created
+                </span>
+              )}
+              <span className="text-[10px] text-[#858585]">{formatTs(report.createdAt)}</span>
+              {report.userId && <span className="text-[10px] text-[#858585]">user: {report.userId.slice(0, 8)}</span>}
+              {report.pageUrl && <span className="text-[10px] text-[#858585] truncate max-w-[180px]">{report.pageUrl}</span>}
+            </div>
+          </div>
+        </div>
+      ))}
+    </>
+  );
 }
 
 export default function AdminErrors() {
@@ -99,15 +185,38 @@ export default function AdminErrors() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showFixTaskForm, setShowFixTaskForm] = useState(false);
   const [fixTaskTitle, setFixTaskTitle] = useState("");
+  const [viewMode, setViewMode] = useState<"all" | "grouped">("grouped");
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-  const queryUrl = buildQueryUrl(statusFilter, fromDate, toDate, page);
+  const queryUrl = buildQueryUrl(statusFilter, fromDate, toDate, page, viewMode === "grouped");
 
-  const { data: reports = [], isLoading } = useQuery<ErrorReport[]>({
+  const { data: allReports = [], isLoading: allLoading } = useQuery<ErrorReport[]>({
     queryKey: ["/api/admin/error-reports", statusFilter, fromDate, toDate, page],
-    queryFn: adminFetchFn(queryUrl),
+    queryFn: adminFetchFn(buildQueryUrl(statusFilter, fromDate, toDate, page, false)),
+    enabled: viewMode === "all",
   });
 
-  const selected = selectedId ? reports.find(r => r.id === selectedId) ?? null : null;
+  const { data: groupedReports = [], isLoading: groupedLoading } = useQuery<GroupedErrorReport[]>({
+    queryKey: ["/api/admin/error-reports/grouped", statusFilter, fromDate, toDate, page],
+    queryFn: adminFetchFn(buildQueryUrl(statusFilter, fromDate, toDate, page, true)),
+    enabled: viewMode === "grouped",
+  });
+
+  const isLoading = viewMode === "all" ? allLoading : groupedLoading;
+  const reports = viewMode === "all" ? allReports : [];
+  const hasNextPage = viewMode === "all" ? allReports.length === PAGE_SIZE : groupedReports.length === PAGE_SIZE;
+
+  const selected = selectedId
+    ? allReports.find(r => r.id === selectedId) ?? null
+    : null;
+
+  const selectedDetailQuery = useQuery<ErrorReport>({
+    queryKey: ["/api/admin/error-reports", selectedId],
+    queryFn: adminFetchFn(`/api/admin/error-reports/${selectedId}`),
+    enabled: !!selectedId && !selected,
+  });
+
+  const detailReport = selected ?? (selectedDetailQuery.data || null);
 
   function handleSelectReport(id: string) {
     setSelectedId(prev => {
@@ -123,7 +232,20 @@ export default function AdminErrors() {
       setter(value);
       setPage(0);
       setSelectedId(null);
+      setExpandedGroups(new Set());
     };
+  }
+
+  function toggleGroup(message: string) {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(message)) {
+        next.delete(message);
+      } else {
+        next.add(message);
+      }
+      return next;
+    });
   }
 
   const updateMutation = useMutation({
@@ -134,6 +256,7 @@ export default function AdminErrors() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports/grouped"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports/stats"] });
       toast({ title: "Status updated" });
     },
@@ -152,6 +275,7 @@ export default function AdminErrors() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports/grouped"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports/stats"] });
       setShowFixTaskForm(false);
       setFixTaskTitle("");
@@ -160,12 +284,15 @@ export default function AdminErrors() {
     onError: () => toast({ title: "Failed to create fix task", variant: "destructive" }),
   });
 
-  const openCount = reports.filter(r => r.status === "open").length;
-  const hasNextPage = reports.length === PAGE_SIZE;
+  const openCount = viewMode === "all"
+    ? allReports.filter(r => r.status === "open").length
+    : groupedReports.filter(g => g.status === "open").length;
+
+  const isEmpty = viewMode === "all" ? allReports.length === 0 : groupedReports.length === 0;
 
   return (
     <div className="flex h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono" data-testid="admin-errors-page">
-      <div className={`flex flex-col ${selected ? "w-1/2" : "w-full"} transition-all duration-200`}>
+      <div className={`flex flex-col ${detailReport ? "w-1/2" : "w-full"} transition-all duration-200`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#3c3c3c] flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <Bug className="h-5 w-5 text-red-400" />
@@ -179,10 +306,28 @@ export default function AdminErrors() {
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center border border-[#3c3c3c] rounded overflow-hidden" data-testid="view-mode-toggle">
+              <button
+                className={`flex items-center gap-1 px-2.5 py-1 text-[11px] transition-colors ${viewMode === "grouped" ? "bg-[#264f78]/50 text-[#e8e8e8]" : "text-[#858585] hover:bg-[#2a2d2e]"}`}
+                onClick={() => { setViewMode("grouped"); setPage(0); setSelectedId(null); setExpandedGroups(new Set()); }}
+                data-testid="button-grouped-view"
+              >
+                <Layers className="h-3 w-3" />
+                Grouped
+              </button>
+              <button
+                className={`flex items-center gap-1 px-2.5 py-1 text-[11px] transition-colors border-l border-[#3c3c3c] ${viewMode === "all" ? "bg-[#264f78]/50 text-[#e8e8e8]" : "text-[#858585] hover:bg-[#2a2d2e]"}`}
+                onClick={() => { setViewMode("all"); setPage(0); setSelectedId(null); }}
+                data-testid="button-all-view"
+              >
+                <List className="h-3 w-3" />
+                All
+              </button>
+            </div>
             <Input
               type="date"
               value={fromDate}
-              onChange={e => { setFromDate(e.target.value); setPage(0); setSelectedId(null); }}
+              onChange={e => { setFromDate(e.target.value); setPage(0); setSelectedId(null); setExpandedGroups(new Set()); }}
               className="h-7 w-[130px] text-xs bg-[#252526] border-[#3c3c3c] text-[#d4d4d4] px-2"
               data-testid="input-from-date"
             />
@@ -190,7 +335,7 @@ export default function AdminErrors() {
             <Input
               type="date"
               value={toDate}
-              onChange={e => { setToDate(e.target.value); setPage(0); setSelectedId(null); }}
+              onChange={e => { setToDate(e.target.value); setPage(0); setSelectedId(null); setExpandedGroups(new Set()); }}
               className="h-7 w-[130px] text-xs bg-[#252526] border-[#3c3c3c] text-[#d4d4d4] px-2"
               data-testid="input-to-date"
             />
@@ -212,7 +357,7 @@ export default function AdminErrors() {
           <div className="flex items-center justify-center h-64" data-testid="loading-errors">
             <Loader2 className="h-5 w-5 animate-spin text-[#858585]" />
           </div>
-        ) : reports.length === 0 ? (
+        ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center h-64 text-[#858585]" data-testid="empty-errors">
             <Bug className="h-10 w-10 mb-3 opacity-30" />
             <p className="text-sm">No error reports found</p>
@@ -220,7 +365,7 @@ export default function AdminErrors() {
         ) : (
           <>
             <div className="flex-1 overflow-auto">
-              {reports.map((report) => (
+              {viewMode === "all" && allReports.map((report) => (
                 <div
                   key={report.id}
                   className={`flex items-start gap-3 px-5 py-3 border-b border-[#2d2d2d] cursor-pointer transition-colors ${selectedId === report.id ? "bg-[#264f78]/30" : "hover:bg-[#2a2d2e]"}`}
@@ -256,6 +401,57 @@ export default function AdminErrors() {
                   </div>
                 </div>
               ))}
+
+              {viewMode === "grouped" && groupedReports.map((group) => {
+                const isExpanded = expandedGroups.has(group.message);
+                return (
+                  <div key={group.message} data-testid={`group-row-${group.latestId}`}>
+                    <div
+                      className="flex items-start gap-3 px-5 py-3 border-b border-[#2d2d2d] cursor-pointer transition-colors hover:bg-[#2a2d2e]"
+                      onClick={() => toggleGroup(group.message)}
+                      data-testid={`group-header-${group.latestId}`}
+                    >
+                      <div className="shrink-0 mt-0.5 text-[#858585]">
+                        {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className={`text-[10px] border px-1.5 py-0.5 rounded font-medium ${TYPE_COLORS[group.errorType] || ""}`}>
+                            {group.errorType.toUpperCase()}
+                          </span>
+                          <span className={`text-[10px] border px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[group.status] || ""}`}>
+                            {group.status}
+                          </span>
+                          <span
+                            className="text-[10px] border px-1.5 py-0.5 rounded font-medium bg-[#3c3c3c] text-[#d4d4d4] border-[#555]"
+                            data-testid={`badge-count-${group.latestId}`}
+                          >
+                            {group.count}×
+                          </span>
+                          <span className="text-[10px] text-[#858585]">last {formatTs(group.lastSeen)}</span>
+                        </div>
+                        <p className="text-sm text-[#e8e8e8] truncate" data-testid={`text-group-message-${group.latestId}`}>
+                          {group.message}
+                        </p>
+                        <div className="text-[10px] text-[#555] mt-0.5">
+                          first seen {formatTs(group.firstSeen)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <ExpandedGroupRows
+                        message={group.message}
+                        statusFilter={statusFilter}
+                        fromDate={fromDate}
+                        toDate={toDate}
+                        selectedId={selectedId}
+                        onSelect={(id) => setSelectedId(selectedId === id ? null : id)}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex items-center justify-between px-5 py-3 border-t border-[#3c3c3c] text-xs text-[#858585]" data-testid="pagination-controls">
@@ -264,19 +460,21 @@ export default function AdminErrors() {
                 variant="ghost"
                 className="h-7 text-xs text-[#d4d4d4] hover:bg-[#2a2d2e] disabled:opacity-30"
                 disabled={page === 0}
-                onClick={() => { setPage(p => p - 1); setSelectedId(null); }}
+                onClick={() => { setPage(p => p - 1); setSelectedId(null); setExpandedGroups(new Set()); }}
                 data-testid="button-prev-page"
               >
                 <ChevronLeft className="h-3.5 w-3.5 mr-1" />
                 Prev
               </Button>
-              <span data-testid="text-page-info">Page {page + 1} · {reports.length} records</span>
+              <span data-testid="text-page-info">
+                Page {page + 1} · {viewMode === "grouped" ? groupedReports.length : allReports.length} records
+              </span>
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-7 text-xs text-[#d4d4d4] hover:bg-[#2a2d2e] disabled:opacity-30"
                 disabled={!hasNextPage}
-                onClick={() => { setPage(p => p + 1); setSelectedId(null); }}
+                onClick={() => { setPage(p => p + 1); setSelectedId(null); setExpandedGroups(new Set()); }}
                 data-testid="button-next-page"
               >
                 Next
@@ -287,7 +485,7 @@ export default function AdminErrors() {
         )}
       </div>
 
-      {selected && (
+      {detailReport && (
         <div className="w-1/2 border-l border-[#3c3c3c] flex flex-col overflow-auto" data-testid="error-detail-panel">
           <div className="flex items-center justify-between px-5 py-4 border-b border-[#3c3c3c] sticky top-0 bg-[#1e1e1e] z-10">
             <div className="flex items-center gap-2">
@@ -306,14 +504,14 @@ export default function AdminErrors() {
           <div className="p-5 space-y-5">
             <div className="grid grid-cols-2 gap-2 text-xs">
               {[
-                { label: "ID", value: selected.id },
-                { label: "Type", value: selected.errorType.toUpperCase() },
-                { label: "Status", value: selected.status },
-                { label: "Time", value: formatTs(selected.createdAt) },
-                { label: "User", value: selected.userId || "anonymous" },
-                { label: "Company", value: selected.companyId || "unknown" },
-                { label: "Browser", value: parseUA(selected.userAgent) },
-                { label: "OS", value: parseOS(selected.userAgent) },
+                { label: "ID", value: detailReport.id },
+                { label: "Type", value: detailReport.errorType.toUpperCase() },
+                { label: "Status", value: detailReport.status },
+                { label: "Time", value: formatTs(detailReport.createdAt) },
+                { label: "User", value: detailReport.userId || "anonymous" },
+                { label: "Company", value: detailReport.companyId || "unknown" },
+                { label: "Browser", value: parseUA(detailReport.userAgent) },
+                { label: "OS", value: parseOS(detailReport.userAgent) },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-[#252526] rounded p-2" data-testid={`detail-${label.toLowerCase()}`}>
                   <div className="text-[#858585] text-[10px] mb-0.5">{label}</div>
@@ -322,11 +520,11 @@ export default function AdminErrors() {
               ))}
             </div>
 
-            {selected.pageUrl && (
+            {detailReport.pageUrl && (
               <div>
                 <div className="text-[10px] text-[#858585] mb-1">PAGE URL</div>
                 <div className="bg-[#252526] rounded p-2 text-xs text-[#9cdcfe] break-all" data-testid="detail-page-url">
-                  {selected.pageUrl}
+                  {detailReport.pageUrl}
                 </div>
               </div>
             )}
@@ -334,25 +532,25 @@ export default function AdminErrors() {
             <div>
               <div className="text-[10px] text-[#858585] mb-1">MESSAGE</div>
               <div className="bg-[#252526] rounded p-3 text-sm text-[#f44747] break-words" data-testid="detail-message">
-                {selected.message}
+                {detailReport.message}
               </div>
             </div>
 
-            {selected.stack && (
+            {detailReport.stack && (
               <div>
                 <div className="text-[10px] text-[#858585] mb-1">STACK TRACE</div>
                 <pre className="bg-[#0d0d0d] rounded p-3 text-[11px] text-[#ce9178] overflow-auto max-h-64 whitespace-pre-wrap break-words" data-testid="detail-stack">
-                  {selected.stack}
+                  {detailReport.stack}
                 </pre>
               </div>
             )}
 
             <div>
               <div className="text-[10px] text-[#858585] mb-2">FIX TASKS</div>
-              {selected.fixTask ? (
+              {detailReport.fixTask ? (
                 <div className="bg-purple-500/10 border border-purple-500/30 rounded p-3" data-testid="fix-task-item">
-                  <div className="text-xs text-[#d4d4d4]" data-testid="fix-task-title">{selected.fixTask.title}</div>
-                  <div className="text-[10px] text-[#858585] mt-0.5" data-testid="fix-task-date">Created {formatTs(selected.fixTask.createdAt)}</div>
+                  <div className="text-xs text-[#d4d4d4]" data-testid="fix-task-title">{detailReport.fixTask.title}</div>
+                  <div className="text-[10px] text-[#858585] mt-0.5" data-testid="fix-task-date">Created {formatTs(detailReport.fixTask.createdAt)}</div>
                 </div>
               ) : showFixTaskForm ? (
                 <div className="bg-[#252526] border border-[#3c3c3c] rounded p-3 space-y-2" data-testid="fix-task-form">
@@ -363,7 +561,7 @@ export default function AdminErrors() {
                     className="h-7 text-xs bg-[#1e1e1e] border-[#3c3c3c] text-[#d4d4d4] placeholder:text-[#585858]"
                     data-testid="input-fix-task-title"
                     onKeyDown={e => {
-                      if (e.key === "Enter") fixTaskMutation.mutate({ id: selected.id, title: fixTaskTitle });
+                      if (e.key === "Enter") fixTaskMutation.mutate({ id: detailReport.id, title: fixTaskTitle });
                       if (e.key === "Escape") { setShowFixTaskForm(false); setFixTaskTitle(""); }
                     }}
                     autoFocus
@@ -374,7 +572,7 @@ export default function AdminErrors() {
                       variant="outline"
                       className="h-7 text-xs bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20"
                       disabled={fixTaskMutation.isPending}
-                      onClick={() => fixTaskMutation.mutate({ id: selected.id, title: fixTaskTitle })}
+                      onClick={() => fixTaskMutation.mutate({ id: detailReport.id, title: fixTaskTitle })}
                       data-testid="button-submit-fix-task"
                     >
                       {fixTaskMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Wrench className="h-3 w-3 mr-1" />}
@@ -406,26 +604,26 @@ export default function AdminErrors() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-[#3c3c3c]">
-              {selected.status !== "acknowledged" && (
+              {detailReport.status !== "acknowledged" && (
                 <Button
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs bg-[#252526] border-[#3c3c3c] text-[#d4d4d4] hover:bg-[#2d2d2d]"
                   disabled={updateMutation.isPending}
-                  onClick={() => updateMutation.mutate({ id: selected.id, status: "acknowledged" })}
+                  onClick={() => updateMutation.mutate({ id: detailReport.id, status: "acknowledged" })}
                   data-testid="button-acknowledge"
                 >
                   <Eye className="h-3 w-3 mr-1" />
                   Acknowledge
                 </Button>
               )}
-              {selected.status !== "resolved" && (
+              {detailReport.status !== "resolved" && (
                 <Button
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs bg-[#252526] border-[#3c3c3c] text-[#d4d4d4] hover:bg-[#2d2d2d]"
                   disabled={updateMutation.isPending}
-                  onClick={() => updateMutation.mutate({ id: selected.id, status: "resolved" })}
+                  onClick={() => updateMutation.mutate({ id: detailReport.id, status: "resolved" })}
                   data-testid="button-resolve"
                 >
                   <CheckCircle className="h-3 w-3 mr-1" />
