@@ -5,6 +5,16 @@ import { queryClient } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Bug, ChevronRight, ChevronDown, Wrench, CheckCircle, Eye, X, ChevronLeft, Layers, List, Check, CheckCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -187,6 +197,7 @@ export default function AdminErrors() {
   const [fixTaskTitle, setFixTaskTitle] = useState("");
   const [viewMode, setViewMode] = useState<"all" | "grouped">("grouped");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState<{ message: string; status: string; count: number } | null>(null);
 
   const queryUrl = buildQueryUrl(statusFilter, fromDate, toDate, page, viewMode === "grouped");
 
@@ -472,7 +483,7 @@ export default function AdminErrors() {
                           <button
                             className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-yellow-500/30 bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors disabled:opacity-40"
                             disabled={isBulkPending}
-                            onClick={() => bulkStatusMutation.mutate({ message: group.message, status: "acknowledged" })}
+                            onClick={() => setBulkConfirm({ message: group.message, status: "acknowledged", count: group.count })}
                             data-testid={`button-acknowledge-all-${group.latestId}`}
                           >
                             {isBulkPending && bulkStatusMutation.variables?.status === "acknowledged"
@@ -485,7 +496,7 @@ export default function AdminErrors() {
                           <button
                             className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors disabled:opacity-40"
                             disabled={isBulkPending}
-                            onClick={() => bulkStatusMutation.mutate({ message: group.message, status: "resolved" })}
+                            onClick={() => setBulkConfirm({ message: group.message, status: "resolved", count: group.count })}
                             data-testid={`button-resolve-all-${group.latestId}`}
                           >
                             {isBulkPending && bulkStatusMutation.variables?.status === "resolved"
@@ -736,6 +747,35 @@ export default function AdminErrors() {
           </div>
         </div>
       )}
+
+      <AlertDialog open={!!bulkConfirm} onOpenChange={(open) => { if (!open) setBulkConfirm(null); }}>
+        <AlertDialogContent data-testid="bulk-confirm-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkConfirm?.status === "resolved" ? "Resolve all errors?" : "Acknowledge all errors?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark{" "}
+              <span className="font-semibold text-foreground">{bulkConfirm?.count ?? 0} error{(bulkConfirm?.count ?? 0) !== 1 ? "s" : ""}</span>{" "}
+              as <span className="font-semibold text-foreground">{bulkConfirm?.status}</span>. This action cannot be undone automatically.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="bulk-confirm-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="bulk-confirm-proceed"
+              onClick={() => {
+                if (bulkConfirm) {
+                  bulkStatusMutation.mutate({ message: bulkConfirm.message, status: bulkConfirm.status });
+                  setBulkConfirm(null);
+                }
+              }}
+            >
+              {bulkConfirm?.status === "resolved" ? "Resolve all" : "Acknowledge all"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
