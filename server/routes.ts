@@ -180,8 +180,10 @@ function sanitizeDecimal(value: any): string {
 }
 
 function auditLog(companyId: string, userId: string | null, entityType: string, entityId: string, action: string, changes?: any, ipAddress?: string) {
-  storage.createAuditEntry({ companyId, userId: userId || null, entityType, entityId, action, changes: changes || {}, ipAddress: ipAddress || null }).catch(console.error);
+  storage.createAuditEntry({ companyId, userId: userId || null, entityType, entityId, action: action as "create" | "update" | "delete" | "void", changes: changes || {}, ipAddress: ipAddress || null }).catch(console.error);
 }
+
+function p(v: string | string[]): string { return Array.isArray(v) ? v[0] : v; }
 
 function computeStopHash(stopIds: string[]): string {
   const sorted = [...stopIds].sort().join(",");
@@ -308,6 +310,7 @@ async function createPropertyWithGeocode(data: {
   city?: string | null; state?: string | null; zipCode?: string | null;
   numberOfDogs?: number | null; yardSize?: string | null;
   latitude?: string | null; longitude?: string | null;
+  gateCode?: string | null; specialInstructions?: string | null;
 }) {
   if (!data.latitude && !data.longitude && data.streetAddress) {
     const coords = await geocodeAddress(data.streetAddress, data.city, data.state, data.zipCode);
@@ -873,7 +876,7 @@ export async function registerRoutes(
   app.post("/api/voice-signup/:slug/checkout", async (req: Request, res: Response) => {
     try {
       if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
-      const { slug } = req.params;
+      const { slug: _slug } = req.params; const slug = p(_slug);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -915,7 +918,7 @@ export async function registerRoutes(
 
   app.get("/api/voice-signup/:slug/info", async (req: Request, res: Response) => {
     try {
-      const { slug } = req.params;
+      const { slug: _slug } = req.params; const slug = p(_slug);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
       const isSubscriber = company.subscriptionStatus === "active";
@@ -1152,7 +1155,7 @@ export async function registerRoutes(
       const routeMap = new Map(companyRoutes.map(r => [r.id, r]));
 
       // Resolve technician names for each route
-      const techIds = [...new Set(companyRoutes.map(r => r.technicianId).filter(Boolean))] as string[];
+      const techIds = Array.from(new Set(companyRoutes.map(r => r.technicianId).filter(Boolean))) as string[];
       const techUsers = techIds.length > 0
         ? await db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
             .from(users).where(inArray(users.id, techIds))
@@ -2442,7 +2445,7 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, role, userId: currentUserId } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
-      const targetUserId = req.params.userId;
+      const targetUserId = p(req.params.userId);
       if (targetUserId === currentUserId) {
         return res.status(400).json({ error: "You cannot remove yourself" });
       }
@@ -2490,7 +2493,7 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const { email, name, role: userRole, phone } = req.body;
-      const cu = await storage.createCompanyUser({ email, name, role: userRole, phone, companyId });
+      const cu = await storage.createCompanyUser({ email, name, role: userRole, phone, companyId } as any);
       res.status(201).json(cu);
     } catch (err) { handleError(res, err); }
   });
@@ -2499,7 +2502,7 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, role, userId: currentUserId } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
-      const targetUserId = req.params.userId;
+      const targetUserId = p(req.params.userId);
       if (targetUserId === currentUserId) {
         return res.status(400).json({ error: "Use the change password form to update your own password" });
       }
@@ -2559,7 +2562,7 @@ Return ONLY valid JSON, no markdown.`,
       const inProgressToday = todaysVisitsList.filter(v => v.status === "in_progress").length;
 
       // Count distinct techs working today (via routes linked to today's visits)
-      const todayRouteIds = [...new Set(todaysVisitsList.map(v => v.routeId).filter(Boolean))] as string[];
+      const todayRouteIds = Array.from(new Set(todaysVisitsList.map(v => v.routeId).filter(Boolean))) as string[];
       let techsWorking = 0;
       if (todayRouteIds.length > 0) {
         const techResult = await db
@@ -2680,7 +2683,7 @@ Return ONLY valid JSON, no markdown.`,
           .where(eq(reminderLogs.companyId, companyId)),
       ]);
 
-      const contactIds = [...new Set(logs.map(l => l.contactId))];
+      const contactIds = Array.from(new Set(logs.map(l => l.contactId)));
       let contactMap = new Map<string, string>();
       if (contactIds.length > 0) {
         const contactRows = await db.select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName })
@@ -2744,7 +2747,7 @@ Return ONLY valid JSON, no markdown.`,
       ]);
 
       const contactCache = new Map<string, string>();
-      async function enrichWithContact(m: Message) {
+      const enrichWithContact = async (m: Message) => {
         let contactName = "";
         if (m.contactId) {
           if (contactCache.has(m.contactId)) {
@@ -2802,7 +2805,7 @@ Return ONLY valid JSON, no markdown.`,
             status: v.status,
             contactName: contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown",
             propertyAddress: prop?.streetAddress || "Unknown",
-            servicePlanName: plan?.name || "Service",
+            servicePlanName: plan?.serviceName || "Service",
           };
         });
       res.json(upcoming);
@@ -3550,7 +3553,7 @@ Return ONLY valid JSON, no markdown.`,
       const csvText = typeof req.body === "string" ? req.body : req.body?.csv;
       if (!csvText) return res.status(400).json({ error: "No CSV data provided" });
 
-      function parseCsvLine(line: string): string[] {
+      const parseCsvLine = (line: string): string[] => {
         const result: string[] = [];
         let current = "";
         let inQuotes = false;
@@ -3744,7 +3747,7 @@ Return ONLY valid JSON, no markdown.`,
       const csvText = typeof req.body === "string" ? req.body : req.body?.csv;
       if (!csvText) return res.status(400).json({ error: "No CSV data provided" });
 
-      function parseCsvLine(line: string): string[] {
+      const parseCsvLine = (line: string): string[] => {
         const result: string[] = [];
         let current = "";
         let inQuotes = false;
@@ -3883,7 +3886,7 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       res.json(contact);
     } catch (err) { handleError(res, err); }
@@ -3959,15 +3962,15 @@ Return ONLY valid JSON, no markdown.`,
   app.patch("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const existing = await storage.getContact(req.params.id, companyId);
+      const existing = await storage.getContact(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Contact not found" });
       const validStatuses = ["lead", "estimate", "active", "paused", "cancelled"];
       if (req.body.status && !validStatuses.includes(req.body.status)) {
         return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
       }
       const { costOverrides: _stripCostOverrides, ...safeBody } = req.body;
-      const contact = await storage.updateContact(req.params.id, companyId, safeBody);
-      auditLog(companyId, userId, "contact", req.params.id, "update", { old: existing, new: contact }, req.ip);
+      const contact = await storage.updateContact(p(req.params.id), companyId, safeBody);
+      auditLog(companyId, userId, "contact", p(req.params.id), "update", { old: existing, new: contact }, req.ip);
 
       if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
         const existingProperties = await storage.getProperties(companyId, contact.id);
@@ -4004,10 +4007,10 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const existing = await storage.getContact(req.params.id, companyId);
+      const existing = await storage.getContact(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Contact not found" });
-      await storage.deleteContact(req.params.id, companyId);
-      auditLog(companyId, userId, "contact", req.params.id, "delete", { deleted: existing }, req.ip);
+      await storage.deleteContact(p(req.params.id), companyId);
+      auditLog(companyId, userId, "contact", p(req.params.id), "delete", { deleted: existing }, req.ip);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -4072,7 +4075,7 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/tags/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      await storage.deleteTag(req.params.id, companyId);
+      await storage.deleteTag(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -4102,7 +4105,7 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/lead-sources/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      await storage.deleteLeadSource(req.params.id, companyId);
+      await storage.deleteLeadSource(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -4112,11 +4115,11 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId } = await getCompanyContext(req);
       const { tagId } = req.body;
       if (!tagId) return res.status(400).json({ error: "tagId is required" });
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const companyTags = await storage.getTags(companyId);
       if (!companyTags.find(t => t.id === tagId)) return res.status(404).json({ error: "Tag not found" });
-      await storage.addTagToContact(req.params.id, tagId);
+      await storage.addTagToContact(p(req.params.id), tagId);
       res.status(201).json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -4124,9 +4127,9 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/contacts/:id/tags/:tagId", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      await storage.removeTagFromContact(req.params.id, req.params.tagId);
+      await storage.removeTagFromContact(p(req.params.id), p(req.params.tagId));
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -4134,11 +4137,11 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/contacts/:id/activity", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
-      const logs = await storage.getActivityLogs(companyId, req.params.id, limit, offset);
+      const logs = await storage.getActivityLogs(companyId, p(req.params.id), limit, offset);
       res.json(logs);
     } catch (err) { handleError(res, err); }
   });
@@ -4146,9 +4149,9 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/contacts/:id/tags", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      const contactTags = await storage.getContactTags(req.params.id);
+      const contactTags = await storage.getContactTags(p(req.params.id));
       res.json(contactTags);
     } catch (err) { handleError(res, err); }
   });
@@ -4156,10 +4159,10 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/contacts/:id/opportunities", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const { getOpportunitiesForContact } = await import("./services/opportunity-engine");
-      const opps = await getOpportunitiesForContact(req.params.id, companyId);
+      const opps = await getOpportunitiesForContact(p(req.params.id), companyId);
       res.json(opps);
     } catch (err) { handleError(res, err); }
   });
@@ -4167,14 +4170,14 @@ Return ONLY valid JSON, no markdown.`,
   app.patch("/api/contacts/:id/dismiss-opportunity", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const { key } = req.body;
       if (!key || typeof key !== "string") return res.status(400).json({ error: "key is required" });
       const current: string[] = (contact.dismissedOpportunities as string[] | null) ?? [];
       if (!current.includes(key)) {
         const updated = [...current, key];
-        await storage.updateContact(req.params.id, companyId, { dismissedOpportunities: updated });
+        await storage.updateContact(p(req.params.id), companyId, { dismissedOpportunities: updated });
       }
       res.json({ ok: true });
     } catch (err) { handleError(res, err); }
@@ -4183,7 +4186,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/contacts/:id/services", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
       const { frequency, dayOfWeek, startDate, pricePerVisit, discount, propertyId, serviceName, addOns } = req.body;
@@ -4193,7 +4196,7 @@ Return ONLY valid JSON, no markdown.`,
 
       const parsed = insertServicePlanSchema.parse({
         companyId,
-        contactId: req.params.id,
+        contactId: p(req.params.id),
         propertyId,
         frequency,
         dayOfWeek: dayOfWeek || null,
@@ -4205,12 +4208,12 @@ Return ONLY valid JSON, no markdown.`,
       });
 
       const plan = await storage.createServicePlan(parsed);
-      auditLog(companyId, userId, "service_plan", plan.id, "create", { new: { contactId: req.params.id, frequency, dayOfWeek } }, req.ip || undefined);
+      auditLog(companyId, userId, "service_plan", plan.id, "create", { new: { contactId: p(req.params.id), frequency, dayOfWeek } }, req.ip || undefined);
 
       if (contact.status === "lead" || contact.status === "estimate") {
-        await storage.updateContact(req.params.id, companyId, { status: "active" });
+        await storage.updateContact(p(req.params.id), companyId, { status: "active" });
         if (contact.email && !contact.hasPortalAccess) {
-          provisionPortalAccess(req.params.id, companyId, getBaseUrl(req)).catch((err) =>
+          provisionPortalAccess(p(req.params.id), companyId, getBaseUrl(req)).catch((err) =>
             console.error("[auto-portal] Failed to provision portal access:", err)
           );
         }
@@ -4227,7 +4230,7 @@ Return ONLY valid JSON, no markdown.`,
               metadata: { scoopilotContactId: contact.id, companyId },
               stripeAccount: acct,
             });
-            await storage.updateContact(req.params.id, companyId, { stripeCustomerId });
+            await storage.updateContact(p(req.params.id), companyId, { stripeCustomerId });
           } catch (err) {
             console.error("[auto-stripe] Failed to auto-create Stripe customer:", err);
           }
@@ -4270,7 +4273,7 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/properties/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const property = await storage.getProperty(req.params.id, companyId);
+      const property = await storage.getProperty(p(req.params.id), companyId);
       if (!property) return res.status(404).json({ error: "Property not found" });
       res.json(property);
     } catch (err) { handleError(res, err); }
@@ -4298,7 +4301,7 @@ Return ONLY valid JSON, no markdown.`,
   app.patch("/api/properties/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const existing = await storage.getProperty(req.params.id, companyId);
+      const existing = await storage.getProperty(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Property not found" });
       const addressChanged =
         (req.body.streetAddress !== undefined && req.body.streetAddress !== existing.streetAddress) ||
@@ -4324,7 +4327,7 @@ Return ONLY valid JSON, no markdown.`,
           }
         }
       }
-      const property = await storage.updateProperty(req.params.id, companyId, updateData);
+      const property = await storage.updateProperty(p(req.params.id), companyId, updateData);
       res.json({ ...property, geocodeFailed });
     } catch (err) { handleError(res, err); }
   });
@@ -4350,9 +4353,9 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/properties/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const existing = await storage.getProperty(req.params.id, companyId);
+      const existing = await storage.getProperty(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Property not found" });
-      await storage.deleteProperty(req.params.id, companyId);
+      await storage.deleteProperty(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -4410,7 +4413,7 @@ Return ONLY valid JSON, no markdown.`,
   app.patch("/api/routes/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const existing = await storage.getRoute(req.params.id, companyId);
+      const existing = await storage.getRoute(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Route not found" });
       const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
       if (req.body.dayOfWeek && !validDays.includes(req.body.dayOfWeek)) {
@@ -4419,7 +4422,7 @@ Return ONLY valid JSON, no markdown.`,
       const allowed = ["name", "dayOfWeek", "technicianId", "color"];
       const updates: any = {};
       for (const key of allowed) { if (req.body[key] !== undefined) updates[key] = req.body[key]; }
-      const route = await storage.updateRoute(req.params.id, companyId, updates);
+      const route = await storage.updateRoute(p(req.params.id), companyId, updates);
       res.json(route);
     } catch (err) { handleError(res, err); }
   });
@@ -4427,9 +4430,9 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/routes/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const existing = await storage.getRoute(req.params.id, companyId);
+      const existing = await storage.getRoute(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Route not found" });
-      await storage.deleteRoute(req.params.id, companyId);
+      await storage.deleteRoute(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -4437,7 +4440,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/routes/:id/unassign-all", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const route = await storage.getRoute(req.params.id, companyId);
+      const route = await storage.getRoute(p(req.params.id), companyId);
       if (!route) return res.status(404).json({ error: "Route not found" });
       const count = await storage.unassignAllStops(route.id);
       res.json({ success: true, unassignedCount: count });
@@ -4469,11 +4472,11 @@ Return ONLY valid JSON, no markdown.`,
   app.patch("/api/routes/:id/lock", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const route = await storage.getRoute(req.params.id, companyId);
+      const route = await storage.getRoute(p(req.params.id), companyId);
       if (!route) return res.status(404).json({ error: "Route not found" });
 
       const newLocked = !route.isLocked;
-      const updated = await storage.updateRoute(req.params.id, companyId, { isLocked: newLocked });
+      const updated = await storage.updateRoute(p(req.params.id), companyId, { isLocked: newLocked });
       res.json(updated);
     } catch (err) { handleError(res, err); }
   });
@@ -4481,7 +4484,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/routes/:id/optimize", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const route = await storage.getRoute(req.params.id, companyId);
+      const route = await storage.getRoute(p(req.params.id), companyId);
       if (!route) return res.status(404).json({ error: "Route not found" });
 
       if (route.isLocked) {
@@ -4631,7 +4634,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/routes/:id/split", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const route = await storage.getRoute(req.params.id, companyId);
+      const route = await storage.getRoute(p(req.params.id), companyId);
       if (!route) return res.status(404).json({ error: "Route not found" });
 
       const company = await storage.getCompany(companyId);
@@ -4751,7 +4754,7 @@ Return ONLY valid JSON, no markdown.`,
       try {
         const tz = company.timezone || "America/New_York";
         const today = getCompanyToday(tz);
-        const uniquePlanIds = [...new Set(allAffectedPlanIds)];
+        const uniquePlanIds = Array.from(new Set(allAffectedPlanIds));
         if (uniquePlanIds.length > 0) {
           await storage.deleteFutureScheduledVisitsForPlans(uniquePlanIds, today);
           const { generateVisitsForPlans } = await import("./jobs/auto-visits");
@@ -4794,6 +4797,7 @@ Return ONLY valid JSON, no markdown.`,
       if (isClearing) {
         return res.json({ cleared: true });
       }
+      const maxStopsNum = maxStops as number;
 
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
@@ -4824,7 +4828,7 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      const oversized = routes.filter(r => (visitCountByRoute.get(r.id) || 0) > maxStops);
+      const oversized = routes.filter(r => (visitCountByRoute.get(r.id) || 0) > maxStopsNum);
 
       if (oversized.length === 0) {
         return res.json({ routesSplit: 0, subRoutesCreated: 0, skipped: routes.length, errors: [] });
@@ -4884,7 +4888,7 @@ Return ONLY valid JSON, no markdown.`,
           }
 
           const routeVisitCount = visitCountByRoute.get(route.id) || 0;
-          const k = Math.ceil(routeVisitCount / maxStops);
+          const k = Math.ceil(routeVisitCount / maxStopsNum);
           const clusters = kMeansClustering(weeklyStops, k);
 
           for (let ci = 0; ci < clusters.length; ci++) {
@@ -4933,7 +4937,7 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       try {
-        const uniquePlanIds = [...new Set(allAffectedPlanIds)];
+        const uniquePlanIds = Array.from(new Set(allAffectedPlanIds));
         if (uniquePlanIds.length > 0) {
           await storage.deleteFutureScheduledVisitsForPlans(uniquePlanIds, today);
           const { generateVisitsForPlans } = await import("./jobs/auto-visits");
@@ -4979,7 +4983,7 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       // Build plan + property maps for geographic data
-      const uniquePlanIds = [...new Set(activeWeekVisits.map(v => v.servicePlanId!))];
+      const uniquePlanIds = Array.from(new Set(activeWeekVisits.map(v => v.servicePlanId!)));
       const allPlans = await storage.getServicePlans(companyId, { isActive: true });
       const planMap = new Map(allPlans.map(p => [p.id, p]));
 
@@ -5099,7 +5103,7 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      function enrichRoutes(days: typeof result.current.days) {
+      const enrichRoutes = (days: typeof result.current.days) => {
         return days.map(d => ({
           ...d,
           routes: d.routes.map(r => {
@@ -5115,7 +5119,7 @@ Return ONLY valid JSON, no markdown.`,
             return { ...r, totalRevenueCents: totalRev, totalCostCents: totalCost, totalProfitCents: totalProfit };
           }),
         }));
-      }
+      };
 
       const enrichedCurrent = enrichRoutes(result.current.days);
       const enrichedProposed = enrichRoutes(result.proposed.days);
@@ -5137,7 +5141,7 @@ Return ONLY valid JSON, no markdown.`,
         fuelCostSource = "default";
       }
 
-      function computeRouteFuel(routes: { estimatedMiles: number; routeLabel: string; totalRevenueCents?: number; totalCostCents?: number; totalProfitCents?: number }[]) {
+      const computeRouteFuel = (routes: { estimatedMiles: number; routeLabel: string; totalRevenueCents?: number; totalCostCents?: number; totalProfitCents?: number }[]) => {
         return routes.map(r => ({
           routeLabel: r.routeLabel,
           fuelCostCents: Math.round(r.estimatedMiles * fuelCostCentsPerMile),
@@ -5146,7 +5150,7 @@ Return ONLY valid JSON, no markdown.`,
           totalCostCents: r.totalCostCents ?? 0,
           totalProfitCents: r.totalProfitCents ?? 0,
         }));
-      }
+      };
 
       const currentFuelCostCents = Math.round(result.current.totalMiles * fuelCostCentsPerMile);
       const proposedFuelCostCents = Math.round(result.proposed.totalMiles * fuelCostCentsPerMile);
@@ -5315,7 +5319,7 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      for (const rId of affectedRouteIds) {
+      for (const rId of Array.from(affectedRouteIds)) {
         clearRouteOptimizationState(rId, companyId).catch(console.error);
       }
 
@@ -5325,7 +5329,7 @@ Return ONLY valid JSON, no markdown.`,
       const allPlans = await storage.getServicePlans(companyId, { isActive: true });
       for (const route of refreshedRoutes) {
         if (!route.dayOfWeek || route.date || route.isLocked) continue;
-        if (!appliedDaySet.has(route.dayOfWeek)) continue;
+        if (!(appliedDaySet as Set<string>).has(route.dayOfWeek)) continue;
         const assignedStops = allPlans.filter(p => p.routeId === route.id);
         if (assignedStops.length === 0) {
           try {
@@ -5356,7 +5360,7 @@ Return ONLY valid JSON, no markdown.`,
         try {
           const tz = company?.timezone || "America/New_York";
           const today = getCompanyToday(tz);
-          const affectedPlanIds = [...new Set(updatedPlanIds)];
+          const affectedPlanIds = Array.from(new Set(updatedPlanIds));
           if (affectedPlanIds.length > 0) {
             await storage.deleteFutureScheduledVisitsForPlans(affectedPlanIds, today);
             const { generateVisitsForPlans } = await import("./jobs/auto-visits");
@@ -5377,7 +5381,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/routes/:id/reverse", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const route = await storage.getRoute(req.params.id, companyId);
+      const route = await storage.getRoute(p(req.params.id), companyId);
       if (!route) return res.status(404).json({ error: "Route not found" });
 
       if (route.isLocked) {
@@ -5403,7 +5407,7 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/routes/:id/metrics", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const route = await storage.getRoute(req.params.id, companyId);
+      const route = await storage.getRoute(p(req.params.id), companyId);
       if (!route) return res.status(404).json({ error: "Route not found" });
 
       const plans = await storage.getServicePlans(companyId, { isActive: true });
@@ -5461,7 +5465,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/routes/:id/dispatch", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const route = await storage.getRoute(req.params.id, companyId);
+      const route = await storage.getRoute(p(req.params.id), companyId);
       if (!route) return res.status(404).json({ error: "Route not found" });
       if (!route.technicianId) return res.status(400).json({ error: "No technician assigned to this route" });
 
@@ -5662,7 +5666,7 @@ Return ONLY valid JSON, no markdown.`,
           isActive: boolean;
           pausedAt: Date | null;
           routeId: string | null;
-          dayOfWeek: string;
+          dayOfWeek: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | "tbd" | null;
         }> = {};
 
         if (updates.priceAdjustment) {
@@ -5684,7 +5688,7 @@ Return ONLY valid JSON, no markdown.`,
         }
 
         if (updates.dayOfWeek) {
-          safeUpdates.dayOfWeek = updates.dayOfWeek;
+          safeUpdates.dayOfWeek = updates.dayOfWeek as "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | "tbd";
           if (updates.dayOfWeek !== existing.dayOfWeek && !updates.routeId) {
             if (dayRoutes && dayRoutes.length > 0) {
               let bestRoute = dayRoutes[0];
@@ -5714,7 +5718,7 @@ Return ONLY valid JSON, no markdown.`,
           const bulkRoutesToClear = new Set<string>();
           if (existing.routeId) bulkRoutesToClear.add(existing.routeId);
           if (safeUpdates.routeId) bulkRoutesToClear.add(safeUpdates.routeId);
-          for (const rId of bulkRoutesToClear) {
+          for (const rId of Array.from(bulkRoutesToClear)) {
             clearRouteOptimizationState(rId, companyId).catch(console.error);
           }
         }
@@ -5727,7 +5731,7 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/service-plans/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const plan = await storage.getServicePlan(req.params.id, companyId);
+      const plan = await storage.getServicePlan(p(req.params.id), companyId);
       if (!plan) return res.status(404).json({ error: "Scheduled service not found" });
       const addOns = await storage.getServicePlanAddOns(plan.id);
       res.json({ ...plan, addOns });
@@ -5860,7 +5864,7 @@ Return ONLY valid JSON, no markdown.`,
   app.patch("/api/service-plans/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const existing = await storage.getServicePlan(req.params.id, companyId);
+      const existing = await storage.getServicePlan(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Scheduled service not found" });
       const validFrequencies = ["weekly", "biweekly", "monthly", "onetime"];
       if (req.body.frequency && !validFrequencies.includes(req.body.frequency)) {
@@ -5892,7 +5896,7 @@ Return ONLY valid JSON, no markdown.`,
           let bestRoute = dayRoutes[0];
           let bestCount = Infinity;
           for (const route of dayRoutes) {
-            const stopCount = allPlans.filter(sp => sp.routeId === route.id && sp.id !== req.params.id).length;
+            const stopCount = allPlans.filter(sp => sp.routeId === route.id && sp.id !== p(req.params.id)).length;
             if (stopCount < bestCount) {
               bestCount = stopCount;
               bestRoute = route;
@@ -5916,13 +5920,13 @@ Return ONLY valid JSON, no markdown.`,
 
       const { addOns: addOnsData } = req.body;
       const updateBody = body;
-      const plan = await storage.updateServicePlan(req.params.id, companyId, updateBody);
+      const plan = await storage.updateServicePlan(p(req.params.id), companyId, updateBody);
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "service_plan", req.params.id, "update", { old: { frequency: existing.frequency, dayOfWeek: existing.dayOfWeek, routeId: existing.routeId }, new: updateBody }, req.ip || undefined);
+      auditLog(companyId, userId, "service_plan", p(req.params.id), "update", { old: { frequency: existing.frequency, dayOfWeek: existing.dayOfWeek, routeId: existing.routeId }, new: updateBody }, req.ip || undefined);
 
       // Propagate changes to the linked jobs and agreements rows so GET /api/jobs
       // (which reads from those tables via INNER JOIN) reflects the edit immediately.
-      const linkedJobForSync = await storage.getJobByServicePlanId(req.params.id);
+      const linkedJobForSync = await storage.getJobByServicePlanId(p(req.params.id));
       if (linkedJobForSync) {
         const jobSync: Partial<InsertJob> = {};
         if (updateBody.serviceName !== undefined) jobSync.serviceName = updateBody.serviceName;
@@ -5963,16 +5967,16 @@ Return ONLY valid JSON, no markdown.`,
         const routesToClear = new Set<string>();
         if (existing.routeId) routesToClear.add(existing.routeId);
         if (body.routeId && body.routeId !== existing.routeId) routesToClear.add(body.routeId);
-        for (const rId of routesToClear) {
+        for (const rId of Array.from(routesToClear)) {
           clearRouteOptimizationState(rId, companyId).catch(console.error);
         }
       }
 
       if (body.isActive === false && existing.isActive === true) {
         const today = new Date().toISOString().split("T")[0];
-        const cancelledCount = await storage.cancelFutureVisitsForPlans([req.params.id], today);
+        const cancelledCount = await storage.cancelFutureVisitsForPlans([p(req.params.id)], today);
         if (cancelledCount > 0) {
-          console.log(`[admin-pause] Cancelled ${cancelledCount} future visits for plan ${req.params.id}`);
+          console.log(`[admin-pause] Cancelled ${cancelledCount} future visits for plan ${p(req.params.id)}`);
         }
       }
 
@@ -5984,7 +5988,7 @@ Return ONLY valid JSON, no markdown.`,
         try {
           if (scheduleChanged && !reactivated) {
             const todayStr = new Date().toISOString().split("T")[0];
-            await storage.cancelFutureVisitsForPlans([req.params.id], todayStr);
+            await storage.cancelFutureVisitsForPlans([p(req.params.id)], todayStr);
           }
           const { generateVisitsForPlans } = await import("./jobs/auto-visits");
           const today = new Date();
@@ -5992,8 +5996,8 @@ Return ONLY valid JSON, no markdown.`,
           const anchor = startDate > today ? startDate : today;
           const sixMonthsOut = new Date(anchor);
           sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
-          const generated = await generateVisitsForPlans(companyId, [req.params.id], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
-          console.log(`[plan-update] ${reactivated ? "Reactivated" : "Schedule changed"}: generated ${generated} visits for plan ${req.params.id}`);
+          const generated = await generateVisitsForPlans(companyId, [p(req.params.id)], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
+          console.log(`[plan-update] ${reactivated ? "Reactivated" : "Schedule changed"}: generated ${generated} visits for plan ${p(req.params.id)}`);
         } catch (genErr) {
           console.error("[plan-update] Failed to regenerate visits:", genErr);
         }
@@ -6001,13 +6005,13 @@ Return ONLY valid JSON, no markdown.`,
 
       if (addOnsData && Array.isArray(addOnsData)) {
         const validatedAddOns = await validateAndResolveAddOns(addOnsData, companyId);
-        const addOns = await storage.setServicePlanAddOns(req.params.id, validatedAddOns);
-        const existingJob = await storage.getJobByServicePlanId(req.params.id);
+        const addOns = await storage.setServicePlanAddOns(p(req.params.id), validatedAddOns);
+        const existingJob = await storage.getJobByServicePlanId(p(req.params.id));
         if (existingJob) await storage.setJobAddOns(existingJob.id, validatedAddOns);
         return res.json({ ...plan, addOns });
       }
 
-      const addOns = await storage.getServicePlanAddOns(req.params.id);
+      const addOns = await storage.getServicePlanAddOns(p(req.params.id));
       res.json({ ...plan, addOns });
     } catch (err) { handleError(res, err); }
   });
@@ -6015,15 +6019,15 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/service-plans/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const existing = await storage.getServicePlan(req.params.id, companyId);
+      const existing = await storage.getServicePlan(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Scheduled service not found" });
 
       if (existing.routeId) {
         clearRouteOptimizationState(existing.routeId, companyId).catch(console.error);
       }
-      await storage.deleteServicePlan(req.params.id, companyId);
+      await storage.deleteServicePlan(p(req.params.id), companyId);
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "service_plan", req.params.id, "delete", { deleted: { contactId: existing.contactId, frequency: existing.frequency, dayOfWeek: existing.dayOfWeek } }, req.ip || undefined);
+      auditLog(companyId, userId, "service_plan", p(req.params.id), "delete", { deleted: { contactId: existing.contactId, frequency: existing.frequency, dayOfWeek: existing.dayOfWeek } }, req.ip || undefined);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -6166,7 +6170,7 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
-      const job = await storage.getJob(req.params.id, companyId);
+      const job = await storage.getJob(p(req.params.id), companyId);
       if (!job) return res.status(404).json({ error: "Job not found" });
       if (job.jobStatus !== "draft") {
         return res.status(400).json({ error: `Cannot approve a job with status '${job.jobStatus}'` });
@@ -6255,7 +6259,7 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId } = await getCompanyContext(req);
       const zones = await storage.getServiceZones(companyId);
-      const existing = zones.find(z => z.id === req.params.id);
+      const existing = zones.find(z => z.id === p(req.params.id));
       if (!existing) return res.status(404).json({ error: "Service zone not found" });
       const { dayOfWeek, label, isActive, priceSurchargePercent } = req.body;
       const updates: any = {};
@@ -6266,7 +6270,7 @@ Return ONLY valid JSON, no markdown.`,
         const pct = Math.max(0, Math.min(200, Math.round(Number(priceSurchargePercent) || 0)));
         updates.priceSurchargePercent = pct;
       }
-      const zone = await storage.updateServiceZone(req.params.id, companyId, updates);
+      const zone = await storage.updateServiceZone(p(req.params.id), companyId, updates);
       res.json(zone);
     } catch (err) { handleError(res, err); }
   });
@@ -6275,9 +6279,9 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId } = await getCompanyContext(req);
       const zones = await storage.getServiceZones(companyId);
-      const existing = zones.find(z => z.id === req.params.id);
+      const existing = zones.find(z => z.id === p(req.params.id));
       if (!existing) return res.status(404).json({ error: "Service zone not found" });
-      await storage.deleteServiceZone(req.params.id, companyId);
+      await storage.deleteServiceZone(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -6287,7 +6291,7 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/service-plans/:id/vacation-holds", isAuthenticated, async (req: Request, res: Response) => {
     try {
       await getCompanyContext(req);
-      const holds = await storage.getVacationHolds(req.params.id);
+      const holds = await storage.getVacationHolds(p(req.params.id));
       res.json(holds);
     } catch (err) { handleError(res, err); }
   });
@@ -6295,7 +6299,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/service-plans/:id/vacation-holds", isAuthenticated, async (req: Request, res: Response) => {
     try {
       await getCompanyContext(req);
-      const parsed = insertVacationHoldSchema.parse({ ...req.body, servicePlanId: req.params.id });
+      const parsed = insertVacationHoldSchema.parse({ ...req.body, servicePlanId: p(req.params.id) });
       const hold = await storage.createVacationHold(parsed);
       res.status(201).json(hold);
     } catch (err) { handleError(res, err); }
@@ -6304,7 +6308,7 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/vacation-holds/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      await storage.deleteVacationHold(req.params.id, companyId);
+      await storage.deleteVacationHold(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -6400,7 +6404,7 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/visits/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const visit = await storage.getVisit(req.params.id, companyId);
+      const visit = await storage.getVisit(p(req.params.id), companyId);
       if (!visit) return res.status(404).json({ error: "Visit not found" });
       res.json(visit);
     } catch (err) { handleError(res, err); }
@@ -6473,7 +6477,7 @@ Return ONLY valid JSON, no markdown.`,
   app.patch("/api/visits/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId, role } = await getCompanyContext(req);
-      const existing = await storage.getVisit(req.params.id, companyId);
+      const existing = await storage.getVisit(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Visit not found" });
 
       if (role === "tech") {
@@ -6518,7 +6522,7 @@ Return ONLY valid JSON, no markdown.`,
       }
       let visit: Awaited<ReturnType<typeof storage.updateVisit>>;
       try {
-        visit = await storage.updateVisit(req.params.id, companyId, updates);
+        visit = await storage.updateVisit(p(req.params.id), companyId, updates);
       } catch (updateErr: unknown) {
         const msg = updateErr instanceof Error ? updateErr.message : String(updateErr);
         if (msg.includes("unique constraint") || msg.includes("duplicate key")) {
@@ -6578,7 +6582,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/visits/:id/on-my-way", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId, role } = await getCompanyContext(req);
-      const visit = await storage.getVisit(req.params.id, companyId);
+      const visit = await storage.getVisit(p(req.params.id), companyId);
       if (!visit) return res.status(404).json({ error: "Visit not found" });
 
       if (role === "tech") {
@@ -6593,7 +6597,7 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "Valid latitude and longitude are required" });
       }
 
-      const cooldownKey = `${companyId}:${req.params.id}`;
+      const cooldownKey = `${companyId}:${p(req.params.id)}`;
       const lastSent = onMyWayCooldowns.get(cooldownKey);
       if (lastSent && Date.now() - lastSent < 5 * 60 * 1000) {
         const waitSec = Math.ceil((5 * 60 * 1000 - (Date.now() - lastSent)) / 1000);
@@ -6665,7 +6669,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/visits/:id/send-custom-sms", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId, role } = await getCompanyContext(req);
-      const visit = await storage.getVisit(req.params.id, companyId);
+      const visit = await storage.getVisit(p(req.params.id), companyId);
       if (!visit) return res.status(404).json({ error: "Visit not found" });
 
       if (role === "tech") {
@@ -6729,7 +6733,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/visits/:id/complete-notify", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId, role } = await getCompanyContext(req);
-      const existing = await storage.getVisit(req.params.id, companyId);
+      const existing = await storage.getVisit(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Visit not found" });
 
       if (role === "tech") {
@@ -6755,7 +6759,7 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "extraPhotos must be an array of strings" });
       }
 
-      const visit = await storage.updateVisit(req.params.id, companyId, {
+      const visit = await storage.updateVisit(p(req.params.id), companyId, {
         status: "completed",
         completedAt: new Date(),
         completedBy: userId,
@@ -7063,7 +7067,7 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/invoices/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const invoice = await storage.getInvoice(req.params.id, companyId);
+      const invoice = await storage.getInvoice(p(req.params.id), companyId);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       const lineItems = await storage.getInvoiceLineItems(invoice.id);
       res.json({ ...invoice, lineItems });
@@ -7220,11 +7224,11 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/contacts/:id/visits", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
       const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
-      const result = await storage.getVisitsForContact(companyId, req.params.id, limit, offset);
+      const result = await storage.getVisitsForContact(companyId, p(req.params.id), limit, offset);
       res.json(result);
     } catch (err) { handleError(res, err); }
   });
@@ -7232,9 +7236,9 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/contacts/:id/uninvoiced-visits", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      const result = await storage.getUninvoicedVisitsForContact(companyId, req.params.id);
+      const result = await storage.getUninvoicedVisitsForContact(companyId, p(req.params.id));
       res.json(result);
     } catch (err) { handleError(res, err); }
   });
@@ -7242,9 +7246,9 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/contacts/:id/unsent-invoices", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      const drafts = await storage.getInvoices(companyId, { contactId: req.params.id, status: "draft" });
+      const drafts = await storage.getInvoices(companyId, { contactId: p(req.params.id), status: "draft" });
       const result = await Promise.all(drafts.map(async (inv) => {
         const items = await storage.getInvoiceLineItems(inv.id);
         return { ...inv, lineItems: items };
@@ -7333,7 +7337,7 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      for (const visitId of newVisitIds) {
+      for (const visitId of Array.from(newVisitIds)) {
         await storage.updateVisit(visitId as string, companyId, { invoiceId: invoice.id });
       }
 
@@ -7644,7 +7648,7 @@ Return ONLY valid JSON, no markdown.`,
   app.patch("/api/contacts/:id/billing-preferences", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
       const { invoiceTiming, invoiceFrequency, autoInvoiceEnabled } = req.body;
@@ -7657,7 +7661,7 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid invoice frequency" });
       }
 
-      const updated = await storage.updateContact(req.params.id, companyId, {
+      const updated = await storage.updateContact(p(req.params.id), companyId, {
         ...(invoiceTiming && { invoiceTiming }),
         ...(invoiceFrequency && { invoiceFrequency }),
         ...(typeof autoInvoiceEnabled === "boolean" && { autoInvoiceEnabled }),
@@ -7669,7 +7673,7 @@ Return ONLY valid JSON, no markdown.`,
   app.patch("/api/invoices/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const existing = await storage.getInvoice(req.params.id, companyId);
+      const existing = await storage.getInvoice(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Invoice not found" });
 
       const { lineItems, status: newStatus, ...invoiceUpdates } = req.body;
@@ -7706,7 +7710,7 @@ Return ONLY valid JSON, no markdown.`,
 
       if (lineItems && Array.isArray(lineItems)) {
 
-        await storage.deleteInvoiceLineItems(req.params.id);
+        await storage.deleteInvoiceLineItems(p(req.params.id));
 
         let subtotal = 0;
         for (const item of lineItems) {
@@ -7715,7 +7719,7 @@ Return ONLY valid JSON, no markdown.`,
           const lineTotal = qty * unitPrice;
           subtotal += lineTotal;
           await storage.createInvoiceLineItem({
-            invoiceId: req.params.id,
+            invoiceId: p(req.params.id),
             description: item.description || "Service",
             quantity: qty,
             unitPrice: unitPrice.toFixed(2),
@@ -7768,14 +7772,14 @@ Return ONLY valid JSON, no markdown.`,
         invoiceUpdates.total = total.toFixed(2);
       }
 
-      const invoice = await storage.updateInvoice(req.params.id, companyId, invoiceUpdates);
-      const updatedLineItems = await storage.getInvoiceLineItems(req.params.id);
+      const invoice = await storage.updateInvoice(p(req.params.id), companyId, invoiceUpdates);
+      const updatedLineItems = await storage.getInvoiceLineItems(p(req.params.id));
       qboAutoSync(companyId, invoice.id, "invoice");
       if (invoiceUpdates.status === "paid") {
         qboAutoSync(companyId, invoice.id, "payment");
       }
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "invoice", req.params.id, "update", { old: { status: existing.status, total: existing.total }, new: { status: invoice.status, total: invoice.total } }, req.ip || undefined);
+      auditLog(companyId, userId, "invoice", p(req.params.id), "update", { old: { status: existing.status, total: existing.total }, new: { status: invoice.status, total: invoice.total } }, req.ip || undefined);
       res.json({ ...invoice, lineItems: updatedLineItems });
     } catch (err) { handleError(res, err); }
   });
@@ -7783,12 +7787,12 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/invoices/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const invoice = await storage.getInvoice(req.params.id, companyId);
+      const invoice = await storage.getInvoice(p(req.params.id), companyId);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       if (invoice.status === "paid") return res.status(400).json({ error: "Cannot delete a paid invoice" });
-      await storage.deleteInvoice(req.params.id, companyId);
+      await storage.deleteInvoice(p(req.params.id), companyId);
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "invoice", req.params.id, "delete", { deleted: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, status: invoice.status } }, req.ip || undefined);
+      auditLog(companyId, userId, "invoice", p(req.params.id), "delete", { deleted: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, status: invoice.status } }, req.ip || undefined);
       res.json({ ok: true });
     } catch (err) { handleError(res, err); }
   });
@@ -7816,8 +7820,8 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getAutomationRules(companyId);
-      if (!existing.find(r => r.id === req.params.id)) return res.status(404).json({ error: "Rule not found" });
-      const rule = await storage.updateAutomationRule(req.params.id, companyId, req.body);
+      if (!existing.find(r => r.id === p(req.params.id))) return res.status(404).json({ error: "Rule not found" });
+      const rule = await storage.updateAutomationRule(p(req.params.id), companyId, req.body);
       res.json(rule);
     } catch (err) { handleError(res, err); }
   });
@@ -7825,7 +7829,7 @@ Return ONLY valid JSON, no markdown.`,
   app.delete("/api/automation-rules/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      await storage.deleteAutomationRule(req.params.id, companyId);
+      await storage.deleteAutomationRule(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -7876,9 +7880,9 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, role, userId } = await getCompanyContext(req);
       requireRole(role);
       const existingKeys = await storage.getApiKeys(companyId);
-      const existingKey = existingKeys.find(k => k.id === req.params.id);
-      await storage.deleteApiKey(req.params.id, companyId);
-      auditLog(companyId, userId, "api_key", req.params.id, "delete", { deleted: { name: existingKey?.name, keyPrefix: existingKey?.keyPrefix } }, req.ip || undefined);
+      const existingKey = existingKeys.find(k => k.id === p(req.params.id));
+      await storage.deleteApiKey(p(req.params.id), companyId);
+      auditLog(companyId, userId, "api_key", p(req.params.id), "delete", { deleted: { name: existingKey?.name, keyPrefix: existingKey?.keyPrefix } }, req.ip || undefined);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -8047,7 +8051,7 @@ Return ONLY valid JSON, no markdown.`,
           servicePlans: servicePlans.map(sp => ({
             frequency: sp.frequency,
             dayOfWeek: sp.dayOfWeek,
-            price: sp.price,
+            price: sp.pricePerVisit,
             isActive: sp.isActive,
           })),
         },
@@ -8221,11 +8225,11 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const existingWebhooks = await storage.getWebhooks(companyId);
-      const existingWh = existingWebhooks.find(w => w.id === req.params.id);
+      const existingWh = existingWebhooks.find(w => w.id === p(req.params.id));
       if (!existingWh) return res.status(404).json({ error: "Webhook not found" });
-      const webhook = await storage.updateWebhook(req.params.id, companyId, req.body);
+      const webhook = await storage.updateWebhook(p(req.params.id), companyId, req.body);
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "webhook", req.params.id, "update", { old: { url: existingWh.url, isActive: existingWh.isActive }, new: req.body }, req.ip || undefined);
+      auditLog(companyId, userId, "webhook", p(req.params.id), "update", { old: { url: existingWh.url, isActive: existingWh.isActive }, new: req.body }, req.ip || undefined);
       res.json(webhook);
     } catch (err) { handleError(res, err); }
   });
@@ -8235,10 +8239,10 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const allWebhooks = await storage.getWebhooks(companyId);
-      const whToDelete = allWebhooks.find(w => w.id === req.params.id);
-      await storage.deleteWebhook(req.params.id, companyId);
+      const whToDelete = allWebhooks.find(w => w.id === p(req.params.id));
+      await storage.deleteWebhook(p(req.params.id), companyId);
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "webhook", req.params.id, "delete", { deleted: { url: whToDelete?.url, events: whToDelete?.events } }, req.ip || undefined);
+      auditLog(companyId, userId, "webhook", p(req.params.id), "delete", { deleted: { url: whToDelete?.url, events: whToDelete?.events } }, req.ip || undefined);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -8248,9 +8252,9 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const existing = await storage.getWebhooks(companyId);
-      if (!existing.find(w => w.id === req.params.id)) return res.status(404).json({ error: "Webhook not found" });
+      if (!existing.find(w => w.id === p(req.params.id))) return res.status(404).json({ error: "Webhook not found" });
       const limit = parseInt(req.query.limit as string) || 50;
-      const deliveries = await storage.getWebhookDeliveries(req.params.id, limit);
+      const deliveries = await storage.getWebhookDeliveries(p(req.params.id), limit);
       res.json(deliveries);
     } catch (err) { handleError(res, err); }
   });
@@ -8284,7 +8288,7 @@ Return ONLY valid JSON, no markdown.`,
       const body = { ...req.body };
       if (body.basePrice !== undefined) body.basePrice = sanitizeDecimal(body.basePrice);
       const parsed = insertServicePricingSchema.partial().parse(body);
-      const item = await storage.updateServicePricingItem(req.params.id, companyId, parsed);
+      const item = await storage.updateServicePricingItem(p(req.params.id), companyId, parsed);
       res.json(item);
     } catch (err) { handleError(res, err); }
   });
@@ -8293,7 +8297,7 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      await storage.deleteServicePricingItem(req.params.id, companyId);
+      await storage.deleteServicePricingItem(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -8314,14 +8318,14 @@ Return ONLY valid JSON, no markdown.`,
       const validTriggers = ["after_job", "end_of_week", "end_of_month", "manual"];
       const validBehaviors = ["autopay_immediate", "autopay_scheduled", "send_invoice", "review_only"];
       const pricingItems = await storage.getServicePricing(companyId);
-      if (!pricingItems.some(item => item.id === req.params.servicePricingId)) {
+      if (!pricingItems.some(item => item.id === p(req.params.servicePricingId))) {
         return res.status(404).json({ error: "Service pricing item not found" });
       }
       const { billingCadence, billingTrigger, paymentBehavior } = req.body;
       if (billingCadence && !validCadences.includes(billingCadence)) return res.status(400).json({ error: "Invalid billingCadence" });
       if (billingTrigger && !validTriggers.includes(billingTrigger)) return res.status(400).json({ error: "Invalid billingTrigger" });
       if (paymentBehavior && !validBehaviors.includes(paymentBehavior)) return res.status(400).json({ error: "Invalid paymentBehavior" });
-      const rule = await storage.upsertServiceBillingRule(companyId, req.params.servicePricingId, {
+      const rule = await storage.upsertServiceBillingRule(companyId, p(req.params.servicePricingId), {
         billingCadence: billingCadence || null,
         billingTrigger: billingTrigger || null,
         paymentBehavior: paymentBehavior || null,
@@ -8334,7 +8338,7 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      await storage.deleteServiceBillingRule(companyId, req.params.servicePricingId);
+      await storage.deleteServiceBillingRule(companyId, p(req.params.servicePricingId));
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -8549,7 +8553,7 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const parsed = insertServicePackageSchema.partial().parse(req.body);
-      const pkg = await storage.updateServicePackage(req.params.id, companyId, parsed);
+      const pkg = await storage.updateServicePackage(p(req.params.id), companyId, parsed);
       res.json(pkg);
     } catch (err) { handleError(res, err); }
   });
@@ -8558,7 +8562,7 @@ Return ONLY valid JSON, no markdown.`,
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      await storage.deleteServicePackage(req.params.id, companyId);
+      await storage.deleteServicePackage(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -8859,7 +8863,7 @@ Return ONLY valid JSON, no markdown.`,
   app.get("/api/pricing/recommendations/:propertyId", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const recs = await storage.getPriceRecommendations(companyId, req.params.propertyId);
+      const recs = await storage.getPriceRecommendations(companyId, p(req.params.propertyId));
       res.json(recs);
     } catch (err) { handleError(res, err); }
   });
@@ -9181,7 +9185,7 @@ Rules:
     try {
       const { companyId } = await getCompanyContext(req);
       const { calculateCustomerProfitability } = await import("./services/profitability-calculator");
-      const result = await calculateCustomerProfitability(companyId, req.params.contactId);
+      const result = await calculateCustomerProfitability(companyId, p(req.params.contactId));
       if (!result) return res.status(404).json({ message: "No profitability data for this customer" });
       res.json(result);
     } catch (err) { handleError(res, err); }
@@ -9191,7 +9195,7 @@ Rules:
     try {
       const { companyId } = await getCompanyContext(req);
       const { generateProfitabilitySuggestions } = await import("./services/profitability-advisor");
-      const suggestions = await generateProfitabilitySuggestions(companyId, req.params.contactId);
+      const suggestions = await generateProfitabilitySuggestions(companyId, p(req.params.contactId));
       res.json({ suggestions });
     } catch (err: any) {
       if (err?.status === 429 || err?.code === "insufficient_quota" || (err?.message && err.message.includes("OpenAI"))) {
@@ -9204,7 +9208,7 @@ Rules:
   app.get("/api/contacts/:id/cost-overrides", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ message: "Contact not found" });
       res.json({ costOverrides: contact.costOverrides || null });
     } catch (err) { handleError(res, err); }
@@ -9213,7 +9217,7 @@ Rules:
   app.patch("/api/contacts/:id/cost-overrides", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ message: "Contact not found" });
       const costOverridesSchema = z.object({
         techHourlyWageCents: z.number().min(0).optional().nullable(),
@@ -9227,7 +9231,7 @@ Rules:
         if (v !== null && v !== undefined) cleaned[k] = v;
       }
       const overrides = Object.keys(cleaned).length > 0 ? cleaned : null;
-      await storage.updateContact(req.params.id, companyId, { costOverrides: overrides });
+      await storage.updateContact(p(req.params.id), companyId, { costOverrides: overrides });
       res.json({ costOverrides: overrides });
     } catch (err) { handleError(res, err); }
   });
@@ -9261,7 +9265,7 @@ Rules:
         routeMap.set(route.id, {
           routeId: route.id,
           routeName: route.name,
-          dayOfWeek: route.dayOfWeek,
+          dayOfWeek: route.dayOfWeek ?? "tbd",
           totalStops: 0,
           totalRevenueCents: 0,
           totalCostCents: 0,
@@ -9410,7 +9414,7 @@ Rules:
         result.push({
           routeId: route.id,
           routeName: route.name,
-          dayOfWeek: route.dayOfWeek,
+          dayOfWeek: route.dayOfWeek ?? "tbd",
           color: route.color || "#3b82f6",
           totalStops: stops.length,
           totalRevenueCents: totalRev,
@@ -9439,7 +9443,7 @@ Rules:
     try {
       const { companyId } = await getCompanyContext(req);
       const snapshots = await storage.getProfitabilitySnapshots(companyId, {
-        contactId: req.params.contactId,
+        contactId: p(req.params.contactId),
       });
       res.json(snapshots);
     } catch (err) { handleError(res, err); }
@@ -9541,7 +9545,7 @@ Rules:
   app.patch("/api/competitor-pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { id } = req.params;
+      const id = p(req.params.id);
       const schema = z.object({
         zipCode: z.string().min(1).optional(),
         competitorName: z.string().min(1).optional(),
@@ -9561,7 +9565,7 @@ Rules:
   app.delete("/api/competitor-pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { id } = req.params;
+      const id = p(req.params.id);
       await storage.deleteCompetitorPricing(id, companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
@@ -9603,7 +9607,7 @@ Rules:
   app.patch("/api/overhead-costs/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { id } = req.params;
+      const id = p(req.params.id);
       const updates: Record<string, any> = {};
       if (typeof req.body.name === "string") updates.name = req.body.name.trim();
       if (typeof req.body.monthlyCostCents === "number" && req.body.monthlyCostCents >= 0) {
@@ -9622,7 +9626,7 @@ Rules:
   app.delete("/api/overhead-costs/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      await storage.deleteOverheadCost(req.params.id, companyId);
+      await storage.deleteOverheadCost(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -9806,7 +9810,7 @@ Rules:
   app.patch("/api/messages/:id/read", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const msg = await storage.markMessageRead(req.params.id, companyId);
+      const msg = await storage.markMessageRead(p(req.params.id), companyId);
       if (!msg) return res.status(404).json({ error: "Message not found" });
       res.json(msg);
     } catch (err) { handleError(res, err); }
@@ -9815,7 +9819,7 @@ Rules:
   app.patch("/api/messages/read-by-contact/:contactId", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      await storage.markMessagesReadByContact(req.params.contactId, companyId);
+      await storage.markMessagesReadByContact(p(req.params.contactId), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -9935,7 +9939,7 @@ Rules:
   app.patch("/api/messages/read-by-email-thread/:threadId", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      await storage.markMessagesReadByEmail(req.params.threadId, companyId);
+      await storage.markMessagesReadByEmail(p(req.params.threadId), companyId);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -10217,7 +10221,7 @@ Rules:
         return res.status(403).json({ error: "Cannot resolve exceptions for another company" });
       }
 
-      const exception = await storage.resolveMessageException(req.params.id, userId, targetCompanyId);
+      const exception = await storage.resolveMessageException(p(req.params.id), userId, targetCompanyId);
       if (!exception) return res.status(404).json({ error: "Exception not found, already resolved, or not assigned to your company" });
 
       if (exception.body && exception.fromAddress) {
@@ -10255,7 +10259,7 @@ Rules:
             }
           }
         } catch (msgErr) {
-          console.error(`[MessageException] Resolved exception ${req.params.id} but message delivery failed:`, msgErr);
+          console.error(`[MessageException] Resolved exception ${p(req.params.id)} but message delivery failed:`, msgErr);
         }
       }
 
@@ -10267,7 +10271,7 @@ Rules:
     try {
       const { companyId, userId, role } = await getCompanyContext(req);
       if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
-      const exception = await storage.dismissMessageException(req.params.id, userId, companyId);
+      const exception = await storage.dismissMessageException(p(req.params.id), userId, companyId);
       if (!exception) return res.status(404).json({ error: "Exception not found, already resolved, or not assigned to your company" });
       res.json(exception);
     } catch (err) { handleError(res, err); }
@@ -10998,7 +11002,7 @@ Rules:
   app.post("/api/invoices/:id/send-email", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const invoice = await storage.getInvoice(req.params.id, companyId);
+      const invoice = await storage.getInvoice(p(req.params.id), companyId);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       if (invoice.status === "paid") return res.status(400).json({ error: "Invoice is already paid" });
 
@@ -11194,7 +11198,7 @@ Rules:
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
       if (contact.stripeCustomerId) {
@@ -11211,7 +11215,7 @@ Rules:
         stripeAccount: connectAcct,
       });
 
-      await storage.updateContact(req.params.id, companyId, { stripeCustomerId });
+      await storage.updateContact(p(req.params.id), companyId, { stripeCustomerId });
       res.json({ stripeCustomerId, alreadyExists: false });
     } catch (err) { handleError(res, err); }
   });
@@ -11219,7 +11223,7 @@ Rules:
   app.post("/api/contacts/:id/send-payment-reminder", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
       const company = await storage.getCompany(companyId);
@@ -11265,7 +11269,7 @@ Rules:
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       if (!contact.stripeCustomerId) return res.status(400).json({ error: "Contact has no Stripe customer. Create one first." });
 
@@ -11280,7 +11284,7 @@ Rules:
         metadata: { contactId: contact.id, companyId },
       });
       if (wasRecreated) {
-        await storage.updateContact(req.params.id, companyId, { stripeCustomerId: resolvedCustId });
+        await storage.updateContact(p(req.params.id), companyId, { stripeCustomerId: resolvedCustId });
       }
       const result = await createSetupIntent(resolvedCustId, connectAcct);
       res.json(result);
@@ -11290,7 +11294,7 @@ Rules:
   app.get("/api/contacts/:id/payment-methods", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       if (!contact.stripeCustomerId) return res.json([]);
 
@@ -11305,7 +11309,7 @@ Rules:
         metadata: { contactId: contact.id, companyId },
       });
       if (wasRecreated) {
-        await storage.updateContact(req.params.id, companyId, { stripeCustomerId: resolvedCustId });
+        await storage.updateContact(p(req.params.id), companyId, { stripeCustomerId: resolvedCustId });
       }
       const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
       res.json(methods);
@@ -11337,10 +11341,10 @@ Rules:
       }
 
       const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
-      const owns = methods.some((m) => m.id === req.params.pmId);
+      const owns = methods.some((m) => m.id === p(req.params.pmId));
       if (!owns) return res.status(403).json({ error: "Payment method not found for this contact" });
 
-      await detachPaymentMethod(req.params.pmId, connectAcct);
+      await detachPaymentMethod(p(req.params.pmId), connectAcct);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -11348,7 +11352,7 @@ Rules:
   app.post("/api/invoices/:id/charge", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const invoice = await storage.getInvoice(req.params.id, companyId);
+      const invoice = await storage.getInvoice(p(req.params.id), companyId);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
 
@@ -11413,7 +11417,7 @@ Rules:
   app.post("/api/invoices/:id/checkout", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const invoice = await storage.getInvoice(req.params.id, companyId);
+      const invoice = await storage.getInvoice(p(req.params.id), companyId);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
 
@@ -12097,6 +12101,7 @@ Rules:
         const meta = subscription.metadata || {};
         const email = meta.email;
         const companyName = meta.company_name || "your company";
+        const trialCompanyId = meta.company_id || "";
         if (email) {
           try {
             const baseUrl = process.env.REPLIT_DEPLOYMENT_URL
@@ -12105,7 +12110,7 @@ Rules:
                 ? `https://${process.env.REPLIT_DEV_DOMAIN}`
                 : "https://scoopilot.replit.app";
             await sendEmail({
-              companyId: company.id,
+              companyId: trialCompanyId,
               to: email,
               subject: `Your ScooPilot trial ends soon`,
               text: `Hi,\n\nYour 14-day free trial for "${companyName}" ends in 3 days. Add a payment method to keep your account active.\n\nVisit ${baseUrl}/billing to update your billing.`,
@@ -12313,6 +12318,7 @@ Rules:
           companyId: newCompany.id,
           to: email,
           subject: "Your ScooPilot account is ready",
+          text: `Hi ${first_name}, your ScooPilot account "${company}" is ready. Email: ${email}, Temporary Password: ${tempPassword}. Login at ${appUrl}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
@@ -12514,7 +12520,7 @@ Rules:
   app.get("/api/quotes/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const quote = await storage.getQuote(req.params.id, companyId);
+      const quote = await storage.getQuote(p(req.params.id), companyId);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
       res.json(quote);
     } catch (err: any) {
@@ -12609,10 +12615,10 @@ Rules:
           const newProperty = await storage.createProperty({
             companyId,
             contactId,
-            address: parsed.data.propertyAddress,
+            streetAddress: parsed.data.propertyAddress,
             city: "",
             state: "",
-            zip: "",
+            zipCode: "",
           });
           propertyId = String(newProperty.id);
         } catch (propErr) {
@@ -12627,6 +12633,7 @@ Rules:
         contactId,
         propertyId,
         expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
+        images: parsed.data.images?.map(img => ({ ...img, sqft: img.sqft ?? undefined })),
       };
 
       const quote = await storage.createQuote(quoteData);
@@ -12640,7 +12647,7 @@ Rules:
   app.patch("/api/quotes/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const existing = await storage.getQuote(req.params.id, companyId);
+      const existing = await storage.getQuote(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Quote not found" });
 
       const parsed = createQuoteBodySchema.partial().safeParse(req.body);
@@ -12653,7 +12660,7 @@ Rules:
         delete updateData.quoteNumber;
       }
 
-      const quote = await storage.updateQuote(req.params.id, companyId, updateData as Partial<InsertQuote>);
+      const quote = await storage.updateQuote(p(req.params.id), companyId, updateData as Partial<InsertQuote>);
       res.json(quote);
     } catch (err: any) {
       console.error("Error updating quote:", err);
@@ -12664,9 +12671,9 @@ Rules:
   app.delete("/api/quotes/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const existing = await storage.getQuote(req.params.id, companyId);
+      const existing = await storage.getQuote(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Quote not found" });
-      await storage.deleteQuote(req.params.id, companyId);
+      await storage.deleteQuote(p(req.params.id), companyId);
       res.json({ success: true });
     } catch (err: any) {
       console.error("Error deleting quote:", err);
@@ -12677,7 +12684,7 @@ Rules:
   app.post("/api/quotes/:id/accept", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const quote = await storage.getQuote(req.params.id, companyId);
+      const quote = await storage.getQuote(p(req.params.id), companyId);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
 
       const tier = req.body.tier as string;
@@ -12696,7 +12703,7 @@ Rules:
       };
       const selectedPrice = priceMap[tier] || "0";
 
-      const updatedQuote = await storage.updateQuote(req.params.id, companyId, {
+      const updatedQuote = await storage.updateQuote(p(req.params.id), companyId, {
         status: "accepted",
         selectedTier: tier as "essential" | "premium" | "deluxe",
         selectedPrice,
@@ -12743,7 +12750,7 @@ Rules:
   app.post("/api/quotes/:id/send", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const quote = await storage.getQuote(req.params.id, companyId);
+      const quote = await storage.getQuote(p(req.params.id), companyId);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
       if (quote.status !== "draft" && quote.status !== "sent") {
         return res.status(400).json({ error: "Only draft or sent quotes can be sent" });
@@ -12798,6 +12805,7 @@ Rules:
             companyId: companyId,
             to: quote.contactEmail,
             subject: `${company.name} — Service ${quote.type === "commercial" ? "Proposal" : "Quote"} #${quote.quoteNumber}`,
+            text: `Please see your ${quote.type === "commercial" ? "proposal" : "quote"} #${quote.quoteNumber} from ${company.name}.`,
             html,
             senderName: company.name,
             replyTo: company.email || undefined,
@@ -12832,7 +12840,7 @@ Rules:
       }
 
       const expiresAt = quote.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      const updatedQuote = await storage.updateQuote(req.params.id, companyId, {
+      const updatedQuote = await storage.updateQuote(p(req.params.id), companyId, {
         status: "sent",
         sentAt: new Date(),
         expiresAt,
@@ -12848,7 +12856,7 @@ Rules:
   app.get("/api/quotes/:id/preview", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const quote = await storage.getQuote(req.params.id, companyId);
+      const quote = await storage.getQuote(p(req.params.id), companyId);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
@@ -12897,7 +12905,7 @@ Rules:
   app.get("/api/quotes/:id/download/:format", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const quote = await storage.getQuote(req.params.id, companyId);
+      const quote = await storage.getQuote(p(req.params.id), companyId);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
@@ -12938,12 +12946,12 @@ Rules:
 
       const safeName = `Quote-${quote.quoteNumber}`.replace(/[^a-zA-Z0-9-_]/g, "_");
 
-      if (req.params.format === "pdf") {
+      if (p(req.params.format) === "pdf") {
         const pdfBuffer = await generateQuotePdf(docData);
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${safeName}.pdf"`);
         res.send(pdfBuffer);
-      } else if (req.params.format === "docx") {
+      } else if (p(req.params.format) === "docx") {
         const docxBuffer = await generateQuoteDocx(docData);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
         res.setHeader("Content-Disposition", `attachment; filename="${safeName}.docx"`);
@@ -13078,7 +13086,7 @@ Rules:
       // Use the exact email the user typed in case the contact has multiple emails stored
       const resetEmailTo = normalizedEmail;
       sendEmail({
-        companyId: company.id,
+        companyId: company?.id || foundContact.companyId,
         to: resetEmailTo,
         subject: `Reset your ${companyName} portal password`,
         senderName: company?.name || undefined,
@@ -13266,7 +13274,7 @@ Rules:
   app.post("/api/portal/invoices/:id/pay", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
-      const invoice = await storage.getInvoice(req.params.id, companyId);
+      const invoice = await storage.getInvoice(p(req.params.id), companyId);
       if (!invoice || invoice.contactId !== contactId) return res.status(404).json({ error: "Invoice not found" });
       if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
       if (invoice.status === "draft") return res.status(400).json({ error: "This invoice has not been finalized yet" });
@@ -13656,8 +13664,8 @@ Rules:
 
       const baseUrl = getBaseUrl(req);
       const Stripe = (await import("stripe")).default;
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-04-30.basil" });
-      const setupOpts: Stripe.RequestOptions = {};
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-04-30.basil" as any });
+      const setupOpts: Record<string, any> = {};
       if (connectAcct) {
         setupOpts.stripeAccount = connectAcct;
       }
@@ -13719,10 +13727,10 @@ Rules:
         await storage.updateContact(contactId, companyId, { stripeCustomerId: resolvedCustId });
       }
       const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
-      const owns = methods.some((m) => m.id === req.params.id);
+      const owns = methods.some((m) => m.id === p(req.params.id));
       if (!owns) return res.status(403).json({ error: "Payment method not found" });
 
-      await detachPaymentMethod(req.params.id, connectAcct);
+      await detachPaymentMethod(p(req.params.id), connectAcct);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
@@ -13788,7 +13796,7 @@ Rules:
   app.post("/api/portal/estimates/:id/approve", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
-      const estimate = await storage.getEstimate(req.params.id, companyId);
+      const estimate = await storage.getEstimate(p(req.params.id), companyId);
       if (!estimate || estimate.contactId !== contactId) return res.status(404).json({ error: "Estimate not found" });
       if (estimate.status !== "pending") return res.status(400).json({ error: "Estimate is no longer pending" });
 
@@ -13820,7 +13828,7 @@ Rules:
   app.post("/api/portal/estimates/:id/decline", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
-      const estimate = await storage.getEstimate(req.params.id, companyId);
+      const estimate = await storage.getEstimate(p(req.params.id), companyId);
       if (!estimate || estimate.contactId !== contactId) return res.status(404).json({ error: "Estimate not found" });
       if (estimate.status !== "pending") return res.status(400).json({ error: "Estimate is no longer pending" });
 
@@ -13840,7 +13848,7 @@ Rules:
 
   app.get("/api/portal/quotes/:id", async (req: Request, res: Response) => {
     try {
-      const quoteId = req.params.id;
+      const quoteId = p(req.params.id);
       const allQuotes = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
       const quoteRow = allQuotes.rows?.[0];
       if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
@@ -13885,7 +13893,7 @@ Rules:
 
   app.post("/api/portal/quotes/:id/accept", async (req: Request, res: Response) => {
     try {
-      const quoteId = req.params.id;
+      const quoteId = p(req.params.id);
       const { tier } = req.body;
       if (!tier || !["essential", "premium", "deluxe"].includes(tier)) {
         return res.status(400).json({ error: "Must select a tier: essential, premium, or deluxe" });
@@ -13916,9 +13924,9 @@ Rules:
         WHERE id = ${quoteId}
       `);
 
-      const contactId = quoteRow.contact_id as number | null;
-      const propertyId = quoteRow.property_id as number | null;
-      const companyId = quoteRow.company_id as number;
+      const contactId = quoteRow.contact_id as string | null;
+      const propertyId = quoteRow.property_id as string | null;
+      const companyId = quoteRow.company_id as string;
       const quoteNumber = quoteRow.quote_number as string | null;
       const frequency = (quoteRow.frequency as string) || "weekly";
 
@@ -13960,7 +13968,7 @@ Rules:
 
   app.post("/api/portal/quotes/:id/decline", async (req: Request, res: Response) => {
     try {
-      const quoteId = req.params.id;
+      const quoteId = p(req.params.id);
       const result = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
       const quoteRow = result.rows?.[0];
       if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
@@ -14108,7 +14116,7 @@ Rules:
   app.get("/api/portal/invoices/:id/pdf", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
-      const invoice = await storage.getInvoice(req.params.id, companyId);
+      const invoice = await storage.getInvoice(p(req.params.id), companyId);
       if (!invoice || invoice.contactId !== contactId) return res.status(404).json({ error: "Invoice not found" });
 
       const contact = await storage.getContactById(contactId);
@@ -14123,7 +14131,7 @@ Rules:
 
       doc.fontSize(20).text(company?.name || "Invoice", { align: "left" });
       doc.moveDown(0.5);
-      doc.fontSize(10).fillColor("#666666").text(`${company?.address || ""} ${company?.city || ""} ${company?.state || ""}`);
+      doc.fontSize(10).fillColor("#666666").text(`${company?.address || ""}`);
       if (company?.phone) doc.text(`Phone: ${company.phone}`);
       if (company?.email) doc.text(`Email: ${company.email}`);
       doc.moveDown(1);
@@ -14345,7 +14353,7 @@ Rules:
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const request = await storage.getServiceChangeRequest(req.params.id, companyId);
+      const request = await storage.getServiceChangeRequest(p(req.params.id), companyId);
       if (!request) return res.status(404).json({ error: "Change request not found" });
       if (request.status !== "pending") return res.status(400).json({ error: "Request is not pending" });
 
@@ -14379,7 +14387,7 @@ Rules:
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const request = await storage.getServiceChangeRequest(req.params.id, companyId);
+      const request = await storage.getServiceChangeRequest(p(req.params.id), companyId);
       if (!request) return res.status(404).json({ error: "Change request not found" });
       if (request.status !== "pending") return res.status(400).json({ error: "Request is not pending" });
 
@@ -14449,11 +14457,11 @@ Rules:
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       if (!contact.email) return res.status(400).json({ error: "Contact must have an email address to enable portal access" });
 
-      await provisionPortalAccess(req.params.id, companyId, getBaseUrl(req));
+      await provisionPortalAccess(p(req.params.id), companyId, getBaseUrl(req));
 
       res.json({ success: true, message: "Portal access enabled. Temporary password has been emailed to the customer." });
     } catch (err: any) {
@@ -14466,10 +14474,10 @@ Rules:
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      await storage.updateContact(req.params.id, companyId, { hasPortalAccess: false });
+      await storage.updateContact(p(req.params.id), companyId, { hasPortalAccess: false });
       res.json({ success: true, message: "Portal access disabled." });
     } catch (err) { handleError(res, err); }
   });
@@ -14478,7 +14486,7 @@ Rules:
     try {
       const { companyId, role, userId } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       if (!contact.hasPortalAccess) return res.status(400).json({ error: "Portal access is not enabled for this contact" });
       const { newPassword } = req.body;
@@ -14492,8 +14500,8 @@ Rules:
           resolve(`${salt}:${key.toString("hex")}`);
         });
       });
-      await storage.updateContact(req.params.id, companyId, { portalPasswordHash });
-      auditLog(companyId, userId, "contact", req.params.id, "update", { action: "portal_password_reset", resetBy: userId });
+      await storage.updateContact(p(req.params.id), companyId, { portalPasswordHash });
+      auditLog(companyId, userId, "contact", p(req.params.id), "update", { action: "portal_password_reset", resetBy: userId });
       res.json({ success: true, message: "Client portal password has been updated." });
     } catch (err) { handleError(res, err); }
   });
@@ -14502,7 +14510,7 @@ Rules:
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       if (!contact.email) return res.status(400).json({ error: "Contact must have an email address to send a portal link" });
       if (!contact.hasPortalAccess) return res.status(400).json({ error: "Portal access is not enabled for this contact. Enable it first." });
@@ -14517,9 +14525,9 @@ Rules:
       });
 
       try {
-        await storage.updateContact(req.params.id, companyId, { portalPasswordHash });
+        await storage.updateContact(p(req.params.id), companyId, { portalPasswordHash });
       } catch (dbErr: any) {
-        console.error("[portal-access/resend] Failed to update contact:", { contactId: req.params.id, companyId, message: dbErr?.message, stack: dbErr?.stack, name: dbErr?.name });
+        console.error("[portal-access/resend] Failed to update contact:", { contactId: p(req.params.id), companyId, message: dbErr?.message, stack: dbErr?.stack, name: dbErr?.name });
         throw new Error(`Failed to save new portal credentials: ${dbErr?.message || String(dbErr)}`);
       }
 
@@ -14566,10 +14574,10 @@ Rules:
     try {
       const { companyId, role, userId } = await getCompanyContext(req);
       requireRole(role);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      const propertiesList = await storage.getProperties(companyId, req.params.id);
+      const propertiesList = await storage.getProperties(companyId, p(req.params.id));
       if (!propertiesList || propertiesList.length === 0) {
         return res.status(400).json({ error: "This contact has no properties. Add a property before sending an onboarding form." });
       }
@@ -14619,7 +14627,7 @@ Rules:
 
       storage.createActivityLog({
         companyId,
-        contactId: req.params.id,
+        contactId: p(req.params.id),
         userId,
         action: "email_sent",
         details: {
@@ -14638,10 +14646,10 @@ Rules:
     try {
       const { companyId, role, userId } = await getCompanyContext(req);
       requireRole(role);
-      const contact = await storage.getContact(req.params.id, companyId);
+      const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      const propertiesList = await storage.getProperties(companyId, req.params.id);
+      const propertiesList = await storage.getProperties(companyId, p(req.params.id));
       if (!propertiesList || propertiesList.length === 0) {
         return res.status(400).json({ error: "This contact has no properties." });
       }
@@ -14655,7 +14663,7 @@ Rules:
 
       storage.createActivityLog({
         companyId,
-        contactId: req.params.id,
+        contactId: p(req.params.id),
         userId,
         action: "email_sent",
         details: { type: "onboarding_link_regenerated", url: onboardingUrl, propertyId: property.id },
@@ -14703,7 +14711,7 @@ Rules:
 
   app.get("/api/public/onboarding/:token", async (req: Request, res: Response) => {
     try {
-      const { token } = req.params;
+      const { token: _token } = req.params; const token = p(_token);
       const rows = await db.execute(sql`
         SELECT p.id, p.contact_id, p.company_id, p.street_address, p.city, p.state, p.zip_code,
                p.number_of_dogs, p.gate_code, p.special_instructions,
@@ -14718,7 +14726,7 @@ Rules:
         LIMIT 1
       `);
       if (!rows.rows.length) return res.status(404).json({ error: "Onboarding link not found or expired" });
-      const row = rows.rows[0] as OnboardingGetRow;
+      const row = rows.rows[0] as unknown as OnboardingGetRow;
       res.json({
         contact: {
           firstName: row.first_name,
@@ -14752,7 +14760,7 @@ Rules:
 
   app.post("/api/public/onboarding/:token", async (req: Request, res: Response) => {
     try {
-      const { token } = req.params;
+      const { token: _token } = req.params; const token = p(_token);
       const rows = await db.execute(sql`
         SELECT p.id, p.company_id, p.contact_id, p.onboarding_completed_at
         FROM properties p
@@ -14805,7 +14813,7 @@ Rules:
             if (bestContactTime === "morning") updated.preferredTiming = "morning_of";
             else if (bestContactTime === "afternoon" || bestContactTime === "evening") updated.preferredTiming = "24h_before";
           }
-          await storage.updateContact(row.contact_id, row.company_id, { reminderPreferences: updated });
+          await storage.updateContact(row.contact_id, row.company_id, { reminderPreferences: updated as any });
         }
       }
 
@@ -14962,7 +14970,7 @@ Rules:
   app.get("/invoice/:invoiceId/render", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const invoice = await storage.getInvoice(req.params.invoiceId, companyId);
+      const invoice = await storage.getInvoice(p(req.params.invoiceId), companyId);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
 
       const lineItems = await storage.getInvoiceLineItems(invoice.id);
@@ -14989,19 +14997,13 @@ Rules:
         city: contact.city || "",
         state: contact.state || "",
         zip: contact.zipCode || "",
-      } : (contact.address ? {
-        line1: contact.address,
-        line2: "",
-        city: "",
-        state: "",
-        zip: "",
-      } : null);
+      } : null;
       const serviceAddrObj = serviceAddr ? {
-        line1: serviceAddr.streetAddress || serviceAddr.street || "",
+        line1: serviceAddr.streetAddress || "",
         line2: "",
         city: serviceAddr.city || "",
         state: serviceAddr.state || "",
-        zip: serviceAddr.zipCode || serviceAddr.zip || "",
+        zip: serviceAddr.zipCode || "",
       } : null;
       const billingLine = billingAddr ? `${billingAddr.line1} ${billingAddr.city} ${billingAddr.state} ${billingAddr.zip}`.trim() : "";
       const serviceLine = serviceAddrObj ? `${serviceAddrObj.line1} ${serviceAddrObj.city} ${serviceAddrObj.state} ${serviceAddrObj.zip}`.trim() : "";
@@ -15167,7 +15169,7 @@ Rules:
   app.patch("/api/notifications/:id/read", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const notif = await storage.markNotificationRead(req.params.id, companyId);
+      const notif = await storage.markNotificationRead(p(req.params.id), companyId);
       if (!notif) return res.status(404).json({ error: "Notification not found" });
       res.json(notif);
     } catch (err) { handleError(res, err); }
@@ -15202,7 +15204,7 @@ Rules:
   app.patch("/api/system-messages/:id/read", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const msg = await storage.markSystemMessageRead(req.params.id, companyId);
+      const msg = await storage.markSystemMessageRead(p(req.params.id), companyId);
       if (!msg) return res.status(404).json({ error: "System message not found" });
       res.json(msg);
     } catch (err) { handleError(res, err); }
@@ -15211,7 +15213,7 @@ Rules:
   app.patch("/api/system-messages/:id/dismiss", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const msg = await storage.dismissSystemMessage(req.params.id, companyId);
+      const msg = await storage.dismissSystemMessage(p(req.params.id), companyId);
       if (!msg) return res.status(404).json({ error: "System message not found" });
       res.json(msg);
     } catch (err) { handleError(res, err); }
@@ -15487,7 +15489,7 @@ Rules:
       const { companyId } = req.body;
       if (!companyId) return res.status(400).json({ error: "companyId is required" });
       const adminUserId = (req as any).adminUser.userId;
-      const exception = await storage.resolveMessageException(req.params.id, adminUserId, companyId, true);
+      const exception = await storage.resolveMessageException(p(req.params.id), adminUserId, companyId, true);
       if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
 
       if (exception.body && exception.fromAddress) {
@@ -15525,7 +15527,7 @@ Rules:
             }
           }
         } catch (msgErr) {
-          console.error(`[Admin MessageException] Resolved exception ${req.params.id} but message delivery failed:`, msgErr);
+          console.error(`[Admin MessageException] Resolved exception ${p(req.params.id)} but message delivery failed:`, msgErr);
         }
       }
       res.json(exception);
@@ -15535,7 +15537,7 @@ Rules:
   app.post("/api/admin/message-exceptions/:id/dismiss", isAdmin, async (req: Request, res: Response) => {
     try {
       const adminUserId = (req as any).adminUser.userId;
-      const exception = await storage.dismissMessageException(req.params.id, adminUserId);
+      const exception = await storage.dismissMessageException(p(req.params.id), adminUserId);
       if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
       res.json(exception);
     } catch (err) { handleError(res, err); }
@@ -15612,7 +15614,7 @@ Rules:
 
   app.get("/api/admin/companies/:id", isAdmin, async (req: Request, res: Response) => {
     try {
-      const company = await storage.getCompany(req.params.id);
+      const company = await storage.getCompany(p(req.params.id));
       if (!company) return res.status(404).json({ error: "Company not found" });
       const companyUserRecords = await storage.getCompanyUsers(company.id);
       const usersWithDetails = await Promise.all(
@@ -15821,15 +15823,15 @@ Rules:
       if (subscriptionStatus !== undefined) opts.subscriptionStatus = subscriptionStatus;
       if (trialEndsAt !== undefined) opts.trialEndsAt = trialEndsAt ? new Date(trialEndsAt) : null;
       if (customMaxUsers !== undefined) opts.customMaxUsers = customMaxUsers === null ? null : parseInt(customMaxUsers);
-      const updated = await storage.updateCompanySubscription(req.params.id, tier, opts);
-      await logAdminAudit(req, "change_subscription", "company", req.params.id, { tier, subscriptionStatus, trialEndsAt, customMaxUsers });
+      const updated = await storage.updateCompanySubscription(p(req.params.id), tier, opts);
+      await logAdminAudit(req, "change_subscription", "company", p(req.params.id), { tier, subscriptionStatus, trialEndsAt, customMaxUsers });
       res.json(updated);
     } catch (err) { handleError(res, err); }
   });
 
   app.post("/api/admin/companies/:id/cancel", isAdmin, async (req: Request, res: Response) => {
     try {
-      const company = await storage.getCompany(req.params.id);
+      const company = await storage.getCompany(p(req.params.id));
       if (!company) return res.status(404).json({ error: "Company not found" });
       if (company.subscriptionStatus === "cancelled") {
         return res.status(400).json({ error: "Account is already cancelled" });
@@ -15857,25 +15859,25 @@ Rules:
         // Mark as pending cancellation in DB — status stays active so tenant keeps access
         await db.update(companies)
           .set({ cancelAtPeriodEnd: true, cancelAt: scheduledCancelAt } as any)
-          .where(eq(companies.id, req.params.id));
-        await logAdminAudit(req, "cancel_account_scheduled", "company", req.params.id, { reason: req.body.reason || null, cancelAt: scheduledCancelAt });
-        console.log(`[Admin] Account "${company.name}" (${req.params.id}) scheduled for cancellation at period end by ${(req as any).adminUser?.email}`);
+          .where(eq(companies.id, p(req.params.id)));
+        await logAdminAudit(req, "cancel_account_scheduled", "company", p(req.params.id), { reason: req.body.reason || null, cancelAt: scheduledCancelAt });
+        console.log(`[Admin] Account "${company.name}" (${p(req.params.id)}) scheduled for cancellation at period end by ${(req as any).adminUser?.email}`);
         return res.json({ ok: true, companyName: company.name, scheduledCancelAt });
       }
       // No Stripe subscription — immediately cancel (manual billing)
-      await storage.updateCompanySubscription(req.params.id, company.subscriptionTier || "free_trial", {
+      await storage.updateCompanySubscription(p(req.params.id), company.subscriptionTier || "free_trial", {
         subscriptionStatus: "cancelled",
       });
-      await db.update(companies).set({ canceledAt: new Date() }).where(eq(companies.id, req.params.id));
-      await logAdminAudit(req, "cancel_account", "company", req.params.id, { reason: req.body.reason || null });
-      console.log(`[Admin] Account "${company.name}" (${req.params.id}) cancelled immediately (no Stripe sub) by ${(req as any).adminUser?.email}`);
+      await db.update(companies).set({ canceledAt: new Date() }).where(eq(companies.id, p(req.params.id)));
+      await logAdminAudit(req, "cancel_account", "company", p(req.params.id), { reason: req.body.reason || null });
+      console.log(`[Admin] Account "${company.name}" (${p(req.params.id)}) cancelled immediately (no Stripe sub) by ${(req as any).adminUser?.email}`);
       res.json({ ok: true, companyName: company.name });
     } catch (err) { handleError(res, err); }
   });
 
   app.post("/api/admin/companies/:id/reactivate", isAdmin, async (req: Request, res: Response) => {
     try {
-      const company = await storage.getCompany(req.params.id);
+      const company = await storage.getCompany(p(req.params.id));
       if (!company) return res.status(404).json({ error: "Company not found" });
       if (!(company as any).cancelAtPeriodEnd) {
         return res.status(400).json({ error: "Account does not have a scheduled cancellation to undo" });
@@ -15899,24 +15901,24 @@ Rules:
         }
         await db.update(companies)
           .set({ cancelAtPeriodEnd: false, cancelAt: null } as any)
-          .where(eq(companies.id, req.params.id));
+          .where(eq(companies.id, p(req.params.id)));
       } else {
-        await storage.updateCompanySubscription(req.params.id, company.subscriptionTier || "free_trial", {
+        await storage.updateCompanySubscription(p(req.params.id), company.subscriptionTier || "free_trial", {
           subscriptionStatus: "active",
         });
         await db.update(companies)
           .set({ cancelAtPeriodEnd: false, cancelAt: null, canceledAt: null } as any)
-          .where(eq(companies.id, req.params.id));
+          .where(eq(companies.id, p(req.params.id)));
       }
-      await logAdminAudit(req, "reactivate_account", "company", req.params.id, {});
-      console.log(`[Admin] Account "${company.name}" (${req.params.id}) reactivated by ${(req as any).adminUser?.email}`);
+      await logAdminAudit(req, "reactivate_account", "company", p(req.params.id), {});
+      console.log(`[Admin] Account "${company.name}" (${p(req.params.id)}) reactivated by ${(req as any).adminUser?.email}`);
       return res.json({ ok: true, companyName: company.name });
     } catch (err) { handleError(res, err); }
   });
 
   app.post("/api/admin/companies/:id/regenerate-visits", isAdmin, async (req: Request, res: Response) => {
     try {
-      const company = await storage.getCompany(req.params.id);
+      const company = await storage.getCompany(p(req.params.id));
       if (!company) return res.status(404).json({ error: "Company not found" });
       const { generateVisitsForCompany } = await import("./jobs/auto-visits");
       const { getCompanyToday } = await import("./utils/company-date");
@@ -15927,19 +15929,19 @@ Rules:
       const endDate = new Date(companyToday + "T00:00:00Z");
       endDate.setUTCDate(endDate.getUTCDate() + 182);
       const created = await generateVisitsForCompany(
-        req.params.id,
+        p(req.params.id),
         startDate.toISOString().split("T")[0],
         endDate.toISOString().split("T")[0],
       );
-      await logAdminAudit(req, "regenerate_visits", "company", req.params.id, { created });
-      console.log(`[Admin] Regenerated ${created} visits for "${company.name}" (${req.params.id})`);
+      await logAdminAudit(req, "regenerate_visits", "company", p(req.params.id), { created });
+      console.log(`[Admin] Regenerated ${created} visits for "${company.name}" (${p(req.params.id)})`);
       return res.json({ ok: true, companyName: company.name, visitsCreated: created });
     } catch (err) { handleError(res, err); }
   });
 
   app.post("/api/admin/companies/:id/users/:userId/reset-password", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { id: companyId, userId } = req.params;
+      const companyId = p(req.params.id); const userId = p(req.params.userId);
       const { newPassword } = req.body;
       const companyUsers = await storage.getCompanyUsers(companyId);
       const cu = companyUsers.find((u) => u.userId === userId);
@@ -15969,7 +15971,7 @@ Rules:
 
   app.post("/api/admin/companies/:id/users/:userId/send-reset-email", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { id: companyId, userId } = req.params;
+      const companyId = p(req.params.id); const userId = p(req.params.userId);
       const companyUsers = await storage.getCompanyUsers(companyId);
       const cu = companyUsers.find((u) => u.userId === userId);
       if (!cu) return res.status(404).json({ error: "User not found in this company" });
@@ -16017,7 +16019,7 @@ Rules:
 
   app.post("/api/admin/companies/:id/users/:userId/send-credentials", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { id: companyId, userId } = req.params;
+      const companyId = p(req.params.id); const userId = p(req.params.userId);
       const companyUsers = await storage.getCompanyUsers(companyId);
       const cu = companyUsers.find((u) => u.userId === userId);
       if (!cu) return res.status(404).json({ error: "User not found in this company" });
@@ -16081,7 +16083,7 @@ Rules:
 
   app.patch("/api/admin/companies/:id", isAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = req.params.id;
+      const companyId = p(req.params.id);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -16115,7 +16117,7 @@ Rules:
 
   app.patch("/api/admin/companies/:id/users/:userId", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { id: companyId, userId } = req.params;
+      const companyId = p(req.params.id); const userId = p(req.params.userId);
       const companyUsers = await storage.getCompanyUsers(companyId);
       const cu = companyUsers.find((u) => u.userId === userId);
       if (!cu) return res.status(404).json({ error: "User not found in this company" });
@@ -16148,9 +16150,9 @@ Rules:
 
       const oldData: Record<string, any> = {};
       const newData: Record<string, any> = {};
-      if (firstName !== undefined) { oldData.firstName = cu.firstName; newData.firstName = firstName?.trim() || null; }
-      if (lastName !== undefined) { oldData.lastName = cu.lastName; newData.lastName = lastName?.trim() || null; }
-      if (email !== undefined) { oldData.email = cu.email; newData.email = email.toLowerCase().trim(); }
+      if (firstName !== undefined) { oldData.firstName = (cu as any).firstName; newData.firstName = firstName?.trim() || null; }
+      if (lastName !== undefined) { oldData.lastName = (cu as any).lastName; newData.lastName = lastName?.trim() || null; }
+      if (email !== undefined) { oldData.email = (cu as any).email; newData.email = email.toLowerCase().trim(); }
       if (role !== undefined) { oldData.role = cu.role; newData.role = role; }
       auditLog(companyId, null, "user", userId, "update", { old: oldData, new: newData, actor: "platform_admin", adminEmail: (req as any).adminUser?.email }, req.ip || undefined);
 
@@ -16161,7 +16163,7 @@ Rules:
 
   app.delete("/api/admin/companies/:id", isAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = req.params.id;
+      const companyId = p(req.params.id);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
       const companyUsersList = await storage.getCompanyUsers(companyId);
@@ -16186,7 +16188,7 @@ Rules:
 
   app.get("/api/admin/companies/:id/notes", isAdmin, async (req: Request, res: Response) => {
     try {
-      const notes = await storage.getAdminNotes(req.params.id);
+      const notes = await storage.getAdminNotes(p(req.params.id));
       res.json(notes);
     } catch (err) { handleError(res, err); }
   });
@@ -16196,7 +16198,7 @@ Rules:
       const { content } = req.body;
       if (!content) return res.status(400).json({ error: "Content required" });
       const note = await storage.createAdminNote({
-        companyId: req.params.id,
+        companyId: p(req.params.id),
         content,
         createdBy: (req as any).adminUser.email,
       });
@@ -16206,14 +16208,14 @@ Rules:
 
   app.delete("/api/admin/notes/:noteId", isAdmin, async (req: Request, res: Response) => {
     try {
-      await storage.deleteAdminNote(req.params.noteId);
+      await storage.deleteAdminNote(p(req.params.noteId));
       res.json({ ok: true });
     } catch (err) { handleError(res, err); }
   });
 
   app.get("/api/admin/companies/:id/usage", isAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = req.params.id;
+      const companyId = p(req.params.id);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -16236,7 +16238,7 @@ Rules:
 
       const apiCallResult = await db.select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
         .from(usageEvents)
-        .where(and(eq(usageEvents.companyId, companyId), eq(usageEvents.eventType, "api_call"), gte(usageEvents.recordedAt, periodStart)));
+        .where(and(eq(usageEvents.companyId, companyId), eq(usageEvents.eventType, "api_call" as any), gte(usageEvents.recordedAt, periodStart)));
 
       const msgCount = await db.select({ total: sql<number>`count(*)` })
         .from(messagesTable)
@@ -16265,7 +16267,7 @@ Rules:
 
   app.get("/api/admin/companies/:id/voice-calls", isAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = req.params.id;
+      const companyId = p(req.params.id);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
@@ -16276,7 +16278,7 @@ Rules:
 
   app.get("/api/admin/companies/:id/audit-logs", isAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = req.params.id;
+      const companyId = p(req.params.id);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -16297,11 +16299,11 @@ Rules:
         .limit(limit)
         .offset(offset);
 
-      const userIds = [...new Set(logs.filter(l => l.userId).map(l => l.userId!))];
+      const userIds = Array.from(new Set(logs.filter(l => l.userId).map(l => l.userId!)));
       const userMap = new Map<string, string>();
       for (const uid of userIds) {
         const user = await getUserById(uid);
-        if (user) userMap.set(uid, user.email);
+        if (user) userMap.set(uid, user.email || "");
       }
 
       const enrichedLogs = logs.map(l => ({
@@ -16315,7 +16317,7 @@ Rules:
 
   app.get("/api/admin/companies/:id/export", isAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = req.params.id;
+      const companyId = p(req.params.id);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -16418,8 +16420,8 @@ Rules:
 
   app.delete("/api/admin/security/sessions/:sessionId", isAdmin, async (req: Request, res: Response) => {
     try {
-      await db.delete(adminSessions).where(eq(adminSessions.id, req.params.sessionId));
-      await logAdminAudit(req, "revoke_session", "admin_session", req.params.sessionId);
+      await db.delete(adminSessions).where(eq(adminSessions.id, p(req.params.sessionId)));
+      await logAdminAudit(req, "revoke_session", "admin_session", p(req.params.sessionId));
       res.json({ ok: true });
     } catch (err) { handleError(res, err); }
   });
@@ -16486,7 +16488,7 @@ Rules:
       if (maxUsers !== undefined) updates.maxUsers = parseInt(maxUsers);
       if (price !== undefined) updates.price = parseFloat(price).toFixed(2);
       if (isActive !== undefined) updates.isActive = isActive;
-      const [updated] = await db.update(subscriptionTiers).set(updates).where(eq(subscriptionTiers.id, req.params.id)).returning();
+      const [updated] = await db.update(subscriptionTiers).set(updates).where(eq(subscriptionTiers.id, p(req.params.id))).returning();
       if (!updated) return res.status(404).json({ error: "Tier not found" });
       await logAdminAudit(req, "update_subscription_tier", "subscription_tier", updated.tierKey, { name: updated.name, price: updated.price, maxUsers: updated.maxUsers });
       res.json(updated);
@@ -16527,7 +16529,7 @@ Rules:
       const fileHash = hashFileContent(csvText);
       const importRun = await storage.createImportRun({
         companyId,
-        type: `${result.platform}_contacts`,
+        type: `${result.platform}_contacts` as any,
         status: "processing",
         fileName: `${result.platform}-contacts.csv`,
         fileHash,
@@ -16863,7 +16865,7 @@ Rules:
   app.get("/api/migrations/:id/invoices-report", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const importRun = await storage.getImportRun(req.params.id, companyId);
+      const importRun = await storage.getImportRun(p(req.params.id), companyId);
       if (!importRun) return res.status(404).json({ error: "Import run not found" });
       res.json(importRun);
     } catch (err) { handleError(res, err); }
@@ -16872,9 +16874,9 @@ Rules:
   app.get("/api/invoices/:id/payments", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const invoice = await storage.getInvoice(req.params.id, companyId);
+      const invoice = await storage.getInvoice(p(req.params.id), companyId);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-      const payments = await storage.getInvoicePayments(req.params.id);
+      const payments = await storage.getInvoicePayments(p(req.params.id));
       res.json(payments);
     } catch (err) { handleError(res, err); }
   });
@@ -16962,7 +16964,7 @@ Respond with exactly one category from the list above and nothing else.`;
     try {
       const { companyId } = await getCompanyContext(req);
       const docs = await storage.getDocumentImports(companyId);
-      const contactIds = [...new Set(docs.filter(d => d.contactId).map(d => d.contactId!))];
+      const contactIds = Array.from(new Set(docs.filter(d => d.contactId).map(d => d.contactId!)));
       const contactMap: Record<string, { firstName: string; lastName: string; email: string | null }> = {};
       if (contactIds.length > 0) {
         const contactRecords = await storage.getContacts(companyId);
@@ -17178,7 +17180,7 @@ Respond with exactly one category from the list above and nothing else.`;
   app.get("/api/imports/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const run = await storage.getImportRun(req.params.id, companyId);
+      const run = await storage.getImportRun(p(req.params.id), companyId);
       if (!run) return res.status(404).json({ error: "Import run not found" });
       res.json(run);
     } catch (err) { handleError(res, err); }
@@ -17626,7 +17628,7 @@ Respond with exactly one category from the list above and nothing else.`;
 
   app.get("/api/public/company/:slug", async (req: Request, res: Response) => {
     try {
-      const { slug } = req.params;
+      const { slug: _slug } = req.params; const slug = p(_slug);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -17664,7 +17666,7 @@ Respond with exactly one category from the list above and nothing else.`;
 
   app.get("/api/public/check-zip/:slug/:zip", async (req: Request, res: Response) => {
     try {
-      const { slug, zip } = req.params;
+      const { slug: _slug2, zip: _zip } = req.params; const slug = p(_slug2); const zip = p(_zip);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -17715,7 +17717,7 @@ Respond with exactly one category from the list above and nothing else.`;
 
   app.get("/api/public/invoices/:id", async (req: Request, res: Response) => {
     try {
-      const invoice = await storage.getInvoiceById(req.params.id);
+      const invoice = await storage.getInvoiceById(p(req.params.id));
       if (!invoice || invoice.status === "draft") return res.status(404).json({ error: "Invoice not found" });
       const company = await storage.getCompany(invoice.companyId);
       const contact = invoice.contactId ? await storage.getContactById(invoice.contactId) : null;
@@ -17735,7 +17737,7 @@ Respond with exactly one category from the list above and nothing else.`;
 
   app.post("/api/public/invoices/:id/pay", async (req: Request, res: Response) => {
     try {
-      const invoice = await storage.getInvoiceById(req.params.id);
+      const invoice = await storage.getInvoiceById(p(req.params.id));
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       if (invoice.status === "draft") return res.status(400).json({ error: "Invoice not yet sent" });
       if (invoice.status === "voided") return res.status(400).json({ error: "Invoice has been voided" });
@@ -17864,7 +17866,7 @@ Respond with exactly one category from the list above and nothing else.`;
     return { priceCents, callForQuote: false };
   }
 
-  async function sendAutoQuoteSms(company: typeof companies.$inferSelect, contact: { firstName: string; phone: string | null; numberOfDogs: number | null; serviceFrequency: string | null }, yardSize?: string): Promise<boolean> {
+  async function sendAutoQuoteSms(company: typeof companies.$inferSelect, contact: { id: string; firstName: string; phone: string | null; numberOfDogs: number | null; serviceFrequency: string | null }, yardSize?: string): Promise<boolean> {
     if (!contact.phone) return false;
     const smsOk = await isSmsConfiguredForCompany(company.id);
     if (!smsOk) return false;
@@ -17967,7 +17969,7 @@ Respond with exactly one category from the list above and nothing else.`;
       let smsSent = false;
       if (phone && company) {
         try {
-          smsSent = await sendAutoQuoteSms(company, { firstName, phone, numberOfDogs, serviceFrequency }, yardSize);
+          smsSent = await sendAutoQuoteSms(company, { id: contact.id, firstName, phone, numberOfDogs, serviceFrequency }, yardSize);
         } catch (err) {
           console.error("[webhook-lead] Auto-quote SMS error:", err);
         }
@@ -18192,7 +18194,7 @@ Respond with exactly one category from the list above and nothing else.`;
         quoteTrackRateLimit.set(clientIp, { count: 1, resetAt: now + 60 * 60 * 1000 });
       }
 
-      const { slug } = req.params;
+      const { slug: _slug } = req.params; const slug = p(_slug);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -18249,7 +18251,7 @@ Respond with exactly one category from the list above and nothing else.`;
         publicLeadRateLimit.set(clientIp, { count: 1, resetAt: now + 60 * 60 * 1000 });
       }
 
-      const { slug } = req.params;
+      const { slug: _slug } = req.params; const slug = p(_slug);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -18334,7 +18336,7 @@ Respond with exactly one category from the list above and nothing else.`;
         const pricingInputs: PriceCalculatorInputs = {
           yardSizeAcres: yardSizeMap[yardSize] || 0.1,
           dogCount: numberOfDogs,
-          serviceFrequency,
+          serviceFrequency: serviceFrequency as any,
           yardDifficulty: "flat",
           distanceFromNearestStopMiles: 0.5,
         };
@@ -18542,7 +18544,7 @@ Respond with exactly one category from the list above and nothing else.`;
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const { syncContactToQbo } = await import("./services/quickbooks");
-      const result = await syncContactToQbo(companyId, req.params.contactId);
+      const result = await syncContactToQbo(companyId, p(req.params.contactId));
       return res.json(result);
     } catch (err) { handleError(res, err); }
   });
@@ -18552,7 +18554,7 @@ Respond with exactly one category from the list above and nothing else.`;
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const { syncInvoiceToQbo } = await import("./services/quickbooks");
-      const result = await syncInvoiceToQbo(companyId, req.params.invoiceId);
+      const result = await syncInvoiceToQbo(companyId, p(req.params.invoiceId));
       return res.json(result);
     } catch (err) { handleError(res, err); }
   });
@@ -18561,7 +18563,7 @@ Respond with exactly one category from the list above and nothing else.`;
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const logId = req.params.logId;
+      const logId = p(req.params.logId);
       const [logEntry] = await db.select().from(qboSyncLogs).where(and(eq(qboSyncLogs.id, logId), eq(qboSyncLogs.companyId, companyId)));
       if (!logEntry) return res.status(404).json({ error: "Sync log not found" });
       const { syncContactToQbo, syncInvoiceToQbo, syncPaymentToQbo } = await import("./services/quickbooks");
@@ -19223,7 +19225,7 @@ Respond with exactly one category from the list above and nothing else.`;
 
   app.get("/api/admin/error-reports/:id", isAdmin, async (req: Request, res: Response) => {
     try {
-      const report = await storage.getErrorReport(req.params.id);
+      const report = await storage.getErrorReport(p(req.params.id));
       if (!report) return res.status(404).json({ error: "Not found" });
       const fixTask = await storage.getErrorFixTask(report.id);
       res.json({ ...report, fixTask: fixTask || null });
@@ -19237,9 +19239,9 @@ Respond with exactly one category from the list above and nothing else.`;
       const { status } = req.body;
       const validStatuses = ["open", "acknowledged", "resolved"];
       if (!status || !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status" });
-      const report = await storage.updateErrorReport(req.params.id, { status });
+      const report = await storage.updateErrorReport(p(req.params.id), { status });
       if (status === "resolved") {
-        const fixTask = await storage.getErrorFixTask(req.params.id);
+        const fixTask = await storage.getErrorFixTask(p(req.params.id));
         if (fixTask && fixTask.status === "open") {
           await storage.updateErrorFixTask(fixTask.id, { status: "done" });
         }
@@ -19255,7 +19257,7 @@ Respond with exactly one category from the list above and nothing else.`;
       const { status } = req.body;
       const validStatuses = ["open", "done"];
       if (!status || !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status" });
-      const report = await storage.getErrorReport(req.params.id);
+      const report = await storage.getErrorReport(p(req.params.id));
       if (!report) return res.status(404).json({ error: "Not found" });
       const fixTask = await storage.getErrorFixTask(report.id);
       if (!fixTask) return res.status(404).json({ error: "Fix task not found" });
@@ -19268,7 +19270,7 @@ Respond with exactly one category from the list above and nothing else.`;
 
   app.post("/api/admin/error-reports/:id/fix-task", isAdmin, async (req: Request, res: Response) => {
     try {
-      const report = await storage.getErrorReport(req.params.id);
+      const report = await storage.getErrorReport(p(req.params.id));
       if (!report) return res.status(404).json({ error: "Not found" });
       const existing = await storage.getErrorFixTask(report.id);
       if (existing) return res.status(409).json({ error: "Fix task already exists", fixTask: existing });

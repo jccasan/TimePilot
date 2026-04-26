@@ -410,7 +410,7 @@ function JobForm({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Repeats</Label>
-              <Select value={frequency} onValueChange={setFrequency}>
+              <Select value={frequency} onValueChange={setFrequency as (v: string) => void}>
                 <SelectTrigger data-testid="select-job-frequency">
                   <SelectValue />
                 </SelectTrigger>
@@ -474,7 +474,7 @@ function JobForm({
                     className="w-20"
                     data-testid="input-ends-after-count"
                   />
-                  <Select value={endsAfterUnit} onValueChange={setEndsAfterUnit}>
+                  <Select value={endsAfterUnit} onValueChange={setEndsAfterUnit as (v: string) => void}>
                     <SelectTrigger className="w-32" data-testid="select-ends-after-unit">
                       <SelectValue />
                     </SelectTrigger>
@@ -933,7 +933,7 @@ export default function Jobs() {
                           size="sm"
                           variant="outline"
                           className="text-destructive"
-                          onClick={(e) => { e.stopPropagation(); setDeleteId(job.servicePlanId || job.id); }}
+                          onClick={(e) => { e.stopPropagation(); setDeleteId(job.id); }}
                           data-testid={`button-delete-job-${job.id}`}
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
@@ -982,7 +982,7 @@ export default function Jobs() {
           </DialogHeader>
           {editJob && contacts && properties && team && (
             <JobForm
-              onSubmit={data => updateMutation.mutate({ id: ('servicePlanId' in editJob && editJob.servicePlanId) ? editJob.servicePlanId : editJob.id, data })}
+              onSubmit={data => updateMutation.mutate({ id: editJob.id, data })}
               isPending={updateMutation.isPending}
               contacts={contacts}
               properties={properties}

@@ -299,3 +299,5 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress, compact }
     </div>
   );
 }
+
+export default ServiceZoneMap;

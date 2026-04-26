@@ -360,7 +360,7 @@ export async function runCompetitorAnalysis(
 
   const zipEntries: CompetitorAnalysisEntry[] = [];
 
-  for (const zip of allZips) {
+  for (const zip of Array.from(allZips)) {
     const myProps = propertyPrices.filter(p => p.zipCode === zip);
     const myWeeklyPrices = myProps.map(p => normalizeToWeekly(p.priceCents, p.frequency));
     const myAvg = myWeeklyPrices.length > 0

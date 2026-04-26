@@ -2183,7 +2183,7 @@ export default function PortalClient() {
                             <p className="text-sm font-medium">{label}</p>
                             <p className="text-xs text-muted-foreground">{desc}</p>
                           </div>
-                          <Switch checked={notifPrefs[key] ?? true} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, [key]: v }))} data-testid={`switch-notif-${key}`} />
+                          <Switch checked={(notifPrefs[key] as boolean) ?? true} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, [key]: v }))} data-testid={`switch-notif-${key}`} />
                         </div>
                       ))}
                     </div>
@@ -2207,7 +2207,7 @@ export default function PortalClient() {
                         <select
                           className="border rounded px-2 py-1 text-sm bg-background"
                           value={notifPrefs.preferredChannel || ""}
-                          onChange={(e) => setNotifPrefs((p) => ({ ...p, preferredChannel: e.target.value || undefined }))}
+                          onChange={(e) => setNotifPrefs((p) => ({ ...p, preferredChannel: e.target.value || "" }))}
                           data-testid="select-preferred-channel"
                         >
                           <option value="">Use default</option>
@@ -2224,7 +2224,7 @@ export default function PortalClient() {
                         <select
                           className="border rounded px-2 py-1 text-sm bg-background"
                           value={notifPrefs.preferredTiming || ""}
-                          onChange={(e) => setNotifPrefs((p) => ({ ...p, preferredTiming: e.target.value || undefined }))}
+                          onChange={(e) => setNotifPrefs((p) => ({ ...p, preferredTiming: e.target.value || "" }))}
                           data-testid="select-preferred-timing"
                         >
                           <option value="">Use default</option>

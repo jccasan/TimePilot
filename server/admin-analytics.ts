@@ -889,7 +889,7 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
 
   app.patch("/api/admin/companies/:companyId/messaging-config", isAdmin as any, async (req: Request, res: Response) => {
     try {
-      const { companyId } = req.params;
+      const companyId = String(req.params.companyId);
       const { messageRetentionDays } = req.body;
 
       const company = await storage.getCompany(companyId);

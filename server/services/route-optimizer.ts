@@ -275,7 +275,7 @@ export async function fetchMapboxDirectionsWithLegs(
       for (let i = 0; i < route.legs.length; i++) {
         legs.push({
           fromId: stopIds[i],
-          toId: stopIds[i + 1] || stopIds[i],
+          toId: (stopIds[i + 1] ?? stopIds[i])!,
           distance: route.legs[i].distance / 1609.34,
           duration: route.legs[i].duration / 60,
         });

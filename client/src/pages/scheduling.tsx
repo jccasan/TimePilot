@@ -717,7 +717,7 @@ export default function Scheduling() {
 
   const activeServicePlans = useMemo(() => {
     if (!servicePlans) return [];
-    return servicePlans.filter((sp) => sp.status === "active");
+    return servicePlans.filter((sp) => sp.isActive);
   }, [servicePlans]);
 
   const [activeVisit, setActiveVisit] = useState<Visit | null>(null);

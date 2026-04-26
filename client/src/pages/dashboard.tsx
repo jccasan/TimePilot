@@ -2139,13 +2139,11 @@ function GridWidgetsSection({
           cols={{ lg: 12, md: 12, sm: 6, xs: 1 }}
           rowHeight={60}
           width={width}
-          isDraggable={!isMobile}
-          isResizable={!isMobile}
-          draggableHandle=".widget-drag-handle"
-          onLayoutChange={handleLayoutChange}
+          dragConfig={{ enabled: !isMobile, handle: ".widget-drag-handle" }}
+          resizeConfig={{ enabled: !isMobile }}
+          onLayoutChange={handleLayoutChange as any}
           onDragStart={handleDragStart}
           onResizeStart={handleResizeStart}
-          compactType="vertical"
           margin={[16, 16]}
         >
           {currentLayout.map(item => (

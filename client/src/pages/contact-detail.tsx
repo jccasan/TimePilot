@@ -711,8 +711,8 @@ export default function ContactDetail() {
                           propertyForm.setValue("city", addr.city);
                           propertyForm.setValue("state", addr.state);
                           propertyForm.setValue("zipCode", addr.zipCode);
-                          if (addr.latitude) propertyForm.setValue("latitude", String(addr.latitude));
-                          if (addr.longitude) propertyForm.setValue("longitude", String(addr.longitude));
+                          if (addr.latitude) propertyForm.setValue("latitude" as any, String(addr.latitude));
+                          if (addr.longitude) propertyForm.setValue("longitude" as any, String(addr.longitude));
                         }}
                         data-testid="input-street"
                       />
@@ -3051,7 +3051,7 @@ function RouteAssignmentCard({ servicePlans, routes }: { servicePlans: ServicePl
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium leading-none truncate">{route.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{dayLabel(route.dayOfWeek)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{dayLabel(route.dayOfWeek ?? "")}</p>
                   </div>
                   {stopOrders.length > 0 && (
                     <Badge variant="outline" className="text-xs font-normal shrink-0">
@@ -4074,7 +4074,7 @@ function InlineSmsCompose({ contactId, contactName, phone }: { contactId: string
         sentBy: null,
         errorMessage: null,
         isRead: true,
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(),
         mediaUrls: [],
         mediaCount: 0,
         emailThreadId: null,

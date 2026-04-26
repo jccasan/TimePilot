@@ -861,7 +861,7 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
               </div>
             )}
             <DialogFooter>
-              <Button onClick={handleClose} data-testid="button-notify-done">Done</Button>
+              <Button onClick={() => handleClose(false)} data-testid="button-notify-done">Done</Button>
             </DialogFooter>
           </div>
         ) : (
@@ -926,7 +926,7 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
             </div>
 
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={handleClose} data-testid="button-notify-cancel">Cancel</Button>
+              <Button variant="outline" onClick={() => handleClose(false)} data-testid="button-notify-cancel">Cancel</Button>
               <Button
                 onClick={() => sendMutation.mutate()}
                 disabled={sendMutation.isPending || !template.trim()}

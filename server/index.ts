@@ -58,7 +58,7 @@ app.use("/api/public", cors({
 }));
 
 app.use(cors({
-  origin: (origin, callback) => {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin || allowedOrigins.length === 0) {
       callback(null, true);
       return;

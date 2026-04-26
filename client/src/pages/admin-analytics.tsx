@@ -985,14 +985,14 @@ function FunnelTab() {
         </CardContent>
       </Card>
 
-      {data?.topZipCodes?.length > 0 && (
+      {(data?.topZipCodes?.length ?? 0) > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Top ZIP Codes by Submissions</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {data.topZipCodes.map((z) => (
+              {data!.topZipCodes!.map((z) => (
                 <div key={z.zipCode} className="flex items-center justify-between gap-2" data-testid={`row-zip-${z.zipCode}`}>
                   <span className="text-sm font-mono" data-testid={`text-zip-code-${z.zipCode}`}>{z.zipCode}</span>
                   <Badge variant="outline" data-testid={`badge-zip-count-${z.zipCode}`}>{z.submissions} submissions</Badge>
@@ -1003,7 +1003,7 @@ function FunnelTab() {
         </Card>
       )}
 
-      {data?.byCompany?.length > 0 && (
+      {(data?.byCompany?.length ?? 0) > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">By Company</CardTitle>
@@ -1020,7 +1020,7 @@ function FunnelTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.byCompany.map((c) => (
+                {data!.byCompany!.map((c) => (
                   <TableRow key={c.companyId} data-testid={`row-funnel-company-${c.companyId}`}>
                     <TableCell className="font-medium truncate max-w-[200px]" data-testid={`text-funnel-company-${c.companyId}`}>{c.companyName}</TableCell>
                     <TableCell className="text-center">{c.loaded}</TableCell>

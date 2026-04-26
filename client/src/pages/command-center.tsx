@@ -841,7 +841,7 @@ export default function CommandCenter() {
                         stops={mapStops}
                         routeName={isToday ? "Today's Route" : format(selectedDate, "MMM d")}
                         onStopClick={(stopNumber) => {
-                          const v = validVisitsForMap[stopNumber - 1];
+                          const v = validVisitsForMap[Number(stopNumber) - 1];
                           if (v) navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`);
                         }}
                       />

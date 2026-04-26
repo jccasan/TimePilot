@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed, Navigation, ShieldAlert, Dog, Map, MapPin, Clock, ArrowRight, Flag, BarChart2 } from "lucide-react";
+import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed, Navigation, ShieldAlert, Dog, Map as MapIcon, MapPin, Clock, ArrowRight, Flag, BarChart2 } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 const RouteMapView = lazy(() => import("@/components/route-map-view"));
 import { SatelliteImage } from "@/components/satellite-image";
@@ -917,7 +917,7 @@ export default function TechMobile() {
               data-testid="button-open-google-maps"
             >
               <a href={googleMapsDirectionsUrl} target="_blank" rel="noopener noreferrer">
-                <Map className="h-4 w-4" />
+                <MapIcon className="h-4 w-4" />
                 Open in Google Maps
               </a>
             </Button>
@@ -949,7 +949,7 @@ export default function TechMobile() {
             onClick={() => setShowMapOverlay(true)}
             data-testid="button-map-toggle"
           >
-            <Map className="h-4 w-4" />
+            <MapIcon className="h-4 w-4" />
             Map
           </Button>
         )}
@@ -1440,7 +1440,7 @@ export default function TechMobile() {
             onClick={() => setShowMapOverlay(true)}
             data-testid="button-progress-map"
           >
-            <Map className="h-4 w-4" />
+            <MapIcon className="h-4 w-4" />
             Map
           </Button>
         </div>
@@ -1453,7 +1453,7 @@ export default function TechMobile() {
       <DialogContent className="sm:max-w-md" data-testid="dialog-map-overlay">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Map className="h-5 w-5" />
+            <MapIcon className="h-5 w-5" />
             Route Overview
           </DialogTitle>
           <DialogDescription>

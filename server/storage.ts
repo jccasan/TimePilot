@@ -566,7 +566,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addUserToCompany(userId: string, companyId: string, role: string): Promise<CompanyUser> {
-    const [cu] = await db.insert(companyUsers).values({ userId, companyId, role }).returning();
+    const [cu] = await db.insert(companyUsers).values({ userId, companyId, role: role as "owner" | "admin" | "tech" }).returning();
     return cu;
   }
 
@@ -1248,11 +1248,11 @@ export class DatabaseStorage implements IStorage {
       return { count: 0, totalDollars: 0, byContact: [] };
     }
 
-    const planIds = [...new Set(uninvoiced.map(v => v.servicePlanId))];
+    const planIds = Array.from(new Set(uninvoiced.map(v => v.servicePlanId)));
     const plans = planIds.length > 0 ? await db.select().from(servicePlans).where(inArray(servicePlans.id, planIds)) : [];
     const planMap = new Map(plans.map(p => [p.id, p]));
 
-    const contactIds = [...new Set(plans.map(p => p.contactId))];
+    const contactIds = Array.from(new Set(plans.map(p => p.contactId)));
     const contactsList = contactIds.length > 0 ? await db.select().from(contacts).where(inArray(contacts.id, contactIds)) : [];
     const contactMap = new Map(contactsList.map(c => [c.id, c]));
 
@@ -1303,7 +1303,7 @@ export class DatabaseStorage implements IStorage {
     )).orderBy(desc(visits.scheduledDate)).limit(limit).offset(offset);
 
     const planMap = new Map(contactPlans.map(p => [p.id, p]));
-    const propertyIds = [...new Set(contactPlans.map(p => p.propertyId))];
+    const propertyIds = Array.from(new Set(contactPlans.map(p => p.propertyId)));
     const propsList = propertyIds.length > 0 ? await db.select().from(properties).where(inArray(properties.id, propertyIds)) : [];
     const propMap = new Map(propsList.map(p => [p.id, p]));
 
@@ -1349,7 +1349,7 @@ export class DatabaseStorage implements IStorage {
     const planMap = new Map(contactPlans.map(p => [p.id, p]));
     const stopOnlyPlanIds = new Set(contactPlans.filter(p => p.isStopOnly).map(p => p.id));
 
-    const propertyIds = [...new Set(contactPlans.map(p => p.propertyId))];
+    const propertyIds = Array.from(new Set(contactPlans.map(p => p.propertyId)));
     const propsList = propertyIds.length > 0 ? await db.select().from(properties).where(inArray(properties.id, propertyIds)) : [];
     const propMap = new Map(propsList.map(p => [p.id, p]));
 

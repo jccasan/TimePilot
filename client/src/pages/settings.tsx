@@ -3050,8 +3050,7 @@ export default function Settings() {
   const settingsInitializedRef = useRef(false);
   const settingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsUserInteractedRef = useRef(false);
-  const gridContainerRef = useRef<HTMLDivElement>(null);
-  const { width: gridWidth } = useContainerWidth(gridContainerRef);
+  const { width: gridWidth, containerRef: gridContainerRef } = useContainerWidth();
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -3265,7 +3264,7 @@ export default function Settings() {
     }, 800);
   }, [saveSettingsLayoutMutation]);
 
-  const handleSettingsLayoutChange = useCallback((_current: any[], allLayouts: { [key: string]: any[] }) => {
+  const handleSettingsLayoutChange = useCallback((_current: any, allLayouts: { [key: string]: any[] }) => {
     if (!settingsUserInteractedRef.current) return;
     const lgLayout = allLayouts.lg;
     if (!lgLayout || lgLayout.length === 0) return;
@@ -4055,7 +4054,7 @@ export default function Settings() {
             })}
         </div>
       ) : (
-        <div ref={gridContainerRef}>
+        <div ref={gridContainerRef as any}>
           {gridWidth > 0 && (
             <ResponsiveGridLayout
               className="layout"
@@ -4064,13 +4063,11 @@ export default function Settings() {
               cols={{ lg: 12, md: 12, sm: 6, xs: 1 }}
               rowHeight={60}
               width={gridWidth}
-              isDraggable={true}
-              isResizable={true}
-              draggableHandle=".settings-drag-handle"
-              onLayoutChange={handleSettingsLayoutChange}
+              dragConfig={{ enabled: true, handle: ".settings-drag-handle" }}
+              resizeConfig={{ enabled: true }}
+              onLayoutChange={handleSettingsLayoutChange as any}
               onDragStart={handleSettingsDragStart}
               onResizeStart={handleSettingsResizeStart}
-              compactType="vertical"
               margin={[16, 16]}
             >
               {currentSettingsLayout

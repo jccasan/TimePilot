@@ -764,7 +764,7 @@ function RouteFormDialog({ open, onOpenChange, editingRoute, team, onSubmit, isS
   useEffect(() => {
     if (open) {
       if (editingRoute) {
-        setName(editingRoute.name); setDayOfWeek(editingRoute.dayOfWeek);
+        setName(editingRoute.name); setDayOfWeek(editingRoute.dayOfWeek ?? "monday");
         setTechnicianId(editingRoute.technicianId || ""); setColor(editingRoute.color || ROUTE_COLORS[0]);
       } else {
         setName(""); setDayOfWeek("monday"); setTechnicianId("");
@@ -1448,7 +1448,7 @@ export default function RoutesPage() {
       if (route.date) {
         const rd = new Date(route.date + "T12:00:00");
         if (rd < currentWeekRange.start || rd > currentWeekRange.end) continue;
-        dow = DAY_NAMES[rd.getDay()];
+        dow = DAY_NAMES[rd.getDay()] as typeof DAYS[number];
       }
       if (!dow || !buckets[dow]) continue;
       buckets[dow].add(visit.servicePlanId ?? visit.id);
@@ -1633,7 +1633,7 @@ export default function RoutesPage() {
     const newRouteId = target === UNASSIGNED_DROP ? null : target.replace("route-", "");
     const targetRoute = newRouteId ? allRoutes.find(r => r.id === newRouteId) : null;
     const dayOfWeek = targetRoute ? targetRoute.dayOfWeek : undefined;
-    assignStopMutation.mutate({ stopId, routeId: newRouteId, dayOfWeek });
+    assignStopMutation.mutate({ stopId, routeId: newRouteId, dayOfWeek: dayOfWeek ?? undefined });
   }
   function handleDragCancel() { setActiveDragId(null); setOverContainerId(null); }
 
@@ -2234,7 +2234,7 @@ export default function RoutesPage() {
 
       {showLivePlayback && (
         <LiveRoutePlayback
-          visits={dayVisits}
+          visits={dayVisits as any}
           onClose={() => setShowLivePlayback(false)}
         />
       )}

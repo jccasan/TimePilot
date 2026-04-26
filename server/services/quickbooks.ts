@@ -63,7 +63,7 @@ export function isQboConfigured(): boolean {
 export function createOAuthState(companyId: string): string {
   const nonce = crypto.randomBytes(24).toString("hex");
   pendingOAuthStates.set(nonce, { companyId, expiresAt: Date.now() + 10 * 60 * 1000 });
-  for (const [key, val] of pendingOAuthStates) {
+  for (const [key, val] of Array.from(pendingOAuthStates)) {
     if (val.expiresAt < Date.now()) pendingOAuthStates.delete(key);
   }
   return nonce;

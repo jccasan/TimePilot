@@ -1431,7 +1431,7 @@ function ContactsTab() {
       <ImportWizard
         targetSchema="contacts"
         onComplete={(result) => {
-          toast({ title: "Import Complete", description: `Successfully imported ${result.imported} contacts` });
+          toast({ title: "Import Complete", description: `Successfully imported ${result.importedRows} contacts` });
           queryClient.invalidateQueries({ queryKey: ["/api/imports"] });
         }}
         onCancel={() => {}}

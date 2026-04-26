@@ -50,7 +50,7 @@ export async function runMessageCleanup() {
         const expiredIds = expiredMessages.map(m => m.id);
 
         const BATCH_SIZE = 500;
-        const attachments: { id: number; storageUrl: string; compressedSizeBytes: number | null }[] = [];
+        const attachments: { id: string; storageUrl: string; compressedSizeBytes: number | null }[] = [];
         for (let i = 0; i < expiredIds.length; i += BATCH_SIZE) {
           const batch = expiredIds.slice(i, i + BATCH_SIZE);
           const batchAttachments = await db.select({

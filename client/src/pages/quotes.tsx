@@ -782,7 +782,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts, prefilledC
   const handleMeasurementSave = useCallback((polygon: number[][], areaSqft: number) => {
     setMeasurements(prev => [...prev, { polygon, sqft: areaSqft }]);
     if (quoteType === "commercial") {
-      setSiteSqft(prev => (prev || 0) + Math.round(areaSqft));
+      setSiteSqft(prev => Number(prev || 0) + Math.round(areaSqft));
     }
     setShowMeasureTool(false);
     if (addressCoords) {
