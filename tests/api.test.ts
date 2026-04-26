@@ -1065,14 +1065,19 @@ async function runTests() {
     assert(Array.isArray(r.data), "Expected array of invoices");
   });
 
-  await test("Portal flow: POST /api/portal/contact-us sends message", "Portal Flow", async () => {
+  await test("Portal flow: POST /api/portal/contact-us sends message or returns configured-error", "Portal Flow", async () => {
     if (!portalFlowToken) return;
     const r = await req("POST", "/api/portal/contact-us", {
       subject: "Test inquiry",
       message: "This is a regression test message from the portal flow tests.",
     }, { Authorization: `Bearer ${portalFlowToken}` });
-    // 200 = success; 400 = company has no email configured (acceptable in test env)
-    assert(r.status === 200 || r.status === 400, `Expected 200 or 400 from /api/portal/contact-us, got ${r.status}: ${JSON.stringify(r.data)}`);
+    // 200 = company email configured and email sent (DISABLE_EMAIL_SENDING suppresses the send but still returns 200)
+    // 400 "Company does not have a contact email configured" = company config not set (acceptable)
+    // Any other status (500, 401, 403) is a regression
+    assert(
+      r.status === 200 || (r.status === 400 && r.data.error === "Company does not have a contact email configured"),
+      `Expected 200 or expected-400 from /api/portal/contact-us, got ${r.status}: ${JSON.stringify(r.data)}`
+    );
     if (r.status === 200) {
       assert(r.data.success === true, "Expected success:true");
     }
@@ -1449,28 +1454,49 @@ async function runTests() {
     assert(Array.isArray(r.data), "Expected array of jobs");
   });
 
-  await test("Jobs lifecycle: GET /api/jobs?contactId filters by contact", "Jobs", async () => {
-    if (!jobsContactId) return;
+  await test("Jobs lifecycle: GET /api/jobs?contactId filters by contact and service plan appears", "Jobs", async () => {
+    if (!jobsContactId || !jobsServicePlanId) return;
+    // GET /api/jobs filters jobs-table rows by contactId
     const r = await req("GET", `/api/jobs?contactId=${jobsContactId}`);
     assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
     assert(Array.isArray(r.data), "Expected array");
-    // All returned jobs should belong to this contact (via their servicePlanId)
-    // Note: the jobs table uses servicePlanId FK; the filter works at the servicePlan level
+    // The service plan we created is accessible via GET /api/service-plans?contactId=
+    // (POST /api/jobs creates a service_plan row; the jobs table is populated via a different path)
+    const spR = await req("GET", `/api/service-plans?contactId=${jobsContactId}`);
+    assert(spR.status === 200, `Expected 200 from service-plans filter, got ${spR.status}`);
+    assert(Array.isArray(spR.data), "Expected array from service-plans");
+    const found = spR.data.find((sp: any) => sp.id === jobsServicePlanId);
+    assert(!!found, `Expected service plan ${jobsServicePlanId} to appear when filtering by contactId, got: ${JSON.stringify(spR.data.map((s: any) => s.id))}`);
   });
 
-  await test("Jobs lifecycle: POST /api/jobs/:id/approve on a draft job changes status to active", "Jobs", async () => {
-    // Look for any draft job in the company to test approval.
-    // This guards the approve path's visit generation (complement to Task #365).
-    const listR = await req("GET", "/api/jobs?jobStatus=draft");
-    if (listR.status !== 200 || !Array.isArray(listR.data) || listR.data.length === 0) {
-      // No draft jobs available; skip gracefully (the approve endpoint is tested structurally)
+  await test("Jobs lifecycle: POST /api/jobs/:id/approve exercises the approve endpoint contract", "Jobs", async () => {
+    // The jobs table is populated from estimates; POST /api/jobs creates service_plans.
+    // We find any job in the company and exercise the approve endpoint deterministically.
+    // If the job is draft → expect 200 + jobStatus:active (full approval path).
+    // If the job is not draft → expect 400 + error message (status guard path).
+    // This guarantees the endpoint is always exercised, never silently skipped.
+    const listR = await req("GET", "/api/jobs");
+    assert(listR.status === 200, `Expected 200 from GET /api/jobs, got ${listR.status}`);
+    assert(Array.isArray(listR.data), "Expected array from GET /api/jobs");
+    if (listR.data.length === 0) {
+      // No jobs in company — assert the endpoint itself responds (404 for unknown ID)
+      const r = await req("POST", "/api/jobs/nonexistent-id/approve", {});
+      assert(r.status === 404 || r.status === 400, `Expected 404/400 for nonexistent job, got ${r.status}`);
       return;
     }
-    const draftJob = listR.data[0];
-    const r = await req("POST", `/api/jobs/${draftJob.id}/approve`, {});
-    assert(r.status === 200 || r.status === 400, `Expected 200 or 400 for approve, got ${r.status}: ${JSON.stringify(r.data)}`);
-    if (r.status === 200) {
-      assert(r.data.jobStatus === "active", `Expected jobStatus:active, got ${r.data.jobStatus}`);
+    const draftJobs = listR.data.filter((j: any) => j.jobStatus === "draft");
+    if (draftJobs.length > 0) {
+      // Full approval path: draft → active
+      const job = draftJobs[0];
+      const r = await req("POST", `/api/jobs/${job.id}/approve`, {});
+      assert(r.status === 200, `Expected 200 approving draft job ${job.id}, got ${r.status}: ${JSON.stringify(r.data)}`);
+      assert(r.data.jobStatus === "active", `Expected jobStatus:active after approval, got ${r.data.jobStatus}`);
+    } else {
+      // Status guard path: non-draft job must return 400 with descriptive error
+      const job = listR.data[0];
+      const r = await req("POST", `/api/jobs/${job.id}/approve`, {});
+      assert(r.status === 400, `Expected 400 for already-active/non-draft job, got ${r.status}: ${JSON.stringify(r.data)}`);
+      assert(r.data.error && r.data.error.includes("Cannot approve"), `Expected 'Cannot approve' error, got ${JSON.stringify(r.data)}`);
     }
   });
 
