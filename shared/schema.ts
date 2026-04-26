@@ -1931,6 +1931,7 @@ export const errorFixTasks = pgTable("error_fix_tasks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   errorReportId: varchar("error_report_id").notNull().references(() => errorReports.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
+  status: varchar("status", { enum: ["open", "done"] }).notNull().default("open"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_eft_report").on(table.errorReportId),

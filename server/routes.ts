@@ -19139,7 +19139,29 @@ Respond with exactly one category from the list above and nothing else.`;
       const validStatuses = ["open", "acknowledged", "resolved"];
       if (!status || !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status" });
       const report = await storage.updateErrorReport(req.params.id, { status });
+      if (status === "resolved") {
+        const fixTask = await storage.getErrorFixTask(req.params.id);
+        if (fixTask && fixTask.status === "open") {
+          await storage.updateErrorFixTask(fixTask.id, { status: "done" });
+        }
+      }
       res.json(report);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.patch("/api/admin/error-reports/:id/fix-task", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { status } = req.body;
+      const validStatuses = ["open", "done"];
+      if (!status || !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status" });
+      const report = await storage.getErrorReport(req.params.id);
+      if (!report) return res.status(404).json({ error: "Not found" });
+      const fixTask = await storage.getErrorFixTask(report.id);
+      if (!fixTask) return res.status(404).json({ error: "Fix task not found" });
+      const updated = await storage.updateErrorFixTask(fixTask.id, { status });
+      res.json(updated);
     } catch (err) {
       handleError(res, err);
     }

@@ -478,6 +478,7 @@ export interface IStorage {
   updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status">>): Promise<ErrorReport>;
   createErrorFixTask(data: InsertErrorFixTask): Promise<ErrorFixTask>;
   getErrorFixTask(errorReportId: string): Promise<ErrorFixTask | undefined>;
+  updateErrorFixTask(id: string, data: Partial<Pick<ErrorFixTask, "status">>): Promise<ErrorFixTask>;
   getOpenErrorCount(): Promise<number>;
   getLatestErrorTimestamp(): Promise<Date | null>;
 }
@@ -2970,6 +2971,11 @@ export class DatabaseStorage implements IStorage {
 
   async getErrorFixTask(errorReportId: string): Promise<ErrorFixTask | undefined> {
     const [row] = await db.select().from(errorFixTasks).where(eq(errorFixTasks.errorReportId, errorReportId));
+    return row;
+  }
+
+  async updateErrorFixTask(id: string, data: Partial<Pick<ErrorFixTask, "status">>): Promise<ErrorFixTask> {
+    const [row] = await db.update(errorFixTasks).set(data).where(eq(errorFixTasks.id, id)).returning();
     return row;
   }
 

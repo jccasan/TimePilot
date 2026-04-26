@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Bug, ChevronRight, ChevronDown, Wrench, CheckCircle, Eye, X, ChevronLeft, Layers, List } from "lucide-react";
+import { Loader2, Bug, ChevronRight, ChevronDown, Wrench, CheckCircle, Eye, X, ChevronLeft, Layers, List, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const PAGE_SIZE = 50;
@@ -22,7 +22,7 @@ type ErrorReport = {
   userAgent: string | null;
   status: "open" | "acknowledged" | "resolved";
   createdAt: string;
-  fixTask: { id: string; title: string; createdAt: string } | null;
+  fixTask: { id: string; title: string; status: "open" | "done"; createdAt: string } | null;
 };
 
 type GroupedErrorReport = {
@@ -161,8 +161,8 @@ function ExpandedGroupRows({
                 {report.status}
               </span>
               {report.fixTask && (
-                <span className="text-[10px] border px-1.5 py-0.5 rounded font-medium bg-purple-500/20 text-purple-400 border-purple-500/30">
-                  task created
+                <span className={`text-[10px] border px-1.5 py-0.5 rounded font-medium ${report.fixTask.status === "done" ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-purple-500/20 text-purple-400 border-purple-500/30"}`}>
+                  {report.fixTask.status === "done" ? "fix done" : "fix open"}
                 </span>
               )}
               <span className="text-[10px] text-[#858585]">{formatTs(report.createdAt)}</span>
@@ -284,6 +284,20 @@ export default function AdminErrors() {
     onError: () => toast({ title: "Failed to create fix task", variant: "destructive" }),
   });
 
+  const markFixTaskDoneMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "open" | "done" }) => {
+      const res = await adminRequest("PATCH", `/api/admin/error-reports/${id}/fix-task`, { status });
+      if (!res.ok) throw new Error("Failed to update fix task");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports/grouped"] });
+      toast({ title: "Fix task updated" });
+    },
+    onError: () => toast({ title: "Failed to update fix task", variant: "destructive" }),
+  });
+
   const openCount = viewMode === "all"
     ? allReports.filter(r => r.status === "open").length
     : groupedReports.filter(g => g.status === "open").length;
@@ -384,8 +398,8 @@ export default function AdminErrors() {
                         {report.status}
                       </span>
                       {report.fixTask && (
-                        <span className="text-[10px] border px-1.5 py-0.5 rounded font-medium bg-purple-500/20 text-purple-400 border-purple-500/30">
-                          task created
+                        <span className={`text-[10px] border px-1.5 py-0.5 rounded font-medium ${report.fixTask.status === "done" ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-purple-500/20 text-purple-400 border-purple-500/30"}`}>
+                          {report.fixTask.status === "done" ? "fix done" : "fix open"}
                         </span>
                       )}
                       <span className="text-[10px] text-[#858585]">{formatTs(report.createdAt)}</span>
@@ -548,9 +562,53 @@ export default function AdminErrors() {
             <div>
               <div className="text-[10px] text-[#858585] mb-2">FIX TASKS</div>
               {detailReport.fixTask ? (
-                <div className="bg-purple-500/10 border border-purple-500/30 rounded p-3" data-testid="fix-task-item">
-                  <div className="text-xs text-[#d4d4d4]" data-testid="fix-task-title">{detailReport.fixTask.title}</div>
-                  <div className="text-[10px] text-[#858585] mt-0.5" data-testid="fix-task-date">Created {formatTs(detailReport.fixTask.createdAt)}</div>
+                <div
+                  className={`border rounded p-3 ${detailReport.fixTask.status === "done" ? "bg-green-500/10 border-green-500/30" : "bg-purple-500/10 border-purple-500/30"}`}
+                  data-testid="fix-task-item"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div
+                        className={`text-xs ${detailReport.fixTask.status === "done" ? "line-through text-[#858585]" : "text-[#d4d4d4]"}`}
+                        data-testid="fix-task-title"
+                      >
+                        {detailReport.fixTask.title}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${detailReport.fixTask.status === "done" ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-purple-500/20 text-purple-400 border-purple-500/30"}`}
+                          data-testid="fix-task-status"
+                        >
+                          {detailReport.fixTask.status}
+                        </span>
+                        <span className="text-[10px] text-[#858585]" data-testid="fix-task-date">Created {formatTs(detailReport.fixTask.createdAt)}</span>
+                      </div>
+                    </div>
+                    {detailReport.fixTask.status === "open" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-[10px] shrink-0 bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
+                        disabled={markFixTaskDoneMutation.isPending}
+                        onClick={() => markFixTaskDoneMutation.mutate({ id: detailReport.id, status: "done" })}
+                        data-testid="button-mark-fix-done"
+                      >
+                        {markFixTaskDoneMutation.isPending ? <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" /> : <Check className="h-2.5 w-2.5 mr-1" />}
+                        Mark done
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 text-[10px] shrink-0 text-[#858585] hover:text-[#d4d4d4] hover:bg-[#2a2d2e]"
+                        disabled={markFixTaskDoneMutation.isPending}
+                        onClick={() => markFixTaskDoneMutation.mutate({ id: detailReport.id, status: "open" })}
+                        data-testid="button-reopen-fix-task"
+                      >
+                        Reopen
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ) : showFixTaskForm ? (
                 <div className="bg-[#252526] border border-[#3c3c3c] rounded p-3 space-y-2" data-testid="fix-task-form">
