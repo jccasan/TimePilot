@@ -660,6 +660,23 @@ async function migrateServicePlansToAgreementsAndJobs() {
     console.error("[Migration] Failed to add date column to routes:", err);
   }
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS business_assessments (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        score INTEGER NOT NULL,
+        verdict TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ba_company ON business_assessments(company_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ba_created ON business_assessments(company_id, created_at)`);
+    console.log("[Migration] business_assessments table verified");
+  } catch (err) {
+    console.error("[Migration] Failed to create business_assessments table:", err);
+  }
+
   await pool.end();
 }
 
