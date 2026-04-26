@@ -1336,11 +1336,46 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
   const { toast } = useToast();
   const [linkCopied, setLinkCopied] = useState(false);
   const [onboardingLink, setOnboardingLink] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    dogNames: "",
+    dogBreeds: "",
+    hasDangerousDog: false,
+    dangerousDogNotes: "",
+    gateCode: "",
+    specialInstructions: "",
+  });
 
   const firstProperty = properties[0] || null;
   const onboardingCompleted = !!firstProperty?.onboardingCompletedAt;
   const hasToken = !!firstProperty?.onboardingToken;
   const onboardingPending = hasToken && !onboardingCompleted;
+
+  const editOnboardingMutation = useMutation({
+    mutationFn: async (data: typeof editForm) => {
+      await apiRequest("PATCH", `/api/properties/${firstProperty!.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${contactId}`] });
+      setEditOpen(false);
+      toast({ title: "Onboarding details updated", description: "The property record has been saved." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error saving changes", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const openEdit = () => {
+    setEditForm({
+      dogNames: firstProperty?.dogNames ?? "",
+      dogBreeds: firstProperty?.dogBreeds ?? "",
+      hasDangerousDog: firstProperty?.hasDangerousDog ?? false,
+      dangerousDogNotes: firstProperty?.dangerousDogNotes ?? "",
+      gateCode: firstProperty?.gateCode ?? "",
+      specialInstructions: firstProperty?.specialInstructions ?? "",
+    });
+    setEditOpen(true);
+  };
 
   const sendOnboardingMutation = useMutation({
     mutationFn: async () => {
@@ -1394,21 +1429,29 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
   if (properties.length === 0) return null;
 
   return (
+    <>
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
         <CardTitle className="text-lg flex items-center gap-2">
           <ClipboardList className="h-5 w-5" /> Client Onboarding
         </CardTitle>
-        {onboardingCompleted && (
-          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex items-center gap-1" data-testid="badge-onboarding-complete">
-            <ClipboardCheck className="h-3.5 w-3.5" /> Onboarded
-          </Badge>
-        )}
-        {onboardingPending && (
-          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-onboarding-pending">
-            Onboarding Pending
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {onboardingCompleted && (
+            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex items-center gap-1" data-testid="badge-onboarding-complete">
+              <ClipboardCheck className="h-3.5 w-3.5" /> Onboarded
+            </Badge>
+          )}
+          {onboardingPending && (
+            <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-onboarding-pending">
+              Onboarding Pending
+            </Badge>
+          )}
+          {onboardingCompleted && (
+            <Button size="sm" variant="outline" onClick={openEdit} data-testid="button-edit-onboarding">
+              <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
@@ -1542,6 +1585,93 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
         )}
       </CardContent>
     </Card>
+
+    <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Onboarding Details</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-dog-names">Dog Names</Label>
+            <Input
+              id="edit-dog-names"
+              data-testid="input-edit-dog-names"
+              value={editForm.dogNames}
+              onChange={e => setEditForm(f => ({ ...f, dogNames: e.target.value }))}
+              placeholder="e.g. Buddy, Max"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-dog-breeds">Breeds</Label>
+            <Input
+              id="edit-dog-breeds"
+              data-testid="input-edit-dog-breeds"
+              value={editForm.dogBreeds}
+              onChange={e => setEditForm(f => ({ ...f, dogBreeds: e.target.value }))}
+              placeholder="e.g. Labrador, Poodle"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label htmlFor="edit-dangerous-dog">Dangerous dog on property</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">Flag for technician safety awareness</p>
+            </div>
+            <Switch
+              id="edit-dangerous-dog"
+              data-testid="switch-edit-dangerous-dog"
+              checked={editForm.hasDangerousDog}
+              onCheckedChange={val => setEditForm(f => ({ ...f, hasDangerousDog: val }))}
+            />
+          </div>
+          {editForm.hasDangerousDog && (
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-dangerous-dog-notes">Dangerous Dog Notes</Label>
+              <Textarea
+                id="edit-dangerous-dog-notes"
+                data-testid="textarea-edit-dangerous-dog-notes"
+                value={editForm.dangerousDogNotes}
+                onChange={e => setEditForm(f => ({ ...f, dangerousDogNotes: e.target.value }))}
+                placeholder="Describe the concern…"
+                rows={2}
+              />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-gate-code">Gate Code</Label>
+            <Input
+              id="edit-gate-code"
+              data-testid="input-edit-gate-code"
+              value={editForm.gateCode}
+              onChange={e => setEditForm(f => ({ ...f, gateCode: e.target.value }))}
+              placeholder="e.g. #1234"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-access-instructions">Access Instructions</Label>
+            <Textarea
+              id="edit-access-instructions"
+              data-testid="textarea-edit-access-instructions"
+              value={editForm.specialInstructions}
+              onChange={e => setEditForm(f => ({ ...f, specialInstructions: e.target.value }))}
+              placeholder="e.g. Use side gate, latch is tricky…"
+              rows={3}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={() => setEditOpen(false)} data-testid="button-cancel-onboarding-edit">Cancel</Button>
+          <Button
+            onClick={() => editOnboardingMutation.mutate(editForm)}
+            disabled={editOnboardingMutation.isPending}
+            data-testid="button-save-onboarding-edit"
+          >
+            {editOnboardingMutation.isPending ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Saving…</> : "Save Changes"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
