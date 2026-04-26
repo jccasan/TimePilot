@@ -97,6 +97,8 @@ export default function AdminErrors() {
   const [toDate, setToDate] = useState<string>("");
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showFixTaskForm, setShowFixTaskForm] = useState(false);
+  const [fixTaskTitle, setFixTaskTitle] = useState("");
 
   const queryUrl = buildQueryUrl(statusFilter, fromDate, toDate, page);
 
@@ -106,6 +108,15 @@ export default function AdminErrors() {
   });
 
   const selected = selectedId ? reports.find(r => r.id === selectedId) ?? null : null;
+
+  function handleSelectReport(id: string) {
+    setSelectedId(prev => {
+      const next = prev === id ? null : id;
+      setShowFixTaskForm(false);
+      setFixTaskTitle("");
+      return next;
+    });
+  }
 
   function handleFilterChange(setter: (v: string) => void) {
     return (value: string) => {
@@ -130,8 +141,8 @@ export default function AdminErrors() {
   });
 
   const fixTaskMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await adminRequest("POST", `/api/admin/error-reports/${id}/fix-task`);
+    mutationFn: async ({ id, title }: { id: string; title: string }) => {
+      const res = await adminRequest("POST", `/api/admin/error-reports/${id}/fix-task`, { title: title.trim() || undefined });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         if (body?.fixTask) return body.fixTask;
@@ -142,6 +153,8 @@ export default function AdminErrors() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports/stats"] });
+      setShowFixTaskForm(false);
+      setFixTaskTitle("");
       toast({ title: "Fix task created" });
     },
     onError: () => toast({ title: "Failed to create fix task", variant: "destructive" }),
@@ -211,7 +224,7 @@ export default function AdminErrors() {
                 <div
                   key={report.id}
                   className={`flex items-start gap-3 px-5 py-3 border-b border-[#2d2d2d] cursor-pointer transition-colors ${selectedId === report.id ? "bg-[#264f78]/30" : "hover:bg-[#2a2d2e]"}`}
-                  onClick={() => setSelectedId(selectedId === report.id ? null : report.id)}
+                  onClick={() => handleSelectReport(report.id)}
                   data-testid={`error-row-${report.id}`}
                 >
                   <div className="shrink-0 mt-0.5 text-[#858585]">
@@ -282,7 +295,7 @@ export default function AdminErrors() {
               <span className="text-sm font-medium text-[#e8e8e8]">Error Detail</span>
             </div>
             <button
-              onClick={() => setSelectedId(null)}
+              onClick={() => { setSelectedId(null); setShowFixTaskForm(false); setFixTaskTitle(""); }}
               className="text-[#858585] hover:text-[#d4d4d4] transition-colors"
               data-testid="button-close-detail"
             >
@@ -334,13 +347,63 @@ export default function AdminErrors() {
               </div>
             )}
 
-            {selected.fixTask && (
-              <div className="bg-purple-500/10 border border-purple-500/30 rounded p-3">
-                <div className="text-[10px] text-purple-400 mb-1">FIX TASK</div>
-                <div className="text-xs text-[#d4d4d4]">{selected.fixTask.title}</div>
-                <div className="text-[10px] text-[#858585] mt-0.5">Created {formatTs(selected.fixTask.createdAt)}</div>
-              </div>
-            )}
+            <div>
+              <div className="text-[10px] text-[#858585] mb-2">FIX TASKS</div>
+              {selected.fixTask ? (
+                <div className="bg-purple-500/10 border border-purple-500/30 rounded p-3" data-testid="fix-task-item">
+                  <div className="text-xs text-[#d4d4d4]" data-testid="fix-task-title">{selected.fixTask.title}</div>
+                  <div className="text-[10px] text-[#858585] mt-0.5" data-testid="fix-task-date">Created {formatTs(selected.fixTask.createdAt)}</div>
+                </div>
+              ) : showFixTaskForm ? (
+                <div className="bg-[#252526] border border-[#3c3c3c] rounded p-3 space-y-2" data-testid="fix-task-form">
+                  <Input
+                    placeholder="Task title (leave blank to auto-generate)"
+                    value={fixTaskTitle}
+                    onChange={e => setFixTaskTitle(e.target.value)}
+                    className="h-7 text-xs bg-[#1e1e1e] border-[#3c3c3c] text-[#d4d4d4] placeholder:text-[#585858]"
+                    data-testid="input-fix-task-title"
+                    onKeyDown={e => {
+                      if (e.key === "Enter") fixTaskMutation.mutate({ id: selected.id, title: fixTaskTitle });
+                      if (e.key === "Escape") { setShowFixTaskForm(false); setFixTaskTitle(""); }
+                    }}
+                    autoFocus
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20"
+                      disabled={fixTaskMutation.isPending}
+                      onClick={() => fixTaskMutation.mutate({ id: selected.id, title: fixTaskTitle })}
+                      data-testid="button-submit-fix-task"
+                    >
+                      {fixTaskMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Wrench className="h-3 w-3 mr-1" />}
+                      Create
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs text-[#858585] hover:text-[#d4d4d4] hover:bg-[#2a2d2e]"
+                      onClick={() => { setShowFixTaskForm(false); setFixTaskTitle(""); }}
+                      data-testid="button-cancel-fix-task"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20"
+                  onClick={() => setShowFixTaskForm(true)}
+                  data-testid="button-create-fix-task"
+                >
+                  <Wrench className="h-3 w-3 mr-1" />
+                  Create Fix Task
+                </Button>
+              )}
+            </div>
 
             <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-[#3c3c3c]">
               {selected.status !== "acknowledged" && (
@@ -367,19 +430,6 @@ export default function AdminErrors() {
                 >
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Resolve
-                </Button>
-              )}
-              {!selected.fixTask && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20"
-                  disabled={fixTaskMutation.isPending}
-                  onClick={() => fixTaskMutation.mutate(selected.id)}
-                  data-testid="button-create-fix-task"
-                >
-                  <Wrench className="h-3 w-3 mr-1" />
-                  Create Fix Task
                 </Button>
               )}
             </div>
