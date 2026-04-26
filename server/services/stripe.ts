@@ -8,7 +8,7 @@ function getStripe(): Stripe {
     if (!key) {
       throw new Error("STRIPE_SECRET_KEY is not configured");
     }
-    stripeInstance = new Stripe(key, { apiVersion: "2025-04-30.basil" });
+    stripeInstance = new Stripe(key, { apiVersion: "2026-01-28.clover" });
   }
   return stripeInstance;
 }
@@ -486,12 +486,19 @@ export async function createCustomerPortalSession(params: {
   return session.url;
 }
 
-export async function createUsageRecord(subscriptionItemId: string, quantity: number, timestamp?: number, action: "increment" | "set" = "increment"): Promise<void> {
+// NOTE: stripe.subscriptionItems.createUsageRecord() was removed in Stripe SDK v17+.
+// The Billing Meter Events API (stripe.billing.meterEvents.create) is the supported
+// replacement for API version 2026-01-28.clover. Meter event names must match meter
+// definitions configured in the Stripe dashboard.
+export async function createUsageRecord(stripeCustomerId: string, eventName: string, quantity: number, timestamp?: number): Promise<void> {
   const stripe = getStripe();
-  await stripe.subscriptionItems.createUsageRecord(subscriptionItemId, {
-    quantity,
+  await stripe.billing.meterEvents.create({
+    event_name: eventName,
+    payload: {
+      value: String(quantity),
+      stripe_customer_id: stripeCustomerId,
+    },
     timestamp: timestamp || Math.floor(Date.now() / 1000),
-    action,
   });
 }
 
@@ -500,16 +507,9 @@ export async function reportMeteredUsageSet(stripeSubscriptionId: string, eventT
   try {
     const stripe = getStripe();
     const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-    const meteredItem = subscription.items.data.find(item => {
-      const price = item.price;
-      const lookupKey = price.lookup_key || price.nickname || "";
-      if (eventType === "user_seat" && (lookupKey.toLowerCase().includes("seat") || lookupKey.toLowerCase().includes("user"))) return true;
-      return false;
-    });
-    if (meteredItem) {
-      await createUsageRecord(meteredItem.id, quantity, undefined, "set");
-      console.log(`[Stripe Usage] Set ${eventType} to ${quantity} on subscription item ${meteredItem.id}`);
-    }
+    const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+    await createUsageRecord(customerId, eventType, quantity);
+    console.log(`[Stripe Usage] Set ${eventType} to ${quantity} for customer ${customerId}`);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[Stripe Usage] Failed to set ${eventType}: ${message}`);
@@ -746,18 +746,9 @@ export async function reportMeteredUsage(stripeSubscriptionId: string, eventType
   try {
     const stripe = getStripe();
     const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-    const meteredItem = subscription.items.data.find(item => {
-      const price = item.price;
-      const lookupKey = price.lookup_key || price.nickname || "";
-      if (eventType === "sms_segment" && lookupKey.toLowerCase().includes("sms")) return true;
-      if (eventType === "voice_minute" && lookupKey.toLowerCase().includes("voice")) return true;
-      if (eventType === "user_seat" && (lookupKey.toLowerCase().includes("seat") || lookupKey.toLowerCase().includes("user"))) return true;
-      return false;
-    });
-    if (meteredItem) {
-      await createUsageRecord(meteredItem.id, quantity);
-      console.log(`[Stripe Usage] Reported ${quantity} ${eventType} to subscription item ${meteredItem.id}`);
-    }
+    const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+    await createUsageRecord(customerId, eventType, quantity);
+    console.log(`[Stripe Usage] Reported ${quantity} ${eventType} for customer ${customerId}`);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[Stripe Usage] Failed to report ${eventType}: ${message}`);

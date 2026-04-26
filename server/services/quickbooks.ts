@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import type Stripe from "stripe";
 import { db } from "../db";
 import { companies, contacts, invoices, invoiceLineItems, qboSyncLogs } from "@shared/schema";
 import { eq, and, desc, isNotNull } from "drizzle-orm";
@@ -476,13 +477,13 @@ async function getStripeFeeForPayment(stripePaymentIntentId: string, stripeAccou
     const StripeSDK = (await import("stripe")).default;
     type StripeType = InstanceType<typeof StripeSDK>;
     const stripe: StripeType = new StripeSDK(process.env.STRIPE_SECRET_KEY!);
-    const retrieveParams: StripeSDK.PaymentIntentRetrieveParams = { expand: ["latest_charge.balance_transaction"] };
-    const requestOptions: StripeSDK.RequestOptions = {};
+    const retrieveParams: Stripe.PaymentIntentRetrieveParams = { expand: ["latest_charge.balance_transaction"] };
+    const requestOptions: Stripe.RequestOptions = {};
     if (stripeAccount) {
       requestOptions.stripeAccount = stripeAccount;
     }
     const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId, retrieveParams, requestOptions);
-    const piData = pi as Record<string, unknown>;
+    const piData = pi as unknown as Record<string, unknown>;
     const charge = piData.latest_charge as Record<string, unknown> | string | null;
     if (!charge || typeof charge === "string") return null;
     const bt = charge.balance_transaction as Record<string, unknown> | string | null;
