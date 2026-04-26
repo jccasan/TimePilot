@@ -7661,6 +7661,11 @@ Return ONLY valid JSON, no markdown.`,
         invoiceUpdates.lastPaymentAttempt = new Date(invoiceUpdates.lastPaymentAttempt);
       }
 
+      // Guard against empty-string dueDate which would fail the NOT NULL date column
+      if ("dueDate" in invoiceUpdates && (invoiceUpdates.dueDate === "" || invoiceUpdates.dueDate === null || invoiceUpdates.dueDate === undefined)) {
+        delete invoiceUpdates.dueDate;
+      }
+
       if (lineItems && Array.isArray(lineItems)) {
 
         await storage.deleteInvoiceLineItems(req.params.id);
@@ -7682,9 +7687,9 @@ Return ONLY valid JSON, no markdown.`,
           });
         }
 
-        const taxRate = parseFloat(invoiceUpdates.taxRate ?? existing.taxRate ?? "0");
+        const taxRate = parseFloat(invoiceUpdates.taxRate ?? existing.taxRate ?? "0") || 0;
         const discountType = invoiceUpdates.discountType ?? existing.discountType;
-        const discountVal = Math.abs(parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0"));
+        const discountVal = Math.abs(parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0") || 0);
         let discountAmount = 0;
         if (discountType === "percent") {
           discountAmount = subtotal * (discountVal / 100);
@@ -7703,10 +7708,10 @@ Return ONLY valid JSON, no markdown.`,
         invoiceUpdates.discountAmount = discountAmount.toFixed(2);
         invoiceUpdates.total = total.toFixed(2);
       } else if ("taxRate" in invoiceUpdates || "discountType" in invoiceUpdates || "discountValue" in invoiceUpdates) {
-        const subtotal = parseFloat(existing.subtotal ?? "0");
-        const taxRate = parseFloat(invoiceUpdates.taxRate ?? existing.taxRate ?? "0");
+        const subtotal = parseFloat(existing.subtotal ?? "0") || 0;
+        const taxRate = parseFloat(invoiceUpdates.taxRate ?? existing.taxRate ?? "0") || 0;
         const discountType = invoiceUpdates.discountType ?? existing.discountType;
-        const discountVal = Math.abs(parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0"));
+        const discountVal = Math.abs(parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0") || 0);
         let discountAmount = 0;
         if (discountType === "percent") {
           discountAmount = subtotal * (discountVal / 100);

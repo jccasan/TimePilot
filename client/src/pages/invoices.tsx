@@ -1378,9 +1378,9 @@ export default function Invoices() {
       if (!selectedInvoice) throw new Error("No invoice selected");
       const body: Record<string, unknown> = {
         dueDate: editDueDate,
-        taxRate: editTaxRate,
+        taxRate: editTaxRate === "" ? "0" : editTaxRate,
         discountType: editDiscountType || null,
-        discountValue: editDiscountValue,
+        discountValue: editDiscountValue === "" ? "0" : editDiscountValue,
         notes: editNotes || null,
         lineItems: editLineItems.map(li => ({
           description: li.description,
