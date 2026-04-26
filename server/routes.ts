@@ -5918,6 +5918,34 @@ Return ONLY valid JSON, no markdown.`,
       const { userId } = await getCompanyContext(req);
       auditLog(companyId, userId, "service_plan", req.params.id, "update", { old: { frequency: existing.frequency, dayOfWeek: existing.dayOfWeek, routeId: existing.routeId }, new: updateBody }, req.ip || undefined);
 
+      // Sync editable fields to the linked jobs-table row and agreement (if they exist).
+      // GET /api/jobs reads from the jobs table (joined with agreements), so changes
+      // made to the service plan must be propagated to both so the jobs list reflects
+      // the edit immediately — otherwise edits appear to have no effect.
+      const linkedJobForSync = await storage.getJobByServicePlanId(req.params.id);
+      if (linkedJobForSync) {
+        const jobSyncFields: Record<string, any> = {};
+        const jobSyncableKeys = ["serviceName", "jobType", "jobStatus", "dayOfWeek", "routeId", "anytime", "startTime", "endTime", "visitInstructions", "assignedUserId", "stopOrder", "isStopOnly"];
+        for (const k of jobSyncableKeys) {
+          if (updateBody[k] !== undefined) jobSyncFields[k] = updateBody[k];
+        }
+        if (Object.keys(jobSyncFields).length > 0) {
+          await storage.updateJob(linkedJobForSync.id, companyId, jobSyncFields as any);
+        }
+      }
+      // Also sync agreement fields (frequency, pricePerVisit, startDate, etc.) since
+      // getJobsWithAgreements surfaces these fields from the agreements table row.
+      if (linkedJobForSync?.agreementId) {
+        const agreementSyncFields: Record<string, any> = {};
+        const agreementSyncableKeys = ["frequency", "pricePerVisit", "startDate", "endDate", "endsAfterCount", "endsAfterUnit", "isActive", "pausedAt"];
+        for (const k of agreementSyncableKeys) {
+          if (updateBody[k] !== undefined) agreementSyncFields[k] = updateBody[k];
+        }
+        if (Object.keys(agreementSyncFields).length > 0) {
+          await storage.updateAgreement(linkedJobForSync.agreementId, companyId, agreementSyncFields as any);
+        }
+      }
+
       const routeIdChanged = body.routeId !== undefined && body.routeId !== existing.routeId;
       const dayChanged2 = body.dayOfWeek !== undefined && body.dayOfWeek !== existing.dayOfWeek;
       const deactivated = body.isActive === false && existing.isActive === true;
