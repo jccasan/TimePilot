@@ -359,6 +359,7 @@ export async function registerRoutes(
     "/api/webhooks/", "/api/portal/",
     "/api/password/",
     "/api/create-tenant",
+    "/api/public/",
   ];
   const GATE_READ_EXEMPT_PREFIXES = [
     "/api/company/stats",
@@ -1468,7 +1469,12 @@ export async function registerRoutes(
         return res.status(400).json({ error: "URL is required" });
       }
       const trimmed = url.trim();
-      try { new URL(trimmed); } catch { return res.status(400).json({ error: "Invalid URL format" }); }
+      try {
+        const parsed = new URL(trimmed);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          return res.status(400).json({ error: "URL must use http or https" });
+        }
+      } catch { return res.status(400).json({ error: "Invalid URL format" }); }
       const memberships = await storage.getCompaniesForUser(userId);
       if (!memberships.length) return res.status(404).json({ error: "No company found" });
       const companyId = memberships[0].companyId;
@@ -17811,7 +17817,7 @@ Respond with exactly one category from the list above and nothing else.`;
           source: `Public Signup (${signupCountry} - pending approval)`,
         }).catch((err) => console.error("[Signup Notification] Failed during public signup:", err));
 
-        res.send(verificationPendingPage(record.firstName, appUrl));
+        res.send(verificationPendingPage(record.firstName, appUrl, record.email));
       }
     } catch (err) {
       console.error("[Signup] Verification error:", err);
@@ -17855,7 +17861,30 @@ Respond with exactly one category from the list above and nothing else.`;
 </html>`;
   }
 
-  function verificationPendingPage(firstName: string, loginUrl: string): string {
+  app.post("/api/public/submit-verification-url", async (req: Request, res: Response) => {
+    try {
+      const { email, url } = req.body;
+      if (!email || typeof email !== "string") return res.status(400).json({ error: "Email is required" });
+      if (!url || typeof url !== "string") return res.status(400).json({ error: "URL is required" });
+      const trimmedUrl = url.trim();
+      try {
+        const parsed = new URL(trimmedUrl);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          return res.status(400).json({ error: "URL must use http or https" });
+        }
+      } catch { return res.status(400).json({ error: "Invalid URL format" }); }
+      const { eq, and } = await import("drizzle-orm");
+      const [company] = await db.select({ id: companies.id }).from(companies).where(
+        and(eq(companies.email, email.trim().toLowerCase()), eq(companies.subscriptionStatus, "pending_approval" as any))
+      );
+      if (!company) return res.status(404).json({ error: "No pending account found for this email" });
+      await db.update(companies).set({ verificationUrl: trimmedUrl } as any).where(eq(companies.id, company.id));
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  function verificationPendingPage(firstName: string, appUrl: string, email: string): string {
+    const escapedEmail = email.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -17871,8 +17900,15 @@ Respond with exactly one category from the list above and nothing else.`;
     .badge { display: inline-block; background: #fef3c7; color: #92400e; border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: 600; margin-bottom: 16px; }
     h2 { color: #1f2937; margin-top: 0; }
     p { color: #4b5563; line-height: 1.6; }
-    .cta { display: inline-block; background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 8px; }
+    label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 4px; margin-top: 14px; }
+    input[type=url], input[type=email] { width: 100%; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 6px; padding: 9px 12px; font-size: 14px; color: #111827; }
+    input[readonly] { background: #f3f4f6; color: #6b7280; }
+    button { margin-top: 16px; background-color: #2d8a5e; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; font-size: 15px; cursor: pointer; width: 100%; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .success { background: #d1fae5; border: 1px solid #6ee7b7; border-radius: 8px; padding: 14px 16px; margin-top: 16px; color: #065f46; font-size: 14px; }
+    .error-msg { color: #dc2626; font-size: 13px; margin-top: 6px; }
     .note { font-size: 13px; color: #9ca3af; margin-top: 20px; }
+    hr { border: none; border-top: 1px solid #e5e7eb; margin: 24px 0; }
   </style>
 </head>
 <body>
@@ -17883,11 +17919,52 @@ Respond with exactly one category from the list above and nothing else.`;
       <h2>Hi ${firstName}, your email is verified!</h2>
       <p>Because your account is registering from outside the United States or Canada, our team does a brief review before activating access.</p>
       <p>You'll receive an email with your login credentials once your account is approved — usually within 1 business day.</p>
-      <p>In the meantime, you can log in and speed up your approval by submitting your LinkedIn profile or business website:</p>
-      <a href="${loginUrl}" class="cta">Log In &amp; Submit Profile</a>
-      <p class="note">Questions? Email us at support@scoopilot.com</p>
+      <hr>
+      <p style="margin-top:0;"><strong>Speed up your approval</strong> — share your LinkedIn profile or business website so our team can verify you faster:</p>
+      <div id="form-area">
+        <label for="email-field">Your email</label>
+        <input type="email" id="email-field" value="${escapedEmail}" readonly />
+        <label for="url-field">LinkedIn or business website URL</label>
+        <input type="url" id="url-field" placeholder="https://linkedin.com/in/yourname" />
+        <div id="error-msg" class="error-msg" style="display:none;"></div>
+        <button id="submit-btn" onclick="submitUrl()">Submit for Faster Review</button>
+      </div>
+      <div id="success-area" class="success" style="display:none;">
+        ✅ <strong>Profile submitted!</strong> Our team will review your information and email you once your account is approved.
+      </div>
+      <p class="note">Questions? Email us at <a href="mailto:support@scoopilot.com">support@scoopilot.com</a></p>
     </div>
   </div>
+  <script>
+    async function submitUrl() {
+      var email = document.getElementById('email-field').value.trim();
+      var url = document.getElementById('url-field').value.trim();
+      var btn = document.getElementById('submit-btn');
+      var err = document.getElementById('error-msg');
+      err.style.display = 'none';
+      if (!url) { err.textContent = 'Please enter a URL.'; err.style.display = 'block'; return; }
+      btn.disabled = true; btn.textContent = 'Submitting...';
+      try {
+        var res = await fetch('/api/public/submit-verification-url', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, url: url })
+        });
+        var data = await res.json();
+        if (res.ok && data.ok) {
+          document.getElementById('form-area').style.display = 'none';
+          document.getElementById('success-area').style.display = 'block';
+        } else {
+          err.textContent = data.error || 'Submission failed. Please try again.';
+          err.style.display = 'block';
+          btn.disabled = false; btn.textContent = 'Submit for Faster Review';
+        }
+      } catch(e) {
+        err.textContent = 'Network error. Please try again.';
+        err.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Submit for Faster Review';
+      }
+    }
+  </script>
 </body>
 </html>`;
   }
