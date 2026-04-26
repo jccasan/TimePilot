@@ -1699,6 +1699,58 @@ async function applyDemoAutopayMigration() {
   }
 }
 
+async function ensureErrorReportsTable() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'error_report_status') THEN
+          CREATE TYPE error_report_status AS ENUM ('open', 'acknowledged', 'resolved');
+        END IF;
+      END $$;
+    `);
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'error_report_type') THEN
+          CREATE TYPE error_report_type AS ENUM ('react', 'js', 'api');
+        END IF;
+      END $$;
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS error_reports (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        message TEXT NOT NULL,
+        stack TEXT,
+        error_type error_report_type NOT NULL DEFAULT 'js',
+        page_url TEXT,
+        user_id VARCHAR(255),
+        company_id VARCHAR(255),
+        user_agent TEXT,
+        status error_report_status NOT NULL DEFAULT 'open',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_er_status ON error_reports (status);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_er_created ON error_reports (created_at);`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS error_fix_tasks (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        error_report_id VARCHAR NOT NULL REFERENCES error_reports(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        status VARCHAR NOT NULL DEFAULT 'open',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_eft_report ON error_fix_tasks (error_report_id);`);
+    console.log("[Migration] error_reports table ensured");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure error_reports table:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function seedHistoricalDemoData() {
   try {
     const { Pool } = await import("pg");
@@ -1870,6 +1922,7 @@ async function seedHistoricalDemoData() {
   await syncSubscriptionTiers();
   await seedDemoCompany();
   await applyDemoAutopayMigration();
+  await ensureErrorReportsTable();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
   setupSession(app);
