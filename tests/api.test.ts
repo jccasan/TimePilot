@@ -801,7 +801,154 @@ async function runTests() {
   });
 
   // ==========================================
-  // 17b. PORTAL LOGIN — CASE-INSENSITIVE EMAIL + VALIDATION
+  // 17b. VISIT GENERATION REGRESSION TESTS
+  // Core invariant: creating a job MUST always produce a corresponding visit,
+  // regardless of whether the start date is today, in the past, or in the future.
+  // These tests prevent silent regressions in auto-visit generation logic.
+  // ==========================================
+
+  let visGenContactId = "";
+  let visGenPropertyId = "";
+
+  await test("Visit generation: setup fixture contact and property", "Visits", async () => {
+    const cR = await req("POST", "/api/contacts", {
+      firstName: "VisGenTest",
+      lastName: "Regression",
+      email: `visgen_${Date.now()}@example.com`,
+      status: "lead",
+    });
+    assert(cR.status === 200 || cR.status === 201, `Expected contact creation 200/201, got ${cR.status}`);
+    visGenContactId = cR.data.id;
+    assert(visGenContactId, "Expected contact ID from creation response");
+
+    const pR = await req("POST", "/api/properties", {
+      contactId: visGenContactId,
+      streetAddress: "123 Test Lane",
+      city: "Fredericksburg",
+      state: "VA",
+      zipCode: "22401",
+    });
+    assert(pR.status === 200 || pR.status === 201, `Expected property creation 200/201, got ${pR.status}`);
+    visGenPropertyId = pR.data.id;
+    assert(visGenPropertyId, "Expected property ID from creation response");
+  });
+
+  await test("Visit generation: one-time job for today creates a visit (POST /api/jobs)", "Visits", async () => {
+    if (!visGenContactId || !visGenPropertyId) return;
+    const today = new Date().toISOString().split("T")[0];
+    const r = await req("POST", "/api/jobs", {
+      contactId: visGenContactId,
+      propertyId: visGenPropertyId,
+      frequency: "onetime",
+      pricePerVisit: "29.99",
+      startDate: today,
+    });
+    assert(r.status === 200 || r.status === 201, `Expected job creation 200/201, got ${r.status}: ${JSON.stringify(r.data)}`);
+    const spId = r.data.servicePlanId;
+    assert(spId, "Expected servicePlanId in job creation response");
+
+    const vR = await req("GET", `/api/visits/range?start=${today}&end=${today}`);
+    assert(vR.status === 200, `Expected 200 from visits range, got ${vR.status}`);
+    assert(Array.isArray(vR.data), "Expected array of visits");
+    const found = vR.data.find((v: any) => v.servicePlanId === spId);
+    assert(!!found, `Expected a visit for servicePlanId ${spId} on ${today}, but none found (${vR.data.length} total visits on date)`);
+
+    await req("DELETE", `/api/service-plans/${spId}`);
+  });
+
+  await test("Visit generation: one-time job with yesterday's date still creates a visit", "Visits", async () => {
+    if (!visGenContactId || !visGenPropertyId) return;
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+    const r = await req("POST", "/api/jobs", {
+      contactId: visGenContactId,
+      propertyId: visGenPropertyId,
+      frequency: "onetime",
+      pricePerVisit: "29.99",
+      startDate: yesterdayStr,
+    });
+    assert(r.status === 200 || r.status === 201, `Expected job creation 200/201, got ${r.status}: ${JSON.stringify(r.data)}`);
+    const spId = r.data.servicePlanId;
+    assert(spId, "Expected servicePlanId in job creation response");
+
+    // The visit must be created even though the date is in the past
+    const vR = await req("GET", `/api/visits/range?start=${yesterdayStr}&end=${yesterdayStr}`);
+    assert(vR.status === 200, `Expected 200 from visits range, got ${vR.status}`);
+    assert(Array.isArray(vR.data), "Expected array of visits");
+    const found = vR.data.find((v: any) => v.servicePlanId === spId);
+    assert(!!found, `Expected a visit for servicePlanId ${spId} on past date ${yesterdayStr}, but none found — anchor-date regression`);
+
+    await req("DELETE", `/api/service-plans/${spId}`);
+  });
+
+  await test("Visit generation: recurring weekly job creates visits within 6 months", "Visits", async () => {
+    if (!visGenContactId || !visGenPropertyId) return;
+    const today = new Date();
+    const todayStr = today.toISOString().split("T")[0];
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const todayDayOfWeek = dayNames[today.getDay()];
+    const sixMonthsOut = new Date(today);
+    sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+    const sixMonthsOutStr = sixMonthsOut.toISOString().split("T")[0];
+
+    const r = await req("POST", "/api/jobs", {
+      contactId: visGenContactId,
+      propertyId: visGenPropertyId,
+      frequency: "weekly",
+      pricePerVisit: "29.99",
+      startDate: todayStr,
+      dayOfWeek: todayDayOfWeek,
+    });
+    assert(r.status === 200 || r.status === 201, `Expected job creation 200/201, got ${r.status}: ${JSON.stringify(r.data)}`);
+    const spId = r.data.servicePlanId;
+    assert(spId, "Expected servicePlanId in job creation response");
+
+    const vR = await req("GET", `/api/visits/range?start=${todayStr}&end=${sixMonthsOutStr}`);
+    assert(vR.status === 200, `Expected 200 from visits range, got ${vR.status}`);
+    assert(Array.isArray(vR.data), "Expected array of visits");
+    const planVisits = vR.data.filter((v: any) => v.servicePlanId === spId);
+    assert(planVisits.length >= 1, `Expected at least 1 visit for weekly plan ${spId} in 6-month window, got ${planVisits.length}`);
+
+    await req("DELETE", `/api/service-plans/${spId}`);
+  });
+
+  await test("Visit generation: POST /api/service-plans one-time plan creates a visit", "Visits", async () => {
+    if (!visGenContactId || !visGenPropertyId) return;
+    const today = new Date().toISOString().split("T")[0];
+
+    const r = await req("POST", "/api/service-plans", {
+      contactId: visGenContactId,
+      propertyId: visGenPropertyId,
+      frequency: "onetime",
+      pricePerVisit: "29.99",
+      startDate: today,
+      isActive: true,
+      jobType: "one_off",
+      jobStatus: "active",
+      anytime: true,
+    });
+    assert(r.status === 200 || r.status === 201, `Expected service-plan creation 200/201, got ${r.status}: ${JSON.stringify(r.data)}`);
+    const spId = r.data.id;
+    assert(spId, "Expected id in service-plan creation response");
+
+    const vR = await req("GET", `/api/visits/range?start=${today}&end=${today}`);
+    assert(vR.status === 200, `Expected 200 from visits range, got ${vR.status}`);
+    assert(Array.isArray(vR.data), "Expected array of visits");
+    const found = vR.data.find((v: any) => v.servicePlanId === spId);
+    assert(!!found, `Expected a visit for servicePlanId ${spId} on ${today} via /api/service-plans, but none found`);
+
+    await req("DELETE", `/api/service-plans/${spId}`);
+  });
+
+  await test("Visit generation: cleanup fixture contact and property", "Visits", async () => {
+    if (visGenPropertyId) await req("DELETE", `/api/properties/${visGenPropertyId}`);
+    if (visGenContactId) await req("DELETE", `/api/contacts/${visGenContactId}`);
+  });
+
+  // ==========================================
+  // 17c. PORTAL LOGIN — CASE-INSENSITIVE EMAIL + VALIDATION
   // ==========================================
 
   await test("Portal login with missing email returns 400", "Portal", async () => {
