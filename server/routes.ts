@@ -9089,13 +9089,35 @@ Rules:
       let parsed: any;
       try { parsed = JSON.parse(raw); } catch { return res.status(503).json({ message: "Failed to parse AI response" }); }
 
-      res.json(parsed);
+      const healthScore = typeof parsed.healthScore === "number" ? parsed.healthScore : null;
+      const verdict = typeof parsed.verdict === "string" ? parsed.verdict : "";
+
+      let scoreDelta: number | null = null;
+      if (healthScore !== null) {
+        const history = await storage.getBusinessAssessments(companyId, 50);
+        const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const priorMonthAssessment = history.find(h => new Date(h.createdAt) < currentMonthStart);
+        if (priorMonthAssessment) {
+          scoreDelta = healthScore - priorMonthAssessment.score;
+        }
+        await storage.saveBusinessAssessment({ companyId, score: healthScore, verdict });
+      }
+
+      res.json({ ...parsed, scoreDelta });
     } catch (err) {
       if ((err as any)?.status === 429 || (err as any)?.code === "insufficient_quota") {
         return res.status(503).json({ message: "AI service temporarily unavailable" });
       }
       handleError(res, err);
     }
+  });
+
+  app.get("/api/business-overview/assessment-history", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const history = await storage.getBusinessAssessments(companyId, 13);
+      res.json(history);
+    } catch (err) { handleError(res, err); }
   });
 
   app.get("/api/profitability/customer/:contactId", isAuthenticated, async (req: Request, res: Response) => {

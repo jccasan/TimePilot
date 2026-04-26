@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DollarSign, Users, TrendingUp, TrendingDown, CheckCircle,
-  Sparkles, Loader2, AlertTriangle, Minus, Activity, LayoutDashboard,
+  Sparkles, Loader2, AlertTriangle, Minus, Activity, LayoutDashboard, ArrowUp, ArrowDown,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -38,6 +38,15 @@ type Assessment = {
   cfo: { rating: string; findings: string[] };
   coo: { rating: string; findings: string[] };
   recommendations: { priority: string; title: string; explanation: string }[];
+  scoreDelta: number | null;
+};
+
+type AssessmentHistoryEntry = {
+  id: string;
+  companyId: string;
+  score: number;
+  verdict: string;
+  createdAt: string;
 };
 
 function fmt(n: number): string {
@@ -151,11 +160,18 @@ export default function BusinessOverview() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.message || "Failed to load assessment");
       }
-      return res.json();
+      const result = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/business-overview/assessment-history"] });
+      return result;
     },
     enabled: hasRequestedAssessment,
     staleTime: Infinity,
     retry: false,
+  });
+
+  const { data: assessmentHistory } = useQuery<AssessmentHistoryEntry[]>({
+    queryKey: ["/api/business-overview/assessment-history"],
+    staleTime: 5 * 60 * 1000,
   });
 
   if (isLoading) {
@@ -455,11 +471,66 @@ export default function BusinessOverview() {
             <div className="space-y-5" data-testid="assessment-results">
               {/* Health Score + Verdict */}
               <div className="flex flex-wrap items-center gap-6">
-                <HealthScoreRing score={assessment.healthScore} />
-                <div className="flex-1 min-w-0">
+                <div className="flex flex-col items-center gap-2">
+                  <HealthScoreRing score={assessment.healthScore} />
+                  {assessment.scoreDelta !== null && assessment.scoreDelta !== undefined && (
+                    <div
+                      className={`flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        assessment.scoreDelta > 0
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          : assessment.scoreDelta < 0
+                          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                      data-testid="text-score-delta"
+                    >
+                      {assessment.scoreDelta > 0 ? (
+                        <ArrowUp className="h-3 w-3" />
+                      ) : assessment.scoreDelta < 0 ? (
+                        <ArrowDown className="h-3 w-3" />
+                      ) : (
+                        <Minus className="h-3 w-3" />
+                      )}
+                      {assessment.scoreDelta > 0 ? "+" : ""}{assessment.scoreDelta} pts from last month
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 space-y-3">
                   <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-verdict">
                     {assessment.verdict}
                   </p>
+                  {assessmentHistory && assessmentHistory.length > 1 && (
+                    <div data-testid="chart-score-history">
+                      <p className="text-xs text-muted-foreground mb-1 font-medium">Score History</p>
+                      <ResponsiveContainer width="100%" height={60}>
+                        <LineChart data={[...assessmentHistory].reverse().map(h => ({
+                          date: new Date(h.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                          score: h.score,
+                        }))}>
+                          <YAxis domain={[0, 100]} hide />
+                          <Tooltip
+                            content={({ active, payload, label }) => {
+                              if (!active || !payload?.length) return null;
+                              return (
+                                <div className="rounded-md border bg-background p-1.5 shadow-md text-xs">
+                                  <p className="font-medium">{label}</p>
+                                  <p>Score: <span className="font-bold">{payload[0].value}</span></p>
+                                </div>
+                              );
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="score"
+                            stroke="#6366f1"
+                            strokeWidth={2}
+                            dot={{ r: 3, fill: "#6366f1" }}
+                            activeDot={{ r: 4 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
                 </div>
               </div>
 

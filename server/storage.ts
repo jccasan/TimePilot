@@ -78,6 +78,8 @@ import {
   type MessageAttachment, type InsertMessageAttachment,
   systemMessages,
   type SystemMessage, type InsertSystemMessage,
+  businessAssessments,
+  type BusinessAssessment, type InsertBusinessAssessment,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -460,6 +462,10 @@ export interface IStorage {
   markSystemMessageRead(id: string, companyId: string): Promise<SystemMessage | undefined>;
   dismissSystemMessage(id: string, companyId: string): Promise<SystemMessage | undefined>;
   dismissAllSystemMessages(companyId: string): Promise<void>;
+
+  // Business Assessments
+  saveBusinessAssessment(data: InsertBusinessAssessment): Promise<BusinessAssessment>;
+  getBusinessAssessments(companyId: string, limit?: number): Promise<BusinessAssessment[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2843,6 +2849,20 @@ export class DatabaseStorage implements IStorage {
     await db.update(systemMessages)
       .set({ dismissedAt: new Date() })
       .where(and(eq(systemMessages.companyId, companyId), isNull(systemMessages.dismissedAt)));
+  }
+
+  // ================ Business Assessments ================
+  async saveBusinessAssessment(data: InsertBusinessAssessment): Promise<BusinessAssessment> {
+    const [row] = await db.insert(businessAssessments).values(data).returning();
+    return row;
+  }
+
+  async getBusinessAssessments(companyId: string, limit = 13): Promise<BusinessAssessment[]> {
+    return db.select()
+      .from(businessAssessments)
+      .where(eq(businessAssessments.companyId, companyId))
+      .orderBy(desc(businessAssessments.createdAt))
+      .limit(limit);
   }
 }
 

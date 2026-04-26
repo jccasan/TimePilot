@@ -1868,6 +1868,21 @@ export const stripeEvents = pgTable("stripe_events", {
   index("idx_stripe_events_processed").on(table.processedAt),
 ]);
 
+export const businessAssessments = pgTable("business_assessments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  score: integer("score").notNull(),
+  verdict: text("verdict").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ba_company").on(table.companyId),
+  index("idx_ba_created").on(table.companyId, table.createdAt),
+]);
+
+export const insertBusinessAssessmentSchema = createInsertSchema(businessAssessments).omit({ id: true, createdAt: true });
+export type BusinessAssessment = typeof businessAssessments.$inferSelect;
+export type InsertBusinessAssessment = z.infer<typeof insertBusinessAssessmentSchema>;
+
 export const quoteFormEvents = pgTable("quote_form_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
