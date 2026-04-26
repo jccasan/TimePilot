@@ -6,6 +6,7 @@ import { sendEmail } from "../services/email";
 import { sendSmsForCompany, isSmsConfiguredForCompany } from "../services/sms";
 import { getCompanyToday } from "../utils/company-date";
 import { users } from "@shared/schema";
+import { maskEmail, maskPhone } from "../utils/pii";
 
 const DEFAULT_REMINDER_RULES: ReminderRule[] = [
   {
@@ -379,9 +380,9 @@ async function sendServiceRemindersForRule(
             replyTo: companyEmail || undefined,
           });
           emailOk = emailRes.success;
-          if (!emailOk) console.error(`[reminders] Email delivery failed for ${contact.email}: ${emailRes.error}`);
+          if (!emailOk) console.error(`[reminders] Email delivery failed for ${maskEmail(contact.email)}: ${emailRes.error}`);
         } catch (err) {
-          console.error(`[reminders] Failed to send email to ${contact.email}:`, err);
+          console.error(`[reminders] Failed to send email to ${maskEmail(contact.email)}:`, err);
         }
       }
 
@@ -389,9 +390,9 @@ async function sendServiceRemindersForRule(
         try {
           const smsRes = await sendSmsForCompany({ to: contact.phone!, body: message, companyId, contactId: contact.id });
           smsOk = smsRes.success;
-          if (!smsOk) console.error(`[reminders] SMS delivery failed for ${contact.phone}: ${smsRes.error}`);
+          if (!smsOk) console.error(`[reminders] SMS delivery failed for ${maskPhone(contact.phone!)}: ${smsRes.error}`);
         } catch (err) {
-          console.error(`[reminders] Failed to send SMS to ${contact.phone}:`, err);
+          console.error(`[reminders] Failed to send SMS to ${maskPhone(contact.phone!)}:`, err);
         }
       }
 
@@ -572,10 +573,10 @@ async function sendInvoiceReminders(
         if (emailRes.success) {
           emailOk = true;
         } else {
-          console.error(`[reminders] Invoice email delivery failed for ${contact.email}: ${emailRes.error}`);
+          console.error(`[reminders] Invoice email delivery failed for ${maskEmail(contact.email)}: ${emailRes.error}`);
         }
       } catch (err) {
-        console.error(`[reminders] Failed to send invoice email to ${contact.email}:`, err);
+        console.error(`[reminders] Failed to send invoice email to ${maskEmail(contact.email)}:`, err);
       }
     }
 
@@ -585,10 +586,10 @@ async function sendInvoiceReminders(
         if (smsRes.success) {
           smsOk = true;
         } else {
-          console.error(`[reminders] Invoice SMS delivery failed for ${contact.phone}: ${smsRes.error}`);
+          console.error(`[reminders] Invoice SMS delivery failed for ${maskPhone(contact.phone!)}: ${smsRes.error}`);
         }
       } catch (err) {
-        console.error(`[reminders] Failed to send invoice SMS to ${contact.phone}:`, err);
+        console.error(`[reminders] Failed to send invoice SMS to ${maskPhone(contact.phone!)}:`, err);
       }
     }
 

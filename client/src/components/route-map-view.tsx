@@ -91,13 +91,20 @@ export default function RouteMapView({ stops, routeName, selectedStopId, onStopC
             el.addEventListener("click", () => onStopClick(stop.id!));
           }
 
-          const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
-            `<div data-testid="popup-stop-${stop.stopNumber}" style="padding:4px;">
-              <strong>Stop #${stop.stopNumber}</strong><br/>
-              <span>${stop.streetAddress}</span><br/>
-              <span style="color:#666;">${stop.contactName}</span>
-            </div>`
-          );
+          const popupEl = document.createElement("div");
+          popupEl.dataset.testid = `popup-stop-${stop.stopNumber}`;
+          popupEl.style.padding = "4px";
+          const strong = document.createElement("strong");
+          strong.textContent = `Stop #${stop.stopNumber}`;
+          const br1 = document.createElement("br");
+          const addrSpan = document.createElement("span");
+          addrSpan.textContent = stop.streetAddress;
+          const br2 = document.createElement("br");
+          const nameSpan = document.createElement("span");
+          nameSpan.style.color = "#666";
+          nameSpan.textContent = stop.contactName;
+          popupEl.append(strong, br1, addrSpan, br2, nameSpan);
+          const popup = new mapboxgl.Popup({ offset: 25 }).setDOMContent(popupEl);
 
           const marker = new mapboxgl.Marker({ element: el })
             .setLngLat([stop.longitude, stop.latitude])

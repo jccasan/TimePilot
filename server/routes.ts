@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { maskEmail, maskPhone } from "./utils/pii";
 import { type Server } from "http";
 import crypto from "crypto";
 import fs from "fs";
@@ -1580,7 +1581,7 @@ export async function registerRoutes(
         if (!emailResult.success) {
           console.error("[Password Reset] Failed to send email:", emailResult.error);
         } else {
-          console.log("[Password Reset] Email sent successfully to:", email);
+          console.log("[Password Reset] Email sent successfully to:", maskEmail(email));
         }
       }
 
@@ -10350,7 +10351,7 @@ Rules:
         toNumber = payload.to;
       }
 
-      console.log(`[Telnyx SMS] Parsed: from=${fromNumber}, to=${toNumber}, messageId=${messageId}`);
+      console.log(`[Telnyx SMS] Parsed: from=${maskPhone(fromNumber)}, to=${maskPhone(toNumber)}, messageId=${messageId}`);
 
       type TelnyxMedia = { url?: string; content_type?: string; size?: number };
       const rawMedia: TelnyxMedia[] = Array.isArray(payload.media) ? payload.media : [];
@@ -10359,7 +10360,7 @@ Rules:
       );
 
       if (!fromNumber || (!textBody && inboundMedia.length === 0)) {
-        console.log(`[Telnyx SMS] Missing required fields: fromNumber=${fromNumber}, textBody=${textBody ? "present" : "missing"}, media=${inboundMedia.length}`);
+        console.log(`[Telnyx SMS] Missing required fields: fromNumber=${maskPhone(fromNumber)}, textBody=${textBody ? "present" : "missing"}, media=${inboundMedia.length}`);
         return res.status(200).json({ ok: true });
       }
 
@@ -10392,7 +10393,7 @@ Rules:
             console.log(`[Telnyx SMS] Shared number routed to company: ${matchedCompany.name} (via routing table)`);
           }
         } else if (routingEntries.length > 1) {
-          console.warn(`[Telnyx SMS] Ambiguous routing: ${routingEntries.length} companies for from=${fromNumber} on shared number. Sending to exception queue.`);
+          console.warn(`[Telnyx SMS] Ambiguous routing: ${routingEntries.length} companies for from=${maskPhone(fromNumber)} on shared number. Sending to exception queue.`);
           await storage.createMessageException({
             providerMessageId: messageId,
             fromAddress: fromNumber,
@@ -10449,7 +10450,7 @@ Rules:
 
       if (!matchedCompany) {
         const checkedNumbers = allCompanies.map(c => `${c.name}: telnyx=${c.telnyxPhoneNumber || "none"}, dedicated=${c.dedicatedPhoneNumber || "none"}`).join("; ");
-        console.warn(`[Telnyx SMS] WARNING: No company matched for to number: ${toNumber} (digits: ${toDigits}). Checked: ${checkedNumbers}`);
+        console.warn(`[Telnyx SMS] WARNING: No company matched for to number: ${maskPhone(toNumber)}. Checked: ${checkedNumbers}`);
         return res.status(200).json({ ok: true });
       }
 
@@ -10689,7 +10690,7 @@ Rules:
         return res.status(200).json({ ok: true });
       }
 
-      console.log(`[Inbound Email] Processing reply from ${senderEmail}, threadId=${threadId}`);
+      console.log(`[Inbound Email] Processing reply from ${maskEmail(senderEmail)}, threadId=${threadId}`);
 
       const threadMessages = await storage.getMessagesByEmailThreadId(threadId);
       if (threadMessages.length === 0) {
@@ -10953,7 +10954,7 @@ Rules:
       });
 
       if (!matchedCompany) {
-        console.warn(`[Retell Webhook] No company matched for agent phone ${agentPhone}, call ${retellCallId}`);
+        console.warn(`[Retell Webhook] No company matched for agent phone ${maskPhone(agentPhone)}, call ${retellCallId}`);
         return res.status(200).json({ ok: true });
       }
 
@@ -11161,7 +11162,7 @@ Rules:
         metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
       });
 
-      console.log(`[send-email] Sending invoice ${invoice.invoiceNumber} to ${contact.email} from ${fromAddress}`);
+      console.log(`[send-email] Sending invoice ${invoice.invoiceNumber} to ${maskEmail(contact.email)} from ${maskEmail(fromAddress)}`);
       const result = await sendEmail({
         companyId: companyId,
         to: contact.email,
@@ -11174,7 +11175,7 @@ Rules:
       });
 
       if (result.success) {
-        console.log(`[send-email] Successfully sent invoice ${invoice.invoiceNumber} to ${contact.email}`);
+        console.log(`[send-email] Successfully sent invoice ${invoice.invoiceNumber} to ${maskEmail(contact.email)}`);
         await storage.updateMessageStatus(msg.id, "sent");
         if (invoice.status === "pending" || invoice.status === "draft") {
           await storage.updateInvoice(invoice.id, companyId, { status: "sent" });
@@ -11615,7 +11616,7 @@ Rules:
 
                 const dedicatedPhoneNumber = await provisionRetellNumber({ areaCode });
                 companyUpdates.dedicatedPhoneNumber = dedicatedPhoneNumber;
-                console.log(`[Retell] Provisioned number ${dedicatedPhoneNumber} for company "${company.name}" (${company.id})`);
+                console.log(`[Retell] Provisioned number ${maskPhone(dedicatedPhoneNumber)} for company "${company.name}" (${company.id})`);
               }
 
               const websiteField = customFields.find((f) => f.key === "business_website");
@@ -11963,12 +11964,12 @@ Rules:
                     </div>
                   </div>`,
               });
-              console.log(`[Stripe Subscription] Welcome email sent to ${email}`);
+              console.log(`[Stripe Subscription] Welcome email sent to ${maskEmail(email)}`);
             } catch (emailErr) {
-              console.error(`[Stripe Subscription] Failed to send welcome email to ${email}:`, emailErr);
+              console.error(`[Stripe Subscription] Failed to send welcome email to ${maskEmail(email)}:`, emailErr);
             }
 
-            console.log(`[Stripe Subscription] Provisioned new tenant "${companyName}" (${company.id}) for ${email}, subscription ${subscription.id}`);
+            console.log(`[Stripe Subscription] Provisioned new tenant "${companyName}" (${company.id}) for ${maskEmail(email)}, subscription ${subscription.id}`);
           }
         } else {
           console.warn(`[Stripe Subscription] Missing required metadata (company_name, email, first_name) on subscription ${subscription.id}`);
@@ -12234,7 +12235,6 @@ Rules:
     try {
       const apiKey = (req.headers["x-api-key"] || req.headers["authorization"]?.replace(/^Bearer\s+/i, "")) as string | undefined;
       const expectedKey = process.env.SCOOPILOT_API_KEY;
-      console.log(`[Create Tenant] Auth check — header present: ${!!apiKey}, expected present: ${!!expectedKey}, key length: ${apiKey?.length || 0}, expected length: ${expectedKey?.length || 0}, match: ${apiKey === expectedKey}`);
       if (!expectedKey || !apiKey || apiKey !== expectedKey) {
         return res.status(401).json({ error: "Unauthorized" });
       }
@@ -12336,12 +12336,12 @@ Rules:
               </div>
             </div>`,
         });
-        console.log(`[Create Tenant] Welcome email sent to ${email}`);
+        console.log(`[Create Tenant] Welcome email sent to ${maskEmail(email)}`);
       } catch (emailErr) {
-        console.error(`[Create Tenant] Failed to send welcome email to ${email}:`, emailErr);
+        console.error(`[Create Tenant] Failed to send welcome email to ${maskEmail(email)}:`, emailErr);
       }
 
-      console.log(`[Create Tenant] Provisioned new tenant "${company}" (${newCompany.id}) for ${email}`);
+      console.log(`[Create Tenant] Provisioned new tenant "${company}" (${newCompany.id}) for ${maskEmail(email)}`);
       return res.json({
         success: true,
         tenant_id: newCompany.id,

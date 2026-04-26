@@ -315,24 +315,45 @@ export default function ProfitabilityMap({
           el.style.cursor = "pointer";
           el.textContent = String(stop.stopOrder || "");
 
-          const popupHtml = useRouteColors
-            ? `<div data-testid="popup-stop-${stop.propertyId}" style="padding:6px;font-family:system-ui,sans-serif;">
-                <div style="font-weight:600;margin-bottom:4px;">${stop.contactName}</div>
-                <div style="font-size:12px;color:#666;">${stop.propertyAddress}</div>
-                <div style="margin-top:4px;font-size:11px;color:#888;">Stop #${stop.stopOrder}</div>
-              </div>`
-            : `<div data-testid="popup-stop-${stop.propertyId}" style="padding:6px;font-family:system-ui,sans-serif;">
-                <div style="font-weight:600;margin-bottom:4px;">${stop.contactName}</div>
-                <div style="font-size:12px;color:#666;margin-bottom:6px;">${stop.propertyAddress}</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;font-size:12px;">
-                  <span style="color:#888;">Revenue:</span><span style="font-weight:500;">${formatDollars(stop.revenuePerVisitCents)}</span>
-                  <span style="color:#888;">Cost:</span><span style="font-weight:500;">${formatDollars(stop.costPerVisitCents)}</span>
-                  <span style="color:#888;">Profit:</span><span style="font-weight:500;color:${stop.profitPerVisitCents >= 0 ? "#16a34a" : "#dc2626"}">${formatDollars(stop.profitPerVisitCents)}</span>
-                  <span style="color:#888;">Margin:</span><span style="font-weight:500;color:${stop.profitMarginPct >= 15 ? "#16a34a" : stop.profitMarginPct >= 0 ? "#ca8a04" : "#dc2626"}">${stop.profitMarginPct.toFixed(1)}%</span>
-                </div>
-                <div style="margin-top:6px;font-size:11px;color:#888;">${stop.frequency} | ${stop.dogCount} dog${stop.dogCount !== 1 ? "s" : ""} | ${stop.yardSize}</div>
-              </div>`;
-          const popup = new mapboxgl.Popup({ offset: 25, maxWidth: "260px" }).setHTML(popupHtml);
+          const popupEl = document.createElement("div");
+          popupEl.dataset.testid = `popup-stop-${stop.propertyId}`;
+          Object.assign(popupEl.style, { padding: "6px", fontFamily: "system-ui,sans-serif" });
+          const nameEl = document.createElement("div");
+          Object.assign(nameEl.style, { fontWeight: "600", marginBottom: "4px" });
+          nameEl.textContent = stop.contactName;
+          const addrEl = document.createElement("div");
+          addrEl.textContent = stop.propertyAddress;
+          popupEl.append(nameEl, addrEl);
+          if (useRouteColors) {
+            Object.assign(addrEl.style, { fontSize: "12px", color: "#666" });
+            const stopEl = document.createElement("div");
+            Object.assign(stopEl.style, { marginTop: "4px", fontSize: "11px", color: "#888" });
+            stopEl.textContent = `Stop #${stop.stopOrder}`;
+            popupEl.append(stopEl);
+          } else {
+            Object.assign(addrEl.style, { fontSize: "12px", color: "#666", marginBottom: "6px" });
+            const grid = document.createElement("div");
+            Object.assign(grid.style, { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 8px", fontSize: "12px" });
+            const addRow = (label: string, value: string, valueColor?: string) => {
+              const lbl = document.createElement("span");
+              lbl.style.color = "#888";
+              lbl.textContent = label;
+              const val = document.createElement("span");
+              val.style.fontWeight = "500";
+              if (valueColor) val.style.color = valueColor;
+              val.textContent = value;
+              grid.append(lbl, val);
+            };
+            addRow("Revenue:", formatDollars(stop.revenuePerVisitCents));
+            addRow("Cost:", formatDollars(stop.costPerVisitCents));
+            addRow("Profit:", formatDollars(stop.profitPerVisitCents), stop.profitPerVisitCents >= 0 ? "#16a34a" : "#dc2626");
+            addRow("Margin:", `${stop.profitMarginPct.toFixed(1)}%`, stop.profitMarginPct >= 15 ? "#16a34a" : stop.profitMarginPct >= 0 ? "#ca8a04" : "#dc2626");
+            const footerEl = document.createElement("div");
+            Object.assign(footerEl.style, { marginTop: "6px", fontSize: "11px", color: "#888" });
+            footerEl.textContent = `${stop.frequency} | ${stop.dogCount} dog${stop.dogCount !== 1 ? "s" : ""} | ${stop.yardSize}`;
+            popupEl.append(grid, footerEl);
+          }
+          const popup = new mapboxgl.Popup({ offset: 25, maxWidth: "260px" }).setDOMContent(popupEl);
 
           el.addEventListener("click", () => {
             if (onStopClick) onStopClick(stop);

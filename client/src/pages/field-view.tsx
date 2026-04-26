@@ -266,15 +266,30 @@ export default function FieldView() {
         const statusLabel = visit.status.replace(/_/g, " ");
         const statusColor = pinColor;
 
-        const popup = new mapboxgl.Popup({ offset: 20, maxWidth: "240px" }).setHTML(
-          `<div data-testid="popup-visit-${visit.id}" style="padding:6px 4px;font-family:sans-serif;">
-            <div style="font-weight:600;font-size:13px;margin-bottom:2px;">Stop #${visit.stopOrder} — ${contactName}</div>
-            <div style="font-size:12px;color:#555;margin-bottom:4px;">${address}${city}</div>
-            ${techLabel ? `<div style="font-size:11px;color:#444;margin-bottom:2px;">${techLabel}</div>` : ""}
-            <div style="font-size:11px;color:#888;margin-bottom:3px;">${routeLabel}</div>
-            <span style="background:${statusColor};color:white;padding:1px 6px;border-radius:10px;font-size:10px;">${statusLabel}</span>
-          </div>`
-        );
+        const popupEl = document.createElement("div");
+        popupEl.dataset.testid = `popup-visit-${visit.id}`;
+        Object.assign(popupEl.style, { padding: "6px 4px", fontFamily: "sans-serif" });
+        const titleEl = document.createElement("div");
+        Object.assign(titleEl.style, { fontWeight: "600", fontSize: "13px", marginBottom: "2px" });
+        titleEl.textContent = `Stop #${visit.stopOrder} — ${contactName}`;
+        const addrEl = document.createElement("div");
+        Object.assign(addrEl.style, { fontSize: "12px", color: "#555", marginBottom: "4px" });
+        addrEl.textContent = `${address}${city}`;
+        popupEl.append(titleEl, addrEl);
+        if (techLabel) {
+          const techEl = document.createElement("div");
+          Object.assign(techEl.style, { fontSize: "11px", color: "#444", marginBottom: "2px" });
+          techEl.textContent = techLabel;
+          popupEl.append(techEl);
+        }
+        const routeEl = document.createElement("div");
+        Object.assign(routeEl.style, { fontSize: "11px", color: "#888", marginBottom: "3px" });
+        routeEl.textContent = routeLabel;
+        const statusEl = document.createElement("span");
+        Object.assign(statusEl.style, { background: statusColor, color: "white", padding: "1px 6px", borderRadius: "10px", fontSize: "10px" });
+        statusEl.textContent = statusLabel;
+        popupEl.append(routeEl, statusEl);
+        const popup = new mapboxgl.Popup({ offset: 20, maxWidth: "240px" }).setDOMContent(popupEl);
 
         const marker = new mapboxgl.Marker({ element: el })
           .setLngLat([lng, lat])
