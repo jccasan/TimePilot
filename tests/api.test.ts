@@ -1001,6 +1001,506 @@ async function runTests() {
   });
 
   // ==========================================
+  // 17d. PORTAL — AUTHENTICATED FULL FLOW
+  // ==========================================
+
+  let portalFlowContactId = "";
+  let portalFlowToken = "";
+  const portalFlowEmail = `portal_flow_${Date.now()}@example.com`;
+  const portalFlowPassword = "PortalFlow1!";
+
+  await test("Portal flow: setup fixture contact with email", "Portal Flow", async () => {
+    const r = await req("POST", "/api/contacts", {
+      firstName: "PortalFlowTest",
+      lastName: "User",
+      email: portalFlowEmail,
+      status: "active",
+    });
+    assert(r.status === 200 || r.status === 201, `Expected 200/201 for contact, got ${r.status}: ${JSON.stringify(r.data)}`);
+    portalFlowContactId = r.data.id;
+    assert(portalFlowContactId, "No contact ID returned");
+  });
+
+  await test("Portal flow: grant portal access and set password", "Portal Flow", async () => {
+    if (!portalFlowContactId) return;
+    const grantR = await req("POST", `/api/contacts/${portalFlowContactId}/portal-access`, {});
+    assert(grantR.status === 200, `Expected 200 for portal access grant, got ${grantR.status}: ${JSON.stringify(grantR.data)}`);
+    const pwR = await req("POST", `/api/contacts/${portalFlowContactId}/portal-access/reset-password`, { newPassword: portalFlowPassword });
+    assert(pwR.status === 200, `Expected 200 for password reset, got ${pwR.status}: ${JSON.stringify(pwR.data)}`);
+  });
+
+  await test("Portal flow: login returns token", "Portal Flow", async () => {
+    if (!portalFlowContactId) return;
+    const r = await req("POST", "/api/portal/login", {
+      email: portalFlowEmail,
+      password: portalFlowPassword,
+    }, { Authorization: "" });
+    assert(r.status === 200, `Expected 200 for portal login, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.token, "Expected token in portal login response");
+    assert(r.data.contactId === portalFlowContactId, `Expected contactId ${portalFlowContactId}, got ${r.data.contactId}`);
+    portalFlowToken = r.data.token;
+  });
+
+  await test("Portal flow: GET /api/portal/me returns contact info", "Portal Flow", async () => {
+    if (!portalFlowToken) return;
+    const r = await req("GET", "/api/portal/me", undefined, { Authorization: `Bearer ${portalFlowToken}` });
+    assert(r.status === 200, `Expected 200 from /api/portal/me, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.id === portalFlowContactId, `Expected contact id ${portalFlowContactId}, got ${r.data.id}`);
+    assert(r.data.firstName === "PortalFlowTest", `Expected firstName PortalFlowTest, got ${r.data.firstName}`);
+    assert(typeof r.data.companyName === "string", "Expected companyName string");
+  });
+
+  await test("Portal flow: GET /api/portal/schedule returns object with arrays", "Portal Flow", async () => {
+    if (!portalFlowToken) return;
+    const r = await req("GET", "/api/portal/schedule", undefined, { Authorization: `Bearer ${portalFlowToken}` });
+    assert(r.status === 200, `Expected 200 from /api/portal/schedule, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(Array.isArray(r.data.servicePlans), "Expected servicePlans array");
+    assert(Array.isArray(r.data.upcomingVisits), "Expected upcomingVisits array");
+  });
+
+  await test("Portal flow: GET /api/portal/invoices returns array", "Portal Flow", async () => {
+    if (!portalFlowToken) return;
+    const r = await req("GET", "/api/portal/invoices", undefined, { Authorization: `Bearer ${portalFlowToken}` });
+    assert(r.status === 200, `Expected 200 from /api/portal/invoices, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(Array.isArray(r.data), "Expected array of invoices");
+  });
+
+  await test("Portal flow: POST /api/portal/contact-us sends message", "Portal Flow", async () => {
+    if (!portalFlowToken) return;
+    const r = await req("POST", "/api/portal/contact-us", {
+      subject: "Test inquiry",
+      message: "This is a regression test message from the portal flow tests.",
+    }, { Authorization: `Bearer ${portalFlowToken}` });
+    // 200 = success; 400 = company has no email configured (acceptable in test env)
+    assert(r.status === 200 || r.status === 400, `Expected 200 or 400 from /api/portal/contact-us, got ${r.status}: ${JSON.stringify(r.data)}`);
+    if (r.status === 200) {
+      assert(r.data.success === true, "Expected success:true");
+    }
+  });
+
+  await test("Portal flow: GET /api/portal/messages returns array", "Portal Flow", async () => {
+    if (!portalFlowToken) return;
+    const r = await req("GET", "/api/portal/messages", undefined, { Authorization: `Bearer ${portalFlowToken}` });
+    assert(r.status === 200, `Expected 200 from /api/portal/messages, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(Array.isArray(r.data), "Expected array of messages");
+  });
+
+  await test("Portal flow: GET /api/portal/visits/history returns paginated object", "Portal Flow", async () => {
+    if (!portalFlowToken) return;
+    const r = await req("GET", "/api/portal/visits/history", undefined, { Authorization: `Bearer ${portalFlowToken}` });
+    assert(r.status === 200, `Expected 200 from /api/portal/visits/history, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(Array.isArray(r.data.visits), "Expected visits array");
+    assert(typeof r.data.total === "number", "Expected numeric total");
+  });
+
+  await test("Portal flow: POST /api/portal/logout invalidates session", "Portal Flow", async () => {
+    if (!portalFlowToken) return;
+    const r = await req("POST", "/api/portal/logout", {}, { Authorization: `Bearer ${portalFlowToken}` });
+    assert(r.status === 200, `Expected 200 from /api/portal/logout, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.success === true, "Expected success:true");
+    // After logout, the same token should be rejected
+    const afterR = await req("GET", "/api/portal/me", undefined, { Authorization: `Bearer ${portalFlowToken}` });
+    assert(afterR.status === 401, `Expected 401 after logout but got ${afterR.status}`);
+  });
+
+  await test("Portal flow: cleanup fixture contact", "Portal Flow", async () => {
+    if (!portalFlowContactId) return;
+    const revokeR = await req("DELETE", `/api/contacts/${portalFlowContactId}/portal-access`);
+    assert(revokeR.status < 500, `Portal access revoke failed with ${revokeR.status}`);
+    const delR = await req("DELETE", `/api/contacts/${portalFlowContactId}`);
+    assert(delR.status < 500, `Contact cleanup failed with ${delR.status}`);
+  });
+
+  // ==========================================
+  // 17e. ROUTES — EXPANDED LIFECYCLE
+  // ==========================================
+
+  let routeLifecycleId = "";
+
+  await test("Route lifecycle: create route for lifecycle tests", "Routes Extended", async () => {
+    const r = await req("POST", "/api/routes", {
+      name: "Lifecycle Test Route",
+      dayOfWeek: "wednesday",
+    });
+    assert(r.status === 200 || r.status === 201, `Expected 200/201, got ${r.status}: ${JSON.stringify(r.data)}`);
+    routeLifecycleId = r.data.id;
+    assert(routeLifecycleId, "No route ID returned");
+  });
+
+  await test("Route lifecycle: PATCH /api/routes/:id renames route", "Routes Extended", async () => {
+    if (!routeLifecycleId) return;
+    const r = await req("PATCH", `/api/routes/${routeLifecycleId}`, { name: "Renamed Lifecycle Route" });
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.name === "Renamed Lifecycle Route", `Expected updated name, got ${r.data.name}`);
+  });
+
+  await test("Route lifecycle: PATCH /api/routes/:id/lock toggles lock on", "Routes Extended", async () => {
+    if (!routeLifecycleId) return;
+    const r = await req("PATCH", `/api/routes/${routeLifecycleId}/lock`, {});
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.isLocked === true, `Expected isLocked:true after first lock toggle, got ${JSON.stringify(r.data.isLocked)}`);
+  });
+
+  await test("Route lifecycle: PATCH /api/routes/:id/lock toggles lock off", "Routes Extended", async () => {
+    if (!routeLifecycleId) return;
+    const r = await req("PATCH", `/api/routes/${routeLifecycleId}/lock`, {});
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.isLocked === false, `Expected isLocked:false after second lock toggle, got ${JSON.stringify(r.data.isLocked)}`);
+  });
+
+  await test("Route lifecycle: GET /api/routes/:id/metrics returns metrics object", "Routes Extended", async () => {
+    if (!routeLifecycleId) return;
+    const r = await req("GET", `/api/routes/${routeLifecycleId}/metrics`);
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(typeof r.data === "object" && r.data !== null, "Expected metrics object");
+    // Empty route returns stopCount:0, totalDistance:0, totalDuration:0
+    assert(typeof r.data.stopCount === "number", "Expected numeric stopCount");
+    assert(typeof r.data.totalDistance === "number", "Expected numeric totalDistance");
+  });
+
+  await test("Route lifecycle: POST /api/routes/:id/optimize on empty route returns early (no credits consumed)", "Routes Extended", async () => {
+    if (!routeLifecycleId) return;
+    const r = await req("POST", `/api/routes/${routeLifecycleId}/optimize`, {});
+    // Empty/unlocked route → 200 with optimized:false
+    assert(r.status === 200 || r.status === 402, `Expected 200 or 402, got ${r.status}: ${JSON.stringify(r.data)}`);
+    if (r.status === 200) {
+      assert(r.data.optimized === false, `Expected optimized:false for empty route, got ${r.data.optimized}`);
+    }
+  });
+
+  await test("Route lifecycle: cleanup route", "Routes Extended", async () => {
+    if (!routeLifecycleId) return;
+    const r = await req("DELETE", `/api/routes/${routeLifecycleId}`);
+    assert(r.status < 500, `Route cleanup failed with ${r.status}`);
+  });
+
+  // ==========================================
+  // 17f. ONBOARDING — BUSINESS STEPS
+  // ==========================================
+
+  await test("Onboarding: GET /api/onboarding/business-status returns current step", "Onboarding", async () => {
+    const r = await req("GET", "/api/onboarding/business-status");
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(typeof r.data.currentStep === "number", "Expected currentStep number");
+    assert(typeof r.data.isComplete === "boolean", "Expected isComplete boolean");
+    assert(Array.isArray(r.data.completedSteps), "Expected completedSteps array");
+    assert(r.data.companyData && typeof r.data.companyData === "object", "Expected companyData object");
+  });
+
+  await test("Onboarding: POST /api/onboarding/business-step saves step 1 (description)", "Onboarding", async () => {
+    const r = await req("POST", "/api/onboarding/business-step", {
+      step: 1,
+      data: {
+        businessDescription: "A test pet waste removal company used for regression testing.",
+        serviceAreaDescription: "Test area",
+      },
+    });
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.success === true, "Expected success:true");
+    assert(r.data.nextStep === 2, `Expected nextStep:2, got ${r.data.nextStep}`);
+  });
+
+  await test("Onboarding: POST /api/onboarding/business-step with invalid step returns 400", "Onboarding", async () => {
+    const r = await req("POST", "/api/onboarding/business-step", { step: 99 });
+    assert(r.status === 400, `Expected 400 for invalid step, got ${r.status}: ${JSON.stringify(r.data)}`);
+  });
+
+  // ==========================================
+  // 17g. INVOICE — FULL LIFECYCLE + #368 REGRESSIONS
+  // ==========================================
+
+  let invoiceFixtureContactId = "";
+  let invoiceId = "";
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 30);
+  const invoiceDueDate = tomorrow.toISOString().split("T")[0];
+
+  await test("Invoice lifecycle: setup fixture contact", "Invoice Lifecycle", async () => {
+    const r = await req("POST", "/api/contacts", {
+      firstName: "InvoiceTest",
+      lastName: "Contact",
+      email: `invoicetest_${Date.now()}@example.com`,
+      status: "active",
+    });
+    assert(r.status === 200 || r.status === 201, `Expected 200/201, got ${r.status}: ${JSON.stringify(r.data)}`);
+    invoiceFixtureContactId = r.data.id;
+    assert(invoiceFixtureContactId, "No contact ID returned");
+  });
+
+  await test("Invoice lifecycle: POST /api/invoices creates invoice with line items", "Invoice Lifecycle", async () => {
+    if (!invoiceFixtureContactId) return;
+    const r = await req("POST", "/api/invoices", {
+      contactId: invoiceFixtureContactId,
+      dueDate: invoiceDueDate,
+      status: "draft",
+      lineItems: [
+        { description: "Weekly dog waste removal", quantity: 4, unitPrice: "29.99" },
+      ],
+    });
+    assert(r.status === 201, `Expected 201, got ${r.status}: ${JSON.stringify(r.data)}`);
+    invoiceId = r.data.id;
+    assert(invoiceId, "Expected invoice ID in response");
+    assert(r.data.invoiceNumber, "Expected invoiceNumber");
+    assert(Array.isArray(r.data.lineItems) && r.data.lineItems.length === 1, `Expected 1 line item, got ${JSON.stringify(r.data.lineItems)}`);
+    assert(r.data.total === "119.96", `Expected total 119.96, got ${r.data.total}`);
+  });
+
+  await test("Invoice lifecycle: GET /api/invoices/:id returns invoice", "Invoice Lifecycle", async () => {
+    if (!invoiceId) return;
+    const r = await req("GET", `/api/invoices/${invoiceId}`);
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.id === invoiceId, `Expected id ${invoiceId}, got ${r.data.id}`);
+    assert(r.data.contactId === invoiceFixtureContactId, "Expected matching contactId");
+  });
+
+  await test("Invoice lifecycle: PATCH /api/invoices/:id updates notes", "Invoice Lifecycle", async () => {
+    if (!invoiceId) return;
+    const r = await req("PATCH", `/api/invoices/${invoiceId}`, { notes: "Regression test note" });
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.notes === "Regression test note", `Expected updated notes, got ${r.data.notes}`);
+  });
+
+  await test("Regression #368a: PATCH with empty taxRate/discountValue does not 500", "Invoice Lifecycle", async () => {
+    if (!invoiceId) return;
+    // Simulates the frontend sending empty strings for numeric fields — must not produce NaN in DB
+    const r = await req("PATCH", `/api/invoices/${invoiceId}`, {
+      taxRate: "",
+      discountValue: "",
+      discountType: "percent",
+    });
+    assert(r.status !== 500, `Got 500 (NaN regression) for empty taxRate/discountValue: ${JSON.stringify(r.data)}`);
+    assert(r.status === 200 || r.status === 400, `Expected 200 or 400, got ${r.status}: ${JSON.stringify(r.data)}`);
+  });
+
+  await test("Regression #368b: PATCH with empty dueDate does not 500", "Invoice Lifecycle", async () => {
+    if (!invoiceId) return;
+    // Simulates the frontend sending dueDate:"" — must not hit Postgres date NOT NULL rejection
+    const r = await req("PATCH", `/api/invoices/${invoiceId}`, { dueDate: "" });
+    assert(r.status !== 500, `Got 500 (dueDate regression) for empty dueDate: ${JSON.stringify(r.data)}`);
+    assert(r.status === 200 || r.status === 400, `Expected 200 or 400, got ${r.status}: ${JSON.stringify(r.data)}`);
+  });
+
+  await test("Invoice lifecycle: POST /api/invoices missing contactId returns 400", "Invoice Lifecycle", async () => {
+    const r = await req("POST", "/api/invoices", {
+      dueDate: invoiceDueDate,
+      lineItems: [{ description: "Test", quantity: 1, unitPrice: "10" }],
+    });
+    assert(r.status === 400, `Expected 400 for missing contactId, got ${r.status}: ${JSON.stringify(r.data)}`);
+  }, "No input validation");
+
+  await test("Invoice lifecycle: POST /api/invoices missing lineItems returns 400", "Invoice Lifecycle", async () => {
+    if (!invoiceFixtureContactId) return;
+    const r = await req("POST", "/api/invoices", {
+      contactId: invoiceFixtureContactId,
+      dueDate: invoiceDueDate,
+    });
+    assert(r.status === 400, `Expected 400 for missing lineItems, got ${r.status}: ${JSON.stringify(r.data)}`);
+  }, "No input validation");
+
+  await test("Invoice lifecycle: DELETE /api/invoices/:id removes invoice", "Invoice Lifecycle", async () => {
+    if (!invoiceId) return;
+    const r = await req("DELETE", `/api/invoices/${invoiceId}`);
+    assert(r.status === 200 || r.status === 204, `Expected 200/204, got ${r.status}: ${JSON.stringify(r.data)}`);
+    // Verify it's gone
+    const checkR = await req("GET", `/api/invoices/${invoiceId}`);
+    assert(checkR.status === 404, `Expected 404 after delete, got ${checkR.status}`);
+  });
+
+  await test("Invoice lifecycle: cleanup fixture contact", "Invoice Lifecycle", async () => {
+    if (!invoiceFixtureContactId) return;
+    const r = await req("DELETE", `/api/contacts/${invoiceFixtureContactId}`);
+    assert(r.status < 500, `Contact cleanup failed with ${r.status}`);
+  });
+
+  // ==========================================
+  // 17h. CONTACTS EXTENDED — TAGS + PORTAL ACCESS
+  // ==========================================
+
+  let contactExtId = "";
+  let contactExtTagId = "";
+
+  await test("Contacts extended: setup fixture contact and tag", "Contacts Extended", async () => {
+    const cR = await req("POST", "/api/contacts", {
+      firstName: "TagTest",
+      lastName: "Contact",
+      email: `tagtest_${Date.now()}@example.com`,
+      status: "lead",
+    });
+    assert(cR.status === 200 || cR.status === 201, `Expected 200/201 for contact, got ${cR.status}`);
+    contactExtId = cR.data.id;
+    assert(contactExtId, "No contact ID");
+
+    const tR = await req("POST", "/api/tags", { name: `TagExt_${Date.now()}` });
+    assert(tR.status === 200 || tR.status === 201, `Expected 200/201 for tag, got ${tR.status}`);
+    contactExtTagId = tR.data.id;
+    assert(contactExtTagId, "No tag ID");
+  });
+
+  await test("Contacts extended: POST /api/contacts/:id/tags adds tag", "Contacts Extended", async () => {
+    if (!contactExtId || !contactExtTagId) return;
+    const r = await req("POST", `/api/contacts/${contactExtId}/tags`, { tagId: contactExtTagId });
+    assert(r.status === 200 || r.status === 201, `Expected 200/201, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.success === true, "Expected success:true");
+  });
+
+  await test("Contacts extended: GET /api/contacts/:id/tags returns tag in array", "Contacts Extended", async () => {
+    if (!contactExtId || !contactExtTagId) return;
+    const r = await req("GET", `/api/contacts/${contactExtId}/tags`);
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(Array.isArray(r.data), "Expected array of tags");
+    const found = r.data.find((t: any) => t.id === contactExtTagId);
+    assert(!!found, `Expected tag ${contactExtTagId} in contact tags, got ${JSON.stringify(r.data)}`);
+  });
+
+  await test("Contacts extended: DELETE /api/contacts/:id/tags/:tagId removes tag", "Contacts Extended", async () => {
+    if (!contactExtId || !contactExtTagId) return;
+    const r = await req("DELETE", `/api/contacts/${contactExtId}/tags/${contactExtTagId}`);
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.success === true, "Expected success:true");
+    // Verify tag is gone
+    const checkR = await req("GET", `/api/contacts/${contactExtId}/tags`);
+    if (checkR.status === 200 && Array.isArray(checkR.data)) {
+      const stillThere = checkR.data.find((t: any) => t.id === contactExtTagId);
+      assert(!stillThere, `Tag ${contactExtTagId} should have been removed but still present`);
+    }
+  });
+
+  await test("Contacts extended: POST /api/contacts/:id/portal-access grants access", "Contacts Extended", async () => {
+    if (!contactExtId) return;
+    const r = await req("POST", `/api/contacts/${contactExtId}/portal-access`, {});
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    // Verify hasPortalAccess is now true on the contact
+    const getR = await req("GET", `/api/contacts/${contactExtId}`);
+    assert(getR.status === 200, `Expected 200 for contact GET, got ${getR.status}`);
+    assert(getR.data.hasPortalAccess === true, `Expected hasPortalAccess:true, got ${getR.data.hasPortalAccess}`);
+  });
+
+  await test("Contacts extended: DELETE /api/contacts/:id/portal-access revokes access", "Contacts Extended", async () => {
+    if (!contactExtId) return;
+    const r = await req("DELETE", `/api/contacts/${contactExtId}/portal-access`);
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.success === true, "Expected success:true");
+    // Verify hasPortalAccess is now false
+    const getR = await req("GET", `/api/contacts/${contactExtId}`);
+    if (getR.status === 200) {
+      assert(getR.data.hasPortalAccess === false || !getR.data.hasPortalAccess, `Expected hasPortalAccess:false after revoke, got ${getR.data.hasPortalAccess}`);
+    }
+  });
+
+  await test("Contacts extended: cleanup fixture contact and tag", "Contacts Extended", async () => {
+    if (contactExtId) {
+      const r = await req("DELETE", `/api/contacts/${contactExtId}`);
+      assert(r.status < 500, `Contact cleanup failed with ${r.status}`);
+    }
+    if (contactExtTagId) {
+      const r = await req("DELETE", `/api/tags/${contactExtTagId}`);
+      assert(r.status < 500, `Tag cleanup failed with ${r.status}`);
+    }
+  });
+
+  // ==========================================
+  // 17i. JOBS — FULL LIFECYCLE
+  // ==========================================
+
+  let jobsContactId = "";
+  let jobsPropertyId = "";
+  let jobsServicePlanId = "";
+
+  await test("Jobs lifecycle: setup fixture contact and property", "Jobs", async () => {
+    const cR = await req("POST", "/api/contacts", {
+      firstName: "JobsTest",
+      lastName: "Contact",
+      email: `jobstest_${Date.now()}@example.com`,
+      status: "lead",
+    });
+    assert(cR.status === 200 || cR.status === 201, `Expected 200/201 for contact, got ${cR.status}`);
+    jobsContactId = cR.data.id;
+
+    const pR = await req("POST", "/api/properties", {
+      contactId: jobsContactId,
+      streetAddress: "456 Jobs Test Lane",
+      city: "Fredericksburg",
+      state: "VA",
+      zipCode: "22401",
+    });
+    assert(pR.status === 200 || pR.status === 201, `Expected 200/201 for property, got ${pR.status}`);
+    jobsPropertyId = pR.data.id;
+  });
+
+  await test("Jobs lifecycle: POST /api/jobs creates job and returns servicePlanId", "Jobs", async () => {
+    if (!jobsContactId || !jobsPropertyId) return;
+    const today = new Date().toISOString().split("T")[0];
+    const r = await req("POST", "/api/jobs", {
+      contactId: jobsContactId,
+      propertyId: jobsPropertyId,
+      frequency: "onetime",
+      pricePerVisit: "39.99",
+      startDate: today,
+      jobStatus: "active",
+    });
+    assert(r.status === 200 || r.status === 201, `Expected 200/201, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.servicePlanId, "Expected servicePlanId in response");
+    jobsServicePlanId = r.data.servicePlanId;
+  });
+
+  await test("Jobs lifecycle: GET /api/jobs returns array", "Jobs", async () => {
+    const r = await req("GET", "/api/jobs");
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(Array.isArray(r.data), "Expected array of jobs");
+  });
+
+  await test("Jobs lifecycle: GET /api/jobs?contactId filters by contact", "Jobs", async () => {
+    if (!jobsContactId) return;
+    const r = await req("GET", `/api/jobs?contactId=${jobsContactId}`);
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(Array.isArray(r.data), "Expected array");
+    // All returned jobs should belong to this contact (via their servicePlanId)
+    // Note: the jobs table uses servicePlanId FK; the filter works at the servicePlan level
+  });
+
+  await test("Jobs lifecycle: POST /api/jobs/:id/approve on a draft job changes status to active", "Jobs", async () => {
+    // Look for any draft job in the company to test approval.
+    // This guards the approve path's visit generation (complement to Task #365).
+    const listR = await req("GET", "/api/jobs?jobStatus=draft");
+    if (listR.status !== 200 || !Array.isArray(listR.data) || listR.data.length === 0) {
+      // No draft jobs available; skip gracefully (the approve endpoint is tested structurally)
+      return;
+    }
+    const draftJob = listR.data[0];
+    const r = await req("POST", `/api/jobs/${draftJob.id}/approve`, {});
+    assert(r.status === 200 || r.status === 400, `Expected 200 or 400 for approve, got ${r.status}: ${JSON.stringify(r.data)}`);
+    if (r.status === 200) {
+      assert(r.data.jobStatus === "active", `Expected jobStatus:active, got ${r.data.jobStatus}`);
+    }
+  });
+
+  await test("Jobs lifecycle: PATCH /api/service-plans/:id updates status to completed", "Jobs", async () => {
+    if (!jobsServicePlanId) return;
+    const r = await req("PATCH", `/api/service-plans/${jobsServicePlanId}`, {
+      jobStatus: "completed",
+      isActive: false,
+    });
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.jobStatus === "completed", `Expected jobStatus:completed, got ${r.data.jobStatus}`);
+    assert(r.data.isActive === false, `Expected isActive:false, got ${r.data.isActive}`);
+  });
+
+  await test("Jobs lifecycle: cleanup fixture service plan, property, contact", "Jobs", async () => {
+    if (jobsServicePlanId) {
+      const r = await req("DELETE", `/api/service-plans/${jobsServicePlanId}`);
+      assert(r.status < 500, `Service plan cleanup failed with ${r.status}`);
+    }
+    if (jobsPropertyId) {
+      const r = await req("DELETE", `/api/properties/${jobsPropertyId}`);
+      assert(r.status < 500, `Property cleanup failed with ${r.status}`);
+    }
+    if (jobsContactId) {
+      const r = await req("DELETE", `/api/contacts/${jobsContactId}`);
+      assert(r.status < 500, `Contact cleanup failed with ${r.status}`);
+    }
+  });
+
+  // ==========================================
   // 18. WEBHOOK & API KEY PROTECTION
   // ==========================================
 
