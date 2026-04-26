@@ -68,6 +68,7 @@ const VoiceSignup = lazy(() => import("@/pages/voice-signup"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
 const SmsTerms = lazy(() => import("@/pages/sms-terms"));
 const Pipeline = lazy(() => import("@/pages/pipeline"));
+const BusinessOverview = lazy(() => import("@/pages/business-overview"));
 const OnboardingForm = lazy(() => import("@/pages/onboarding-form"));
 
 function PageLoader() {
@@ -110,6 +111,7 @@ function Router() {
         <Route path="/webhooks" component={WebhooksPage} />
         <Route path="/pricing" component={Pricing} />
         <Route path="/pricing-calculator" component={PricingCalculator} />
+        <Route path="/business-overview" component={BusinessOverview} />
         <Route path="/profitability" component={Profitability} />
         <Route path="/profitability/:contactId" component={ProfitabilityDetail} />
         <Route path="/route-profit-maps" component={RouteProfitMaps} />

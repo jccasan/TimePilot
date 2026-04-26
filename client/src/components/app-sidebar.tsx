@@ -92,6 +92,7 @@ const menuSections = [
     label: "Business",
     key: "business",
     items: [
+      { title: "Business Overview", url: "/business-overview", icon: LayoutDashboard },
       { title: "Profitability", url: "/profitability", icon: TrendingUp },
       { title: "Route Profit Maps", url: "/route-profit-maps", icon: Map },
       { title: "Expenses", url: "/overhead-costs", icon: DollarSign },

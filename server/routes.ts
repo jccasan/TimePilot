@@ -8818,6 +8818,286 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  // ─── Business Overview ────────────────────────────────────────────────────
+  app.get("/api/business-overview", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const tz = company?.timezone || "America/New_York";
+      const now = new Date();
+
+      const allContactsRaw = await storage.getContacts(companyId);
+      const allInvoices = await storage.getInvoices(companyId);
+      const allPlansRaw = await storage.getServicePlans(companyId, {});
+      const allActivePlans = allPlansRaw.filter(p => p.isActive && !p.isStopOnly);
+
+      const analyticsPlanPriceMap = new Map(allPlansRaw.map(p => [p.id, parseFloat(p.pricePerVisit) || 0]));
+
+      // 12-month revenue
+      const monthlyRevenue: { month: string; revenue: number }[] = [];
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const start = d.toISOString().split("T")[0];
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0];
+        let revenue = await storage.getRevenueForPeriod(companyId, start, end, tz);
+        if (revenue === 0) {
+          const periodVisits = await storage.getVisitsForDateRange(companyId, start, end);
+          for (const v of periodVisits) {
+            if (v.status === "completed") revenue += analyticsPlanPriceMap.get(v.servicePlanId) || 0;
+          }
+          revenue = Math.round(revenue * 100) / 100;
+        }
+        monthlyRevenue.push({
+          month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
+          revenue,
+        });
+      }
+
+      // Customer acquisition (12 months)
+      const customerAcquisition: { month: string; newClients: number; total: number }[] = [];
+      const contactsByCreatedMonth: Record<string, number> = {};
+      for (const c of allContactsRaw) {
+        const created = new Date(c.createdAt);
+        const key = `${created.getFullYear()}-${String(created.getMonth()).padStart(2, "0")}`;
+        contactsByCreatedMonth[key] = (contactsByCreatedMonth[key] || 0) + 1;
+      }
+      const windowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      let runningTotal = allContactsRaw.filter(c => new Date(c.createdAt) < windowStart).length;
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+        const newClients = contactsByCreatedMonth[key] || 0;
+        runningTotal += newClients;
+        customerAcquisition.push({
+          month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
+          newClients,
+          total: runningTotal,
+        });
+      }
+
+      // Weekly visit completion (8 weeks)
+      const currentMonday = new Date(now);
+      const dow = currentMonday.getDay();
+      currentMonday.setDate(currentMonday.getDate() - (dow === 0 ? 6 : dow - 1));
+      currentMonday.setHours(0, 0, 0, 0);
+      const weeklyCompletion: { week: string; completed: number; total: number; completionRate: number }[] = [];
+      for (let w = 7; w >= 0; w--) {
+        const ws = new Date(currentMonday);
+        ws.setDate(ws.getDate() - w * 7);
+        const we = new Date(ws);
+        we.setDate(we.getDate() + 6);
+        const wss = `${ws.getFullYear()}-${String(ws.getMonth() + 1).padStart(2, "0")}-${String(ws.getDate()).padStart(2, "0")}`;
+        const wes = `${we.getFullYear()}-${String(we.getMonth() + 1).padStart(2, "0")}-${String(we.getDate()).padStart(2, "0")}`;
+        const wv = await storage.getVisitsForDateRange(companyId, wss, wes);
+        const comp = wv.filter(v => v.status === "completed").length;
+        const tot = wv.length;
+        weeklyCompletion.push({
+          week: `${ws.toLocaleString("default", { month: "short" })} ${ws.getDate()}`,
+          completed: comp,
+          total: tot,
+          completionRate: tot > 0 ? Math.round((comp / tot) * 100) : 0,
+        });
+      }
+
+      // Profitability mix
+      const { calculateAllCustomerProfitability } = await import("./services/profitability-calculator");
+      const profitResults = await calculateAllCustomerProfitability(companyId);
+      let profitableCount = 0, marginalCount = 0, unprofitableCount = 0;
+      let totalMonthlyRevenueCents = 0, totalMonthlyCostCents = 0;
+      for (const p of profitResults) {
+        if (p.status === "profitable") profitableCount++;
+        else if (p.status === "marginal") marginalCount++;
+        else unprofitableCount++;
+        totalMonthlyRevenueCents += p.monthlyRevenueCents;
+        totalMonthlyCostCents += p.monthlyCostCents;
+      }
+      const avgProfitMarginPct = totalMonthlyRevenueCents > 0
+        ? Math.round(((totalMonthlyRevenueCents - totalMonthlyCostCents) / totalMonthlyRevenueCents) * 1000) / 10
+        : 0;
+      const profitabilityMix = [
+        { name: "Profitable", value: profitableCount, color: "#22c55e" },
+        { name: "Marginal", value: marginalCount, color: "#eab308" },
+        { name: "Unprofitable", value: unprofitableCount, color: "#ef4444" },
+      ];
+
+      // MRR from active service plans
+      const visitsPerMonthByFreq: Record<string, number> = { weekly: 4.33, biweekly: 2.17, monthly: 1, onetime: 0 };
+      let mrrCents = 0;
+      for (const p of allActivePlans) {
+        const freq = visitsPerMonthByFreq[p.frequency] ?? 0;
+        mrrCents += Math.round(parseFloat(p.pricePerVisit) * 100 * freq);
+      }
+
+      // Invoice collection rate
+      const paidTotal = allInvoices.filter(i => i.status === "paid").reduce((s, i) => s + parseFloat(i.total), 0);
+      const outstandingTotal = allInvoices.filter(i => i.status === "sent" || i.status === "pending").reduce((s, i) => s + parseFloat(i.total), 0);
+      const collectionRate = (paidTotal + outstandingTotal) > 0
+        ? Math.round((paidTotal / (paidTotal + outstandingTotal)) * 100)
+        : 100;
+
+      // Active customers
+      const activeCustomers = allContactsRaw.filter(c => c.status === "active").length;
+
+      // Recent completion rate (30 days)
+      const thirtyAgo = new Date(now);
+      thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+      const recentVisits = await storage.getVisitsForDateRange(
+        companyId,
+        thirtyAgo.toISOString().split("T")[0],
+        now.toISOString().split("T")[0],
+      );
+      const visitCompletionRate = recentVisits.length > 0
+        ? Math.round((recentVisits.filter(v => v.status === "completed").length / recentVisits.length) * 100)
+        : 0;
+
+      res.json({
+        kpis: {
+          mrrCents,
+          activeCustomers,
+          avgProfitMarginPct,
+          collectionRate,
+          visitCompletionRate,
+          profitableCount,
+          marginalCount,
+          unprofitableCount,
+        },
+        monthlyRevenue,
+        customerAcquisition,
+        profitabilityMix,
+        weeklyCompletion,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/business-overview/assessment", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const company = await storage.getCompany(companyId);
+      const tz = company?.timezone || "America/New_York";
+      const now = new Date();
+
+      const allContacts = await storage.getContacts(companyId);
+      const allInvoices = await storage.getInvoices(companyId);
+      const allPlansRaw = await storage.getServicePlans(companyId, {});
+      const allActivePlans = allPlansRaw.filter(p => p.isActive && !p.isStopOnly);
+
+      const activeCustomers = allContacts.filter(c => c.status === "active").length;
+      const cancelledCustomers = allContacts.filter(c => c.status === "cancelled").length;
+
+      const visitsPerMonthByFreq: Record<string, number> = { weekly: 4.33, biweekly: 2.17, monthly: 1, onetime: 0 };
+      let mrrCents = 0;
+      for (const p of allActivePlans) {
+        mrrCents += Math.round(parseFloat(p.pricePerVisit) * 100 * (visitsPerMonthByFreq[p.frequency] ?? 0));
+      }
+
+      const paidInvoices = allInvoices.filter(i => i.status === "paid");
+      const paidTotal = paidInvoices.reduce((s, i) => s + parseFloat(i.total), 0);
+      const outstandingTotal = allInvoices.filter(i => i.status === "sent" || i.status === "pending").reduce((s, i) => s + parseFloat(i.total), 0);
+      const collectionRate = (paidTotal + outstandingTotal) > 0 ? Math.round((paidTotal / (paidTotal + outstandingTotal)) * 100) : 100;
+
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0];
+      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0];
+      const thisMonthRev = await storage.getRevenueForPeriod(companyId, thisMonthStart, thisMonthEnd, tz);
+      const lastMonthRev = await storage.getRevenueForPeriod(companyId, lastMonthStart, lastMonthEnd, tz);
+      const revenueGrowthPct = lastMonthRev > 0 ? Math.round(((thisMonthRev - lastMonthRev) / lastMonthRev) * 100) : 0;
+
+      const thirtyAgo = new Date(now);
+      thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+      const recentVisits = await storage.getVisitsForDateRange(companyId, thirtyAgo.toISOString().split("T")[0], now.toISOString().split("T")[0]);
+      const visitCompletionRate = recentVisits.length > 0
+        ? Math.round((recentVisits.filter(v => v.status === "completed").length / recentVisits.length) * 100) : 0;
+
+      const { calculateAllCustomerProfitability } = await import("./services/profitability-calculator");
+      const profitResults = await calculateAllCustomerProfitability(companyId);
+      let profitableCount = 0, marginalCount = 0, unprofitableCount = 0;
+      let totalMonthlyRevCents = 0, totalMonthlyCostCents = 0;
+      for (const p of profitResults) {
+        if (p.status === "profitable") profitableCount++;
+        else if (p.status === "marginal") marginalCount++;
+        else unprofitableCount++;
+        totalMonthlyRevCents += p.monthlyRevenueCents;
+        totalMonthlyCostCents += p.monthlyCostCents;
+      }
+      const avgProfitMarginPct = totalMonthlyRevCents > 0
+        ? Math.round(((totalMonthlyRevCents - totalMonthlyCostCents) / totalMonthlyRevCents) * 1000) / 10 : 0;
+
+      const factSheet = {
+        businessName: company?.name || "Your Business",
+        activeCustomers,
+        cancelledCustomers,
+        totalCustomers: allContacts.length,
+        mrrDollars: Math.round(mrrCents / 100),
+        collectionRatePct: collectionRate,
+        visitCompletionRatePct: visitCompletionRate,
+        avgProfitMarginPct,
+        profitableCustomers: profitableCount,
+        marginalCustomers: marginalCount,
+        unprofitableCustomers: unprofitableCount,
+        thisMonthRevenueDollars: Math.round(thisMonthRev),
+        lastMonthRevenueDollars: Math.round(lastMonthRev),
+        revenueGrowthPct,
+        paidInvoiceCount: paidInvoices.length,
+      };
+
+      const systemPrompt = `You are a business performance analyst (CFO + COO dual perspective) for a pet waste removal company.
+You will receive a fact sheet with key business metrics. Produce a structured assessment in JSON.
+
+Return exactly this JSON shape:
+{
+  "healthScore": <integer 0-100>,
+  "verdict": "<2-3 sentence executive summary of overall business health>",
+  "cfo": {
+    "rating": "<Healthy|Caution|Critical>",
+    "findings": ["<specific finding with numbers>", ...]
+  },
+  "coo": {
+    "rating": "<Healthy|Caution|Critical>",
+    "findings": ["<specific finding with numbers>", ...]
+  },
+  "recommendations": [
+    { "priority": "<High|Medium|Low>", "title": "<short title>", "explanation": "<1-2 sentences with specific numbers>" }
+  ]
+}
+
+Rules:
+- healthScore: weighted score (revenue growth 20%, profit margin 25%, collection rate 15%, visit completion 20%, customer mix 20%)
+- cfo findings: focus on revenue, collection, MRR, margin
+- coo findings: focus on visit completion, customer mix, cancellations
+- recommendations: max 4, ranked by priority, cite exact numbers from the fact sheet
+- NEVER invent numbers not present in the fact sheet`;
+
+      const OpenAI = (await import("openai")).default;
+      const ai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
+      });
+
+      const completion = await ai.chat.completions.create({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        temperature: 0.2,
+        max_tokens: 1500,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: JSON.stringify(factSheet, null, 2) },
+        ],
+      });
+
+      const raw = completion.choices[0]?.message?.content ?? "{}";
+      let parsed: any;
+      try { parsed = JSON.parse(raw); } catch { return res.status(503).json({ message: "Failed to parse AI response" }); }
+
+      res.json(parsed);
+    } catch (err) {
+      if ((err as any)?.status === 429 || (err as any)?.code === "insufficient_quota") {
+        return res.status(503).json({ message: "AI service temporarily unavailable" });
+      }
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/profitability/customer/:contactId", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
