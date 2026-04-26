@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,10 +41,27 @@ import {
   ChevronDown,
   ChevronRight,
   CheckCircle,
+  Brain,
+  Loader2,
+  Zap,
+  ExternalLink,
 } from "lucide-react";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import type { Route as RouteRecord } from "@shared/schema";
 type RouteWithOptStatus = RouteRecord & { isOptimizedCurrent?: boolean };
+
+interface ProfitabilitySuggestion {
+  type:
+    | "route_day_move"
+    | "yard_size_mismatch"
+    | "price_increase"
+    | "frequency_upgrade"
+    | "add_nearby_customers"
+    | "no_path_to_profitability";
+  title: string;
+  explanation: string;
+  impactCents: number;
+}
 
 interface CustomerPropertyProfitability {
   propertyId: string;
@@ -176,6 +193,11 @@ export default function Profitability() {
   const [sortField, setSortField] = useState<SortField>("profit");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
+  const [aiSuggestionsMap, setAiSuggestionsMap] = useState<Map<string, ProfitabilitySuggestion[] | "error">>(new Map());
+  const [isAnalysisRunning, setIsAnalysisRunning] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<{ current: number; total: number } | null>(null);
+  const [currentlyAnalyzingId, setCurrentlyAnalyzingId] = useState<string | null>(null);
+  const abortRef = useRef(false);
 
   useEffect(() => {
     try { localStorage.setItem("scoopilot_profit_view_mode", viewMode); } catch {}
@@ -230,6 +252,53 @@ export default function Profitability() {
       setSortField(field);
       setSortDir("desc");
     }
+  };
+
+  const runBulkAiAnalysis = async () => {
+    const struggling = (customers ?? []).filter(c => c.status === "marginal" || c.status === "unprofitable");
+    if (struggling.length === 0) {
+      toast({ title: "No struggling customers", description: "All customers are profitable — nothing to analyze." });
+      return;
+    }
+    abortRef.current = false;
+    setIsAnalysisRunning(true);
+    setAnalysisProgress({ current: 0, total: struggling.length });
+    setAiSuggestionsMap(new Map());
+    setCurrentlyAnalyzingId(null);
+    for (let i = 0; i < struggling.length; i++) {
+      if (abortRef.current) break;
+      const customer = struggling[i];
+      setAnalysisProgress({ current: i + 1, total: struggling.length });
+      setCurrentlyAnalyzingId(customer.contactId);
+      try {
+        const res = await fetch(`/api/profitability/customer/${customer.contactId}/suggestions`, {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setAiSuggestionsMap(prev => {
+          const next = new Map(prev);
+          next.set(customer.contactId, (data.suggestions ?? []) as ProfitabilitySuggestion[]);
+          return next;
+        });
+      } catch {
+        setAiSuggestionsMap(prev => {
+          const next = new Map(prev);
+          next.set(customer.contactId, "error");
+          return next;
+        });
+      }
+    }
+    setCurrentlyAnalyzingId(null);
+    setIsAnalysisRunning(false);
+    setAnalysisProgress(null);
+  };
+
+  const stopBulkAiAnalysis = () => {
+    abortRef.current = true;
+    setCurrentlyAnalyzingId(null);
+    setIsAnalysisRunning(false);
+    setAnalysisProgress(null);
   };
 
 
@@ -335,6 +404,30 @@ export default function Profitability() {
               <Sparkles className={`mr-1 h-4 w-4`} />
               {bulkRecommendationsMutation.isPending ? "Generating..." : "Price Recommendations"}
             </Button>
+          )}
+          {viewMode === "customers" && (
+            isAnalysisRunning ? (
+              <Button
+                variant="outline"
+                onClick={stopBulkAiAnalysis}
+                data-testid="button-stop-ai-analysis"
+              >
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                {analysisProgress
+                  ? `Analyzing ${analysisProgress.current}/${analysisProgress.total}...`
+                  : "Stopping..."}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={runBulkAiAnalysis}
+                disabled={isLoading}
+                data-testid="button-run-ai-analysis"
+              >
+                <Brain className="mr-1 h-4 w-4" />
+                Run AI Analysis
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -674,13 +767,15 @@ export default function Profitability() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((customer) => {
+                  filtered.flatMap((customer) => {
                     const rowBg = customer.status === "unprofitable"
                       ? "bg-red-50/50 dark:bg-red-950/20"
                       : customer.status === "marginal"
                         ? "bg-yellow-50/50 dark:bg-yellow-950/20"
                         : "";
-                    return (
+                    const aiResult = aiSuggestionsMap.get(customer.contactId);
+                    const isAnalyzingThis = currentlyAnalyzingId === customer.contactId;
+                    const rows = [
                       <TableRow
                         key={customer.contactId}
                         className={`cursor-pointer hover-elevate ${rowBg}`}
@@ -714,8 +809,77 @@ export default function Profitability() {
                         <TableCell>
                           {statusBadge(customer.status)}
                         </TableCell>
-                      </TableRow>
-                    );
+                      </TableRow>,
+                    ];
+                    if (isAnalyzingThis) {
+                      rows.push(
+                        <TableRow key={`${customer.contactId}-ai-loading`} className={rowBg} data-testid={`row-ai-loading-${customer.contactId}`}>
+                          <TableCell colSpan={7} className="py-2 pl-8">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Analyzing with AI...
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    } else if (aiResult === "error") {
+                      rows.push(
+                        <TableRow key={`${customer.contactId}-ai-error`} className={rowBg} data-testid={`row-ai-error-${customer.contactId}`}>
+                          <TableCell colSpan={7} className="py-2 pl-8">
+                            <p className="text-xs text-muted-foreground italic">AI analysis unavailable for this customer.</p>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    } else if (Array.isArray(aiResult)) {
+                      const topSuggestions = aiResult.slice(0, 2);
+                      if (topSuggestions.length === 0) {
+                        rows.push(
+                          <TableRow key={`${customer.contactId}-ai-none`} className={rowBg} data-testid={`row-ai-none-${customer.contactId}`}>
+                            <TableCell colSpan={7} className="py-2 pl-8">
+                              <p className="text-xs text-muted-foreground italic">No specific suggestions found for this customer.</p>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      } else {
+                        rows.push(
+                          <TableRow key={`${customer.contactId}-ai-suggestions`} className={rowBg} data-testid={`row-ai-suggestions-${customer.contactId}`}>
+                            <TableCell colSpan={7} className="py-2 pl-8 pr-4">
+                              <div className="flex flex-wrap gap-3">
+                                {topSuggestions.map((s, idx) => (
+                                  <Link
+                                    key={idx}
+                                    href={`/contacts/${customer.contactId}`}
+                                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                    data-testid={`link-ai-detail-${customer.contactId}-${idx}`}
+                                  >
+                                    <div
+                                      className="flex items-start gap-2 rounded-md border border-border bg-background/60 hover:bg-muted/60 transition-colors px-3 py-2 max-w-sm cursor-pointer"
+                                      data-testid={`card-ai-suggestion-${customer.contactId}-${idx}`}
+                                    >
+                                      <Zap className="h-3.5 w-3.5 mt-0.5 shrink-0 text-yellow-500" />
+                                      <div className="space-y-0.5">
+                                        <p className="text-xs font-semibold leading-tight" data-testid={`text-ai-suggestion-title-${customer.contactId}-${idx}`}>{s.title}</p>
+                                        <p className="text-xs text-muted-foreground leading-snug" data-testid={`text-ai-suggestion-explanation-${customer.contactId}-${idx}`}>{s.explanation}</p>
+                                        {s.impactCents > 0 && (
+                                          <p className="text-xs text-green-600 dark:text-green-400 font-medium" data-testid={`text-ai-suggestion-impact-${customer.contactId}-${idx}`}>
+                                            +{formatDollars(s.impactCents)}/mo potential
+                                          </p>
+                                        )}
+                                        <div className="flex items-center gap-1 pt-0.5 text-xs text-muted-foreground">
+                                          <ExternalLink className="h-2.5 w-2.5" />
+                                          View contact
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </Link>
+                                ))}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+                    }
+                    return rows;
                   })
                 )}
               </TableBody>

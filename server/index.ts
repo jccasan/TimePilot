@@ -387,6 +387,13 @@ async function ensureCompanyColumns() {
       AND id IN (SELECT DISTINCT company_id FROM contacts)
     `);
     console.log("[Migration] Business onboarding columns verified");
+    await pool.query(`
+      ALTER TABLE properties ADD COLUMN IF NOT EXISTS onboarding_token VARCHAR(36) UNIQUE;
+      ALTER TABLE properties ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMP;
+      ALTER TABLE properties ADD COLUMN IF NOT EXISTS dog_names TEXT;
+      ALTER TABLE properties ADD COLUMN IF NOT EXISTS dog_breeds TEXT;
+    `);
+    console.log("[Migration] Property onboarding columns verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure company columns:", err);
   } finally {
