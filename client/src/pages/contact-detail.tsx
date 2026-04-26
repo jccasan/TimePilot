@@ -56,7 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle, Star, ClipboardList, ClipboardCheck, Copy, ExternalLink, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle, Star, ClipboardList, ClipboardCheck, Copy, ExternalLink, RefreshCw, Sparkles, Users } from "lucide-react";
 import { compressImage, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/image-compress";
 import { Switch } from "@/components/ui/switch";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
@@ -1806,8 +1806,129 @@ function CostOverridesEditor({ contactId }: { contactId: string }) {
   );
 }
 
+type AiSuggestionType =
+  | "route_day_move"
+  | "yard_size_mismatch"
+  | "price_increase"
+  | "frequency_upgrade"
+  | "add_nearby_customers"
+  | "no_path_to_profitability";
+
+interface AiSuggestion {
+  type: AiSuggestionType;
+  title: string;
+  explanation: string;
+  impactCents: number;
+}
+
+function suggestionIcon(type: AiSuggestionType) {
+  switch (type) {
+    case "route_day_move": return <MapPin className="h-4 w-4 shrink-0" />;
+    case "yard_size_mismatch": return <Ruler className="h-4 w-4 shrink-0" />;
+    case "price_increase": return <DollarSign className="h-4 w-4 shrink-0" />;
+    case "frequency_upgrade": return <Clock className="h-4 w-4 shrink-0" />;
+    case "add_nearby_customers": return <Users className="h-4 w-4 shrink-0" />;
+    case "no_path_to_profitability": return <AlertTriangle className="h-4 w-4 shrink-0" />;
+  }
+}
+
+function AiSuggestionsPanel({ contactId, onDismiss }: { contactId: string; onDismiss: () => void }) {
+  const [fetchKey, setFetchKey] = useState(0);
+  const { data, isLoading, isError, error } = useQuery<{ suggestions: AiSuggestion[] }>({
+    queryKey: ["/api/profitability/customer", contactId, "suggestions", fetchKey],
+    queryFn: () =>
+      fetch(`/api/profitability/customer/${contactId}/suggestions`, { credentials: "include" })
+        .then(async (r) => {
+          if (!r.ok) {
+            const body = await r.json().catch(() => ({}));
+            throw new Error(body.message || `Error ${r.status}`);
+          }
+          return r.json();
+        }),
+    staleTime: Infinity,
+    retry: false,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2" data-testid="ai-suggestions-loading">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Sparkles className="h-4 w-4 animate-pulse" />
+          <span>Analyzing profitability factors…</span>
+        </div>
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    const msg = (error as Error)?.message ?? "Unknown error";
+    return (
+      <div className="p-3 rounded-md bg-muted text-sm text-muted-foreground space-y-2" data-testid="ai-suggestions-error">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{msg}</span>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setFetchKey((k) => k + 1)} data-testid="button-retry-suggestions">
+          <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Try Again
+        </Button>
+      </div>
+    );
+  }
+
+  const suggestions = data?.suggestions ?? [];
+
+  return (
+    <div className="space-y-2" data-testid="ai-suggestions-panel">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI Suggestions</p>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-xs text-muted-foreground"
+          onClick={() => setFetchKey((k) => k + 1)}
+          data-testid="button-refresh-suggestions"
+        >
+          <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+        </Button>
+      </div>
+
+      {suggestions.map((s, i) => {
+        const isNoPath = s.type === "no_path_to_profitability";
+        return (
+          <div
+            key={i}
+            className={`rounded-md p-3 text-sm space-y-1 ${
+              isNoPath
+                ? "bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800"
+                : "bg-muted/60"
+            }`}
+            data-testid={`ai-suggestion-${s.type}-${i}`}
+          >
+            <div className={`flex items-center gap-2 font-medium ${isNoPath ? "text-amber-800 dark:text-amber-300" : ""}`}>
+              {suggestionIcon(s.type)}
+              <span>{s.title}</span>
+              {s.impactCents > 0 && (
+                <Badge variant="outline" className="ml-auto text-xs text-green-700 dark:text-green-400 border-green-300 dark:border-green-700">
+                  +${(s.impactCents / 100).toFixed(0)}/mo
+                </Badge>
+              )}
+            </div>
+            <p className={`text-xs leading-relaxed ${isNoPath ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
+              {s.explanation}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: string; contactStatus: string }) {
   const [expanded, setExpanded] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const { data, isLoading, isError } = useQuery<{
     contactId: string;
     contactName: string;
@@ -1853,6 +1974,7 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
 
   const cfg = statusConfig[data.status] || statusConfig.profitable;
   const isUnprofitable = data.status === "unprofitable";
+  const isMarginalOrWorse = data.status === "marginal" || data.status === "unprofitable";
 
   const flaggedProperties = (data.properties || []).filter(p => p.profitMarginPct <= 15);
   const showBreakdowns = flaggedProperties.length > 0;
@@ -1958,6 +2080,28 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {isMarginalOrWorse && (
+          <div className="border-t pt-3">
+            {!showSuggestions ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-2"
+                onClick={() => setShowSuggestions(true)}
+                data-testid="button-get-ai-suggestions"
+              >
+                <Sparkles className="h-4 w-4" />
+                Get AI Suggestions
+              </Button>
+            ) : (
+              <AiSuggestionsPanel
+                contactId={contactId}
+                onDismiss={() => setShowSuggestions(false)}
+              />
+            )}
           </div>
         )}
 

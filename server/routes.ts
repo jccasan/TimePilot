@@ -8828,6 +8828,20 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/profitability/customer/:contactId/suggestions", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { generateProfitabilitySuggestions } = await import("./services/profitability-advisor");
+      const suggestions = await generateProfitabilitySuggestions(companyId, req.params.contactId);
+      res.json({ suggestions });
+    } catch (err: any) {
+      if (err?.status === 429 || err?.code === "insufficient_quota" || (err?.message && err.message.includes("OpenAI"))) {
+        return res.status(503).json({ message: "AI service temporarily unavailable. Please try again later." });
+      }
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/contacts/:id/cost-overrides", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
