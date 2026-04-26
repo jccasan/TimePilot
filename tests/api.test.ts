@@ -1139,18 +1139,21 @@ async function runTests() {
     assert(r.data.name === "Renamed Lifecycle Route", `Expected updated name, got ${r.data.name}`);
   });
 
-  await test("Route lifecycle: PATCH /api/routes/:id/lock toggles lock on", "Routes Extended", async () => {
+  await test("Route lifecycle: PATCH /api/routes/:id/lock toggles lock on (payload: { isLocked: true })", "Routes Extended", async () => {
     if (!routeLifecycleId) return;
-    const r = await req("PATCH", `/api/routes/${routeLifecycleId}/lock`, {});
+    // The server toggles via !route.isLocked and ignores the payload value, but we send
+    // the explicit intended state as per contract so any future payload-driven refactor
+    // is covered by this regression guard.
+    const r = await req("PATCH", `/api/routes/${routeLifecycleId}/lock`, { isLocked: true });
     assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
-    assert(r.data.isLocked === true, `Expected isLocked:true after first lock toggle, got ${JSON.stringify(r.data.isLocked)}`);
+    assert(r.data.isLocked === true, `Expected isLocked:true after lock-on toggle, got ${JSON.stringify(r.data.isLocked)}`);
   });
 
-  await test("Route lifecycle: PATCH /api/routes/:id/lock toggles lock off", "Routes Extended", async () => {
+  await test("Route lifecycle: PATCH /api/routes/:id/lock toggles lock off (payload: { isLocked: false })", "Routes Extended", async () => {
     if (!routeLifecycleId) return;
-    const r = await req("PATCH", `/api/routes/${routeLifecycleId}/lock`, {});
+    const r = await req("PATCH", `/api/routes/${routeLifecycleId}/lock`, { isLocked: false });
     assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
-    assert(r.data.isLocked === false, `Expected isLocked:false after second lock toggle, got ${JSON.stringify(r.data.isLocked)}`);
+    assert(r.data.isLocked === false, `Expected isLocked:false after lock-off toggle, got ${JSON.stringify(r.data.isLocked)}`);
   });
 
   await test("Route lifecycle: GET /api/routes/:id/metrics returns metrics object", "Routes Extended", async () => {
@@ -1418,6 +1421,7 @@ async function runTests() {
   let jobsEstimateId = "";
   let jobsPortalToken = "";
   let jobsServicePlanId = "";
+  let directServicePlanId = "";
   let draftJobId = "";
   const jobsEmail = `jobsflow_${Date.now()}@example.com`;
   const jobsPassword = "JobsFlow1!";
@@ -1454,6 +1458,26 @@ async function runTests() {
     });
     assert(eR.status === 200 || eR.status === 201, `Expected 200/201 for estimate, got ${eR.status}: ${JSON.stringify(eR.data)}`);
     jobsEstimateId = eR.data.id;
+  });
+
+  await test("Jobs lifecycle: POST /api/jobs (direct, onetime draft) creates service plan and returns servicePlanId", "Jobs", async () => {
+    // POST /api/jobs creates a service_plan row (not a jobs-table row). The response
+    // always contains servicePlanId (the service_plan.id) per routes.ts:6123.
+    // This test protects the direct job-creation path independently of the estimate flow.
+    if (!jobsContactId || !jobsPropertyId) return;
+    const today = new Date().toISOString().split("T")[0];
+    const r = await req("POST", "/api/jobs", {
+      contactId: jobsContactId,
+      propertyId: jobsPropertyId,
+      frequency: "onetime",
+      pricePerVisit: "49.99",
+      startDate: today,
+      jobStatus: "draft",
+      serviceName: "Regression direct-jobs test",
+    });
+    assert(r.status === 200 || r.status === 201, `Expected 200/201 from POST /api/jobs, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.servicePlanId, `Expected servicePlanId in response, got ${JSON.stringify(r.data)}`);
+    directServicePlanId = r.data.servicePlanId;
   });
 
   await test("Jobs lifecycle: grant portal access to fixture contact and login", "Jobs", async () => {
@@ -1522,12 +1546,28 @@ async function runTests() {
     assert(r.data.error && r.data.error.includes("Cannot approve"), `Expected 'Cannot approve' error, got ${JSON.stringify(r.data)}`);
   });
 
+  await test("Jobs lifecycle: PATCH /api/service-plans/:id marks service plan as completed", "Jobs", async () => {
+    // After the approve tests, the service plan created via estimate approval should be
+    // patchable to completed status. This covers the PATCH endpoint contract.
+    if (!jobsServicePlanId) return;
+    const r = await req("PATCH", `/api/service-plans/${jobsServicePlanId}`, {
+      jobStatus: "completed",
+      isActive: false,
+    });
+    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+    assert(r.data.jobStatus === "completed", `Expected jobStatus:completed, got ${r.data.jobStatus}`);
+    assert(r.data.isActive === false, `Expected isActive:false, got ${r.data.isActive}`);
+  });
+
   await test("Jobs lifecycle: cleanup fixture jobs, service plan, property, contact", "Jobs", async () => {
     if (jobsPortalToken) {
       await req("POST", "/api/portal/logout", {}, { Authorization: `Bearer ${jobsPortalToken}` });
     }
     if (jobsContactId) {
       await req("DELETE", `/api/contacts/${jobsContactId}/portal-access`);
+    }
+    if (directServicePlanId) {
+      await req("DELETE", `/api/service-plans/${directServicePlanId}`);
     }
     if (jobsServicePlanId) {
       const r = await req("DELETE", `/api/service-plans/${jobsServicePlanId}`);
