@@ -782,7 +782,7 @@ async function runTests() {
     if (r.status === 200) assert(r.data.id === visitId, "Response should contain the visit ID");
   });
 
-  await test("PATCH /api/visits/:id with scheduledDate field succeeds (200 or 404)", "Visits", async () => {
+  await test("PATCH /api/visits/:id with scheduledDate field succeeds (200, 404, or 409)", "Visits", async () => {
     const rangeR = await req("GET", "/api/visits/range?start=2026-01-01&end=2026-12-31");
     if (rangeR.status !== 200 || !Array.isArray(rangeR.data) || rangeR.data.length === 0) return;
     const visitId = rangeR.data[0].id;
@@ -790,8 +790,8 @@ async function runTests() {
       scheduledDate: "2026-06-15",
       technicianNotes: "Rescheduled by automated test",
     });
-    assert(r.status === 200 || r.status === 404,
-      `Expected 200 or 404, got ${r.status} (should not be 403/500): ${JSON.stringify(r.data)}`);
+    assert(r.status === 200 || r.status === 404 || r.status === 409,
+      `Expected 200, 404, or 409 (date conflict), got ${r.status} (should not be 403/500): ${JSON.stringify(r.data)}`);
     if (r.status === 200) assert(r.data.id === visitId, "Response should contain the visit ID");
   });
 

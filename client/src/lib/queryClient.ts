@@ -83,3 +83,29 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+queryClient.getQueryCache().subscribe((event) => {
+  if (event.type === "updated" && event.action?.type === "error") {
+    const err = event.action.error;
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    if (/^5\d\d[^0-9]/.test(msg) || msg.includes("Internal Server Error") || msg.includes("Bad Gateway")) {
+      import("./errorReporter").then(({ reportError }) => {
+        reportError(msg, stack, "api");
+      }).catch(() => {});
+    }
+  }
+});
+
+queryClient.getMutationCache().subscribe((event) => {
+  if (event.type === "updated" && event.mutation?.state.status === "error") {
+    const err = event.mutation.state.error;
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    if (/^5\d\d[^0-9]/.test(msg) || msg.includes("Internal Server Error") || msg.includes("Bad Gateway")) {
+      import("./errorReporter").then(({ reportError }) => {
+        reportError(msg, stack, "api");
+      }).catch(() => {});
+    }
+  }
+});

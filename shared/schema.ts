@@ -1903,3 +1903,39 @@ export const quoteFormEvents = pgTable("quote_form_events", {
 export const insertQuoteFormEventSchema = createInsertSchema(quoteFormEvents).omit({ id: true, createdAt: true });
 export type QuoteFormEvent = typeof quoteFormEvents.$inferSelect;
 export type InsertQuoteFormEvent = z.infer<typeof insertQuoteFormEventSchema>;
+
+export const errorReportStatusEnum = pgEnum("error_report_status", ["open", "acknowledged", "resolved"]);
+export const errorReportTypeEnum = pgEnum("error_report_type", ["react", "js", "api"]);
+
+export const errorReports = pgTable("error_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  message: text("message").notNull(),
+  stack: text("stack"),
+  errorType: errorReportTypeEnum("error_type").notNull().default("js"),
+  pageUrl: text("page_url"),
+  userId: varchar("user_id", { length: 255 }),
+  companyId: varchar("company_id", { length: 255 }),
+  userAgent: text("user_agent"),
+  status: errorReportStatusEnum("status").notNull().default("open"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_er_status").on(table.status),
+  index("idx_er_created").on(table.createdAt),
+]);
+
+export const insertErrorReportSchema = createInsertSchema(errorReports).omit({ id: true, createdAt: true });
+export type ErrorReport = typeof errorReports.$inferSelect;
+export type InsertErrorReport = z.infer<typeof insertErrorReportSchema>;
+
+export const errorFixTasks = pgTable("error_fix_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  errorReportId: varchar("error_report_id").notNull().references(() => errorReports.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_eft_report").on(table.errorReportId),
+]);
+
+export const insertErrorFixTaskSchema = createInsertSchema(errorFixTasks).omit({ id: true, createdAt: true });
+export type ErrorFixTask = typeof errorFixTasks.$inferSelect;
+export type InsertErrorFixTask = z.infer<typeof insertErrorFixTaskSchema>;

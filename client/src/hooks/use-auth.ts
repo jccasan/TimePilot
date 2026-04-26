@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import type { User } from "@shared/models/auth";
+import { setUserContext, clearUserContext } from "@/lib/errorReporter";
 
-type SafeUser = Omit<User, "passwordHash"> & { role?: string; setupDone?: boolean; sessionToken?: string };
+type SafeUser = Omit<User, "passwordHash"> & { role?: string; companyId?: string | null; setupDone?: boolean; sessionToken?: string };
 
 async function fetchUser(): Promise<SafeUser | null> {
   const token = localStorage.getItem("sessionToken");
@@ -44,6 +46,14 @@ export function useAuth() {
     staleTime: 1000 * 60 * 5,
   });
 
+  useEffect(() => {
+    if (user) {
+      setUserContext(user.id, user.companyId ?? undefined);
+    } else if (!isLoading) {
+      clearUserContext();
+    }
+  }, [user, isLoading]);
+
   const logoutMutation = useMutation({
     mutationFn: async () => {
       const token = localStorage.getItem("sessionToken");
@@ -56,6 +66,7 @@ export function useAuth() {
     onSuccess: () => {
       localStorage.removeItem("sessionToken");
       queryClient.setQueryData(["/api/auth/user"], null);
+      clearUserContext();
     },
   });
 

@@ -11,10 +11,11 @@ import { useFeatureTour, FeatureTourOverlay } from "@/components/feature-tour";
 import { TutorialProvider } from "@/hooks/use-tutorials";
 import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard, Loader2, MessageSquare } from "lucide-react";
+import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard, Loader2, MessageSquare, Bug } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Component, lazy, Suspense, useEffect, useState, useRef, useCallback } from "react";
 import type { ErrorInfo, ReactNode } from "react";
+import { adminFetchFn } from "@/lib/adminApi";
 import RoverChatbot, { type RoverChatbotHandle } from "@/components/rover-chatbot";
 import BusinessOnboarding from "@/components/business-onboarding";
 
@@ -53,6 +54,7 @@ const AdminChangePassword = lazy(() => import("@/pages/admin-change-password"));
 const AdminSecurity = lazy(() => import("@/pages/admin-security"));
 const AdminSubscriptionPricing = lazy(() => import("@/pages/admin-subscription-pricing"));
 const AdminMessaging = lazy(() => import("@/pages/admin-messaging"));
+const AdminErrors = lazy(() => import("@/pages/admin-errors"));
 const Settings = lazy(() => import("@/pages/settings"));
 const PricingCalculator = lazy(() => import("@/pages/pricing-calculator"));
 const Profitability = lazy(() => import("@/pages/profitability"));
@@ -371,7 +373,7 @@ function TechnicianLayout() {
   );
 }
 
-function AdminSidebarLink({ href, icon: Icon, label, location }: { href: string; icon: any; label: string; location: string }) {
+function AdminSidebarLink({ href, icon: Icon, label, location, badge }: { href: string; icon: any; label: string; location: string; badge?: number }) {
   const isActive = location === href || (href !== "/admin" && location.startsWith(href));
   return (
     <WouterLink
@@ -384,7 +386,12 @@ function AdminSidebarLink({ href, icon: Icon, label, location }: { href: string;
       data-testid={`link-admin-${label.toLowerCase().replace(/\s/g, "-")}`}
     >
       <Icon className="h-4 w-4" />
-      {label}
+      <span className="flex-1">{label}</span>
+      {badge != null && badge > 0 && (
+        <span className="ml-auto text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none" data-testid={`badge-${label.toLowerCase()}`}>
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </WouterLink>
   );
 }
@@ -393,6 +400,13 @@ function AdminLayout() {
   const { isAuthenticated, isLoading, mustChangePassword, logout } = useAdminAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [location] = useLocation();
+
+  const { data: errorStats } = useQuery<{ openCount: number; latestTimestamp: string | null }>({
+    queryKey: ["/api/admin/error-reports/stats"],
+    queryFn: adminFetchFn("/api/admin/error-reports/stats"),
+    enabled: isAuthenticated && !isLoading,
+    refetchInterval: 60000,
+  });
 
   if (isLoading) {
     return (
@@ -442,6 +456,7 @@ function AdminLayout() {
             <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">System</p>
             <div className="space-y-1">
               <AdminSidebarLink href="/admin/messaging" icon={MessageSquare} label="Messaging" location={location} />
+              <AdminSidebarLink href="/admin/errors" icon={Bug} label="Errors" location={location} badge={errorStats?.openCount} />
               <AdminSidebarLink href="/admin/security" icon={Shield} label="Security" location={location} />
             </div>
           </div>
@@ -485,6 +500,7 @@ function AdminLayout() {
               <Route path="/admin/security" component={AdminSecurity} />
               <Route path="/admin/pricing" component={AdminSubscriptionPricing} />
               <Route path="/admin/messaging" component={AdminMessaging} />
+              <Route path="/admin/errors" component={AdminErrors} />
               <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
               <Route path="/admin/login">{() => { window.location.href = "/admin"; return null; }}</Route>
               <Route component={NotFound} />
@@ -627,6 +643,15 @@ class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("[ErrorBoundary]", error, errorInfo);
+    if (!isChunkLoadError(error)) {
+      import("./lib/errorReporter").then(({ reportError }) => {
+        reportError(
+          error.message || "React error boundary catch",
+          (error.stack || "") + "\n\nComponent Stack:\n" + (errorInfo.componentStack || ""),
+          "react"
+        );
+      }).catch(() => {});
+    }
     if (isChunkLoadError(error)) {
       const key = "scoopilot_chunk_reload";
       if (!sessionStorage.getItem(key)) {

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, Contact2, CalendarCheck, DollarSign, ChevronRight, BarChart3, ArrowRight, AlertTriangle } from "lucide-react";
+import { Building2, Users, Contact2, CalendarCheck, DollarSign, ChevronRight, BarChart3, ArrowRight, AlertTriangle, Bug } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { adminFetchFn } from "@/lib/adminApi";
 
@@ -35,6 +35,12 @@ export default function AdminDashboard() {
   const { data: inactiveUsers } = useQuery<Record<string, any[]>>({
     queryKey: ["/api/admin/inactive-users"],
     queryFn: adminFetchFn("/api/admin/inactive-users"),
+  });
+
+  const { data: errorStats } = useQuery<{ openCount: number; latestTimestamp: string | null }>({
+    queryKey: ["/api/admin/error-reports/stats"],
+    queryFn: adminFetchFn("/api/admin/error-reports/stats"),
+    refetchInterval: 60000,
   });
 
   const recentTenants = (companies || [])
@@ -71,6 +77,43 @@ export default function AdminDashboard() {
           </Card>
         ))}
       </div>
+
+      <Link href="/admin/errors">
+        <Card className={`hover-elevate cursor-pointer ${(errorStats?.openCount ?? 0) > 0 ? "border-red-300 dark:border-red-800 bg-red-50/30 dark:bg-red-950/10" : ""}`} data-testid="card-system-errors">
+          <CardContent className="pt-5 pb-4 px-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${(errorStats?.openCount ?? 0) > 0 ? "bg-red-100 dark:bg-red-900/40" : "bg-muted"}`}>
+                  <Bug className={`h-5 w-5 ${(errorStats?.openCount ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">System Errors</p>
+                  <p className="text-sm text-muted-foreground">
+                    {errorStats == null
+                      ? "Loading..."
+                      : errorStats.openCount === 0
+                        ? "No open errors"
+                        : `${errorStats.openCount} open error${errorStats.openCount !== 1 ? "s" : ""}`}
+                  </p>
+                  {errorStats?.latestTimestamp && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Latest: {new Date(errorStats.latestTimestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {(errorStats?.openCount ?? 0) > 0 && (
+                  <Badge className="bg-red-500 text-white hover:bg-red-600" data-testid="badge-open-errors">
+                    {errorStats!.openCount}
+                  </Badge>
+                )}
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
 
       <div className="grid md:grid-cols-2 gap-4">
         <Link href="/admin/tenants">

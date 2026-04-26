@@ -80,6 +80,9 @@ import {
   type SystemMessage, type InsertSystemMessage,
   businessAssessments,
   type BusinessAssessment, type InsertBusinessAssessment,
+  errorReports, errorFixTasks,
+  type ErrorReport, type InsertErrorReport,
+  type ErrorFixTask, type InsertErrorFixTask,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -466,6 +469,16 @@ export interface IStorage {
   // Business Assessments
   saveBusinessAssessment(data: InsertBusinessAssessment): Promise<BusinessAssessment>;
   getBusinessAssessments(companyId: string, limit?: number): Promise<BusinessAssessment[]>;
+
+  // Error Reports
+  createErrorReport(data: InsertErrorReport): Promise<ErrorReport>;
+  listErrorReports(filters?: { status?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<ErrorReport[]>;
+  getErrorReport(id: string): Promise<ErrorReport | undefined>;
+  updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status">>): Promise<ErrorReport>;
+  createErrorFixTask(data: InsertErrorFixTask): Promise<ErrorFixTask>;
+  getErrorFixTask(errorReportId: string): Promise<ErrorFixTask | undefined>;
+  getOpenErrorCount(): Promise<number>;
+  getLatestErrorTimestamp(): Promise<Date | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2863,6 +2876,56 @@ export class DatabaseStorage implements IStorage {
       .where(eq(businessAssessments.companyId, companyId))
       .orderBy(desc(businessAssessments.createdAt))
       .limit(limit);
+  }
+
+  // ================ Error Reports ================
+  async createErrorReport(data: InsertErrorReport): Promise<ErrorReport> {
+    const [row] = await db.insert(errorReports).values(data).returning();
+    return row;
+  }
+
+  async listErrorReports(filters?: { status?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<ErrorReport[]> {
+    const status = filters?.status as "open" | "acknowledged" | "resolved" | undefined;
+    return db.select()
+      .from(errorReports)
+      .where(and(
+        status ? eq(errorReports.status, status) : undefined,
+        filters?.fromDate ? gte(errorReports.createdAt, filters.fromDate) : undefined,
+        filters?.toDate ? lte(errorReports.createdAt, filters.toDate) : undefined,
+      ))
+      .orderBy(desc(errorReports.createdAt))
+      .limit(filters?.limit ?? 50)
+      .offset(filters?.offset ?? 0);
+  }
+
+  async getErrorReport(id: string): Promise<ErrorReport | undefined> {
+    const [row] = await db.select().from(errorReports).where(eq(errorReports.id, id));
+    return row;
+  }
+
+  async updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status">>): Promise<ErrorReport> {
+    const [row] = await db.update(errorReports).set(data).where(eq(errorReports.id, id)).returning();
+    return row;
+  }
+
+  async createErrorFixTask(data: InsertErrorFixTask): Promise<ErrorFixTask> {
+    const [row] = await db.insert(errorFixTasks).values(data).returning();
+    return row;
+  }
+
+  async getErrorFixTask(errorReportId: string): Promise<ErrorFixTask | undefined> {
+    const [row] = await db.select().from(errorFixTasks).where(eq(errorFixTasks.errorReportId, errorReportId));
+    return row;
+  }
+
+  async getOpenErrorCount(): Promise<number> {
+    const [result] = await db.select({ cnt: count() }).from(errorReports).where(eq(errorReports.status, "open"));
+    return result?.cnt ?? 0;
+  }
+
+  async getLatestErrorTimestamp(): Promise<Date | null> {
+    const [result] = await db.select({ ts: sql<Date>`max(${errorReports.createdAt})` }).from(errorReports);
+    return result?.ts ?? null;
   }
 }
 
