@@ -72,6 +72,7 @@ const SmsTerms = lazy(() => import("@/pages/sms-terms"));
 const Pipeline = lazy(() => import("@/pages/pipeline"));
 const BusinessOverview = lazy(() => import("@/pages/business-overview"));
 const OnboardingForm = lazy(() => import("@/pages/onboarding-form"));
+const PendingApproval = lazy(() => import("@/pages/pending-approval"));
 
 function PageLoader() {
   return (
@@ -139,7 +140,7 @@ function AuthenticatedLayout() {
   const openRover = useCallback(() => {
     roverRef.current?.open();
   }, []);
-  const [setupState, setSetupState] = useState<"loading" | "ready" | "error">(
+  const [setupState, setSetupState] = useState<"loading" | "ready" | "error" | "pending_approval">(
     (user as any)?.setupDone ? "ready" : "loading"
   );
   const { activeTour, isRunning, startTour, handleCallback, getUnseenTours, isTourStatusLoaded } = useFeatureTour();
@@ -164,14 +165,32 @@ function AuthenticatedLayout() {
 
   const setupMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/setup");
+      const { getAuthHeaders } = await import("@/lib/queryClient");
+      const res = await fetch("/api/setup", {
+        method: "POST",
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
+      if (res.status === 403) {
+        const data = await res.json().catch(() => ({}));
+        if (data.subscriptionStatus === "pending_approval") {
+          const err = new Error("pending_approval") as any;
+          err.subscriptionStatus = "pending_approval";
+          throw err;
+        }
+      }
+      if (!res.ok) throw new Error(`Setup failed: ${res.status}`);
       return res.json();
     },
     onSuccess: () => {
       setSetupState("ready");
     },
-    onError: () => {
-      setSetupState("error");
+    onError: (err: any) => {
+      if (err.subscriptionStatus === "pending_approval") {
+        setSetupState("pending_approval");
+      } else {
+        setSetupState("error");
+      }
     },
   });
 
@@ -217,6 +236,14 @@ function AuthenticatedLayout() {
           Retry
         </Button>
       </div>
+    );
+  }
+
+  if (setupState === "pending_approval") {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <PendingApproval />
+      </Suspense>
     );
   }
 

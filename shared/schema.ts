@@ -21,7 +21,7 @@ export const invoiceTimingEnum = pgEnum("invoice_timing", ["before_service", "af
 export const invoiceFrequencyEnum = pgEnum("invoice_frequency", ["per_service", "per_week", "per_month"]);
 export const discountTypeEnum = pgEnum("discount_type", ["percent", "amount"]);
 export const subscriptionTierEnum = pgEnum("subscription_tier", ["free_trial", "tier_starter", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"]);
-export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "past_due", "cancelled", "trialing", "suspended"]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "past_due", "cancelled", "trialing", "suspended", "pending_approval"]);
 export const automationTriggerEnum = pgEnum("automation_trigger", ["lead_created", "service_completed", "payment_failed", "invoice_created", "quote_created"]);
 
 export const yardDifficultyEnum = pgEnum("yard_difficulty", ["flat", "moderate", "difficult"]);
@@ -213,6 +213,8 @@ export const companies = pgTable("companies", {
   cancelAt: timestamp("cancel_at"),
   subscriptionUpdatedAt: timestamp("subscription_updated_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
+  signupCountry: varchar("signup_country", { length: 5 }),
+  verificationUrl: text("verification_url"),
   churnNotes: text("churn_notes"),
   voicePlanTier: varchar("voice_plan_tier", { length: 50 }),
   voicePlanStatus: varchar("voice_plan_status", { length: 50 }),

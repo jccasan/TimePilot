@@ -354,6 +354,7 @@ export async function registerRoutes(
 
   const GATE_EXEMPT_PREFIXES = [
     "/api/auth/", "/api/auth/login", "/api/auth/register", "/api/auth/user",
+    "/api/auth/submit-verification-url",
     "/api/billing/", "/api/subscriptions/",
     "/api/webhooks/", "/api/portal/",
     "/api/password/",
@@ -429,6 +430,13 @@ export async function registerRoutes(
             error: "Account suspended",
             message: "Your subscription is inactive. Please update your billing to continue.",
             subscriptionStatus: company.subscriptionStatus,
+          });
+        }
+        if (company && company.subscriptionStatus === "pending_approval") {
+          return res.status(403).json({
+            error: "Account pending approval",
+            message: "Your account is under review. You will receive an email once approved.",
+            subscriptionStatus: "pending_approval",
           });
         }
       }
@@ -1450,6 +1458,23 @@ export async function registerRoutes(
       res.clearCookie("connect.sid");
       return res.json({ ok: true });
     });
+  });
+
+  app.post("/api/auth/submit-verification-url", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { url } = req.body;
+      if (!url || typeof url !== "string") {
+        return res.status(400).json({ error: "URL is required" });
+      }
+      const trimmed = url.trim();
+      try { new URL(trimmed); } catch { return res.status(400).json({ error: "Invalid URL format" }); }
+      const memberships = await storage.getCompaniesForUser(userId);
+      if (!memberships.length) return res.status(404).json({ error: "No company found" });
+      const companyId = memberships[0].companyId;
+      await db.update(companies).set({ verificationUrl: trimmed } as any).where(eq(companies.id, companyId));
+      res.json({ ok: true });
+    } catch (err) { handleError(res, err); }
   });
 
   app.get("/api/tours/status", isAuthenticated, async (req: Request, res: Response) => {
@@ -15916,6 +15941,170 @@ Rules:
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Pending Approval Admin Routes ================
+
+  app.get("/api/admin/pending-approvals", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { eq } = await import("drizzle-orm");
+      const pendingCompanies = await db.select().from(companies).where(eq(companies.subscriptionStatus, "pending_approval"));
+      const result = await Promise.all(pendingCompanies.map(async (c) => {
+        const companyUserRecords = await storage.getCompanyUsers(c.id);
+        const ownerRecord = companyUserRecords.find(cu => cu.role === "owner") || companyUserRecords[0];
+        let ownerEmail: string | null = null;
+        let ownerName: string | null = null;
+        if (ownerRecord) {
+          const ownerUser = await getUserById(ownerRecord.userId);
+          if (ownerUser) {
+            ownerEmail = ownerUser.email || null;
+            ownerName = [ownerUser.firstName, ownerUser.lastName].filter(Boolean).join(" ") || null;
+          }
+        }
+        return {
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          ownerEmail,
+          ownerName,
+          signupCountry: c.signupCountry || null,
+          verificationUrl: c.verificationUrl || null,
+          createdAt: c.createdAt,
+        };
+      }));
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/companies/:id/approve", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const company = await storage.getCompany(p(req.params.id));
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (company.subscriptionStatus !== "pending_approval") {
+        return res.status(400).json({ error: "Account is not pending approval" });
+      }
+
+      const newTempPassword = crypto.randomBytes(6).toString("base64url");
+      const newPasswordHash = await (async () => {
+        const { scrypt, randomBytes } = await import("crypto");
+        const salt = randomBytes(16).toString("hex");
+        return new Promise<string>((resolve, reject) => {
+          scrypt(newTempPassword, salt, 64, (err, key) => {
+            if (err) reject(err);
+            else resolve(`${salt}:${key.toString("hex")}`);
+          });
+        });
+      })();
+
+      const companyUserRecords = await storage.getCompanyUsers(company.id);
+      const ownerRecord = companyUserRecords.find(cu => cu.role === "owner") || companyUserRecords[0];
+      if (ownerRecord) {
+        await db.update((await import("@shared/models/auth")).users)
+          .set({ passwordHash: newPasswordHash, mustChangePassword: true, updatedAt: new Date() })
+          .where(eq((await import("@shared/models/auth")).users.id, ownerRecord.userId));
+      }
+
+      await db.update(companies)
+        .set({
+          subscriptionStatus: "trialing",
+          trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        } as any)
+        .where(eq(companies.id, p(req.params.id)));
+
+      await logAdminAudit(req, "approve_account", "company", p(req.params.id), {});
+
+      const host = req.headers.host || "localhost:5000";
+      const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+      const appUrl = `${isLocalhost ? "http" : "https"}://${host}`;
+
+      if (ownerRecord) {
+        const ownerUser = await getUserById(ownerRecord.userId);
+        if (ownerUser?.email) {
+          await sendEmail({
+            companyId: company.id,
+            to: ownerUser.email,
+            subject: "Your ScooPilot account has been approved!",
+            text: `Hi ${ownerUser.firstName || "there"},\n\nGreat news — your ScooPilot account has been approved!\n\nCompany: ${company.name}\nLogin: ${appUrl}\nEmail: ${ownerUser.email}\nTemporary Password: ${newTempPassword}\n\nYou'll be asked to set a new password on your first login.\n\nWelcome aboard!`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">ScooPilot</h1>
+                </div>
+                <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                  <h2 style="margin-top: 0; color: #2d8a5e;">Your Account is Approved!</h2>
+                  <p>Hi ${ownerUser.firstName || "there"},</p>
+                  <p>Your ScooPilot account <strong>"${company.name}"</strong> has been reviewed and approved. Your 14-day free trial starts now.</p>
+                  <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 4px 0;"><strong>Email:</strong> ${ownerUser.email}</p>
+                    <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${newTempPassword}</p>
+                  </div>
+                  <div style="text-align: center; margin: 24px 0;">
+                    <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
+                  </div>
+                  <p style="color: #6b7280; font-size: 14px;">You'll be asked to set a new password when you first log in.</p>
+                </div>
+              </div>
+            `,
+          }).catch(err => console.error("[Admin Approve] Failed to send approval email:", err));
+        }
+      }
+
+      console.log(`[Admin] Account "${company.name}" (${p(req.params.id)}) approved by ${(req as any).adminUser?.email}`);
+      res.json({ ok: true, companyName: company.name });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/companies/:id/reject", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const company = await storage.getCompany(p(req.params.id));
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (company.subscriptionStatus !== "pending_approval") {
+        return res.status(400).json({ error: "Account is not pending approval" });
+      }
+
+      const { sendRejectionEmail = false, rejectionNote } = req.body as { sendRejectionEmail?: boolean; rejectionNote?: string };
+
+      const companyUserRecords = await storage.getCompanyUsers(company.id);
+      const ownerRecord = companyUserRecords.find(cu => cu.role === "owner") || companyUserRecords[0];
+
+      if (sendRejectionEmail && ownerRecord) {
+        const ownerUser = await getUserById(ownerRecord.userId);
+        if (ownerUser?.email) {
+          const note = rejectionNote?.trim() || "We're currently focused on serving pet waste removal businesses in the US and Canada.";
+          await sendEmail({
+            to: ownerUser.email,
+            subject: "Update on your ScooPilot application",
+            text: `Hi ${ownerUser.firstName || "there"},\n\nThank you for your interest in ScooPilot.\n\nAfter reviewing your account, we're unable to approve access at this time.\n\n${note}\n\nIf you believe this is an error, please contact support@scoopilot.com.\n\nThank you for your understanding.`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">ScooPilot</h1>
+                </div>
+                <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                  <h2 style="margin-top: 0;">Application Update</h2>
+                  <p>Hi ${ownerUser.firstName || "there"},</p>
+                  <p>Thank you for your interest in ScooPilot.</p>
+                  <p>After reviewing your account, we're unable to approve access at this time.</p>
+                  <p style="background: #f3f4f6; padding: 12px; border-radius: 6px;">${note}</p>
+                  <p>If you believe this is an error, please contact <a href="mailto:support@scoopilot.com">support@scoopilot.com</a>.</p>
+                </div>
+              </div>
+            `,
+          }).catch(err => console.error("[Admin Reject] Failed to send rejection email:", err));
+        }
+      }
+
+      const { eq: eqOp, inArray } = await import("drizzle-orm");
+      const userIds = companyUserRecords.map(cu => cu.userId);
+      await db.delete(companies).where(eqOp(companies.id, p(req.params.id)));
+      if (userIds.length > 0) {
+        await db.delete((await import("@shared/models/auth")).users).where(inArray((await import("@shared/models/auth")).users.id, userIds));
+      }
+
+      await logAdminAudit(req, "reject_account", "company", p(req.params.id), { sendRejectionEmail, rejectionNote: rejectionNote || null });
+      console.log(`[Admin] Account "${company.name}" (${p(req.params.id)}) rejected and deleted by ${(req as any).adminUser?.email}`);
+      res.json({ ok: true, companyName: company.name });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/admin/companies/:id/regenerate-visits", isAdmin, async (req: Request, res: Response) => {
     try {
       const company = await storage.getCompany(p(req.params.id));
@@ -17503,6 +17692,33 @@ Respond with exactly one category from the list above and nothing else.`;
 
       const tempPassword = crypto.randomBytes(6).toString("base64url");
 
+      // --- GeoIP detection ---
+      let signupCountry: string = "US";
+      try {
+        const cfCountry = (req.headers["cf-ipcountry"] as string | undefined)?.trim().toUpperCase();
+        if (cfCountry && cfCountry.length === 2 && cfCountry !== "XX") {
+          signupCountry = cfCountry;
+        } else {
+          const forwardedFor = req.headers["x-forwarded-for"] as string | undefined;
+          const clientIp = forwardedFor ? forwardedFor.split(",")[0].trim() : req.ip || "";
+          const isPrivate = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|::1$|localhost)/.test(clientIp);
+          if (!isPrivate && clientIp) {
+            const geoRes = await fetch(`http://ip-api.com/json/${clientIp}?fields=countryCode`, { signal: AbortSignal.timeout(3000) });
+            if (geoRes.ok) {
+              const geoData = await geoRes.json() as { countryCode?: string };
+              if (geoData.countryCode && geoData.countryCode.length === 2) {
+                signupCountry = geoData.countryCode.toUpperCase();
+              }
+            }
+          }
+        }
+      } catch (geoErr) {
+        console.warn("[Signup] GeoIP detection failed, defaulting to US:", geoErr);
+      }
+
+      const isDomestic = signupCountry === "US" || signupCountry === "CA";
+      const newStatus = isDomestic ? "trialing" : "pending_approval";
+
       const { company } = await db.transaction(async (tx) => {
         const txUser = await createUserWithTempPassword(record.email, record.firstName, record.lastName || "", tempPassword);
 
@@ -17520,8 +17736,9 @@ Respond with exactly one category from the list above and nothing else.`;
           email: record.email,
           slug,
           subscriptionTier: "free_trial",
-          subscriptionStatus: "trialing",
-          trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          subscriptionStatus: newStatus,
+          trialEndsAt: isDomestic ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) : null,
+          signupCountry,
         }).returning();
 
         await tx.insert((await import("@shared/schema")).companyUsers).values({
@@ -17544,46 +17761,58 @@ Respond with exactly one category from the list above and nothing else.`;
       const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
       const appUrl = `${isLocalhost ? "http" : "https"}://${host}`;
 
-      try {
-        await sendEmail({
-          companyId: company.id,
-          to: record.email,
-          subject: "Welcome to ScooPilot - Your login credentials",
-          text: `Hi ${record.firstName},\n\nYour ScooPilot free trial is active!\n\nCompany: ${record.companyName}\nLogin: ${appUrl}\nEmail: ${record.email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-                <h1 style="color: white; margin: 0;">ScooPilot</h1>
-              </div>
-              <div style="padding: 20px; border: 1px solid #e5e7eb;">
-                <h2 style="margin-top: 0;">Your Free Trial is Active!</h2>
-                <p>Hi ${record.firstName},</p>
-                <p>Your ScooPilot account <strong>"${record.companyName}"</strong> is ready to go.</p>
-                <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
-                  <p style="margin: 4px 0;"><strong>Email:</strong> ${record.email}</p>
-                  <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+      if (isDomestic) {
+        try {
+          await sendEmail({
+            companyId: company.id,
+            to: record.email,
+            subject: "Welcome to ScooPilot - Your login credentials",
+            text: `Hi ${record.firstName},\n\nYour ScooPilot free trial is active!\n\nCompany: ${record.companyName}\nLogin: ${appUrl}\nEmail: ${record.email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">ScooPilot</h1>
                 </div>
-                <div style="text-align: center; margin: 24px 0;">
-                  <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
+                <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                  <h2 style="margin-top: 0;">Your Free Trial is Active!</h2>
+                  <p>Hi ${record.firstName},</p>
+                  <p>Your ScooPilot account <strong>"${record.companyName}"</strong> is ready to go.</p>
+                  <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 4px 0;"><strong>Email:</strong> ${record.email}</p>
+                    <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+                  </div>
+                  <div style="text-align: center; margin: 24px 0;">
+                    <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
+                  </div>
+                  <p style="color: #6b7280; font-size: 14px;">You'll be asked to set a new password when you first log in.</p>
                 </div>
-                <p style="color: #6b7280; font-size: 14px;">You'll be asked to set a new password when you first log in.</p>
               </div>
-            </div>
-          `,
-        });
-      } catch (emailErr) {
-        console.error("[Signup] Failed to send welcome email:", emailErr);
+            `,
+          });
+        } catch (emailErr) {
+          console.error("[Signup] Failed to send welcome email:", emailErr);
+        }
+
+        sendAdminSignupNotification({
+          companyName: record.companyName,
+          ownerEmail: record.email,
+          ownerName: [record.firstName, record.lastName].filter(Boolean).join(" "),
+          tier: "free_trial",
+          source: "Public Signup",
+        }).catch((err) => console.error("[Signup Notification] Failed during public signup:", err));
+
+        res.send(verificationResultPage(true, null, appUrl));
+      } else {
+        sendAdminSignupNotification({
+          companyName: record.companyName,
+          ownerEmail: record.email,
+          ownerName: [record.firstName, record.lastName].filter(Boolean).join(" "),
+          tier: "free_trial",
+          source: `Public Signup (${signupCountry} - pending approval)`,
+        }).catch((err) => console.error("[Signup Notification] Failed during public signup:", err));
+
+        res.send(verificationPendingPage(record.firstName, appUrl));
       }
-
-      sendAdminSignupNotification({
-        companyName: record.companyName,
-        ownerEmail: record.email,
-        ownerName: [record.firstName, record.lastName].filter(Boolean).join(" "),
-        tier: "free_trial",
-        source: "Public Signup",
-      }).catch((err) => console.error("[Signup Notification] Failed during public signup:", err));
-
-      res.send(verificationResultPage(true, null, appUrl));
     } catch (err) {
       console.error("[Signup] Verification error:", err);
       res.send(verificationResultPage(false, "Something went wrong. Please try again or contact support."));
@@ -17621,6 +17850,43 @@ Respond with exactly one category from the list above and nothing else.`;
   <div class="card">
     <div class="header"><h1>ScooPilot</h1></div>
     <div class="content">${body}</div>
+  </div>
+</body>
+</html>`;
+  }
+
+  function verificationPendingPage(firstName: string, loginUrl: string): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Under Review - ScooPilot</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f9fafb; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.07); max-width: 520px; width: 90%; overflow: hidden; }
+    .header { background-color: #2d8a5e; padding: 20px; text-align: center; }
+    .header h1 { color: white; margin: 0; font-size: 24px; }
+    .content { padding: 28px; }
+    .badge { display: inline-block; background: #fef3c7; color: #92400e; border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+    h2 { color: #1f2937; margin-top: 0; }
+    p { color: #4b5563; line-height: 1.6; }
+    .cta { display: inline-block; background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 8px; }
+    .note { font-size: 13px; color: #9ca3af; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header"><h1>ScooPilot</h1></div>
+    <div class="content">
+      <span class="badge">⏳ Pending Review</span>
+      <h2>Hi ${firstName}, your email is verified!</h2>
+      <p>Because your account is registering from outside the United States or Canada, our team does a brief review before activating access.</p>
+      <p>You'll receive an email with your login credentials once your account is approved — usually within 1 business day.</p>
+      <p>In the meantime, you can log in and speed up your approval by submitting your LinkedIn profile or business website:</p>
+      <a href="${loginUrl}" class="cta">Log In &amp; Submit Profile</a>
+      <p class="note">Questions? Email us at support@scoopilot.com</p>
+    </div>
   </div>
 </body>
 </html>`;
