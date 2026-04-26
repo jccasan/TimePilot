@@ -19122,6 +19122,19 @@ Respond with exactly one category from the list above and nothing else.`;
     }
   });
 
+  app.post("/api/admin/error-reports/bulk-status", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { message, status } = req.body;
+      const validStatuses = ["open", "acknowledged", "resolved"];
+      if (!message || typeof message !== "string") return res.status(400).json({ error: "message is required" });
+      if (!status || !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status" });
+      const updated = await storage.bulkUpdateErrorReportStatus(message, status as "open" | "acknowledged" | "resolved");
+      res.json({ updated });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/admin/error-reports/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const report = await storage.getErrorReport(req.params.id);

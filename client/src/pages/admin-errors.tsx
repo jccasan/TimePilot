@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Bug, ChevronRight, ChevronDown, Wrench, CheckCircle, Eye, X, ChevronLeft, Layers, List, Check } from "lucide-react";
+import { Loader2, Bug, ChevronRight, ChevronDown, Wrench, CheckCircle, Eye, X, ChevronLeft, Layers, List, Check, CheckCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const PAGE_SIZE = 50;
@@ -263,6 +263,21 @@ export default function AdminErrors() {
     onError: () => toast({ title: "Failed to update status", variant: "destructive" }),
   });
 
+  const bulkStatusMutation = useMutation({
+    mutationFn: async ({ message, status }: { message: string; status: string }) => {
+      const res = await adminRequest("POST", "/api/admin/error-reports/bulk-status", { message, status });
+      if (!res.ok) throw new Error("Failed to bulk update");
+      return res.json();
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports/grouped"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports/stats"] });
+      toast({ title: `${data.updated} error${data.updated !== 1 ? "s" : ""} marked as ${variables.status}` });
+    },
+    onError: () => toast({ title: "Failed to bulk update status", variant: "destructive" }),
+  });
+
   const fixTaskMutation = useMutation({
     mutationFn: async ({ id, title }: { id: string; title: string }) => {
       const res = await adminRequest("POST", `/api/admin/error-reports/${id}/fix-task`, { title: title.trim() || undefined });
@@ -418,6 +433,7 @@ export default function AdminErrors() {
 
               {viewMode === "grouped" && groupedReports.map((group) => {
                 const isExpanded = expandedGroups.has(group.message);
+                const isBulkPending = bulkStatusMutation.isPending && bulkStatusMutation.variables?.message === group.message;
                 return (
                   <div key={group.message} data-testid={`group-row-${group.latestId}`}>
                     <div
@@ -450,6 +466,34 @@ export default function AdminErrors() {
                         <div className="text-[10px] text-[#555] mt-0.5">
                           first seen {formatTs(group.firstSeen)}
                         </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2" onClick={e => e.stopPropagation()}>
+                        {group.status !== "acknowledged" && (
+                          <button
+                            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-yellow-500/30 bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors disabled:opacity-40"
+                            disabled={isBulkPending}
+                            onClick={() => bulkStatusMutation.mutate({ message: group.message, status: "acknowledged" })}
+                            data-testid={`button-acknowledge-all-${group.latestId}`}
+                          >
+                            {isBulkPending && bulkStatusMutation.variables?.status === "acknowledged"
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <Eye className="h-3 w-3" />}
+                            Ack all
+                          </button>
+                        )}
+                        {group.status !== "resolved" && (
+                          <button
+                            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors disabled:opacity-40"
+                            disabled={isBulkPending}
+                            onClick={() => bulkStatusMutation.mutate({ message: group.message, status: "resolved" })}
+                            data-testid={`button-resolve-all-${group.latestId}`}
+                          >
+                            {isBulkPending && bulkStatusMutation.variables?.status === "resolved"
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <CheckCheck className="h-3 w-3" />}
+                            Resolve all
+                          </button>
+                        )}
                       </div>
                     </div>
 

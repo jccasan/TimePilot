@@ -476,6 +476,7 @@ export interface IStorage {
   listGroupedErrorReports(filters?: { status?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<GroupedErrorReport[]>;
   getErrorReport(id: string): Promise<ErrorReport | undefined>;
   updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status">>): Promise<ErrorReport>;
+  bulkUpdateErrorReportStatus(message: string, status: "open" | "acknowledged" | "resolved"): Promise<number>;
   createErrorFixTask(data: InsertErrorFixTask): Promise<ErrorFixTask>;
   getErrorFixTask(errorReportId: string): Promise<ErrorFixTask | undefined>;
   updateErrorFixTask(id: string, data: Partial<Pick<ErrorFixTask, "status">>): Promise<ErrorFixTask>;
@@ -2962,6 +2963,11 @@ export class DatabaseStorage implements IStorage {
   async updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status">>): Promise<ErrorReport> {
     const [row] = await db.update(errorReports).set(data).where(eq(errorReports.id, id)).returning();
     return row;
+  }
+
+  async bulkUpdateErrorReportStatus(message: string, status: "open" | "acknowledged" | "resolved"): Promise<number> {
+    const result = await db.update(errorReports).set({ status }).where(eq(errorReports.message, message)).returning({ id: errorReports.id });
+    return result.length;
   }
 
   async createErrorFixTask(data: InsertErrorFixTask): Promise<ErrorFixTask> {
