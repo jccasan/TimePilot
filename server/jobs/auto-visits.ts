@@ -162,7 +162,9 @@ async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], 
     if (plan.frequency === "onetime") {
       if (!plan.startDate) continue;
       const dateStr = plan.startDate;
-      if (dateStr >= startDate && dateStr <= endDate) {
+      // For one-time plans we only check the upper bound (endDate) so that visits
+      // whose scheduled date is today or in the past are still created when missing.
+      if (dateStr <= endDate) {
         const key = `${plan.id}_${dateStr}`;
         if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, plan.id, holdsByPlan)) {
           const routeId = await getRouteIdForDate(dateStr);

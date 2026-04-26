@@ -5789,7 +5789,8 @@ Return ONLY valid JSON, no markdown.`,
         const anchor = planStart > today ? planStart : today;
         const sixMonthsOut = new Date(anchor);
         sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
-        await generateVisitsForPlans(companyId, [plan.id], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
+        // Use planStart (not anchor) so one-time or past-dated plans still get their visits.
+        await generateVisitsForPlans(companyId, [plan.id], planStart.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
       } catch (genErr) {
         console.error("[service-plan] Failed to auto-generate visits:", genErr);
       }
@@ -6082,7 +6083,9 @@ Return ONLY valid JSON, no markdown.`,
         const anchor = jobStart > today ? jobStart : today;
         const sixMonthsOut = new Date(anchor);
         sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
-        await generateVisitsForPlans(companyId, [sp.id], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
+        // Use jobStart (not anchor) as the lower bound so that one-time jobs with a
+        // start date on or before today still have their visit created correctly.
+        await generateVisitsForPlans(companyId, [sp.id], jobStart.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
       } catch (genErr) {
         console.error("[jobs] Failed to auto-generate visits:", genErr);
       }
@@ -6147,7 +6150,8 @@ Return ONLY valid JSON, no markdown.`,
           const anchor = planStart > today ? planStart : today;
           const sixMonthsOut = new Date(anchor);
           sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
-          const generated = await generateVisitsForPlans(companyId, [job.servicePlanId], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
+          // Use planStart (not anchor) so one-time or past-dated jobs still get their visits.
+          const generated = await generateVisitsForPlans(companyId, [job.servicePlanId], planStart.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
           console.log(`[job-approve] Generated ${generated} visits for approved job ${job.id}`);
         } catch (genErr) {
           console.error("[job-approve] Failed to generate visits:", genErr);
@@ -15848,6 +15852,29 @@ Rules:
       await logAdminAudit(req, "reactivate_account", "company", req.params.id, {});
       console.log(`[Admin] Account "${company.name}" (${req.params.id}) reactivated by ${(req as any).adminUser?.email}`);
       return res.json({ ok: true, companyName: company.name });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/companies/:id/regenerate-visits", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const company = await storage.getCompany(req.params.id);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const { generateVisitsForCompany } = await import("./jobs/auto-visits");
+      const { getCompanyToday } = await import("./utils/company-date");
+      const companyToday = getCompanyToday(company.timezone || "America/New_York");
+      // Look back 30 days to catch any missed past one-time visits, then forward 6 months
+      const startDate = new Date(companyToday + "T00:00:00Z");
+      startDate.setUTCDate(startDate.getUTCDate() - 30);
+      const endDate = new Date(companyToday + "T00:00:00Z");
+      endDate.setUTCDate(endDate.getUTCDate() + 182);
+      const created = await generateVisitsForCompany(
+        req.params.id,
+        startDate.toISOString().split("T")[0],
+        endDate.toISOString().split("T")[0],
+      );
+      await logAdminAudit(req, "regenerate_visits", "company", req.params.id, { created });
+      console.log(`[Admin] Regenerated ${created} visits for "${company.name}" (${req.params.id})`);
+      return res.json({ ok: true, companyName: company.name, visitsCreated: created });
     } catch (err) { handleError(res, err); }
   });
 
