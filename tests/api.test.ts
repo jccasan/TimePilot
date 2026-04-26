@@ -853,7 +853,11 @@ async function runTests() {
     const found = vR.data.find((v: any) => v.servicePlanId === spId);
     assert(!!found, `Expected a visit for servicePlanId ${spId} on ${today}, but none found (${vR.data.length} total visits on date)`);
 
-    await req("DELETE", `/api/service-plans/${spId}`);
+    // Cleanup: POST /api/jobs creates a service_plan row (jobs ARE service plans in this schema).
+    // Deleting the service plan cascades to visits. No separate jobs-table row is created
+    // for these test cases (getJobByServicePlanId returns null on fresh plans).
+    const delR = await req("DELETE", `/api/service-plans/${spId}`);
+    assert(delR.status < 500, `Service plan cleanup failed with ${delR.status}`);
   });
 
   await test("Visit generation: one-time job with yesterday's date still creates a visit", "Visits", async () => {
@@ -880,7 +884,8 @@ async function runTests() {
     const found = vR.data.find((v: any) => v.servicePlanId === spId);
     assert(!!found, `Expected a visit for servicePlanId ${spId} on past date ${yesterdayStr}, but none found — anchor-date regression`);
 
-    await req("DELETE", `/api/service-plans/${spId}`);
+    const delR = await req("DELETE", `/api/service-plans/${spId}`);
+    assert(delR.status < 500, `Service plan cleanup failed with ${delR.status}`);
   });
 
   await test("Visit generation: recurring weekly job creates visits within 6 months", "Visits", async () => {
@@ -911,7 +916,8 @@ async function runTests() {
     const planVisits = vR.data.filter((v: any) => v.servicePlanId === spId);
     assert(planVisits.length >= 1, `Expected at least 1 visit for weekly plan ${spId} in 6-month window, got ${planVisits.length}`);
 
-    await req("DELETE", `/api/service-plans/${spId}`);
+    const delR = await req("DELETE", `/api/service-plans/${spId}`);
+    assert(delR.status < 500, `Service plan cleanup failed with ${delR.status}`);
   });
 
   await test("Visit generation: POST /api/service-plans one-time plan creates a visit", "Visits", async () => {
@@ -939,12 +945,19 @@ async function runTests() {
     const found = vR.data.find((v: any) => v.servicePlanId === spId);
     assert(!!found, `Expected a visit for servicePlanId ${spId} on ${today} via /api/service-plans, but none found`);
 
-    await req("DELETE", `/api/service-plans/${spId}`);
+    const delR = await req("DELETE", `/api/service-plans/${spId}`);
+    assert(delR.status < 500, `Service plan cleanup failed with ${delR.status}`);
   });
 
   await test("Visit generation: cleanup fixture contact and property", "Visits", async () => {
-    if (visGenPropertyId) await req("DELETE", `/api/properties/${visGenPropertyId}`);
-    if (visGenContactId) await req("DELETE", `/api/contacts/${visGenContactId}`);
+    if (visGenPropertyId) {
+      const delProp = await req("DELETE", `/api/properties/${visGenPropertyId}`);
+      assert(delProp.status < 500, `Property cleanup failed with ${delProp.status}`);
+    }
+    if (visGenContactId) {
+      const delContact = await req("DELETE", `/api/contacts/${visGenContactId}`);
+      assert(delContact.status < 500, `Contact cleanup failed with ${delContact.status}`);
+    }
   });
 
   // ==========================================
