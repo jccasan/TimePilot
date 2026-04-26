@@ -1478,7 +1478,11 @@ export async function registerRoutes(
       const memberships = await storage.getCompaniesForUser(userId);
       if (!memberships.length) return res.status(404).json({ error: "No company found" });
       const companyId = memberships[0].companyId;
-      await db.update(companies).set({ verificationUrl: trimmed } as any).where(eq(companies.id, companyId));
+      const company = await storage.getCompany(companyId);
+      if (!company || company.subscriptionStatus !== "pending_approval") {
+        return res.status(403).json({ error: "Verification URL can only be submitted while account is pending approval" });
+      }
+      await db.update(companies).set({ verificationUrl: trimmed }).where(eq(companies.id, companyId));
       res.json({ ok: true });
     } catch (err) { handleError(res, err); }
   });
@@ -17873,12 +17877,16 @@ Respond with exactly one category from the list above and nothing else.`;
           return res.status(400).json({ error: "URL must use http or https" });
         }
       } catch { return res.status(400).json({ error: "Invalid URL format" }); }
-      const { eq, and } = await import("drizzle-orm");
+      const { eq, and, isNull } = await import("drizzle-orm");
       const [company] = await db.select({ id: companies.id }).from(companies).where(
-        and(eq(companies.email, email.trim().toLowerCase()), eq(companies.subscriptionStatus, "pending_approval" as any))
+        and(
+          eq(companies.email, email.trim().toLowerCase()),
+          eq(companies.subscriptionStatus, "pending_approval"),
+          isNull(companies.verificationUrl)
+        )
       );
       if (!company) return res.status(404).json({ error: "No pending account found for this email" });
-      await db.update(companies).set({ verificationUrl: trimmedUrl } as any).where(eq(companies.id, company.id));
+      await db.update(companies).set({ verificationUrl: trimmedUrl }).where(eq(companies.id, company.id));
       res.json({ ok: true });
     } catch (err) { handleError(res, err); }
   });
