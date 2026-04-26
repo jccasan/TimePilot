@@ -19001,6 +19001,19 @@ Respond with exactly one category from the list above and nothing else.`;
     return true;
   }
 
+  const ERROR_ALERT_EMAIL = process.env.ERROR_ALERT_EMAIL || "jeremy@scoopilot.com";
+  const ERROR_EMAIL_DEBOUNCE_MS = 15 * 60 * 1000;
+  const recentErrorEmails = new Map<string, number>();
+
+  function shouldSendErrorEmail(message: string): boolean {
+    const key = message.slice(0, 200);
+    const now = Date.now();
+    const lastSent = recentErrorEmails.get(key);
+    if (lastSent && now - lastSent < ERROR_EMAIL_DEBOUNCE_MS) return false;
+    recentErrorEmails.set(key, now);
+    return true;
+  }
+
   app.post("/api/errors/report", async (req: Request, res: Response) => {
     try {
       const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
@@ -19022,11 +19035,12 @@ Respond with exactly one category from the list above and nothing else.`;
         status: "open",
       });
 
-      sendEmail({
-        to: "jeremy@scoopilot.com",
-        subject: `[ScooPilot Error] ${safeType.toUpperCase()}: ${message.slice(0, 80)}`,
-        text: `Error Report #${report.id}\n\nType: ${safeType}\nPage: ${pageUrl || "unknown"}\nUser: ${userId || "anonymous"}\nCompany: ${companyId || "unknown"}\nTime: ${new Date().toISOString()}\n\nMessage:\n${message}\n\nStack:\n${stack || "(none)"}`,
-        html: `<div style="font-family:monospace;max-width:700px;margin:0 auto;">
+      if (shouldSendErrorEmail(message)) {
+        sendEmail({
+          to: ERROR_ALERT_EMAIL,
+          subject: `[ScooPilot Error] ${safeType.toUpperCase()}: ${message.slice(0, 80)}`,
+          text: `Error Report #${report.id}\n\nType: ${safeType}\nPage: ${pageUrl || "unknown"}\nUser: ${userId || "anonymous"}\nCompany: ${companyId || "unknown"}\nTime: ${new Date().toISOString()}\n\nMessage:\n${message}\n\nStack:\n${stack || "(none)"}`,
+          html: `<div style="font-family:monospace;max-width:700px;margin:0 auto;">
           <div style="background:#1e1e1e;color:#f8f8f2;padding:16px 20px;border-radius:6px 6px 0 0;">
             <h2 style="margin:0;font-size:16px;color:#ff6b6b;">⚠ ScooPilot Error Report</h2>
           </div>
@@ -19052,7 +19066,8 @@ Respond with exactly one category from the list above and nothing else.`;
             </div>
           </div>
         </div>`,
-      }).catch(console.error);
+        }).catch(console.error);
+      }
 
       res.json({ ok: true, id: report.id });
     } catch (err) {
