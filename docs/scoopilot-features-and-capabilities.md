@@ -290,7 +290,7 @@ ScooPilot is built to integrate with your existing tools and external services t
 
 ## 17. Analytics & Business Intelligence
 
-ScooPilot gives you a clear picture of your business health with real-time dashboards, KPI tracking, and visual analytics.
+ScooPilot gives you a clear picture of your business health with real-time dashboards, KPI tracking, visual analytics, and AI-powered executive assessments.
 
 ### Customizable Dashboard
 - **Drag-and-Drop Widgets** — Build your perfect dashboard by adding, removing, and rearranging widgets. Choose from MRR, revenue, team size, client count, visit progress, and more.
@@ -298,13 +298,52 @@ ScooPilot gives you a clear picture of your business health with real-time dashb
 - **Today's Operations** — Real-time progress bar showing how many of today's visits are completed, plus a weekly upcoming visit summary.
 - **5-Day Weather Forecast** — Plan around the weather with an integrated forecast widget. Know when rain or extreme temperatures might affect your service schedule.
 
-### Business Metrics
-- **Monthly Recurring Revenue (MRR)** — Track your predictable revenue with real-time MRR calculations based on active service plans.
-- **Customer Acquisition** — Monitor new customer growth rates, lead sources, and conversion rates from lead to paying client.
-- **Visit Completion Rates** — Track the percentage of scheduled visits that are completed vs. skipped or cancelled. Identify patterns and address issues.
-- **Revenue Trends** — Visualize monthly revenue trends with interactive charts. Spot seasonality and growth patterns.
-- **Lead Source Distribution** — See where your leads are coming from (website, referral, phone, webhook) with pie and bar chart breakdowns.
-- **Route Performance** — Compare routes by efficiency metrics: stops per hour, revenue per mile, and completion rates.
+### Business Overview
+An executive-level command center that surfaces the metrics that matter most — and tells you what to do about them.
+
+**KPI Scorecard**
+- **Monthly Recurring Revenue** — Real-time MRR calculated from all active service plans.
+- **Active Customers** — Current count of paying clients.
+- **Avg Profit Margin** — Average margin across all customers, color-coded green / yellow / red against industry thresholds.
+- **Invoice Collection Rate** — Percentage of issued invoices that have been paid, flagged when below healthy benchmarks.
+- **Visit Completion Rate** — Percentage of scheduled service visits completed in the last 30 days.
+
+**Charts**
+- **12-Month Revenue** — Area chart of earned revenue over the trailing year. Spot seasonality and growth momentum at a glance.
+- **Customer Growth** — Line chart overlaying total customers and new clients added per month over 12 months.
+- **Profitability Mix** — Donut chart breaking your customer base into three groups: Profitable, Marginal, and Unprofitable — with exact customer counts for each.
+- **Weekly Visit Completion** — Bar chart of visit completion rate across the last 8 weeks to catch any decline in field performance early.
+
+**AI Business Assessment**
+The signature feature of the Business Overview. Click "Run AI Assessment" to send your live KPI data to the AI and receive a structured health report:
+- **Health Score (0–100)** — An animated ring gauge giving your business a single, comparable score you can track over time.
+- **Overall Verdict** — A plain-English summary of your business health at this moment.
+- **CFO Perspective** — Financial findings rated Healthy / Caution / At Risk, covering revenue trends, collection rate, and margin health — the view a finance officer would give on your P&L.
+- **COO Perspective** — Operational findings rated the same way, covering route efficiency, visit completion, and scheduling patterns — the view an operations officer would give on your service delivery.
+- **Prioritized Recommendations** — A ranked list of specific actions (High / Medium / Low priority) with plain-English explanations of what to do and why.
+- **Assessment History** — Every assessment is saved so you can compare your score over time and measure the impact of changes.
+- **Print Report** — The entire Business Overview page — KPIs, charts, and AI assessment — formats cleanly for PDF or printing for board meetings, investor updates, or personal records.
+
+### Analytics
+A deeper operational intelligence dashboard for day-to-day business visibility.
+
+**KPI Cards**
+- **This Month Revenue** — Current month earnings with a month-over-month growth percentage and trend arrow.
+- **Active Clients** — Active client count out of your total contact database.
+- **Visit Completion Rate** — Completion percentage with total visit volume for the last 30 days.
+- **Outstanding Balance** — Total dollar amount sitting in unpaid invoices.
+
+**Charts**
+- **Monthly Revenue** — 12-month area chart of revenue with gradient fill for visual clarity.
+- **Customer Acquisition** — Combined bar/line chart showing new clients added each month as bars and the running total as a line.
+- **Route Performance by Day** — Stacked bar chart of visit outcomes (completed, scheduled, skipped, cancelled) by day of week over the last 30 days. Instantly see which days have the highest skip rates.
+- **Weekly Visit Trends** — Dual-axis chart showing total visit volume as bars and completion rate as a line for the last 8 weeks.
+- **Client Retention** — Donut chart of your customer base by status (active, paused, cancelled, estimate) with the overall retention rate prominently displayed.
+- **Lead Source Distribution** — Horizontal bar chart showing which marketing channels (referral, Facebook, Google, NextDoor, yard sign, local advertising) are bringing in your clients.
+
+**Supplementary Cards**
+- **Service Day Distribution** — Bar chart of how your stops are spread across days of the week, useful for balancing route load.
+- **Avg Service Metrics** — Average price per visit and average invoice amount alongside total active service plan count.
 
 ---
 
