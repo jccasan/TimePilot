@@ -14,6 +14,16 @@ import { properties, servicePlans as servicePlansTable, routes } from "@shared/s
 import { eq, and, isNotNull, ne } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
+export interface SuggestionActionData {
+  servicePlanId?: string;
+  propertyId?: string;
+  targetDayOfWeek?: string;
+  recommendedPriceCents?: number;
+  targetFrequency?: string;
+  measuredYardSqft?: number;
+  currentYardSize?: string;
+}
+
 export interface ProfitabilitySuggestion {
   type:
     | "route_day_move"
@@ -25,6 +35,7 @@ export interface ProfitabilitySuggestion {
   title: string;
   explanation: string;
   impactCents: number;
+  actionData?: SuggestionActionData;
 }
 
 function haversineDistanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -406,6 +417,35 @@ Rules:
     "no_path_to_profitability",
   ]);
 
+  const actionDataByType: Record<string, SuggestionActionData> = {};
+
+  if (opportunities.routeDayMove) {
+    actionDataByType.route_day_move = {
+      servicePlanId: targetPlan.id,
+      targetDayOfWeek: opportunities.routeDayMove.bestDay,
+    };
+  }
+  if (opportunities.priceIncrease) {
+    actionDataByType.price_increase = {
+      servicePlanId: targetPlan.id,
+      recommendedPriceCents: opportunities.priceIncrease.recommendedPriceCents,
+    };
+  }
+  if (opportunities.yardSizeMismatch) {
+    actionDataByType.yard_size_mismatch = {
+      propertyId: targetProperty.id,
+      measuredYardSqft: opportunities.yardSizeMismatch.measuredSqft,
+      currentYardSize: targetProperty.yardSize ?? undefined,
+    };
+  }
+  if (opportunities.frequencyUpgrade) {
+    actionDataByType.frequency_upgrade = {
+      servicePlanId: targetPlan.id,
+      targetFrequency: opportunities.frequencyUpgrade.upgradeFrequency,
+      recommendedPriceCents: opportunities.frequencyUpgrade.recommendedNewPriceCents,
+    };
+  }
+
   if (Array.isArray(parsed.suggestions)) {
     for (const s of parsed.suggestions.slice(0, 5)) {
       if (!s.type || !validTypes.has(s.type)) continue;
@@ -415,6 +455,7 @@ Rules:
         title: String(s.title).slice(0, 100),
         explanation: String(s.explanation).slice(0, 500),
         impactCents: typeof s.impactCents === "number" ? Math.round(s.impactCents) : 0,
+        actionData: actionDataByType[s.type],
       });
     }
   }

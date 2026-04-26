@@ -1944,11 +1944,22 @@ type AiSuggestionType =
   | "add_nearby_customers"
   | "no_path_to_profitability";
 
+interface SuggestionActionData {
+  servicePlanId?: string;
+  propertyId?: string;
+  targetDayOfWeek?: string;
+  recommendedPriceCents?: number;
+  targetFrequency?: string;
+  measuredYardSqft?: number;
+  currentYardSize?: string;
+}
+
 interface AiSuggestion {
   type: AiSuggestionType;
   title: string;
   explanation: string;
   impactCents: number;
+  actionData?: SuggestionActionData;
 }
 
 function suggestionIcon(type: AiSuggestionType) {
@@ -1960,6 +1971,234 @@ function suggestionIcon(type: AiSuggestionType) {
     case "add_nearby_customers": return <Users className="h-4 w-4 shrink-0" />;
     case "no_path_to_profitability": return <AlertTriangle className="h-4 w-4 shrink-0" />;
   }
+}
+
+function sqftToYardSizeLabel(sqft: number): string {
+  const acres = sqft / 43560;
+  if (acres <= 0.075) return "small";
+  if (acres <= 0.15) return "medium";
+  if (acres <= 0.275) return "large";
+  return "extra_large";
+}
+
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function SuggestionActionRow({
+  suggestion,
+  contactId,
+  onActionComplete,
+}: {
+  suggestion: AiSuggestion;
+  contactId: string;
+  onActionComplete: () => void;
+}) {
+  const { toast } = useToast();
+  const [priceEditValue, setPriceEditValue] = useState<string>("");
+  const [showPriceEdit, setShowPriceEdit] = useState(false);
+  const [yardSizeValue, setYardSizeValue] = useState<string>("");
+  const [showYardEdit, setShowYardEdit] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const ad = suggestion.actionData;
+
+  const servicePlanMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiRequest("PATCH", `/api/service-plans/${ad?.servicePlanId}`, payload),
+    onMutate: () => {
+      setDone(true);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      onActionComplete();
+    },
+    onError: (err: Error) => {
+      setDone(false);
+      toast({ title: "Action failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const propertyMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiRequest("PATCH", `/api/properties/${ad?.propertyId}`, payload),
+    onMutate: () => {
+      setDone(true);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      onActionComplete();
+    },
+    onError: (err: Error) => {
+      setDone(false);
+      toast({ title: "Action failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  if (done) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400" data-testid={`suggestion-action-done-${suggestion.type}`}>
+        <CheckCircle className="h-3.5 w-3.5" />
+        <span>Applied successfully</span>
+      </div>
+    );
+  }
+
+  if (!ad) return null;
+
+  if (suggestion.type === "route_day_move" && ad.servicePlanId && ad.targetDayOfWeek) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs"
+        disabled={servicePlanMutation.isPending}
+        onClick={() => servicePlanMutation.mutate({ dayOfWeek: ad.targetDayOfWeek })}
+        data-testid="button-action-route-day-move"
+      >
+        <MapPin className="h-3 w-3 mr-1" />
+        {`Move to ${capitalize(ad.targetDayOfWeek)}`}
+      </Button>
+    );
+  }
+
+  if (suggestion.type === "price_increase" && ad.servicePlanId && ad.recommendedPriceCents) {
+    const suggestedDollars = (ad.recommendedPriceCents / 100).toFixed(2);
+    if (!showPriceEdit) {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={() => { setShowPriceEdit(true); setPriceEditValue(suggestedDollars); }}
+          data-testid="button-action-price-increase-open"
+        >
+          <DollarSign className="h-3 w-3 mr-1" />
+          Raise to ${suggestedDollars}
+        </Button>
+      );
+    }
+    return (
+      <div className="flex items-center gap-2" data-testid="inline-price-edit">
+        <span className="text-xs text-muted-foreground">$</span>
+        <Input
+          type="number"
+          step="0.01"
+          min="0"
+          value={priceEditValue}
+          onChange={(e) => setPriceEditValue(e.target.value)}
+          className="h-7 w-24 text-xs"
+          data-testid="input-new-price"
+        />
+        <Button
+          size="sm"
+          className="h-7 text-xs"
+          disabled={servicePlanMutation.isPending || !priceEditValue}
+          onClick={() => {
+            const val = parseFloat(priceEditValue);
+            if (isNaN(val) || val <= 0) {
+              toast({ title: "Enter a valid price", variant: "destructive" });
+              return;
+            }
+            servicePlanMutation.mutate({ pricePerVisit: val.toFixed(2) });
+          }}
+          data-testid="button-apply-price"
+        >
+          Apply
+        </Button>
+        <button
+          className="text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => setShowPriceEdit(false)}
+          data-testid="button-cancel-price-edit"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  if (suggestion.type === "yard_size_mismatch" && ad.propertyId && ad.measuredYardSqft) {
+    const suggestedLabel = sqftToYardSizeLabel(ad.measuredYardSqft);
+    const yardSizeOptions = [
+      { value: "small", label: "Small" },
+      { value: "medium", label: "Medium" },
+      { value: "large", label: "Large" },
+      { value: "extra_large", label: "Extra Large" },
+    ];
+    if (!showYardEdit) {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={() => { setShowYardEdit(true); setYardSizeValue(suggestedLabel); }}
+          data-testid="button-action-yard-size-open"
+        >
+          <Ruler className="h-3 w-3 mr-1" />
+          Correct Yard Size
+        </Button>
+      );
+    }
+    return (
+      <div className="flex items-center gap-2" data-testid="inline-yard-size-edit">
+        <Select value={yardSizeValue} onValueChange={setYardSizeValue}>
+          <SelectTrigger className="h-7 w-32 text-xs" data-testid="select-yard-size">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {yardSizeOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value} data-testid={`yard-size-option-${opt.value}`}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          size="sm"
+          className="h-7 text-xs"
+          disabled={propertyMutation.isPending || !yardSizeValue}
+          onClick={() => propertyMutation.mutate({ yardSize: yardSizeValue })}
+          data-testid="button-apply-yard-size"
+        >
+          Apply
+        </Button>
+        <button
+          className="text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => setShowYardEdit(false)}
+          data-testid="button-cancel-yard-size-edit"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  if (suggestion.type === "frequency_upgrade" && ad.servicePlanId && ad.targetFrequency) {
+    const newFreqLabel = ad.targetFrequency === "weekly" ? "Weekly" : ad.targetFrequency === "biweekly" ? "Biweekly" : capitalize(ad.targetFrequency);
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs"
+        disabled={servicePlanMutation.isPending}
+        onClick={() => {
+          const patch: Record<string, unknown> = { frequency: ad.targetFrequency };
+          if (ad.recommendedPriceCents) {
+            patch.pricePerVisit = (ad.recommendedPriceCents / 100).toFixed(2);
+          }
+          servicePlanMutation.mutate(patch);
+        }}
+        data-testid="button-action-frequency-upgrade"
+      >
+        <Clock className="h-3 w-3 mr-1" />
+        {`Switch to ${newFreqLabel}`}
+      </Button>
+    );
+  }
+
+  return null;
 }
 
 function AiSuggestionsPanel({ contactId, onDismiss }: { contactId: string; onDismiss: () => void }) {
@@ -2030,7 +2269,7 @@ function AiSuggestionsPanel({ contactId, onDismiss }: { contactId: string; onDis
         return (
           <div
             key={i}
-            className={`rounded-md p-3 text-sm space-y-1 ${
+            className={`rounded-md p-3 text-sm space-y-1.5 ${
               isNoPath
                 ? "bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800"
                 : "bg-muted/60"
@@ -2049,6 +2288,13 @@ function AiSuggestionsPanel({ contactId, onDismiss }: { contactId: string; onDis
             <p className={`text-xs leading-relaxed ${isNoPath ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
               {s.explanation}
             </p>
+            {!isNoPath && s.actionData && (
+              <SuggestionActionRow
+                suggestion={s}
+                contactId={contactId}
+                onActionComplete={() => setFetchKey((k) => k + 1)}
+              />
+            )}
           </div>
         );
       })}
