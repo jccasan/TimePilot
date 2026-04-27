@@ -6,7 +6,7 @@ import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
-import { DEFAULT_PRICING_CONFIG, type PricingConfig } from "@shared/schema";
+import { DEFAULT_PRICING_CONFIG, DEFAULT_PRICING_RULES, type PricingConfig } from "@shared/schema";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -304,6 +304,8 @@ function BusinessIntelligenceStep({
   const [insights, setInsights] = useState<WebsiteInsights | null>(null);
   const [businessDescription, setBusinessDescription] = useState(companyData.businessDescription || "");
   const [serviceArea, setServiceArea] = useState(companyData.serviceAreaDescription || "");
+  const [serviceAreaMode, setServiceAreaMode] = useState<"zip" | "radius">("zip");
+  const [radiusMiles, setRadiusMiles] = useState(15);
   const [csvSummary, setCsvSummary] = useState<{ totalRows: number; priceColumns: string[]; frequencyColumns: string[] } | null>(null);
 
   const scrapeMutation = useMutation({
@@ -474,13 +476,63 @@ function BusinessIntelligenceStep({
           </div>
           <div>
             <label className="text-sm font-medium">Service Area</label>
-            <Input
-              value={serviceArea}
-              onChange={(e) => setServiceArea(e.target.value)}
-              placeholder="e.g. Fredericksburg, VA and surrounding areas"
-              className="mt-1"
-              data-testid="input-service-area"
-            />
+            <div className="flex gap-4 mt-2 mb-2">
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="serviceAreaMode"
+                  value="zip"
+                  checked={serviceAreaMode === "zip"}
+                  onChange={() => setServiceAreaMode("zip")}
+                  data-testid="radio-service-area-zip"
+                />
+                ZIP Codes
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="serviceAreaMode"
+                  value="radius"
+                  checked={serviceAreaMode === "radius"}
+                  onChange={() => setServiceAreaMode("radius")}
+                  data-testid="radio-service-area-radius"
+                />
+                Radius
+              </label>
+            </div>
+            {serviceAreaMode === "zip" ? (
+              <div>
+                <Input
+                  value={serviceArea}
+                  onChange={(e) => setServiceArea(e.target.value)}
+                  placeholder="e.g. 23220, 23235, 23234"
+                  className="mt-1"
+                  data-testid="input-service-area"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Enter comma-separated ZIP codes you serve</p>
+              </div>
+            ) : (
+              <div className="mt-1 space-y-1">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min="0"
+                    max="50"
+                    step="1"
+                    value={radiusMiles}
+                    onChange={(e) => {
+                      const r = Number(e.target.value);
+                      setRadiusMiles(r);
+                      setServiceArea(`Within ${r} miles of your business address`);
+                    }}
+                    className="flex-1"
+                    data-testid="input-radius-slider"
+                  />
+                  <span className="text-sm font-medium w-16 shrink-0">{radiusMiles} mi</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Radius from your registered business address</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -510,6 +562,27 @@ function BusinessIntelligenceStep({
   );
 }
 
+type FreqKey = "weekly" | "biWeekly" | "twiceWeekly" | "monthly";
+type DogCol = "1" | "2" | "3" | "4p";
+
+const PRICING_FREQS: { key: FreqKey; label: string }[] = [
+  { key: "weekly", label: "Weekly" },
+  { key: "biWeekly", label: "Bi-Weekly" },
+  { key: "twiceWeekly", label: "2x / Week" },
+  { key: "monthly", label: "Monthly" },
+];
+const DOG_COLS: { key: DogCol; label: string }[] = [
+  { key: "1", label: "1 Dog" },
+  { key: "2", label: "2 Dogs" },
+  { key: "3", label: "3 Dogs" },
+  { key: "4p", label: "4+ Dogs" },
+];
+
+function calcDogPrice(base: number, dogs: number, increment: number, surcharge: number): string {
+  if (!base) return "";
+  return (base + Math.floor((dogs - 1) / Math.max(1, increment)) * surcharge).toFixed(2);
+}
+
 function PricingSetupStep({
   companyData,
   onNext,
@@ -524,35 +597,72 @@ function PricingSetupStep({
   isPending: boolean;
 }) {
   const existingConfig = { ...DEFAULT_PRICING_CONFIG, ...(companyData.pricingConfig || {}) };
-  const [pricingMode, setPricingMode] = useState<"aggressive" | "standard" | "premium">(existingConfig.pricingMode || "standard");
-  const [techWage, setTechWage] = useState(((existingConfig.techHourlyWageCents ?? 1500) / 100).toString());
-  const [vehicleCost, setVehicleCost] = useState(((existingConfig.vehicleCostPerMileCents ?? 65) / 100).toString());
-  const [monthlyStops, setMonthlyStops] = useState((existingConfig.estimatedMonthlyStops ?? 100).toString());
-  const [marketPrice, setMarketPrice] = useState(
-    existingConfig.localMarketAverageWeeklyPriceCents
-      ? (existingConfig.localMarketAverageWeeklyPriceCents / 100).toString()
-      : ""
+  const existingRules = existingConfig.pricingRules || DEFAULT_PRICING_RULES;
+
+  const [pricingMode, setPricingMode] = useState<"aggressive" | "standard" | "premium">(
+    existingConfig.pricingMode || "standard"
   );
+
+  const [qfBase, setQfBase] = useState<Record<FreqKey, string>>({
+    weekly: existingRules.basePrices.weekly ? String(existingRules.basePrices.weekly) : "",
+    biWeekly: existingRules.basePrices.biWeekly ? String(existingRules.basePrices.biWeekly) : "",
+    twiceWeekly: existingRules.basePrices.twiceWeekly ? String(existingRules.basePrices.twiceWeekly) : "",
+    monthly: existingRules.basePrices.monthly ? String(existingRules.basePrices.monthly) : "",
+  });
+  const [surcharge, setSurcharge] = useState(String(existingRules.perDogRule.surchargeAmount || "5"));
+  const [increment, setIncrement] = useState(String(existingRules.perDogRule.incrementDogs || "1"));
+
+  const buildGrid = (bases: Record<FreqKey, string>, sur: string, inc: string) => {
+    const grid: Record<FreqKey, Record<DogCol, string>> = {} as any;
+    for (const { key } of PRICING_FREQS) {
+      const base = parseFloat(bases[key]) || 0;
+      const s = parseFloat(sur) || 0;
+      const i = parseInt(inc) || 1;
+      grid[key] = {
+        "1": calcDogPrice(base, 1, i, s),
+        "2": calcDogPrice(base, 2, i, s),
+        "3": calcDogPrice(base, 3, i, s),
+        "4p": calcDogPrice(base, 4, i, s),
+      };
+    }
+    return grid;
+  };
+
+  const [grid, setGrid] = useState<Record<FreqKey, Record<DogCol, string>>>(
+    () => buildGrid(qfBase, surcharge, increment)
+  );
+
+  const applyQuickFill = () => setGrid(buildGrid(qfBase, surcharge, increment));
 
   const handleSubmit = () => {
     const config: Partial<PricingConfig> = {
       ...DEFAULT_PRICING_CONFIG,
       pricingMode,
-      techHourlyWageCents: Math.round(parseFloat(techWage || "15") * 100),
-      vehicleCostPerMileCents: Math.round(parseFloat(vehicleCost || "0.65") * 100),
-      estimatedMonthlyStops: parseInt(monthlyStops || "100"),
-      localMarketAverageWeeklyPriceCents: marketPrice ? Math.round(parseFloat(marketPrice) * 100) : null,
       targetProfitMarginPct: pricingMode === "aggressive" ? 20 : pricingMode === "premium" ? 40 : 30,
       premiumMarginPct: pricingMode === "aggressive" ? 30 : pricingMode === "premium" ? 55 : 40,
+      pricingRules: {
+        basePrices: {
+          weekly: parseFloat(grid.weekly?.["1"] || qfBase.weekly) || 0,
+          biWeekly: parseFloat(grid.biWeekly?.["1"] || qfBase.biWeekly) || 0,
+          twiceWeekly: parseFloat(grid.twiceWeekly?.["1"] || qfBase.twiceWeekly) || 0,
+          monthly: parseFloat(grid.monthly?.["1"] || qfBase.monthly) || undefined,
+        },
+        perDogRule: {
+          incrementDogs: parseInt(increment) || 1,
+          surchargeAmount: parseFloat(surcharge) || 5,
+          maxDogs: 6,
+        },
+        yardSizeTiers: DEFAULT_PRICING_RULES.yardSizeTiers,
+      },
     };
     onNext({ pricingConfig: config });
   };
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="max-w-2xl mx-auto">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold" data-testid="text-step-title">Set Your Pricing Strategy</h2>
-        <p className="text-muted-foreground mt-1">Configure the basics — you can fine-tune everything later in the Pricing Calculator.</p>
+        <h2 className="text-2xl font-bold" data-testid="text-step-title">Set Your Pricing</h2>
+        <p className="text-muted-foreground mt-1">Enter your rates for each service frequency and dog count.</p>
       </div>
 
       <div className="space-y-6">
@@ -560,22 +670,20 @@ function PricingSetupStep({
           <label className="text-sm font-medium mb-3 block">Pricing Strategy</label>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { mode: "aggressive" as const, label: "Growth", desc: "20% margin", icon: Zap, color: "text-blue-500" },
-              { mode: "standard" as const, label: "Standard", desc: "30% margin", icon: Shield, color: "text-green-500" },
-              { mode: "premium" as const, label: "Premium", desc: "40% margin", icon: Crown, color: "text-amber-500" },
+              { mode: "aggressive" as const, label: "Growth", desc: "Lower prices, grow fast", icon: Zap, color: "text-blue-500" },
+              { mode: "standard" as const, label: "Standard", desc: "Balanced market rate", icon: Shield, color: "text-green-500" },
+              { mode: "premium" as const, label: "Premium", desc: "Higher prices, premium feel", icon: Crown, color: "text-amber-500" },
             ].map(({ mode, label, desc, icon: Icon, color }) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => setPricingMode(mode)}
-                className={`p-4 rounded-lg border-2 transition-all text-left ${
-                  pricingMode === mode
-                    ? "border-primary bg-primary/5"
-                    : "border-muted hover:border-muted-foreground/30"
+                className={`p-3 rounded-lg border-2 transition-all text-left ${
+                  pricingMode === mode ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"
                 }`}
                 data-testid={`button-pricing-${mode}`}
               >
-                <Icon className={`h-5 w-5 ${color} mb-2`} />
+                <Icon className={`h-4 w-4 ${color} mb-1`} />
                 <div className="font-medium text-sm">{label}</div>
                 <div className="text-xs text-muted-foreground">{desc}</div>
               </button>
@@ -583,58 +691,132 @@ function PricingSetupStep({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">Tech Hourly Wage ($)</label>
-            <Input
-              type="number"
-              step="0.50"
-              value={techWage}
-              onChange={(e) => setTechWage(e.target.value)}
-              className="mt-1"
-              data-testid="input-tech-wage"
-            />
-            <p className="text-xs text-muted-foreground mt-1">What you pay technicians per hour</p>
+        <div className="border rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm font-semibold">Quick Fill</span>
+              <span className="text-xs text-muted-foreground ml-2">
+                formula: base + &#8970;(dogs&minus;1) &divide; step&#8971; &times; surcharge
+              </span>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={applyQuickFill}
+              data-testid="button-apply-quickfill"
+            >
+              Apply
+            </Button>
           </div>
-          <div>
-            <label className="text-sm font-medium">Vehicle Cost ($/mile)</label>
-            <Input
-              type="number"
-              step="0.01"
-              value={vehicleCost}
-              onChange={(e) => setVehicleCost(e.target.value)}
-              className="mt-1"
-              data-testid="input-vehicle-cost"
-            />
-            <p className="text-xs text-muted-foreground mt-1">IRS standard: $0.67/mile</p>
+          <div className="overflow-x-auto">
+            <table className="text-sm w-full">
+              <thead>
+                <tr>
+                  <th className="text-left pr-4 pb-1 text-xs font-medium text-muted-foreground">Frequency</th>
+                  <th className="px-2 pb-1 text-xs font-medium text-muted-foreground">Base / 1 dog ($)</th>
+                  <th className="px-2 pb-1 text-xs font-medium text-muted-foreground">Surcharge / step ($)</th>
+                  <th className="px-2 pb-1 text-xs font-medium text-muted-foreground">Dogs / step</th>
+                </tr>
+              </thead>
+              <tbody>
+                {PRICING_FREQS.map(({ key, label }, i) => (
+                  <tr key={key}>
+                    <td className="pr-4 py-1 whitespace-nowrap text-sm">{label}</td>
+                    <td className="px-2 py-1">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="h-7 w-24 text-sm"
+                        value={qfBase[key]}
+                        onChange={(e) => setQfBase(prev => ({ ...prev, [key]: e.target.value }))}
+                        placeholder="e.g. 25"
+                        data-testid={`input-qf-base-${key}`}
+                      />
+                    </td>
+                    <td className="px-2 py-1">
+                      {i === 0 ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="h-7 w-20 text-sm"
+                          value={surcharge}
+                          onChange={(e) => setSurcharge(e.target.value)}
+                          placeholder="e.g. 5"
+                          data-testid="input-qf-surcharge"
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground px-2">shared</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1">
+                      {i === 0 ? (
+                        <Input
+                          type="number"
+                          step="1"
+                          min="1"
+                          className="h-7 w-16 text-sm"
+                          value={increment}
+                          onChange={(e) => setIncrement(e.target.value)}
+                          placeholder="1"
+                          data-testid="input-qf-increment"
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground px-2">shared</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">Estimated Monthly Stops</label>
-            <Input
-              type="number"
-              value={monthlyStops}
-              onChange={(e) => setMonthlyStops(e.target.value)}
-              className="mt-1"
-              data-testid="input-monthly-stops"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Used to spread overhead costs</p>
+        <div>
+          <label className="text-sm font-medium mb-2 block">Price Matrix</label>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="text-sm w-full">
+              <thead>
+                <tr className="bg-muted/50">
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Frequency</th>
+                  {DOG_COLS.map(({ key, label }) => (
+                    <th key={key} className="px-2 py-2 text-xs font-medium text-muted-foreground text-center">{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {PRICING_FREQS.map(({ key: freq, label }, i) => (
+                  <tr key={freq} className={i % 2 === 0 ? "" : "bg-muted/20"}>
+                    <td className="px-3 py-1.5 font-medium text-sm whitespace-nowrap">{label}</td>
+                    {DOG_COLS.map(({ key: col }) => (
+                      <td key={col} className="px-1 py-1 text-center">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="h-7 w-20 text-sm text-center mx-auto"
+                          value={grid[freq]?.[col] ?? ""}
+                          onChange={(e) =>
+                            setGrid(prev => ({
+                              ...prev,
+                              [freq]: { ...prev[freq], [col]: e.target.value },
+                            }))
+                          }
+                          placeholder="—"
+                          data-testid={`input-price-${freq}-${col}`}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div>
-            <label className="text-sm font-medium">Local Avg Weekly Price ($)</label>
-            <Input
-              type="number"
-              step="1"
-              value={marketPrice}
-              onChange={(e) => setMarketPrice(e.target.value)}
-              placeholder="Optional"
-              className="mt-1"
-              data-testid="input-market-price"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Anchors your prices to the market</p>
-          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Use Quick Fill to calculate prices automatically, or enter them directly in any cell.
+          </p>
         </div>
       </div>
 

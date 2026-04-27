@@ -32,6 +32,7 @@ export interface PricingRulesConfig {
     weekly: number;
     biWeekly: number;
     twiceWeekly: number;
+    monthly?: number;
   };
   perDogRule: {
     incrementDogs: number;
