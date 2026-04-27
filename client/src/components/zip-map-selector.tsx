@@ -32,15 +32,6 @@ function addOsmLayer(map: L.Map) {
   }).addTo(map);
 }
 
-/**
- * Correct call order to reposition Leaflet tiles:
- *   1. invalidateSize  → updates Leaflet's stored container dimensions
- *   2. setView         → positions tiles using the now-correct dimensions
- */
-function resync(map: L.Map, pos: L.LatLngExpression, zoom: number) {
-  map.invalidateSize({ animate: false });
-  map.setView(pos, zoom, { animate: false });
-}
 
 async function fetchZipsInViewport(w: number, s: number, e: number, n: number): Promise<string[]> {
   const p = new URLSearchParams({
@@ -111,19 +102,6 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
     let map: L.Map | null = null;
     let ro: ResizeObserver | null = null;
     const timers: ReturnType<typeof setTimeout>[] = [];
-
-    function createMap() {
-      if (cancelled || mapRef.current || !el) return;
-
-      map = L.map(el as HTMLElement, { zoomControl: true });
-      mapRef.current = map;
-      addOsmLayer(map);
-
-      ro = new ResizeObserver(() => {
-        if (mapRef.current) mapRef.current.invalidateSize({ animate: false });
-      });
-      ro.observe(el as HTMLElement);
-    }
 
     async function loadZips() {
       if (!mapRef.current || loadingRef.current || mapRef.current.getZoom() < 8) return;
@@ -199,53 +177,56 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
       }
     }
 
-    // Use rAF to wait until the container has non-zero clientWidth/clientHeight.
-    // rAF fires after paint, guaranteeing CSS layout is complete.
+    // Geocode-first approach:
+    //   1. Wait for container to have real dimensions (rAF loop)
+    //   2. Geocode BEFORE creating the Leaflet map
+    //   3. Create map + setView in one synchronous block — no async gap between
+    //      creation and first view, so Leaflet always reads the correct dimensions
     let rafId: number;
-    function tryInit() {
-      if (cancelled || !el) return;
-      const w = el.clientWidth;
-      const h = el.clientHeight;
-      if (w === 0 || h === 0) {
-        // Container not sized yet — try again next frame
-        rafId = requestAnimationFrame(tryInit);
-        return;
+
+    async function init() {
+      const container = el as HTMLElement;
+
+      // Step 1: Wait for a non-zero layout
+      await new Promise<void>(resolve => {
+        function check() {
+          if (cancelled) { resolve(); return; }
+          if (container.clientWidth > 0 && container.clientHeight > 0) { resolve(); return; }
+          rafId = requestAnimationFrame(check);
+        }
+        check();
+      });
+      if (cancelled) return;
+
+      // Step 2: Geocode — container is correctly sized and stable
+      let pos: L.LatLngExpression = FALLBACK;
+      if (addressHint) {
+        const geocoded = await geocodeAddress(addressHint);
+        if (geocoded && !cancelled) pos = geocoded;
       }
+      if (cancelled) return;
 
-      // Container has correct dimensions → create map synchronously
-      createMap();
-      if (!map) return;
-
+      // Step 3: Create map + setView synchronously. Leaflet reads clientWidth/clientHeight
+      // inside setView() — at this point the container has been stable for 0-2 seconds.
+      map = L.map(container, { zoomControl: true });
+      mapRef.current = map;
+      addOsmLayer(map);
+      map.setView(pos, DEFAULT_ZOOM, { animate: false });
       map.on("moveend zoomend", loadZips);
 
-      // Geocode then apply correct view.
-      // Key: invalidateSize() BEFORE setView() so Leaflet knows the right dimensions.
-      (async () => {
-        let pos: L.LatLngExpression = FALLBACK;
-        if (addressHint) {
-          const geocoded = await geocodeAddress(addressHint);
-          if (geocoded && !cancelled) pos = geocoded;
-        }
-        if (cancelled || !mapRef.current) return;
+      // Restore previously selected ZIPs styling (loaded lazily via loadZips below)
 
-        // ① First sync — correct order: invalidate → setView
-        resync(mapRef.current, pos, DEFAULT_ZOOM);
+      // ResizeObserver handles any future resize after the map is loaded
+      ro = new ResizeObserver(() => {
+        if (mapRef.current) mapRef.current.invalidateSize({ animate: false });
+      });
+      ro.observe(el as HTMLElement);
 
-        // ② 150 ms pass — catches any layout settling after first paint
-        timers.push(setTimeout(() => {
-          if (cancelled || !mapRef.current) return;
-          resync(mapRef.current, pos, DEFAULT_ZOOM);
-        }, 150));
-
-        // ③ 600 ms pass — safety net for slow renderers / transitions
-        timers.push(setTimeout(() => {
-          if (cancelled || !mapRef.current) return;
-          resync(mapRef.current, pos, DEFAULT_ZOOM);
-          timers.push(setTimeout(loadZips, 50));
-        }, 600));
-      })();
+      // Trigger initial ZIP load after a short delay to let tiles settle
+      timers.push(setTimeout(loadZips, 300));
     }
-    rafId = requestAnimationFrame(tryInit);
+
+    init();
 
     return () => {
       cancelled = true;
@@ -341,47 +322,47 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
     const timers: ReturnType<typeof setTimeout>[] = [];
     let rafId: number;
 
-    function tryInit() {
-      if (cancelled || !el) return;
-      if (el.clientWidth === 0 || el.clientHeight === 0) {
-        rafId = requestAnimationFrame(tryInit);
-        return;
-      }
+    async function init() {
+      const container = el as HTMLElement;
 
-      map = L.map(el as HTMLElement, { zoomControl: true, scrollWheelZoom: false });
+      // Step 1: Wait for container to have real dimensions
+      await new Promise<void>(resolve => {
+        function check() {
+          if (cancelled) { resolve(); return; }
+          if (container.clientWidth > 0 && container.clientHeight > 0) { resolve(); return; }
+          rafId = requestAnimationFrame(check);
+        }
+        check();
+      });
+      if (cancelled) return;
+
+      // Step 2: Geocode before creating the map
+      if (addressHint) {
+        const pos = await geocodeAddress(addressHint);
+        if (pos && !cancelled) centerRef.current = pos;
+      }
+      if (cancelled) return;
+
+      // Step 3: Create map + fitBounds synchronously — no async gap
+      map = L.map(container, { zoomControl: true, scrollWheelZoom: false });
       mapRef.current = map;
       addOsmLayer(map);
+
+      const circle = L.circle(centerRef.current, {
+        radius: radiusRef.current * MILES_TO_M,
+        color: "#15803d", fillColor: "#16a34a",
+        fillOpacity: 0.2, weight: 2,
+      }).addTo(map);
+      circleRef.current = circle;
+      map.fitBounds(circle.getBounds(), { padding: [24, 24], animate: false });
 
       ro = new ResizeObserver(() => {
         if (mapRef.current) mapRef.current.invalidateSize({ animate: false });
       });
-      ro.observe(el as HTMLElement);
-
-      (async () => {
-        if (addressHint) {
-          const pos = await geocodeAddress(addressHint);
-          if (pos && !cancelled) centerRef.current = pos;
-        }
-        if (cancelled || !mapRef.current) return;
-
-        const circle = L.circle(centerRef.current, {
-          radius: radiusRef.current * MILES_TO_M,
-          color: "#15803d", fillColor: "#16a34a",
-          fillOpacity: 0.2, weight: 2,
-        }).addTo(map!);
-        circleRef.current = circle;
-
-        mapRef.current.invalidateSize({ animate: false });
-        mapRef.current.fitBounds(circle.getBounds(), { padding: [24, 24] });
-
-        timers.push(setTimeout(() => {
-          if (cancelled || !mapRef.current || !circleRef.current) return;
-          mapRef.current.invalidateSize({ animate: false });
-          mapRef.current.fitBounds(circleRef.current.getBounds(), { padding: [24, 24] });
-        }, 400));
-      })();
+      ro.observe(container);
     }
-    rafId = requestAnimationFrame(tryInit);
+
+    init();
 
     return () => {
       cancelled = true;
