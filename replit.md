@@ -81,3 +81,4 @@ The scheduling data model is refactored into three layers: `agreements` (billing
 - **OpenAI**: Used for AI-assisted import wizard and Rover AI chatbot.
 - **QuickBooks Online**: Accounting integration.
 - **Retell AI**: Voice agent integration for lead creation and customer lookup.
+- **Voice Agent Wizard** (Python Flask, port 5001): Standalone onboarding wizard for Retell AI agent tenants. Located in `wizard/`. Uses TinyDB, Leaflet.js map, pgeocode for ZIP centroids, geopy for distance calculation. Generates four output files per tenant (tenant_config.json, territory_data.json, agent_handbook.md, api_credentials.json). Dashboard at `/`, start at `/start`, wizard at `/onboard/<phone>`, summary at `/ready/<phone>`. Config API: `GET /api/config/<phone>` (X-Wizard-Key header). Location check: `POST /api/verify-location`. Sysadmin credentials: `GET /admin/credentials/<phone>` (WIZARD_ADMIN_KEY required).

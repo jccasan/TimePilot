@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Admin Credentials — {{ phone }} — ScooPilot Voice Wizard{% endblock %}
+
+{% block nav %}
+<div class="topbar">
+  <span class="topbar-brand">ScooPilot Voice Wizard</span>
+  <span class="topbar-phone">Sysadmin: Credentials</span>
+  <span class="topbar-spacer"></span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container page">
+  <div class="landing-card" style="max-width:560px">
+    <h2 style="margin-bottom:20px">API Credentials — {{ phone }}</h2>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% else %}
+
+    {% set creds = tenant.get('credentials', {}) %}
+    {% set api_key = creds.get('xApiKey','') %}
+
+    <div style="margin-bottom:20px">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Current API Key</label>
+      <div class="creds-box">
+        <span class="creds-key" id="key-display" style="font-size:12px;word-break:break-all">{{ api_key }}</span>
+        <button type="button" class="btn btn-copy btn-sm" onclick="copyKey('{{ api_key }}')">Copy</button>
+      </div>
+    </div>
+
+    {% if saved %}
+    <div class="alert alert-success">Key updated successfully.</div>
+    {% endif %}
+
+    <form method="POST">
+      <input type="hidden" name="admin_key" value="{{ admin_key }}"/>
+      <div class="form-group">
+        <label for="xApiKey">Set New API Key</label>
+        <input type="text" id="xApiKey" name="xApiKey" class="form-control"
+               placeholder="Enter new UUID key or leave blank to cancel"/>
+        <div class="helper">Leave blank to cancel. The existing key will remain unchanged.</div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn btn-primary">Update Key</button>
+        <button type="button" class="btn btn-secondary" onclick="genUUID()">Generate UUID</button>
+      </div>
+    </form>
+
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyKey(key) {
+  navigator.clipboard.writeText(key).then(function() {
+    var btn = document.querySelector('.btn-copy');
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+function genUUID() {
+  var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+  document.getElementById('xApiKey').value = uuid;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}{{ tenant.profile.get('businessName') or tenant.phone }} — Ready — ScooPilot Voice Wizard{% endblock %}
+
+{% block nav %}
+{% set profile = tenant.get('profile', {}) %}
+<div class="topbar">
+  <span class="topbar-brand">ScooPilot Voice Wizard</span>
+  <span class="topbar-phone">{{ profile.get('businessName') or phone }} — Ready Overview</span>
+  <span class="topbar-spacer"></span>
+  <a href="{{ url_for('onboard', phone=phone) }}" class="btn btn-secondary btn-sm">Edit Wizard</a>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm">Dashboard</a>
+</div>
+{% endblock %}
+
+{% block content %}
+{% set profile = tenant.get('profile', {}) %}
+{% set territory = tenant.get('territory', {}) %}
+{% set pricing = tenant.get('pricing', {}) %}
+{% set policies = tenant.get('policies', {}) %}
+{% set voice = tenant.get('voiceAgent', {}) %}
+{% set creds = tenant.get('credentials', {}) %}
+{% set docs = tenant.get('documents', []) %}
+{% set base_grid = pricing.get('baseGrid', {}) %}
+{% set ym = pricing.get('yardMultipliers', {}) %}
+{% set cs = pricing.get('cleanupSurcharges', {}) %}
+{% set c = completeness %}
+{% set agent_types = tenant.get('agentTypes', []) %}
+
+<div class="container page">
+  <div class="ready-layout">
+
+    <!-- Main Column -->
+    <div class="ready-main">
+
+      <!-- Identity Card -->
+      <div class="identity-card">
+        <h2>{{ profile.get('businessName') or '(No name set)' }}</h2>
+        <div class="identity-meta">
+          {{ phone }}
+          {% if profile.get('email') %} &mdash; {{ profile.email }}{% endif %}
+          {% if profile.get('timezone') %} &mdash; {{ profile.timezone }}{% endif %}
+        </div>
+        <div class="agent-badges">
+          <span class="agent-badge {{ '' if 'voice' in agent_types else 'inactive' }}">
+            Voice Agent {{ 'Active' if 'voice' in agent_types else 'Inactive' }}
+          </span>
+          <span class="agent-badge {{ '' if 'chat' in agent_types else 'inactive' }}">
+            Chat Agent {{ 'Active' if 'chat' in agent_types else 'Inactive' }}
+          </span>
+          <span class="agent-badge">Source: {{ tenant.get('source','manual')|capitalize }}</span>
+        </div>
+      </div>
+
+      <!-- Profile -->
+      <div class="ready-section">
+        <div class="ready-section-header">
+          <h3>Business Profile</h3>
+        </div>
+        <div class="ready-section-body">
+          <div class="info-row"><span class="info-label">Legal Name</span><span class="info-value">{{ profile.get('legalName') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Business Name</span><span class="info-value">{{ profile.get('businessName') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Email</span><span class="info-value">{{ profile.get('email') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Phone</span><span class="info-value">{{ profile.get('phone') or phone }}</span></div>
+          <div class="info-row"><span class="info-label">Primary Service</span><span class="info-value">{{ profile.get('primaryService') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Timezone</span><span class="info-value">{{ profile.get('timezone') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">HQ Address</span><span class="info-value">{{ profile.get('businessAddress') or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Territory -->
+      <div class="ready-section">
+        <div class="ready-section-header">
+          <h3>Service Territory</h3>
+        </div>
+        <div class="ready-section-body">
+          <div class="info-row"><span class="info-label">Mode</span><span class="info-value">{{ territory.get('mode','zip')|capitalize }}</span></div>
+          {% if territory.get('mode') == 'radius' %}
+          <div class="info-row"><span class="info-label">Radius</span><span class="info-value">{{ territory.get('radiusMiles','—') }} miles from HQ</span></div>
+          <div class="info-row"><span class="info-label">HQ Address</span><span class="info-value">{{ territory.get('hqAddress') or '—' }}</span></div>
+          {% else %}
+          <div class="info-row"><span class="info-label">ZIP Count</span><span class="info-value">{{ territory.get('zipList',[])|length }} ZIPs</span></div>
+          {% if territory.get('zipList') %}
+          <div class="info-row">
+            <span class="info-label">ZIP Codes</span>
+            <span class="info-value" style="font-family:monospace;font-size:12px;line-height:1.8">
+              {{ territory.zipList|join(', ') }}
+            </span>
+          </div>
+          {% endif %}
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Pricing -->
+      <div class="ready-section">
+        <div class="ready-section-header">
+          <h3>Pricing Matrix</h3>
+        </div>
+        <div class="ready-section-body">
+          {% if base_grid %}
+          <table class="pricing-table" style="margin-bottom:10px">
+            <thead>
+              <tr><th>Frequency</th><th>1 Dog</th><th>2 Dogs</th><th>3 Dogs</th><th>4+ Dogs</th></tr>
+            </thead>
+            <tbody>
+            {% for freq, row in base_grid.items() %}
+            {% if row %}
+            <tr>
+              <td>{{ freq }}</td>
+              {% for col in ['1','2','3','4p'] %}
+              <td style="text-align:center">{{ ('$' + row[col]) if row.get(col) else '—' }}</td>
+              {% endfor %}
+            </tr>
+            {% endif %}
+            {% endfor %}
+            </tbody>
+          </table>
+          {% if ym.get('small') or ym.get('medium') or ym.get('large') %}
+          <p style="font-size:12px"><strong>Yard Multipliers:</strong>
+            Small {{ ym.get('small','—') }}x &nbsp; Medium {{ ym.get('medium','—') }}x &nbsp; Large {{ ym.get('large','—') }}x
+          </p>
+          {% endif %}
+          {% if cs.get('light') or cs.get('medium') or cs.get('heavy') %}
+          <p style="font-size:12px;margin-top:4px"><strong>Cleanup Surcharges:</strong>
+            Light ${{ cs.get('light','—') }} &nbsp; Medium ${{ cs.get('medium','—') }} &nbsp; Heavy ${{ cs.get('heavy','—') }}
+          </p>
+          {% endif %}
+          {% else %}
+          <p style="color:var(--gray);font-size:13px">No pricing configured yet.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Policies -->
+      <div class="ready-section">
+        <div class="ready-section-header"><h3>Operational Policies</h3></div>
+        <div class="ready-section-body">
+          {% set p = policies %}
+          <div class="info-row"><span class="info-label">Disposal Method</span><span class="info-value">{{ p.get('disposal') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Aggressive Dog</span><span class="info-value">{{ p.get('aggressiveDog') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Gate Code Policy</span><span class="info-value">{{ p.get('gateCode') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Guarantee</span><span class="info-value">{{ p.get('guarantee') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Lead Time</span><span class="info-value">{{ (p.get('leadTimeHours')|string + ' hrs') if p.get('leadTimeHours') else '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Vacation Hold</span><span class="info-value">{{ p.get('vacationHold') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Rescheduling</span><span class="info-value">{{ p.get('rescheduling') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Manager Phone</span><span class="info-value">{{ p.get('managerPhone') or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Voice Agent -->
+      {% if 'voice' in agent_types %}
+      <div class="ready-section">
+        <div class="ready-section-header"><h3>Voice Agent</h3></div>
+        <div class="ready-section-body">
+          {% if voice.get('greeting') %}
+          <div class="greeting-preview" style="margin-bottom:12px">
+            <div class="preview-label">Opening Greeting</div>
+            <div class="preview-text">{{ voice.greeting }}</div>
+          </div>
+          {% endif %}
+          <div class="info-row"><span class="info-label">Service Area Desc.</span><span class="info-value">{{ voice.get('serviceAreaOverride') or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Special Lines</span><span class="info-value">{{ voice.get('specialLines') or '—' }}</span></div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Documents -->
+      {% if docs %}
+      <div class="ready-section">
+        <div class="ready-section-header"><h3>Uploaded Documents</h3></div>
+        <div class="ready-section-body">
+          {% for doc in docs %}
+          <div class="info-row">
+            <span class="info-label">{{ doc.category }}</span>
+            <span class="info-value"><a href="{{ url_for('serve_upload', phone=phone, filename=doc.get('savedAs', doc.filename)) }}">{{ doc.filename }}</a></span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- API Credentials -->
+      <div class="ready-section">
+        <div class="ready-section-header"><h3>API Credentials</h3></div>
+        <div class="ready-section-body">
+          {% set api_key = creds.get('xApiKey','') %}
+          {% set masked = api_key[:8] + '...' + api_key[-4:] if api_key|length > 12 else api_key %}
+          <div class="creds-box" style="margin-bottom:8px">
+            <span class="creds-key">{{ masked }}</span>
+            <button type="button" class="btn btn-copy btn-sm" onclick="copyApiKey('{{ api_key }}')">Copy Key</button>
+          </div>
+          <div class="creds-note">
+            Config API: <code>GET /api/config/{{ phone }}</code> with <code>X-Wizard-Key: &lt;key&gt;</code>
+          </div>
+          <div class="creds-note" style="margin-top:4px">
+            Location check: <code>POST /api/verify-location</code>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.ready-main -->
+
+    <!-- Sidebar -->
+    <div class="ready-sidebar">
+      <div class="checklist">
+        <h3>Completion Checklist</h3>
+        {% for label, done in c.sections.items() %}
+        <div class="checklist-item">
+          <span class="check-icon {{ 'check-ok' if done else 'check-warn' }}">{{ '✓' if done else '○' }}</span>
+          <span class="check-label">{{ label }}</span>
+          {% if not done %}
+          <a href="{{ url_for('onboard', phone=phone) }}#sec-{{ label.lower().replace(' ','') }}" class="check-edit">Fix</a>
+          {% endif %}
+        </div>
+        {% endfor %}
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--gray-light);text-align:center">
+          <span style="font-size:22px;font-weight:800;color:{{ 'var(--green)' if c.completed == c.total else 'var(--yellow)' }}">
+            {{ c.completed }}/{{ c.total }}
+          </span>
+          <br><span style="font-size:12px;color:var(--gray)">sections complete</span>
+        </div>
+      </div>
+
+      <div style="margin-top:16px">
+        <h3 style="font-size:13px;font-weight:700;color:var(--green-dark);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">
+          Output Files
+        </h3>
+        <div class="download-links">
+          {% if output_files.tenantConfig %}
+          <a href="{{ url_for('download_output', phone=phone, filename='tenant_config.json') }}" class="download-link">
+            tenant_config.json
+          </a>
+          {% endif %}
+          {% if output_files.territoryData %}
+          <a href="{{ url_for('download_output', phone=phone, filename='territory_data.json') }}" class="download-link">
+            territory_data.json
+          </a>
+          {% endif %}
+          {% if output_files.agentHandbook %}
+          <a href="{{ url_for('download_output', phone=phone, filename='agent_handbook.md') }}" class="download-link">
+            agent_handbook.md
+          </a>
+          {% endif %}
+          {% if output_files.apiCredentials %}
+          <a href="{{ url_for('download_output', phone=phone, filename='api_credentials.json') }}" class="download-link">
+            api_credentials.json
+          </a>
+          {% endif %}
+          {% if not (output_files.tenantConfig or output_files.territoryData) %}
+          <p style="font-size:12px;color:var(--gray)">
+            Save the wizard form to generate output files.
+          </p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="margin-top:16px">
+        <a href="{{ url_for('handbook', phone=phone) }}" target="_blank" class="btn btn-secondary" style="width:100%;text-align:center;display:block">
+          View Agent Handbook
+        </a>
+      </div>
+
+      <div style="margin-top:10px">
+        <a href="{{ url_for('onboard', phone=phone) }}" class="btn btn-primary" style="width:100%;text-align:center;display:block">
+          Edit Wizard
+        </a>
+      </div>
+    </div><!-- /.ready-sidebar -->
+
+  </div><!-- /.ready-layout -->
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyApiKey(key) {
+  navigator.clipboard.writeText(key).then(function() {
+    var btns = document.querySelectorAll('.btn-copy');
+    btns.forEach(function(btn) {
+      var orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(function() { btn.textContent = orig; }, 2000);
+    });
+  });
+}
+</script>
+{% endblock %}

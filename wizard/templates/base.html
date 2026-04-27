@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>{% block title %}ScooPilot Voice Wizard{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+{% block head %}{% endblock %}
+</head>
+<body>
+{% block nav %}{% endblock %}
+{% block content %}{% endblock %}
+<footer class="footer">Powered by ScooPilot &mdash; Voice Agent Onboarding Wizard</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

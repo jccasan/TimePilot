@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Tenant Dashboard — ScooPilot Voice Wizard{% endblock %}
+
+{% block nav %}
+<div class="topbar">
+  <span class="topbar-brand">ScooPilot Voice Wizard</span>
+  <span class="topbar-phone">Tenant Dashboard</span>
+  <span class="topbar-spacer"></span>
+  <a href="{{ url_for('landing') }}" class="btn btn-primary btn-sm">+ New Tenant</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container page">
+  <div class="dash-header">
+    <h1>All Tenants</h1>
+    <span class="badge badge-gray">{{ tenants|length }} tenant{{ 's' if tenants|length != 1 else '' }}</span>
+  </div>
+
+  {% if tenants %}
+  <table class="dash-table">
+    <thead>
+      <tr>
+        <th>Business</th>
+        <th>Phone</th>
+        <th>Agent Types</th>
+        <th>Progress</th>
+        <th>Last Updated</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for t in tenants %}
+    {% set profile = t.get('profile', {}) %}
+    {% set c = t.completeness %}
+    <tr>
+      <td>
+        <strong>{{ profile.get('businessName') or '(No name)' }}</strong>
+        {% if profile.get('email') %}<br><span style="color:var(--gray);font-size:12px">{{ profile.email }}</span>{% endif %}
+      </td>
+      <td style="font-family:monospace;font-size:13px">{{ t.phone }}</td>
+      <td>
+        {% for atype in (t.get('agentTypes') or []) %}
+          <span class="badge badge-green">{{ atype|capitalize }}</span>
+        {% else %}
+          <span class="badge badge-gray">None</span>
+        {% endfor %}
+      </td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="progress-bar-wrap" style="flex:1;margin-bottom:0">
+            <div class="progress-bar-fill" style="width:{{ (c.completed / c.total * 100)|int }}%"></div>
+          </div>
+          <span style="font-size:12px;color:var(--gray);white-space:nowrap">{{ c.completed }}/{{ c.total }}</span>
+        </div>
+      </td>
+      <td style="font-size:12px;color:var(--gray)">
+        {{ t.get('updatedAt','')[:10] if t.get('updatedAt') else '—' }}
+      </td>
+      <td>
+        <a href="{{ url_for('onboard', phone=t.phone) }}" class="btn btn-secondary btn-sm">Edit</a>
+        {% if t.get('complete') %}
+        <a href="{{ url_for('ready', phone=t.phone) }}" class="btn btn-primary btn-sm">Ready</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <p>No tenants yet. Get started by adding your first business.</p>
+    <a href="{{ url_for('landing') }}" class="btn btn-primary">+ New Tenant</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

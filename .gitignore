@@ -4,3 +4,9 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+wizard/uploads/
+wizard/output/
+wizard/data/
+__pycache__/
+*.pyc
+*.pyo

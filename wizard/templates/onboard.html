@@ -1,0 +1,787 @@
+{% extends "base.html" %}
+{% block title %}{{ tenant.profile.get('businessName') or tenant.phone }} — ScooPilot Voice Wizard{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+{% endblock %}
+
+{% block nav %}
+{% set profile = tenant.get('profile', {}) %}
+<div class="topbar">
+  <span class="topbar-brand">ScooPilot Voice Wizard</span>
+  <span class="topbar-phone">{{ profile.get('businessName') or phone }}</span>
+  <span class="topbar-spacer"></span>
+  <div class="topbar-toggles">
+    <label title="Enable Voice Agent">
+      <input type="checkbox" id="toggle-voice" {{ 'checked' if 'voice' in tenant.get('agentTypes', []) else '' }}/>
+      Voice Agent
+    </label>
+    <label title="Enable Chat Agent">
+      <input type="checkbox" id="toggle-chat" {{ 'checked' if 'chat' in tenant.get('agentTypes', []) else '' }}/>
+      Chat Agent
+    </label>
+  </div>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm">Dashboard</a>
+</div>
+{% endblock %}
+
+{% block content %}
+{% set profile = tenant.get('profile', {}) %}
+{% set territory = tenant.get('territory', {}) %}
+{% set pricing = tenant.get('pricing', {}) %}
+{% set policies = tenant.get('policies', {}) %}
+{% set voice = tenant.get('voiceAgent', {}) %}
+{% set chat = tenant.get('chatAgent', {}) %}
+{% set creds = tenant.get('credentials', {}) %}
+{% set docs = tenant.get('documents', []) %}
+{% set base_grid = pricing.get('baseGrid', {}) %}
+{% set ym = pricing.get('yardMultipliers', {}) %}
+{% set cs = pricing.get('cleanupSurcharges', {}) %}
+
+<div class="container page">
+
+  <!-- Progress -->
+  {% set c = completeness %}
+  <div class="progress-bar-wrap">
+    <div class="progress-bar-fill" id="progress-fill" style="width:{{ (c.completed / c.total * 100)|int }}%"></div>
+  </div>
+  <p style="font-size:12px;color:var(--gray);margin-bottom:18px;text-align:right">
+    {{ c.completed }} of {{ c.total }} sections complete
+  </p>
+
+  <form method="POST" id="onboard-form" enctype="multipart/form-data">
+
+    <!-- ─── GENERAL PROFILE ─── -->
+    <div class="section-card" id="sec-profile">
+      <div class="section-header">
+        <h2>General Profile</h2>
+        <span class="badge badge-green">Always Required</span>
+      </div>
+      <div class="section-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="businessName">Business Name *</label>
+            <input type="text" id="businessName" name="businessName" class="form-control"
+                   value="{{ profile.get('businessName','') }}" required/>
+          </div>
+          <div class="form-group">
+            <label for="legalName">Legal / DBA Name</label>
+            <input type="text" id="legalName" name="legalName" class="form-control"
+                   value="{{ profile.get('legalName','') }}"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="email">Business Email *</label>
+            <input type="email" id="email" name="email" class="form-control"
+                   value="{{ profile.get('email','') }}" required/>
+          </div>
+          <div class="form-group">
+            <label for="bizPhone">Business Phone</label>
+            <input type="tel" id="bizPhone" name="bizPhone" class="form-control"
+                   value="{{ profile.get('phone','') or phone }}"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="primaryService">Primary Service</label>
+            <select id="primaryService" name="primaryService" class="form-control">
+              <option value="">— Select —</option>
+              {% for svc in ['Pet Waste Removal','Dog Walking','Pet Sitting','Pet Boarding','Odor Control','Other'] %}
+              <option value="{{ svc }}" {{ 'selected' if profile.get('primaryService') == svc else '' }}>{{ svc }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="timezone">Timezone *</label>
+            <select id="timezone" name="timezone" class="form-control">
+              {% for tz in timezones %}
+              <option value="{{ tz }}" {{ 'selected' if profile.get('timezone') == tz else '' }}>{{ tz }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="businessAddress">Business / HQ Address</label>
+          <input type="text" id="businessAddress" name="businessAddress" class="form-control"
+                 value="{{ profile.get('businessAddress','') }}"
+                 placeholder="123 Main St, City, State ZIP"/>
+          <div class="helper">Used to center the territory map and pre-fill territory selection.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── TERRITORY ─── -->
+    <div class="section-card" id="sec-territory">
+      <div class="section-header">
+        <h2>Service Territory</h2>
+        <span class="badge badge-yellow">Required for Routing</span>
+      </div>
+      <div class="section-body">
+
+        <div class="map-controls">
+          <div class="map-mode-toggle">
+            <label>
+              <input type="radio" name="territoryMode" value="zip"
+                     {{ 'checked' if territory.get('mode','zip') == 'zip' else '' }}
+                     onchange="setTerritoryMode('zip')"/> ZIP Code Mode
+            </label>
+            &nbsp;&nbsp;
+            <label>
+              <input type="radio" name="territoryMode" value="radius"
+                     {{ 'checked' if territory.get('mode') == 'radius' else '' }}
+                     onchange="setTerritoryMode('radius')"/> Radius Mode
+            </label>
+          </div>
+          <div class="radius-control" id="radius-control" style="{{ '' if territory.get('mode') == 'radius' else 'display:none' }}">
+            <label for="radiusMiles" style="font-weight:600;font-size:13px">Radius:</label>
+            <input type="range" id="radiusMiles-range" min="5" max="100" step="5"
+                   value="{{ territory.get('radiusMiles',30)|int }}"
+                   oninput="updateRadius(this.value)"/>
+            <span id="radius-label">{{ territory.get('radiusMiles',30)|int }} mi</span>
+            <input type="hidden" id="radiusMiles" name="radiusMiles"
+                   value="{{ territory.get('radiusMiles',30) }}"/>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="geocodeAndCenter()">
+            Center on Business Address
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" id="clear-zips-btn"
+                  onclick="clearAllZips()" style="{{ 'display:none' if territory.get('mode') == 'radius' else '' }}">
+            Clear All ZIPs
+          </button>
+        </div>
+
+        <div class="map-banner" id="map-banner">
+          Loading ZIP code data for this area...
+        </div>
+
+        <div id="territory-map"></div>
+
+        <div class="selected-zips" id="zip-summary">
+          <strong id="zip-count">{{ territory.get('zipList',[])|length }}</strong> ZIP codes selected
+          <span id="zip-list-preview" style="margin-left:8px;color:var(--green-dark)">
+            {% if territory.get('zipList') %}
+              {{ territory.zipList[:8]|join(', ') }}{{ '...' if territory.zipList|length > 8 else '' }}
+            {% endif %}
+          </span>
+        </div>
+
+        <!-- Hidden inputs -->
+        <input type="hidden" id="selectedZips" name="selectedZips"
+               value="{{ territory.get('zipList',[])|join(',') }}"/>
+        <input type="hidden" id="zipCentroids" name="zipCentroids"
+               value="{{ territory.get('zipCentroids', {})|tojson }}"/>
+        <input type="hidden" id="hqLat" name="hqLat" value="{{ territory.get('hqLat','') }}"/>
+        <input type="hidden" id="hqLon" name="hqLon" value="{{ territory.get('hqLon','') }}"/>
+      </div>
+    </div>
+
+    <!-- ─── PRICING ─── -->
+    <div class="section-card" id="sec-pricing">
+      <div class="section-header">
+        <h2>Pricing Matrix</h2>
+        <span class="badge badge-yellow">Required for Voice &amp; Chat</span>
+      </div>
+      <div class="section-body">
+        <div class="quick-fill">
+          <label>Quick Fill:</label>
+          <span class="qf-text">Base (1 dog):</span>
+          {% for freq in frequencies %}
+          {% set fkey = freq.replace(' ','_').replace('-','_') %}
+          <input type="number" id="qf_{{ fkey }}" placeholder="{{ freq[:4] }}.." step="0.01" min="0"
+                 style="width:70px" oninput="quickFill()"/>
+          {% endfor %}
+          <span class="qf-text">+$</span>
+          <input type="number" id="qf_step" placeholder="step" step="0.01" min="0" style="width:65px" oninput="quickFill()"/>
+          <span class="qf-text">per additional dog</span>
+        </div>
+
+        <table class="pricing-table">
+          <thead>
+            <tr>
+              <th>Frequency</th>
+              <th>1 Dog</th>
+              <th>2 Dogs</th>
+              <th>3 Dogs</th>
+              <th>4+ Dogs</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for freq in frequencies %}
+          {% set fkey = freq.replace(' ','_').replace('-','_') %}
+          {% set row = base_grid.get(freq, {}) %}
+          <tr>
+            <td>{{ freq }}</td>
+            {% for col, label in [('1',''), ('2',''), ('3',''), ('4p','')] %}
+            <td>
+              <input type="number" name="price_{{ fkey }}_{{ col }}"
+                     id="price_{{ fkey }}_{{ col }}"
+                     value="{{ row.get(col,'') }}" step="0.01" min="0" placeholder="—"
+                     class="price-cell" data-freq="{{ fkey }}" data-col="{{ col }}"/>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+
+        <hr class="divider"/>
+        <p style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--text)">Yard Size Multipliers</p>
+        <div class="multiplier-table">
+          <div class="multiplier-item">
+            <label>Small Yard (x)</label>
+            <input type="number" name="yard_small" value="{{ ym.get('small','') }}"
+                   step="0.01" min="0" placeholder="e.g. 1.0"/>
+          </div>
+          <div class="multiplier-item">
+            <label>Medium Yard (x)</label>
+            <input type="number" name="yard_medium" value="{{ ym.get('medium','') }}"
+                   step="0.01" min="0" placeholder="e.g. 1.25"/>
+          </div>
+          <div class="multiplier-item">
+            <label>Large Yard (x)</label>
+            <input type="number" name="yard_large" value="{{ ym.get('large','') }}"
+                   step="0.01" min="0" placeholder="e.g. 1.5"/>
+          </div>
+        </div>
+
+        <hr class="divider"/>
+        <p style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--text)">Initial Cleanup Surcharges ($)</p>
+        <div class="surcharge-grid">
+          <div class="multiplier-item">
+            <label>Light (abandoned &lt; 2 wk)</label>
+            <input type="number" name="cleanup_light" value="{{ cs.get('light','') }}"
+                   step="0.01" min="0" placeholder="e.g. 25"/>
+          </div>
+          <div class="multiplier-item">
+            <label>Medium (2–6 wk)</label>
+            <input type="number" name="cleanup_medium" value="{{ cs.get('medium','') }}"
+                   step="0.01" min="0" placeholder="e.g. 50"/>
+          </div>
+          <div class="multiplier-item">
+            <label>Heavy (6+ weeks)</label>
+            <input type="number" name="cleanup_heavy" value="{{ cs.get('heavy','') }}"
+                   step="0.01" min="0" placeholder="e.g. 95"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── POLICIES ─── -->
+    <div class="section-card" id="sec-policies">
+      <div class="section-header">
+        <h2>Operational Policies</h2>
+        <span class="badge badge-yellow">Required for Voice &amp; Chat</span>
+      </div>
+      <div class="section-body">
+        <div class="form-group">
+          <label>Waste Disposal Method</label>
+          <select name="disposal" class="form-control">
+            <option value="">— Select —</option>
+            {% for opt in ["Remove from property (bag & haul)", "Bag and leave at property", "Compost on-site", "Client preference"] %}
+            <option value="{{ opt }}" {{ 'selected' if policies.get('disposal') == opt else '' }}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+          <div class="helper">How does the technician handle the waste after collecting it?</div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Aggressive Dog Protocol</label>
+            <textarea name="aggressiveDog" class="form-control"
+                      placeholder="e.g. Skip visit and notify owner, charge $10 skip fee">{{ policies.get('aggressiveDog','') }}</textarea>
+          </div>
+          <div class="form-group">
+            <label>Gate / Access Code Policy</label>
+            <textarea name="gateCode" class="form-control"
+                      placeholder="e.g. Customer must provide code via portal before first visit">{{ policies.get('gateCode','') }}</textarea>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Satisfaction Guarantee</label>
+            <textarea name="guarantee" class="form-control"
+                      placeholder="e.g. 100% satisfaction, we'll re-clean for free within 24 hours">{{ policies.get('guarantee','') }}</textarea>
+          </div>
+          <div class="form-group">
+            <label>Min Booking Lead Time (hours)</label>
+            <input type="number" name="leadTimeHours" class="form-control"
+                   value="{{ policies.get('leadTimeHours','') }}" min="0" step="1" placeholder="e.g. 24"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Vacation / Hold Policy</label>
+            <textarea name="vacationHold" class="form-control"
+                      placeholder="e.g. Pause service with 48 hr notice, no charge during hold">{{ policies.get('vacationHold','') }}</textarea>
+          </div>
+          <div class="form-group">
+            <label>Rescheduling Rules</label>
+            <textarea name="rescheduling" class="form-control"
+                      placeholder="e.g. Cancel within 24 hr incurs $15 fee">{{ policies.get('rescheduling','') }}</textarea>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Manager / Escalation Phone</label>
+          <input type="tel" name="managerPhone" class="form-control"
+                 value="{{ policies.get('managerPhone','') }}"
+                 placeholder="(555) 555-5555 — for complex issues the agent can't resolve"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── API CREDENTIALS ─── -->
+    <div class="section-card" id="sec-creds">
+      <div class="section-header">
+        <h2>API Credentials</h2>
+        <span class="badge badge-blue">Auto-Generated</span>
+      </div>
+      <div class="section-body">
+        {% set api_key = creds.get('xApiKey','') %}
+        {% set masked = api_key[:8] + '...' + api_key[-4:] if api_key|length > 12 else api_key %}
+        <div class="creds-box">
+          <span class="creds-key" id="api-key-display">{{ masked }}</span>
+          <button type="button" class="btn btn-copy btn-sm" onclick="copyApiKey('{{ api_key }}')">
+            Copy Key
+          </button>
+        </div>
+        <div class="creds-note">
+          This key is auto-generated and read-only. Supply it as <code>X-Wizard-Key</code> when calling
+          <code>/api/config/{{ phone }}</code>. Sysadmin rotation available at <code>/admin/credentials/{{ phone }}</code>.
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── VOICE AGENT CONFIG ─── -->
+    <div class="section-card" id="sec-voice">
+      <div class="section-header">
+        <h2>Voice Agent Configuration</h2>
+        <span class="lock-badge" id="voice-lock-badge">
+          {{ 'Active' if 'voice' in tenant.get('agentTypes',[]) else 'Select Voice to unlock' }}
+        </span>
+      </div>
+      <div class="section-body">
+        <div class="form-group">
+          <label for="greeting">Opening Greeting</label>
+          <textarea id="greeting" name="greeting" class="form-control" rows="3"
+                    placeholder="e.g. Thanks for calling Poop Patrol, how can I help you today?"
+                    oninput="updateGreetingPreview()">{{ voice.get('greeting','') }}</textarea>
+          <div class="helper">This is the first thing the voice agent says when a call connects.</div>
+        </div>
+        <div class="greeting-preview" id="greeting-preview">
+          <div class="preview-label">Live Preview</div>
+          <div class="preview-text" id="greeting-preview-text">
+            {{ voice.get('greeting') or ('Thanks for calling ' + (profile.get('businessName') or 'Us') + ', how can I help you today?') }}
+          </div>
+        </div>
+        <hr class="divider"/>
+        <div class="form-group">
+          <label for="serviceAreaOverride">Service Area Description (voice-friendly)</label>
+          <textarea id="serviceAreaOverride" name="serviceAreaOverride" class="form-control"
+                    placeholder="e.g. We serve the greater Richmond area including ZIP codes 23220 through 23235">{{ voice.get('serviceAreaOverride','') }}</textarea>
+          <div class="helper">Natural-language description for the agent to read aloud when asked about your coverage area.</div>
+        </div>
+        <div class="form-group">
+          <label for="specialLines">Special Handling Lines</label>
+          <textarea id="specialLines" name="specialLines" class="form-control"
+                    placeholder="e.g. If caller mentions a wedding or event, offer our one-time large event cleanup package">{{ voice.get('specialLines','') }}</textarea>
+          <div class="helper">Edge-case instructions, upsell triggers, or topic-specific talking points for the agent.</div>
+        </div>
+
+        <div style="background:var(--gray-light);border:1px solid var(--gray-border);border-radius:6px;padding:12px 14px;margin-top:12px">
+          <p style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Hardcoded Protocol (read-only)</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+            <div><strong>Backchannel:</strong> Gotcha, Right, I see, yeah, yes, ok</div>
+            <div><strong>Spelling:</strong> Common Words (A as in Apple...)</div>
+            <div><strong>Voicemail Detection:</strong> Disabled</div>
+            <div><strong>Call Direction:</strong> Inbound</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── CHAT AGENT CONFIG ─── -->
+    <div class="section-card" id="sec-chat">
+      <div class="section-header">
+        <h2>Chat Agent Configuration</h2>
+        <span class="lock-badge" id="chat-lock-badge">
+          {{ 'Active' if 'chat' in tenant.get('agentTypes',[]) else 'Select Chat to unlock' }}
+        </span>
+      </div>
+      <div class="section-body">
+        <div style="background:var(--yellow-light);border:1px solid #fcd34d;border-radius:6px;padding:12px 14px;margin-bottom:16px">
+          <strong style="font-size:13px">Chat agent configuration is in development.</strong>
+          <p style="font-size:12px;color:var(--gray);margin-top:4px">
+            The chat agent will inherit your Pricing, Policies, and Territory settings automatically.
+            Add any additional chat-specific notes below.
+          </p>
+        </div>
+        <div class="form-group">
+          <label for="chatNotes">Chat-Specific Notes (optional)</label>
+          <textarea id="chatNotes" name="chatNotes" class="form-control" rows="3"
+                    placeholder="Any channel-specific instructions for the chat agent...">{{ chat.get('notes','') }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── DOCUMENT UPLOADS ─── -->
+    <div class="section-card" id="sec-docs">
+      <div class="section-header">
+        <h2>Reference Documents</h2>
+        <span class="badge badge-gray">Optional</span>
+      </div>
+      <div class="section-body">
+        <p style="font-size:13px;color:var(--gray);margin-bottom:14px">
+          Upload pricing sheets, competitor analysis, customer lists, contracts, or other reference materials
+          for AI training. Supported: CSV, Excel, PDF, images, Word, ZIP.
+        </p>
+        <div class="upload-row" id="upload-form-row">
+          <div class="form-group">
+            <label>Category</label>
+            <select id="upload-category" class="form-control" style="min-width:180px">
+              {% for cat in upload_categories %}
+              <option value="{{ cat }}">{{ cat }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>File</label>
+            <input type="file" id="upload-file" class="form-control"
+                   accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.txt,.zip"/>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="uploadDoc()">Upload</button>
+        </div>
+        <div id="upload-status" style="font-size:13px;margin-bottom:8px"></div>
+
+        <div class="file-list" id="file-list">
+          {% for doc in docs %}
+          <div class="file-item" id="file-{{ loop.index }}">
+            <span class="file-name">{{ doc.filename }}</span>
+            <span class="file-cat badge badge-gray">{{ doc.category }}</span>
+            <button type="button" class="btn btn-danger btn-sm"
+                    onclick="removeDoc('{{ doc.savedAs or doc.filename }}', this.closest('.file-item'))">Remove</button>
+          </div>
+          {% if doc.preview %}
+          <div class="file-preview">{{ doc.preview|safe }}</div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── SAVE ─── -->
+    <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:24px;padding-bottom:20px">
+      <a href="{{ url_for('ready', phone=phone) }}" class="btn btn-secondary">View Ready Page</a>
+      <button type="submit" class="btn-save">Save &amp; Generate Files</button>
+    </div>
+
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ─── State ───
+var PHONE = {{ phone|tojson }};
+{% set _t = tenant.get('territory', {}) %}
+var territoryMode = {{ _t.get('mode','zip')|tojson }};
+var selectedZips = new Set({{ _t.get('zipList', [])|tojson }});
+var zipCentroids = {{ _t.get('zipCentroids', {})|tojson }};
+var hqLat = {{ (_t.get('hqLat') or 39.5)|float }};
+var hqLon = {{ (_t.get('hqLon') or -98.35)|float }};
+var radiusMiles = {{ (_t.get('radiusMiles') or 30)|float }};
+
+// Agent type toggles
+var voiceToggle = document.getElementById('toggle-voice');
+var chatToggle = document.getElementById('toggle-chat');
+
+function updateLocks() {
+  var hasVoice = voiceToggle.checked;
+  var hasChat = chatToggle.checked;
+  var hasEither = hasVoice || hasChat;
+
+  var secVoice = document.getElementById('sec-voice');
+  var secChat = document.getElementById('sec-chat');
+  var voiceBadge = document.getElementById('voice-lock-badge');
+  var chatBadge = document.getElementById('chat-lock-badge');
+
+  if (hasVoice) {
+    secVoice.classList.remove('section-locked');
+    voiceBadge.textContent = 'Active';
+    voiceBadge.className = 'lock-badge badge badge-green';
+  } else {
+    secVoice.classList.add('section-locked');
+    voiceBadge.textContent = 'Select Voice to unlock';
+    voiceBadge.className = 'lock-badge';
+  }
+
+  if (hasChat) {
+    secChat.classList.remove('section-locked');
+    chatBadge.textContent = 'Active';
+    chatBadge.className = 'lock-badge badge badge-green';
+  } else {
+    secChat.classList.add('section-locked');
+    chatBadge.textContent = 'Select Chat to unlock';
+    chatBadge.className = 'lock-badge';
+  }
+
+  // Pricing + Policies unlock for either
+  document.getElementById('sec-pricing').classList.toggle('section-locked', !hasEither);
+  document.getElementById('sec-policies').classList.toggle('section-locked', !hasEither);
+
+  // Persist
+  var types = [];
+  if (hasVoice) types.push('voice');
+  if (hasChat) types.push('chat');
+  fetch('/update-agent-types/' + PHONE, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({agentTypes: types})
+  });
+}
+
+voiceToggle.addEventListener('change', updateLocks);
+chatToggle.addEventListener('change', updateLocks);
+updateLocks();
+
+// ─── Map ───
+var map = L.map('territory-map').setView([hqLat || 39.5, hqLon || -98.35],
+  (hqLat && hqLon) ? 9 : 4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 13
+}).addTo(map);
+
+var zipMarkers = {};
+var radiusCircle = null;
+var isLoading = false;
+
+function setTerritoryMode(mode) {
+  territoryMode = mode;
+  var radiusCtrl = document.getElementById('radius-control');
+  var clearBtn = document.getElementById('clear-zips-btn');
+  if (mode === 'radius') {
+    radiusCtrl.style.display = '';
+    clearBtn.style.display = 'none';
+    drawRadiusCircle();
+  } else {
+    radiusCtrl.style.display = 'none';
+    clearBtn.style.display = '';
+    if (radiusCircle) { map.removeLayer(radiusCircle); radiusCircle = null; }
+    loadZipsInBounds();
+  }
+}
+
+function updateRadius(val) {
+  radiusMiles = parseFloat(val);
+  document.getElementById('radius-label').textContent = val + ' mi';
+  document.getElementById('radiusMiles').value = val;
+  drawRadiusCircle();
+}
+
+function drawRadiusCircle() {
+  if (radiusCircle) map.removeLayer(radiusCircle);
+  if (!hqLat || !hqLon) return;
+  var meters = radiusMiles * 1609.34;
+  radiusCircle = L.circle([hqLat, hqLon], {
+    radius: meters, color: '#2d8a5e', fillColor: '#2d8a5e', fillOpacity: 0.12, weight: 2
+  }).addTo(map);
+}
+
+function loadZipsInBounds() {
+  if (territoryMode !== 'zip') return;
+  if (!hqLat || !hqLon) return;
+  if (isLoading) return;
+  isLoading = true;
+  var banner = document.getElementById('map-banner');
+  banner.classList.add('visible');
+
+  var bounds = map.getBounds();
+  var miles = Math.min(geodesicDistance(bounds.getNorth(), bounds.getWest(), bounds.getSouth(), bounds.getEast()) / 2, 80);
+
+  fetch('/api/zips-in-bounds?lat=' + hqLat + '&lon=' + hqLon + '&miles=' + Math.max(miles, 30))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      (data.zips || []).forEach(function(z) {
+        if (zipMarkers[z.zip]) return;
+        var isSelected = selectedZips.has(z.zip);
+        var marker = L.circleMarker([z.lat, z.lon], {
+          radius: 8,
+          color: isSelected ? '#2d8a5e' : '#d1d5db',
+          fillColor: isSelected ? '#2d8a5e' : '#f9fafb',
+          fillOpacity: isSelected ? 0.75 : 0.6,
+          weight: 2
+        }).addTo(map);
+        marker.bindTooltip(z.zip + ' — ' + z.city + ', ' + z.state);
+        marker.zipData = z;
+        marker.on('click', function() { toggleZip(z.zip, z.lat, z.lon, this); });
+        zipMarkers[z.zip] = marker;
+      });
+      banner.classList.remove('visible');
+      isLoading = false;
+    })
+    .catch(function() { banner.classList.remove('visible'); isLoading = false; });
+}
+
+function geodesicDistance(lat1, lon1, lat2, lon2) {
+  var R = 3959;
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLon = (lon2 - lon1) * Math.PI / 180;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+          Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+          Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function toggleZip(zip, lat, lon, marker) {
+  if (selectedZips.has(zip)) {
+    selectedZips.delete(zip);
+    delete zipCentroids[zip];
+    marker.setStyle({ color: '#d1d5db', fillColor: '#f9fafb', fillOpacity: 0.6 });
+  } else {
+    selectedZips.add(zip);
+    zipCentroids[zip] = {lat: lat, lon: lon};
+    marker.setStyle({ color: '#2d8a5e', fillColor: '#2d8a5e', fillOpacity: 0.75 });
+  }
+  updateHiddenZips();
+}
+
+function clearAllZips() {
+  selectedZips.clear();
+  zipCentroids = {};
+  Object.values(zipMarkers).forEach(function(m) {
+    m.setStyle({ color: '#d1d5db', fillColor: '#f9fafb', fillOpacity: 0.6 });
+  });
+  updateHiddenZips();
+}
+
+function updateHiddenZips() {
+  var zipArr = Array.from(selectedZips).sort();
+  document.getElementById('selectedZips').value = zipArr.join(',');
+  document.getElementById('zipCentroids').value = JSON.stringify(zipCentroids);
+  document.getElementById('zip-count').textContent = zipArr.length;
+  var preview = zipArr.slice(0, 8).join(', ') + (zipArr.length > 8 ? '...' : '');
+  document.getElementById('zip-list-preview').textContent = preview;
+}
+
+function geocodeAndCenter() {
+  var addr = document.getElementById('businessAddress').value.trim();
+  if (!addr) return;
+  fetch('/geocode', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({address: addr})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.lat) {
+      hqLat = d.lat; hqLon = d.lon;
+      document.getElementById('hqLat').value = d.lat;
+      document.getElementById('hqLon').value = d.lon;
+      map.setView([d.lat, d.lon], 9);
+      L.marker([d.lat, d.lon]).addTo(map).bindTooltip('HQ: ' + d.display).openTooltip();
+      if (territoryMode === 'radius') drawRadiusCircle();
+      else loadZipsInBounds();
+    }
+  });
+}
+
+map.on('moveend', function() {
+  if (territoryMode === 'zip' && hqLat && hqLon) loadZipsInBounds();
+});
+
+if (hqLat && hqLon) {
+  if (territoryMode === 'radius') drawRadiusCircle();
+  else loadZipsInBounds();
+}
+
+// ─── Pricing quick fill ───
+var FREQUENCIES = {{ frequencies|tojson }};
+
+function quickFill() {
+  var step = parseFloat(document.getElementById('qf_step').value) || 0;
+  FREQUENCIES.forEach(function(freq) {
+    var fkey = freq.replace(/ /g,'_').replace(/-/g,'_');
+    var base = parseFloat(document.getElementById('qf_' + fkey).value);
+    if (isNaN(base)) return;
+    ['1','2','3','4p'].forEach(function(col, i) {
+      var el = document.getElementById('price_' + fkey + '_' + col);
+      if (el) el.value = (base + step * i).toFixed(2);
+    });
+  });
+}
+
+// ─── Greeting preview ───
+function updateGreetingPreview() {
+  var text = document.getElementById('greeting').value;
+  if (!text) {
+    var biz = document.getElementById('businessName').value || 'Us';
+    text = 'Thanks for calling ' + biz + ', how can I help you today?';
+  }
+  document.getElementById('greeting-preview-text').textContent = text;
+}
+
+// ─── API Key copy ───
+function copyApiKey(key) {
+  navigator.clipboard.writeText(key).then(function() {
+    var btn = document.querySelector('.btn-copy');
+    var orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 2000);
+  });
+}
+
+// ─── Document upload ───
+function uploadDoc() {
+  var file = document.getElementById('upload-file').files[0];
+  var cat = document.getElementById('upload-category').value;
+  if (!file) { alert('Please select a file first.'); return; }
+  var fd = new FormData();
+  fd.append('file', file);
+  fd.append('category', cat);
+  var status = document.getElementById('upload-status');
+  status.textContent = 'Uploading...';
+  fetch('/upload/' + PHONE, { method: 'POST', body: fd })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        status.textContent = '';
+        var list = document.getElementById('file-list');
+        var item = document.createElement('div');
+        item.className = 'file-item';
+        item.innerHTML = '<span class="file-name">' + d.doc.filename + '</span>' +
+          '<span class="file-cat badge badge-gray">' + d.doc.category + '</span>' +
+          '<button type="button" class="btn btn-danger btn-sm" onclick="removeDoc(\'' +
+          (d.doc.savedAs || d.doc.filename) + '\', this.closest(\'.file-item\'))">Remove</button>';
+        list.appendChild(item);
+        if (d.doc.preview) {
+          var prev = document.createElement('div');
+          prev.className = 'file-preview';
+          prev.innerHTML = d.doc.preview;
+          list.appendChild(prev);
+        }
+        document.getElementById('upload-file').value = '';
+      } else {
+        status.textContent = 'Error: ' + (d.error || 'Upload failed');
+      }
+    })
+    .catch(function() { status.textContent = 'Upload failed. Please try again.'; });
+}
+
+function removeDoc(filename, el) {
+  if (!confirm('Remove this file?')) return;
+  fetch('/remove-doc/' + PHONE, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({filename: filename})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.ok && el) el.remove();
+  });
+}
+
+// Auto-geocode if no coords yet
+if (!hqLat || hqLat == 0) {
+  var initAddr = document.getElementById('businessAddress').value.trim();
+  if (initAddr) geocodeAndCenter();
+}
+</script>
+{% endblock %}
