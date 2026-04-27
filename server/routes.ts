@@ -1060,6 +1060,34 @@ export async function registerRoutes(
     res.json({ token });
   });
 
+  // OSM tile proxy — avoids browser-side CSP/CORS issues with tile.openstreetmap.org
+  app.get("/api/map/tiles/:z/:x/:y", async (req: Request, res: Response) => {
+    const { z, x, y } = req.params;
+    if (!/^\d+$/.test(z) || !/^\d+$/.test(x) || !/^\d+$/.test(y)) {
+      return res.status(400).send("Invalid tile coordinates");
+    }
+    const zi = parseInt(z, 10);
+    const xi = parseInt(x, 10);
+    const yi = parseInt(y, 10);
+    if (zi < 0 || zi > 20 || xi < 0 || yi < 0) return res.status(400).send("Out of range");
+    try {
+      const upstream = await fetch(
+        `https://tile.openstreetmap.org/${zi}/${xi}/${yi}.png`,
+        { headers: { "User-Agent": "ScooPilot/1.0 map-proxy" } }
+      );
+      if (!upstream.ok) return res.status(upstream.status).send("Tile unavailable");
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.set({
+        "Content-Type": "image/png",
+        "Cache-Control": "public, max-age=86400",
+        "Access-Control-Allow-Origin": "*",
+      });
+      res.send(buf);
+    } catch {
+      res.status(502).send("Tile fetch failed");
+    }
+  });
+
   app.get("/api/streetview", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const token = process.env.MAPBOX_PUBLIC_TOKEN;

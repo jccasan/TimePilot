@@ -22,9 +22,9 @@ async function geocodeAddress(address: string): Promise<L.LatLngExpression | nul
 }
 
 function addOsmLayer(map: L.Map) {
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  L.tileLayer("/api/map/tiles/{z}/{x}/{y}", {
     maxZoom: 19,
-    attribution: "© OpenStreetMap contributors",
+    attribution: "© <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
   }).addTo(map);
 }
 
