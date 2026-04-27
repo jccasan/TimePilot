@@ -133,7 +133,13 @@ export async function refreshQboTokens(companyId: string): Promise<{ access_toke
 }
 
 async function doRefreshQboTokens(companyId: string): Promise<{ access_token: string; refresh_token: string }> {
-  const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
+  const [company] = await db.select({
+    id: companies.id,
+    qboRefreshToken: companies.qboRefreshToken,
+    qboAccessToken: companies.qboAccessToken,
+    qboTokenExpiresAt: companies.qboTokenExpiresAt,
+    qboRealmId: companies.qboRealmId,
+  }).from(companies).where(eq(companies.id, companyId));
   if (!company?.qboRefreshToken) {
     throw new Error("No QBO refresh token found");
   }
@@ -178,7 +184,13 @@ async function doRefreshQboTokens(companyId: string): Promise<{ access_token: st
 }
 
 async function getValidAccessToken(companyId: string): Promise<{ token: string; realmId: string }> {
-  const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
+  const [company] = await db.select({
+    id: companies.id,
+    qboRealmId: companies.qboRealmId,
+    qboAccessToken: companies.qboAccessToken,
+    qboRefreshToken: companies.qboRefreshToken,
+    qboTokenExpiresAt: companies.qboTokenExpiresAt,
+  }).from(companies).where(eq(companies.id, companyId));
   if (!company?.qboRealmId || !company?.qboAccessToken) {
     throw new Error("QuickBooks is not connected");
   }
@@ -988,9 +1000,9 @@ export function startCdcPolling(): void {
     setInterval(() => {
       runCdcPoll().catch(err => console.error("[QBO CDC] Scheduled poll error:", err));
     }, SIX_HOURS);
-  }, 60_000);
+  }, 90_000);
 
-  console.log("[QBO CDC] Polling scheduled (first run in 60s, then every 6 hours)");
+  console.log("[QBO CDC] Polling scheduled (first run in 90s, then every 6 hours)");
 }
 
 export async function disconnectQbo(companyId: string): Promise<void> {

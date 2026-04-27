@@ -19405,12 +19405,12 @@ Respond with exactly one category from the list above and nothing else.`;
   });
 
   import("./jobs/demo-auto-pay").then(({ runDemoAutoPay }) => {
-    setTimeout(() => runDemoAutoPay().catch(console.error), 60000);
+    setTimeout(() => runDemoAutoPay().catch(console.error), 120000);
     setInterval(() => runDemoAutoPay().catch(console.error), 24 * 60 * 60 * 1000);
   });
 
   import("./jobs/trial-expiration").then(({ runTrialExpirationCheck }) => {
-    setTimeout(() => runTrialExpirationCheck().catch(console.error), 90000);
+    setTimeout(() => runTrialExpirationCheck().catch(console.error), 150000);
     setInterval(() => runTrialExpirationCheck().catch(console.error), 60 * 60 * 1000);
   });
 

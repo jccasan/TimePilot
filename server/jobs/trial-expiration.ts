@@ -10,7 +10,12 @@ export async function runTrialExpirationCheck(): Promise<void> {
 
   try {
     const expiredTrials = await db
-      .select()
+      .select({
+        id: companies.id,
+        name: companies.name,
+        trialEndsAt: companies.trialEndsAt,
+        subscriptionStatus: companies.subscriptionStatus,
+      })
       .from(companies)
       .where(
         and(
