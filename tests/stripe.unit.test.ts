@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const mockCustomerCreate = vi.fn();
 const mockCustomerRetrieve = vi.fn();
 const mockPaymentMethodsList = vi.fn();
+const mockPaymentMethodsCreate = vi.fn();
+const mockPaymentMethodsAttach = vi.fn();
 const mockPaymentMethodsDetach = vi.fn();
 const mockPaymentIntentsCreate = vi.fn();
 const mockPaymentIntentsRetrieve = vi.fn();
@@ -23,8 +25,8 @@ vi.mock("stripe", () => {
       paymentMethods: {
         list: mockPaymentMethodsList,
         detach: mockPaymentMethodsDetach,
-        create: vi.fn(),
-        attach: vi.fn(),
+        create: mockPaymentMethodsCreate,
+        attach: mockPaymentMethodsAttach,
       },
       paymentIntents: {
         create: mockPaymentIntentsCreate,
@@ -58,6 +60,7 @@ const {
   detachPaymentMethod,
   ensureConnectedCustomer,
   retrievePaymentIntentFees,
+  migrateCustomerToConnectedAccount,
 } = await import("../server/services/stripe.js");
 
 // =============================================================================
@@ -688,5 +691,217 @@ describe("retrievePaymentIntentFees()", () => {
     });
     const result = await retrievePaymentIntentFees("pi_fees_123");
     expect(result).toBeNull();
+  });
+});
+
+// =============================================================================
+// migrateCustomerToConnectedAccount() integration tests (Stripe SDK mocked)
+// =============================================================================
+
+describe("migrateCustomerToConnectedAccount()", () => {
+  const baseParams = {
+    platformCustomerId: "cus_platform_123",
+    stripeAccount: "acct_connected",
+    email: "customer@example.com",
+    name: "Test Customer",
+    metadata: { tenantId: "tenant_abc" },
+  };
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Happy path: all payment methods migrate successfully
+  // ---------------------------------------------------------------------------
+
+  describe("happy path — all methods migrated", () => {
+    beforeEach(() => {
+      mockCustomerRetrieve.mockResolvedValue({ id: "cus_platform_123" });
+      mockCustomerCreate.mockResolvedValue({ id: "cus_connected_new" });
+      mockPaymentMethodsList
+        .mockResolvedValueOnce({ data: [{ id: "pm_one" }, { id: "pm_two" }] })
+        .mockResolvedValueOnce({ data: [{ id: "pm_cloned_one" }, { id: "pm_cloned_two" }] });
+      mockPaymentMethodsCreate
+        .mockResolvedValueOnce({ id: "pm_cloned_one" })
+        .mockResolvedValueOnce({ id: "pm_cloned_two" });
+      mockPaymentMethodsAttach.mockResolvedValue({});
+    });
+
+    it("returns status migrated and correct counts", async () => {
+      const result = await migrateCustomerToConnectedAccount(baseParams);
+      expect(result.status).toBe("migrated");
+      expect(result.newCustomerId).toBe("cus_connected_new");
+      expect(result.migratedPaymentMethods).toBe(2);
+      expect(result.totalPaymentMethods).toBe(2);
+      expect(result.failedPaymentMethods).toHaveLength(0);
+    });
+
+    it("passes { stripeAccount } to customers.create", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      const [, opts] = mockCustomerCreate.mock.calls[0];
+      expect(opts).toEqual({ stripeAccount: "acct_connected" });
+      expect(opts).not.toEqual({});
+    });
+
+    it("passes no reqOpts to the platform paymentMethods.list call", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      const [, firstListOpts] = mockPaymentMethodsList.mock.calls[0];
+      expect(firstListOpts).toBeUndefined();
+      expect(firstListOpts).not.toEqual({});
+    });
+
+    it("passes { stripeAccount } to paymentMethods.create for each cloned method", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      expect(mockPaymentMethodsCreate).toHaveBeenCalledTimes(2);
+      for (const call of mockPaymentMethodsCreate.mock.calls) {
+        const [, opts] = call;
+        expect(opts).toEqual({ stripeAccount: "acct_connected" });
+        expect(opts).not.toEqual({});
+      }
+    });
+
+    it("passes { stripeAccount } to paymentMethods.attach for each cloned method", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      expect(mockPaymentMethodsAttach).toHaveBeenCalledTimes(2);
+      for (const call of mockPaymentMethodsAttach.mock.calls) {
+        const [, , opts] = call;
+        expect(opts).toEqual({ stripeAccount: "acct_connected" });
+        expect(opts).not.toEqual({});
+      }
+    });
+
+    it("passes { stripeAccount } to the destination paymentMethods.list verification call", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      const [, secondListOpts] = mockPaymentMethodsList.mock.calls[1];
+      expect(secondListOpts).toEqual({ stripeAccount: "acct_connected" });
+      expect(secondListOpts).not.toEqual({});
+    });
+
+    it("passes the cloned PM id as the first arg to paymentMethods.create", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      const [firstCreateParams] = mockPaymentMethodsCreate.mock.calls[0];
+      expect(firstCreateParams).toEqual({ payment_method: "pm_one" });
+    });
+
+    it("passes the new customer id to paymentMethods.attach", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      const [attachedPmId, attachParams] = mockPaymentMethodsAttach.mock.calls[0];
+      expect(attachedPmId).toBe("pm_cloned_one");
+      expect(attachParams).toEqual({ customer: "cus_connected_new" });
+    });
+
+    it("includes migratedFromPlatform in the new customer metadata", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      const [createParams] = mockCustomerCreate.mock.calls[0];
+      expect(createParams.metadata.migratedFromPlatform).toBe("cus_platform_123");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // no_methods: platform customer exists but has no cards on file
+  // ---------------------------------------------------------------------------
+
+  describe("no_methods — platform customer has no payment methods", () => {
+    beforeEach(() => {
+      mockCustomerRetrieve.mockResolvedValue({ id: "cus_platform_123" });
+      mockCustomerCreate.mockResolvedValue({ id: "cus_connected_new" });
+      mockPaymentMethodsList.mockResolvedValue({ data: [] });
+    });
+
+    it("returns status no_methods", async () => {
+      const result = await migrateCustomerToConnectedAccount(baseParams);
+      expect(result.status).toBe("no_methods");
+      expect(result.migratedPaymentMethods).toBe(0);
+      expect(result.totalPaymentMethods).toBe(0);
+      expect(result.failedPaymentMethods).toHaveLength(0);
+    });
+
+    it("creates the connected customer even when there are no payment methods", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      expect(mockCustomerCreate).toHaveBeenCalledOnce();
+      const [, opts] = mockCustomerCreate.mock.calls[0];
+      expect(opts).toEqual({ stripeAccount: "acct_connected" });
+    });
+
+    it("does not call paymentMethods.create or attach when there are no methods", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      expect(mockPaymentMethodsCreate).not.toHaveBeenCalled();
+      expect(mockPaymentMethodsAttach).not.toHaveBeenCalled();
+    });
+
+    it("calls paymentMethods.list exactly once (only the platform lookup)", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      expect(mockPaymentMethodsList).toHaveBeenCalledOnce();
+      const [, opts] = mockPaymentMethodsList.mock.calls[0];
+      expect(opts).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Partial migration: some payment methods fail to clone
+  // ---------------------------------------------------------------------------
+
+  describe("partial migration — one of two methods fails", () => {
+    beforeEach(() => {
+      mockCustomerRetrieve.mockResolvedValue({ id: "cus_platform_123" });
+      mockCustomerCreate.mockResolvedValue({ id: "cus_connected_new" });
+      mockPaymentMethodsList
+        .mockResolvedValueOnce({ data: [{ id: "pm_good" }, { id: "pm_bad" }] })
+        .mockResolvedValueOnce({ data: [{ id: "pm_cloned_good" }] });
+      mockPaymentMethodsCreate
+        .mockResolvedValueOnce({ id: "pm_cloned_good" })
+        .mockRejectedValueOnce(Object.assign(new Error("Cannot clone"), { message: "Cannot clone" }));
+      mockPaymentMethodsAttach.mockResolvedValue({});
+    });
+
+    it("returns status partial", async () => {
+      const result = await migrateCustomerToConnectedAccount(baseParams);
+      expect(result.status).toBe("partial");
+    });
+
+    it("reports one migrated and one failed", async () => {
+      const result = await migrateCustomerToConnectedAccount(baseParams);
+      expect(result.migratedPaymentMethods).toBe(1);
+      expect(result.totalPaymentMethods).toBe(2);
+      expect(result.failedPaymentMethods).toEqual(["pm_bad"]);
+    });
+
+    it("still passes { stripeAccount } to the successful paymentMethods.create call", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      const [, opts] = mockPaymentMethodsCreate.mock.calls[0];
+      expect(opts).toEqual({ stripeAccount: "acct_connected" });
+      expect(opts).not.toEqual({});
+    });
+
+    it("still passes { stripeAccount } to the destination paymentMethods.list verification call", async () => {
+      await migrateCustomerToConnectedAccount(baseParams);
+      const [, secondListOpts] = mockPaymentMethodsList.mock.calls[1];
+      expect(secondListOpts).toEqual({ stripeAccount: "acct_connected" });
+      expect(secondListOpts).not.toEqual({});
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Skipped: customer is not on the platform account
+  // ---------------------------------------------------------------------------
+
+  describe("skipped — customer is not on the platform", () => {
+    beforeEach(() => {
+      mockCustomerRetrieve.mockRejectedValue(new Error("No such customer"));
+    });
+
+    it("returns status skipped without creating any Stripe resources", async () => {
+      const result = await migrateCustomerToConnectedAccount(baseParams);
+      expect(result.status).toBe("skipped");
+      expect(result.newCustomerId).toBe("cus_platform_123");
+      expect(result.migratedPaymentMethods).toBe(0);
+      expect(result.totalPaymentMethods).toBe(0);
+      expect(result.failedPaymentMethods).toHaveLength(0);
+      expect(mockCustomerCreate).not.toHaveBeenCalled();
+      expect(mockPaymentMethodsList).not.toHaveBeenCalled();
+      expect(mockPaymentMethodsCreate).not.toHaveBeenCalled();
+      expect(mockPaymentMethodsAttach).not.toHaveBeenCalled();
+    });
   });
 });
