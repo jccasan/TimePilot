@@ -305,14 +305,13 @@ def onboard_save(phone: str):
                 row[col] = val
         if row:
             base_grid[freq] = row
-    # Quick fill rules (formula: base + floor((dogs-1)/Y) * X)
-    qf_x = f.get("qf_X_saved", "").strip()
-    qf_y = f.get("qf_Y_saved", "").strip()
-    quick_fill_rules = {}
-    if qf_x:
-        quick_fill_rules["X"] = qf_x
-    if qf_y:
-        quick_fill_rules["Y"] = qf_y
+    # Quick fill rules (per-frequency: {fkey: {base, surchargeAmount, incrementDogs}})
+    try:
+        quick_fill_rules = json.loads(f.get("quickFillRules", "{}") or "{}")
+        if not isinstance(quick_fill_rules, dict):
+            quick_fill_rules = {}
+    except Exception:
+        quick_fill_rules = {}
 
     pricing = {
         "baseGrid": base_grid,

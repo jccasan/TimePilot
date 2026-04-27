@@ -168,10 +168,11 @@ def verify_location(
     if caller_zip and zip_list:
         if str(caller_zip).zfill(5) in zip_list:
             return {"inTerritory": True, "method": "zip"}
-        if mode == "zip":
+        # ZIP miss — fall through to radius check when coordinates available
+        if mode == "zip" and not (caller_lat is not None and caller_lon is not None and hq_lat and hq_lon and radius_miles):
             return {"inTerritory": False, "method": "zip"}
 
-    # Step 2: Radius check
+    # Step 2: Geodesic radius check (always attempted when coordinates available)
     if (
         caller_lat is not None
         and caller_lon is not None

@@ -108,13 +108,11 @@ def write_all_files(tenant: dict) -> dict:
     # 3. agent_handbook.md
     (out_dir / "agent_handbook.md").write_text(_render_handbook(tenant, config))
 
-    # 4. api_credentials.json (only key — never in main config)
+    # 4. api_credentials.json — tenantId + xApiKey only (strict contract)
     creds = tenant.get("credentials", {})
     creds_data = {
         "tenantId": phone,
-        "businessName": config.get("businessName", ""),
         "xApiKey": creds.get("xApiKey", ""),
-        "generatedAt": datetime.utcnow().isoformat() + "Z",
     }
     (out_dir / "api_credentials.json").write_text(json.dumps(creds_data, indent=2))
 

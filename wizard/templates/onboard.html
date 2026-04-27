@@ -88,7 +88,7 @@
             <label for="primaryService">Primary Service</label>
             <select id="primaryService" name="primaryService" class="form-control">
               <option value="">— Select —</option>
-              {% for svc in ['Pet Waste Removal','Dog Walking','Pet Sitting','Pet Boarding','Odor Control','Other'] %}
+              {% for svc in ['Pet Waste','Bin Cleaning','Lawn Care','Other'] %}
               <option value="{{ svc }}" {{ 'selected' if profile.get('primaryService') == svc else '' }}>{{ svc }}</option>
               {% endfor %}
             </select>
@@ -137,7 +137,7 @@
           </div>
           <div class="radius-control" id="radius-control" style="{{ '' if territory.get('mode') == 'radius' else 'display:none' }}">
             <label style="font-weight:600;font-size:13px">Radius:</label>
-            <input type="range" id="radiusMiles-range" min="5" max="100" step="5"
+            <input type="range" id="radiusMiles-range" min="0" max="50" step="1"
                    value="{{ territory.get('radiusMiles',30)|int }}"
                    oninput="updateRadius(this.value)"/>
             <span id="radius-label">{{ territory.get('radiusMiles',30)|int }} mi</span>
@@ -227,27 +227,41 @@
         <span class="badge badge-yellow">Required for Voice &amp; Chat</span>
       </div>
       <div class="section-body">
-        <div class="quick-fill">
-          <label>Quick Fill</label>
-          <span class="qf-text">Base prices (1 dog) per frequency:</span>
-          {% for freq in frequencies %}
-          {% set fkey = freq.replace(' ','_').replace('-','_') %}
-          <div style="display:flex;align-items:center;gap:4px">
-            <span class="qf-text" style="font-size:11px">{{ freq[:6] }}:</span>
-            <input type="number" id="qf_{{ fkey }}" placeholder="$" step="0.01" min="0"
-                   style="width:65px" oninput="quickFill()"/>
+        <div class="quick-fill" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <label style="margin:0;font-weight:700;font-size:13px">Quick Fill</label>
+            <em style="font-size:11px;color:var(--gray)">formula: base + floor((dogs&minus;1) &divide; incr) &times; surcharge</em>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="applyQuickFill()">Apply</button>
           </div>
-          {% endfor %}
-          <span class="qf-text" style="margin-left:8px">Add&nbsp;$</span>
-          <input type="number" id="qf_X" placeholder="amt" step="0.01" min="0" style="width:60px" oninput="quickFill()"/>
-          <span class="qf-text">every</span>
-          <input type="number" id="qf_Y" placeholder="N" step="1" min="1" value="1" style="width:45px" oninput="quickFill()"/>
-          <span class="qf-text">dog(s) &nbsp;<em style="color:var(--gray)">[formula: base + floor((dogs&minus;1)&divide;N)&times;$]</em></span>
+          <table style="font-size:12px;border-collapse:collapse">
+            <thead>
+              <tr>
+                <th style="padding:4px 8px;text-align:left;color:var(--gray)">Frequency</th>
+                <th style="padding:4px 8px;color:var(--gray)">Base (1 dog, $)</th>
+                <th style="padding:4px 8px;color:var(--gray)">Surcharge/step ($)</th>
+                <th style="padding:4px 8px;color:var(--gray)">Dogs/step</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for freq in frequencies %}
+            {% set fkey = freq.replace(' ','_').replace('-','_') %}
+            {% set fqf = qf.get(fkey, {}) %}
+            <tr>
+              <td style="padding:4px 8px;white-space:nowrap">{{ freq }}</td>
+              <td style="padding:4px 4px"><input type="number" id="qf_{{ fkey }}_base" step="0.01" min="0" style="width:70px"
+                     value="{{ fqf.get('base','') }}" placeholder="e.g. 25"/></td>
+              <td style="padding:4px 4px"><input type="number" id="qf_{{ fkey }}_surcharge" step="0.01" min="0" style="width:70px"
+                     value="{{ fqf.get('surchargeAmount','') }}" placeholder="e.g. 5"/></td>
+              <td style="padding:4px 4px"><input type="number" id="qf_{{ fkey }}_incr" step="1" min="1" style="width:55px"
+                     value="{{ fqf.get('incrementDogs','1') }}" placeholder="1"/></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
         </div>
 
-        <!-- Hidden quick-fill rule storage -->
-        <input type="hidden" name="qf_X_saved" id="qf_X_saved" value="{{ qf.get('X','') }}"/>
-        <input type="hidden" name="qf_Y_saved" id="qf_Y_saved" value="{{ qf.get('Y','') }}"/>
+        <!-- Hidden quick-fill rules storage (JSON blob) -->
+        <input type="hidden" name="quickFillRules" id="quickFillRules" value="{{ qf|tojson }}"/>
 
         <table class="pricing-table">
           <thead>
@@ -331,7 +345,7 @@
           <label>Waste Disposal Method</label>
           <select name="disposal" class="form-control">
             <option value="">— Select —</option>
-            {% for opt in ["Remove from property (bag & haul)", "Bag and leave at property", "Compost on-site", "Client preference"] %}
+            {% for opt in ["Haul-Away", "Customer's Bin", "Compost On-Site", "Client Preference"] %}
             <option value="{{ opt }}" {{ 'selected' if policies.get('disposal') == opt else '' }}>{{ opt }}</option>
             {% endfor %}
           </select>
@@ -764,31 +778,37 @@ if (hqLat && hqLon) {
   else setBanner(true, 'Enter a business address above to center the map and load ZIP territories.');
 }
 
-// ─── Pricing Quick Fill — base + floor((dogs-1)/Y) * X ───
-function quickFill() {
-  var X = parseFloat(document.getElementById('qf_X').value);
-  var Y = parseFloat(document.getElementById('qf_Y').value) || 1;
-  if (isNaN(X)) X = 0;
-
-  // dog column index: col '1'→dogs=1, '2'→dogs=2, '3'→dogs=3, '4p'→dogs=4
+// ─── Pricing Quick Fill — per-frequency: base + floor((dogs-1)/incrementDogs) * surchargeAmount ───
+function applyQuickFill() {
   var colDogs = {'1': 1, '2': 2, '3': 3, '4p': 4};
+  var rules = {};
 
   FREQUENCIES.forEach(function(freq) {
     var fkey = freq.replace(/ /g,'_').replace(/-/g,'_');
-    var base = parseFloat(document.getElementById('qf_' + fkey) ? document.getElementById('qf_' + fkey).value : '');
+    var baseEl = document.getElementById('qf_' + fkey + '_base');
+    var surEl  = document.getElementById('qf_' + fkey + '_surcharge');
+    var incrEl = document.getElementById('qf_' + fkey + '_incr');
+    if (!baseEl) return;
+    var base = parseFloat(baseEl.value);
     if (isNaN(base)) return;
+    var surcharge = parseFloat(surEl.value) || 0;
+    var incr = parseFloat(incrEl.value) || 1;
+
+    // Store rule for persistence
+    rules[fkey] = { base: base.toFixed(2), surchargeAmount: surcharge.toFixed(2), incrementDogs: incr };
+
+    // Apply formula to price cells
     Object.keys(colDogs).forEach(function(col) {
       var el = document.getElementById('price_' + fkey + '_' + col);
       if (!el) return;
       var dogs = colDogs[col];
-      var price = base + Math.floor((dogs - 1) / Y) * X;
+      var price = base + Math.floor((dogs - 1) / incr) * surcharge;
       el.value = price.toFixed(2);
     });
   });
 
-  // Save quick-fill rules to hidden inputs
-  document.getElementById('qf_X_saved').value = X;
-  document.getElementById('qf_Y_saved').value = Y;
+  // Persist rules as JSON for save route
+  document.getElementById('quickFillRules').value = JSON.stringify(rules);
 }
 
 // ─── Greeting preview ───
