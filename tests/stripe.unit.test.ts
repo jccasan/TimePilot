@@ -5,30 +5,35 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // that reqOpts() never passes an empty {} as the second argument.
 
 const mockCustomerCreate = vi.fn();
+const mockCustomerRetrieve = vi.fn();
 const mockPaymentMethodsList = vi.fn();
+const mockPaymentMethodsDetach = vi.fn();
 const mockPaymentIntentsCreate = vi.fn();
+const mockPaymentIntentsRetrieve = vi.fn();
+const mockSetupIntentsCreate = vi.fn();
+const mockCheckoutSessionsCreate = vi.fn();
 
 vi.mock("stripe", () => {
   function MockStripe() {
     return {
       customers: {
         create: mockCustomerCreate,
-        retrieve: vi.fn(),
+        retrieve: mockCustomerRetrieve,
       },
       paymentMethods: {
         list: mockPaymentMethodsList,
-        detach: vi.fn(),
+        detach: mockPaymentMethodsDetach,
         create: vi.fn(),
         attach: vi.fn(),
       },
       paymentIntents: {
         create: mockPaymentIntentsCreate,
-        retrieve: vi.fn(),
+        retrieve: mockPaymentIntentsRetrieve,
       },
-      setupIntents: { create: vi.fn() },
+      setupIntents: { create: mockSetupIntentsCreate },
       accounts: { create: vi.fn(), retrieve: vi.fn(), createLoginLink: vi.fn() },
       accountLinks: { create: vi.fn() },
-      checkout: { sessions: { create: vi.fn() } },
+      checkout: { sessions: { create: mockCheckoutSessionsCreate } },
       webhooks: { constructEvent: vi.fn() },
       billingPortal: { sessions: { create: vi.fn() } },
       billing: { meterEvents: { create: vi.fn() } },
@@ -47,6 +52,12 @@ const {
   createStripeCustomer,
   createPaymentIntent,
   chargeInvoiceAutomatically,
+  createSetupIntent,
+  getCustomerPaymentMethods,
+  createCheckoutSession,
+  detachPaymentMethod,
+  ensureConnectedCustomer,
+  retrievePaymentIntentFees,
 } = await import("../server/services/stripe.js");
 
 // =============================================================================
@@ -326,5 +337,356 @@ describe("chargeInvoiceAutomatically()", () => {
     expect(params.metadata.invoiceId).toBe("inv_999");
     expect(params.metadata.invoiceNumber).toBe("INV-999");
     expect(params.metadata.tenant_id).toBe("tenant_xyz");
+  });
+});
+
+// =============================================================================
+// createSetupIntent() integration tests (Stripe SDK mocked)
+// =============================================================================
+
+describe("createSetupIntent()", () => {
+  beforeEach(() => {
+    mockSetupIntentsCreate.mockResolvedValue({
+      id: "seti_test123",
+      client_secret: "seti_test123_secret",
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("passes undefined (not {}) as request options when no stripeAccount", async () => {
+    await createSetupIntent("cus_abc");
+
+    expect(mockSetupIntentsCreate).toHaveBeenCalledOnce();
+    const [, opts] = mockSetupIntentsCreate.mock.calls[0];
+    expect(opts).toBeUndefined();
+    expect(opts).not.toEqual({});
+  });
+
+  it("passes { stripeAccount } as request options when stripeAccount is provided", async () => {
+    await createSetupIntent("cus_abc", "acct_connect");
+
+    const [, opts] = mockSetupIntentsCreate.mock.calls[0];
+    expect(opts).toEqual({ stripeAccount: "acct_connect" });
+  });
+
+  it("passes undefined options when stripeAccount is null", async () => {
+    await createSetupIntent("cus_abc", null);
+
+    const [, opts] = mockSetupIntentsCreate.mock.calls[0];
+    expect(opts).toBeUndefined();
+  });
+
+  it("returns the setupIntentId and clientSecret", async () => {
+    const result = await createSetupIntent("cus_abc");
+    expect(result.setupIntentId).toBe("seti_test123");
+    expect(result.clientSecret).toBe("seti_test123_secret");
+  });
+});
+
+// =============================================================================
+// getCustomerPaymentMethods() integration tests (Stripe SDK mocked)
+// =============================================================================
+
+describe("getCustomerPaymentMethods()", () => {
+  beforeEach(() => {
+    mockPaymentMethodsList.mockResolvedValue({
+      data: [
+        {
+          id: "pm_visa",
+          card: { brand: "visa", last4: "4242", exp_month: 12, exp_year: 2028 },
+        },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("passes undefined (not {}) as request options when no stripeAccount", async () => {
+    await getCustomerPaymentMethods("cus_abc");
+
+    expect(mockPaymentMethodsList).toHaveBeenCalledOnce();
+    const [, opts] = mockPaymentMethodsList.mock.calls[0];
+    expect(opts).toBeUndefined();
+    expect(opts).not.toEqual({});
+  });
+
+  it("passes { stripeAccount } as request options when stripeAccount is provided", async () => {
+    await getCustomerPaymentMethods("cus_abc", "acct_connect");
+
+    const [, opts] = mockPaymentMethodsList.mock.calls[0];
+    expect(opts).toEqual({ stripeAccount: "acct_connect" });
+  });
+
+  it("passes undefined options when stripeAccount is null", async () => {
+    await getCustomerPaymentMethods("cus_abc", null);
+
+    const [, opts] = mockPaymentMethodsList.mock.calls[0];
+    expect(opts).toBeUndefined();
+  });
+
+  it("returns mapped payment method data", async () => {
+    const result = await getCustomerPaymentMethods("cus_abc");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("pm_visa");
+    expect(result[0].brand).toBe("visa");
+    expect(result[0].last4).toBe("4242");
+  });
+});
+
+// =============================================================================
+// createCheckoutSession() integration tests (Stripe SDK mocked)
+// =============================================================================
+
+describe("createCheckoutSession()", () => {
+  const baseParams = {
+    customerId: "cus_abc",
+    invoiceId: "inv_1",
+    invoiceNumber: "INV-001",
+    amount: 100,
+    successUrl: "https://example.com/success",
+    cancelUrl: "https://example.com/cancel",
+  };
+
+  beforeEach(() => {
+    mockCheckoutSessionsCreate.mockResolvedValue({
+      id: "cs_test123",
+      url: "https://checkout.stripe.com/pay/cs_test123",
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("passes undefined (not {}) as request options when no stripeConnectAccountId", async () => {
+    await createCheckoutSession(baseParams);
+
+    expect(mockCheckoutSessionsCreate).toHaveBeenCalledOnce();
+    const [, opts] = mockCheckoutSessionsCreate.mock.calls[0];
+    expect(opts).toBeUndefined();
+    expect(opts).not.toEqual({});
+  });
+
+  it("passes { stripeAccount } as request options when stripeConnectAccountId is provided", async () => {
+    await createCheckoutSession({ ...baseParams, stripeConnectAccountId: "acct_connect" });
+
+    const [, opts] = mockCheckoutSessionsCreate.mock.calls[0];
+    expect(opts).toEqual({ stripeAccount: "acct_connect" });
+  });
+
+  it("passes undefined options when stripeConnectAccountId is null", async () => {
+    await createCheckoutSession({ ...baseParams, stripeConnectAccountId: null });
+
+    const [, opts] = mockCheckoutSessionsCreate.mock.calls[0];
+    expect(opts).toBeUndefined();
+  });
+
+  it("includes application_fee_amount when stripeConnectAccountId is provided", async () => {
+    await createCheckoutSession({ ...baseParams, stripeConnectAccountId: "acct_connect" });
+
+    const [params] = mockCheckoutSessionsCreate.mock.calls[0];
+    expect(params.payment_intent_data?.application_fee_amount).toBeGreaterThan(0);
+  });
+
+  it("does not include application_fee_amount when no connected account", async () => {
+    await createCheckoutSession(baseParams);
+
+    const [params] = mockCheckoutSessionsCreate.mock.calls[0];
+    expect(params.payment_intent_data).toBeUndefined();
+  });
+
+  it("returns the sessionId and url", async () => {
+    const result = await createCheckoutSession(baseParams);
+    expect(result.sessionId).toBe("cs_test123");
+    expect(result.url).toBe("https://checkout.stripe.com/pay/cs_test123");
+  });
+});
+
+// =============================================================================
+// detachPaymentMethod() integration tests (Stripe SDK mocked)
+// =============================================================================
+
+describe("detachPaymentMethod()", () => {
+  beforeEach(() => {
+    mockPaymentMethodsDetach.mockResolvedValue({ id: "pm_detached" });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("passes undefined (not {}) as request options when no stripeAccount", async () => {
+    await detachPaymentMethod("pm_card_123");
+
+    expect(mockPaymentMethodsDetach).toHaveBeenCalledOnce();
+    const [, opts] = mockPaymentMethodsDetach.mock.calls[0];
+    expect(opts).toBeUndefined();
+    expect(opts).not.toEqual({});
+  });
+
+  it("passes { stripeAccount } as request options when stripeAccount is provided", async () => {
+    await detachPaymentMethod("pm_card_123", "acct_connect");
+
+    const [, opts] = mockPaymentMethodsDetach.mock.calls[0];
+    expect(opts).toEqual({ stripeAccount: "acct_connect" });
+  });
+
+  it("passes undefined options when stripeAccount is null", async () => {
+    await detachPaymentMethod("pm_card_123", null);
+
+    const [, opts] = mockPaymentMethodsDetach.mock.calls[0];
+    expect(opts).toBeUndefined();
+  });
+
+  it("passes the payment method id as the first argument", async () => {
+    await detachPaymentMethod("pm_card_xyz", "acct_connect");
+
+    const [pmId] = mockPaymentMethodsDetach.mock.calls[0];
+    expect(pmId).toBe("pm_card_xyz");
+  });
+});
+
+// =============================================================================
+// ensureConnectedCustomer() integration tests (Stripe SDK mocked)
+// =============================================================================
+
+describe("ensureConnectedCustomer()", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("creates a new customer (with undefined options) when currentCustomerId is null and no stripeAccount", async () => {
+    mockCustomerCreate.mockResolvedValue({ id: "cus_new" });
+
+    const result = await ensureConnectedCustomer({
+      currentCustomerId: null,
+      stripeAccount: null,
+      name: "New Customer",
+    });
+
+    expect(result.customerId).toBe("cus_new");
+    expect(result.wasRecreated).toBe(true);
+    const [, opts] = mockCustomerCreate.mock.calls[0];
+    expect(opts).toBeUndefined();
+    expect(opts).not.toEqual({});
+  });
+
+  it("creates a new customer with { stripeAccount } when currentCustomerId is null and stripeAccount provided", async () => {
+    mockCustomerCreate.mockResolvedValue({ id: "cus_new_connected" });
+
+    const result = await ensureConnectedCustomer({
+      currentCustomerId: null,
+      stripeAccount: "acct_connect",
+      name: "New Connected Customer",
+    });
+
+    expect(result.customerId).toBe("cus_new_connected");
+    expect(result.wasRecreated).toBe(true);
+    const [, opts] = mockCustomerCreate.mock.calls[0];
+    expect(opts).toEqual({ stripeAccount: "acct_connect" });
+  });
+
+  it("returns existing customerId without SDK call when stripeAccount is null", async () => {
+    const result = await ensureConnectedCustomer({
+      currentCustomerId: "cus_existing",
+      stripeAccount: null,
+      name: "Existing Customer",
+    });
+
+    expect(result.customerId).toBe("cus_existing");
+    expect(result.wasRecreated).toBe(false);
+    expect(mockCustomerRetrieve).not.toHaveBeenCalled();
+  });
+
+  it("passes { stripeAccount } to customers.retrieve when verifying existing customer", async () => {
+    mockCustomerRetrieve.mockResolvedValue({ id: "cus_existing", deleted: false });
+
+    const result = await ensureConnectedCustomer({
+      currentCustomerId: "cus_existing",
+      stripeAccount: "acct_connect",
+      name: "Existing Customer",
+    });
+
+    expect(result.customerId).toBe("cus_existing");
+    expect(result.wasRecreated).toBe(false);
+    const [, opts] = mockCustomerRetrieve.mock.calls[0];
+    expect(opts).toEqual({ stripeAccount: "acct_connect" });
+    expect(opts).not.toEqual({});
+  });
+});
+
+// =============================================================================
+// retrievePaymentIntentFees() integration tests (Stripe SDK mocked)
+// =============================================================================
+
+describe("retrievePaymentIntentFees()", () => {
+  const fakePI = {
+    id: "pi_fees_123",
+    latest_charge: {
+      balance_transaction: {
+        fee: 320,
+        net: 6680,
+        amount: 7000,
+      },
+    },
+  };
+
+  beforeEach(() => {
+    mockPaymentIntentsRetrieve.mockResolvedValue(fakePI);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("passes undefined (not {}) as request options when no stripeAccount", async () => {
+    await retrievePaymentIntentFees("pi_fees_123");
+
+    expect(mockPaymentIntentsRetrieve).toHaveBeenCalledOnce();
+    const [, , opts] = mockPaymentIntentsRetrieve.mock.calls[0];
+    expect(opts).toBeUndefined();
+    expect(opts).not.toEqual({});
+  });
+
+  it("passes { stripeAccount } as request options when stripeAccount is provided", async () => {
+    await retrievePaymentIntentFees("pi_fees_123", "acct_connect");
+
+    const [, , opts] = mockPaymentIntentsRetrieve.mock.calls[0];
+    expect(opts).toEqual({ stripeAccount: "acct_connect" });
+  });
+
+  it("passes undefined options when stripeAccount is null", async () => {
+    await retrievePaymentIntentFees("pi_fees_123", null);
+
+    const [, , opts] = mockPaymentIntentsRetrieve.mock.calls[0];
+    expect(opts).toBeUndefined();
+  });
+
+  it("returns feeCents, netCents, and grossCents from balance_transaction", async () => {
+    const result = await retrievePaymentIntentFees("pi_fees_123");
+    expect(result).not.toBeNull();
+    expect(result!.feeCents).toBe(320);
+    expect(result!.netCents).toBe(6680);
+    expect(result!.grossCents).toBe(7000);
+  });
+
+  it("returns null when latest_charge is a string (unexpanded)", async () => {
+    mockPaymentIntentsRetrieve.mockResolvedValue({ id: "pi_fees_123", latest_charge: "ch_abc" });
+    const result = await retrievePaymentIntentFees("pi_fees_123");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when balance_transaction is a string (unexpanded)", async () => {
+    mockPaymentIntentsRetrieve.mockResolvedValue({
+      id: "pi_fees_123",
+      latest_charge: { balance_transaction: "txn_abc" },
+    });
+    const result = await retrievePaymentIntentFees("pi_fees_123");
+    expect(result).toBeNull();
   });
 });
