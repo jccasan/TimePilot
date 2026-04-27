@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Prevent Tailwind base resets from breaking Leaflet tile images */
+.leaflet-container img {
+  max-width: none;
+  display: inline;
+}
+.leaflet-container {
+  font: inherit;
+}
+
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);

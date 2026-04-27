@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
 import { DEFAULT_PRICING_CONFIG, DEFAULT_PRICING_RULES, type PricingConfig } from "@shared/schema";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
-import { ZipMapSelector } from "@/components/zip-map-selector";
+import { ZipMapSelector, RadiusMapSelector } from "@/components/zip-map-selector";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -510,11 +510,11 @@ function BusinessIntelligenceStep({
                 />
               </div>
             ) : (
-              <div className="mt-1 space-y-1">
+              <div className="mt-2 space-y-3">
                 <div className="flex items-center gap-3">
                   <input
                     type="range"
-                    min="0"
+                    min="1"
                     max="50"
                     step="1"
                     value={radiusMiles}
@@ -528,7 +528,10 @@ function BusinessIntelligenceStep({
                   />
                   <span className="text-sm font-medium w-16 shrink-0">{radiusMiles} mi</span>
                 </div>
-                <p className="text-xs text-muted-foreground">Radius from your registered business address</p>
+                <RadiusMapSelector
+                  radiusMiles={radiusMiles}
+                  addressHint={companyData.address}
+                />
               </div>
             )}
           </div>
