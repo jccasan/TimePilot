@@ -8,6 +8,9 @@ const COLOR_UNSEL = "#4b9e5f";
 const COLOR_SEL   = "#16a34a";
 const COLOR_HOVER = "#bbf7d0";
 const MILES_TO_M  = 1609.34;
+const DEFAULT_ZOOM = 11;   // ~15-mile view
+
+function isZip(s: string) { return /^\d{5}$/.test(s); }
 
 async function geocodeAddress(address: string): Promise<L.LatLngExpression | null> {
   try {
@@ -28,6 +31,13 @@ function addOsmLayer(map: L.Map) {
   }).addTo(map);
 }
 
+function invalidate(map: L.Map) {
+  // Run after paint so the container has its final dimensions
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => { map.invalidateSize(); });
+  });
+}
+
 async function fetchZipsInViewport(w: number, s: number, e: number, n: number): Promise<string[]> {
   const p = new URLSearchParams({
     geometry: `${w},${s},${e},${n}`,
@@ -41,7 +51,7 @@ async function fetchZipsInViewport(w: number, s: number, e: number, n: number): 
   try {
     const r = await fetch(`${TIGER_URL}?${p}`);
     const d = await r.json();
-    return (d.features ?? []).map((f: any) => f.attributes?.ZCTA5 as string).filter(Boolean);
+    return (d.features ?? []).map((f: any) => f.attributes?.ZCTA5 as string).filter(isZip);
   } catch { return []; }
 }
 
@@ -73,9 +83,14 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
   const selectedRef  = useRef<Set<string>>(new Set());
   const loadingRef   = useRef(false);
 
-  const [selectedZips, setSelectedZips] = useState<string[]>(() =>
-    value ? value.split(",").map(z => z.trim()).filter(Boolean) : []
-  );
+  // Only keep valid 5-digit ZIP codes from the stored value
+  const [selectedZips, setSelectedZips] = useState<string[]>(() => {
+    const initial = value
+      ? value.split(",").map(z => z.trim()).filter(isZip)
+      : [];
+    selectedRef.current = new Set(initial);
+    return initial;
+  });
   const [loading, setLoading] = useState(false);
 
   function syncSelected(next: Set<string>) {
@@ -88,10 +103,10 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = L.map(containerRef.current, { zoomControl: true }).setView([38.5, -97], 5);
+    // Start without a view — we'll set it after geocoding
+    const map = L.map(containerRef.current, { zoomControl: true });
     mapRef.current = map;
     addOsmLayer(map);
-    setTimeout(() => map.invalidateSize(), 150);
 
     async function loadZips() {
       if (loadingRef.current || map.getZoom() < 8) return;
@@ -106,7 +121,7 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
           const geo = await fetchZipPolygons(fresh.slice(i, i + 50));
           geo.features.forEach(feat => {
             const zip = (feat.properties as any)?.ZCTA5 as string;
-            if (!zip || layersRef.current.has(zip)) return;
+            if (!zip || !isZip(zip) || layersRef.current.has(zip)) return;
             const isSel = selectedRef.current.has(zip);
             const layer = L.geoJSON(feat as any, {
               style: {
@@ -166,14 +181,18 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
     map.on("moveend zoomend", loadZips);
 
     (async () => {
+      // Geocode address to center the map at the saved business location
+      let pos: L.LatLngExpression = [38.5, -97]; // US fallback
       if (addressHint) {
-        const pos = await geocodeAddress(addressHint);
-        if (pos && mapRef.current) {
-          map.setView(pos, 11);
-          setTimeout(() => map.invalidateSize(), 150);
-        }
+        const geocoded = await geocodeAddress(addressHint);
+        if (geocoded) pos = geocoded;
       }
-      loadZips();
+      if (mapRef.current) {
+        map.setView(pos, DEFAULT_ZOOM);
+        invalidate(map);
+        // Load ZIPs for the initial view automatically
+        setTimeout(loadZips, 300);
+      }
     })();
 
     return () => {
@@ -196,7 +215,12 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
 
   return (
     <div className="space-y-2">
-      <div className="relative rounded-md overflow-hidden border border-border" style={{ height: 340 }}>
+      {/* overflow:clip clips visually but does NOT create a scroll container
+          that breaks Leaflet's tile-position calculations */}
+      <div
+        className="relative rounded-md border border-border"
+        style={{ height: 340, overflow: "clip" }}
+      >
         <div ref={containerRef} style={{ height: "100%", width: "100%" }} data-testid="zip-map" />
         {loading && (
           <div className="absolute top-2 right-2 z-[1000] bg-white/90 text-xs text-muted-foreground px-2 py-1 rounded shadow">
@@ -205,7 +229,7 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Zoom in (level 8+) then click ZIP code areas to select your service territory.
+        Click ZIP code areas to select your service territory. Zoom in for more detail.
       </p>
       {selectedZips.length > 0 ? (
         <div className="flex items-center justify-between gap-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-md px-3 py-2">
@@ -250,32 +274,26 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = L.map(containerRef.current, { zoomControl: true, scrollWheelZoom: false })
-      .setView(centerRef.current, 9);
+    const map = L.map(containerRef.current, { zoomControl: true, scrollWheelZoom: false });
     mapRef.current = map;
     addOsmLayer(map);
-    setTimeout(() => map.invalidateSize(), 150);
-
-    const circle = L.circle(centerRef.current, {
-      radius: radiusMiles * MILES_TO_M,
-      color: "#15803d",
-      fillColor: "#16a34a",
-      fillOpacity: 0.2,
-      weight: 2,
-    }).addTo(map);
-    circleRef.current = circle;
-    map.fitBounds(circle.getBounds(), { padding: [24, 24] });
 
     (async () => {
       if (addressHint) {
         const pos = await geocodeAddress(addressHint);
-        if (pos && mapRef.current) {
-          centerRef.current = pos;
-          circle.setLatLng(pos);
-          map.fitBounds(circle.getBounds(), { padding: [24, 24] });
-          setTimeout(() => map.invalidateSize(), 150);
-        }
+        if (pos) centerRef.current = pos;
       }
+      if (!mapRef.current) return;
+      const circle = L.circle(centerRef.current, {
+        radius: radiusMiles * MILES_TO_M,
+        color: "#15803d",
+        fillColor: "#16a34a",
+        fillOpacity: 0.2,
+        weight: 2,
+      }).addTo(map);
+      circleRef.current = circle;
+      map.fitBounds(circle.getBounds(), { padding: [24, 24] });
+      invalidate(map);
     })();
 
     return () => {
@@ -293,7 +311,10 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
 
   return (
     <div className="space-y-2">
-      <div className="rounded-md overflow-hidden border border-border" style={{ height: 260 }}>
+      <div
+        className="rounded-md border border-border"
+        style={{ height: 260, overflow: "clip" }}
+      >
         <div ref={containerRef} style={{ height: "100%", width: "100%" }} data-testid="radius-map" />
       </div>
       <p className="text-xs text-muted-foreground">
