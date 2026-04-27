@@ -1772,9 +1772,7 @@ export async function registerRoutes(
     try {
       const { companyId } = await getCompanyContext(req);
       const demoId = await getDemoCompanyId();
-      if (demoId && demoId === companyId) {
-        await db.execute(sql`UPDATE companies SET business_onboarding_step = 0, business_onboarding_complete = false WHERE id = ${companyId} AND business_onboarding_complete = true`);
-      }
+      const isDemo = demoId && demoId === companyId;
       const result = await db.execute(sql`SELECT name, email, phone, address, logo_url, website_url, business_description, service_area_description, pricing_config, stripe_connect_account_id, stripe_connect_onboarded, business_onboarding_step, business_onboarding_complete FROM companies WHERE id = ${companyId}`);
       const rows = result.rows as Record<string, unknown>[];
       if (!rows || rows.length === 0) return res.status(404).json({ error: "Company not found" });
@@ -1783,7 +1781,7 @@ export async function registerRoutes(
       const completedSteps: number[] = Array.from({ length: step }, (_, i) => i);
       res.json({
         currentStep: step,
-        isComplete: (row.business_onboarding_complete as boolean) ?? false,
+        isComplete: isDemo ? false : ((row.business_onboarding_complete as boolean) ?? false),
         completedSteps,
         companyData: {
           name: row.name,
@@ -1843,9 +1841,12 @@ export async function registerRoutes(
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
-      await db.execute(
-        sql`UPDATE companies SET business_onboarding_complete = true, business_onboarding_step = 5 WHERE id = ${companyId}`
-      );
+      const demoId = await getDemoCompanyId();
+      if (!demoId || demoId !== companyId) {
+        await db.execute(
+          sql`UPDATE companies SET business_onboarding_complete = true, business_onboarding_step = 5 WHERE id = ${companyId}`
+        );
+      }
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
