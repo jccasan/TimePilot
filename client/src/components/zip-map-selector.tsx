@@ -31,11 +31,22 @@ function addOsmLayer(map: L.Map) {
   }).addTo(map);
 }
 
-function invalidate(map: L.Map) {
-  // Run after paint so the container has its final dimensions
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => { map.invalidateSize(); });
+/** Hook up a ResizeObserver so invalidateSize fires whenever the container changes. */
+function observeSize(el: HTMLElement, map: L.Map): () => void {
+  let lastW = 0;
+  let lastH = 0;
+  const ro = new ResizeObserver(entries => {
+    for (const e of entries) {
+      const { width, height } = e.contentRect;
+      if (width !== lastW || height !== lastH) {
+        lastW = width;
+        lastH = height;
+        if (width > 0 && height > 0) map.invalidateSize();
+      }
+    }
   });
+  ro.observe(el);
+  return () => ro.disconnect();
 }
 
 async function fetchZipsInViewport(w: number, s: number, e: number, n: number): Promise<string[]> {
@@ -101,12 +112,16 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
   }
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    const el = containerRef.current;
+    if (!el || mapRef.current) return;
 
-    // Start without a view — we'll set it after geocoding
-    const map = L.map(containerRef.current, { zoomControl: true });
+    // Create map without an initial view — we set it after geocoding
+    const map = L.map(el, { zoomControl: true });
     mapRef.current = map;
     addOsmLayer(map);
+
+    // ResizeObserver: every time the container actually resizes, re-sync tiles
+    const stopObserving = observeSize(el, map);
 
     async function loadZips() {
       if (loadingRef.current || map.getZoom() < 8) return;
@@ -181,21 +196,19 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
     map.on("moveend zoomend", loadZips);
 
     (async () => {
-      // Geocode address to center the map at the saved business location
       let pos: L.LatLngExpression = [38.5, -97]; // US fallback
       if (addressHint) {
         const geocoded = await geocodeAddress(addressHint);
         if (geocoded) pos = geocoded;
       }
-      if (mapRef.current) {
-        map.setView(pos, DEFAULT_ZOOM);
-        invalidate(map);
-        // Load ZIPs for the initial view automatically
-        setTimeout(loadZips, 300);
-      }
+      if (!mapRef.current) return;
+      map.setView(pos, DEFAULT_ZOOM);
+      // Load ZIPs for the initial view
+      setTimeout(loadZips, 400);
     })();
 
     return () => {
+      stopObserving();
       map.remove();
       mapRef.current = null;
       layersRef.current.clear();
@@ -215,13 +228,20 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
 
   return (
     <div className="space-y-2">
-      {/* overflow:clip clips visually but does NOT create a scroll container
-          that breaks Leaflet's tile-position calculations */}
+      {/*
+        The wrapper must NOT use overflow-hidden — that creates a scroll-container
+        BFC which breaks Leaflet's tile-position math.
+        border-radius is applied to the inner div instead.
+      */}
       <div
-        className="relative rounded-md border border-border"
-        style={{ height: 340, overflow: "clip" }}
+        className="relative border border-border"
+        style={{ height: 340, borderRadius: 6 }}
       >
-        <div ref={containerRef} style={{ height: "100%", width: "100%" }} data-testid="zip-map" />
+        <div
+          ref={containerRef}
+          style={{ height: "100%", width: "100%", borderRadius: 6 }}
+          data-testid="zip-map"
+        />
         {loading && (
           <div className="absolute top-2 right-2 z-[1000] bg-white/90 text-xs text-muted-foreground px-2 py-1 rounded shadow">
             Loading ZIPs…
@@ -272,11 +292,14 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
   const centerRef    = useRef<L.LatLngExpression>([38.5, -97]);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    const el = containerRef.current;
+    if (!el || mapRef.current) return;
 
-    const map = L.map(containerRef.current, { zoomControl: true, scrollWheelZoom: false });
+    const map = L.map(el, { zoomControl: true, scrollWheelZoom: false });
     mapRef.current = map;
     addOsmLayer(map);
+
+    const stopObserving = observeSize(el, map);
 
     (async () => {
       if (addressHint) {
@@ -293,10 +316,10 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
       }).addTo(map);
       circleRef.current = circle;
       map.fitBounds(circle.getBounds(), { padding: [24, 24] });
-      invalidate(map);
     })();
 
     return () => {
+      stopObserving();
       map.remove();
       mapRef.current = null;
       circleRef.current = null;
@@ -312,10 +335,14 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
   return (
     <div className="space-y-2">
       <div
-        className="rounded-md border border-border"
-        style={{ height: 260, overflow: "clip" }}
+        className="border border-border"
+        style={{ height: 260, borderRadius: 6 }}
       >
-        <div ref={containerRef} style={{ height: "100%", width: "100%" }} data-testid="radius-map" />
+        <div
+          ref={containerRef}
+          style={{ height: "100%", width: "100%", borderRadius: 6 }}
+          data-testid="radius-map"
+        />
       </div>
       <p className="text-xs text-muted-foreground">
         Shaded area = your {radiusMiles}-mile service radius from your business address.
