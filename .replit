@@ -47,6 +47,10 @@ args = "typecheck"
 task = "workflow.run"
 args = "Voice Agent Wizard"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "stripe-unit-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -88,6 +92,17 @@ args = "python wizard/app.py"
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow]]
+name = "stripe-unit-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx vitest run --reporter=verbose"
+
+[workflows.workflow.metadata]
+isValidation = true
 
 [agent]
 integrations = ["javascript_database:1.0.0", "javascript_object_storage:2.0.0", "javascript_websocket:1.0.0", "javascript_openai_ai_integrations:2.0.0"]

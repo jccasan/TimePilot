@@ -28,7 +28,7 @@ export function isStripeConfigured(): boolean {
  * When stripeAccount IS provided, { stripeAccount } is a valid options hash
  * (isOptionsHash returns true) and is processed correctly by the SDK.
  */
-function reqOpts(stripeAccount?: string | null): Stripe.RequestOptions | undefined {
+export function reqOpts(stripeAccount?: string | null): Stripe.RequestOptions | undefined {
   return stripeAccount ? { stripeAccount } : undefined;
 }
 
