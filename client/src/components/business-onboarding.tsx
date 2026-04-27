@@ -307,8 +307,6 @@ function BusinessIntelligenceStep({
   const [serviceArea, setServiceArea] = useState(companyData.serviceAreaDescription || "");
   const [serviceAreaMode, setServiceAreaMode] = useState<"zip" | "radius">("zip");
   const [radiusMiles, setRadiusMiles] = useState(15);
-  const [csvSummary, setCsvSummary] = useState<{ totalRows: number; priceColumns: string[]; frequencyColumns: string[] } | null>(null);
-
   const scrapeMutation = useMutation({
     mutationFn: async (url: string) => {
       const res = await apiRequest("POST", "/api/onboarding/scrape-website", { websiteUrl: url });
@@ -332,35 +330,6 @@ function BusinessIntelligenceStep({
       toast({ title: "Error", description: "Failed to analyze website.", variant: "destructive" });
     },
   });
-
-  const csvMutation = useMutation({
-    mutationFn: async (csvText: string) => {
-      const res = await apiRequest("POST", "/api/onboarding/import-pricing-csv", { csvText });
-      return res.json();
-    },
-    onSuccess: (data) => {
-      if (data.success) {
-        setCsvSummary(data.summary);
-        toast({ title: "CSV parsed", description: `Found ${data.summary.totalRows} rows of pricing data.` });
-      } else {
-        toast({ title: "Error", description: data.error || "Could not parse CSV.", variant: "destructive" });
-      }
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to parse CSV.", variant: "destructive" });
-    },
-  });
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      csvMutation.mutate(text);
-    };
-    reader.readAsText(file);
-  };
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -428,40 +397,6 @@ function BusinessIntelligenceStep({
             </CardContent>
           </Card>
         )}
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Upload className="h-4 w-4" />
-              Import Pricing CSV
-            </CardTitle>
-            <CardDescription>Upload a CSV with your current pricing data to help set up your rate card.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Input
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              data-testid="input-csv-upload"
-            />
-            {csvMutation.isPending && (
-              <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Parsing CSV...
-              </div>
-            )}
-            {csvSummary && (
-              <div className="mt-3 p-3 bg-muted/50 rounded-lg text-sm space-y-1">
-                <p><span className="font-medium">{csvSummary.totalRows}</span> rows found</p>
-                {csvSummary.priceColumns.length > 0 && (
-                  <p>Price columns: <span className="text-muted-foreground">{csvSummary.priceColumns.join(", ")}</span></p>
-                )}
-                {csvSummary.frequencyColumns.length > 0 && (
-                  <p>Frequency columns: <span className="text-muted-foreground">{csvSummary.frequencyColumns.join(", ")}</span></p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
         <div className="space-y-4">
           <div>
@@ -597,6 +532,38 @@ function PricingSetupStep({
   onSkip: () => void;
   isPending: boolean;
 }) {
+  const { toast } = useToast();
+  const [csvSummary, setCsvSummary] = useState<{ totalRows: number; priceColumns: string[]; frequencyColumns: string[] } | null>(null);
+
+  const csvMutation = useMutation({
+    mutationFn: async (csvText: string) => {
+      const res = await apiRequest("POST", "/api/onboarding/import-pricing-csv", { csvText });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        setCsvSummary(data.summary);
+        toast({ title: "CSV parsed", description: `Found ${data.summary.totalRows} rows of pricing data.` });
+      } else {
+        toast({ title: "Error", description: data.error || "Could not parse CSV.", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to parse CSV.", variant: "destructive" });
+    },
+  });
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      csvMutation.mutate(text);
+    };
+    reader.readAsText(file);
+  };
+
   const existingConfig = { ...DEFAULT_PRICING_CONFIG, ...(companyData.pricingConfig || {}) };
   const existingRules = existingConfig.pricingRules || DEFAULT_PRICING_RULES;
 
@@ -667,6 +634,40 @@ function PricingSetupStep({
       </div>
 
       <div className="space-y-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              Import Pricing CSV
+            </CardTitle>
+            <CardDescription>Upload a CSV with your current pricing data to help set up your rate card.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Input
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              data-testid="input-csv-upload"
+            />
+            {csvMutation.isPending && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Parsing CSV...
+              </div>
+            )}
+            {csvSummary && (
+              <div className="mt-3 p-3 bg-muted/50 rounded-lg text-sm space-y-1">
+                <p><span className="font-medium">{csvSummary.totalRows}</span> rows found</p>
+                {csvSummary.priceColumns.length > 0 && (
+                  <p>Price columns: <span className="text-muted-foreground">{csvSummary.priceColumns.join(", ")}</span></p>
+                )}
+                {csvSummary.frequencyColumns.length > 0 && (
+                  <p>Frequency columns: <span className="text-muted-foreground">{csvSummary.frequencyColumns.join(", ")}</span></p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <div>
           <label className="text-sm font-medium mb-3 block">Pricing Strategy</label>
           <div className="grid grid-cols-3 gap-3">
