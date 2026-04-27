@@ -329,10 +329,13 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
       }
       if (cancelled) return;
 
-      // Step 3: Create map + fitBounds synchronously — no async gap
+      // Step 3: Create map + set initial view + add circle + fitBounds synchronously
+      // setView() must come before circle.getBounds() — Leaflet needs a projection
+      // to compute geographic bounds from a pixel-radius circle.
       map = L.map(container, { zoomControl: true, scrollWheelZoom: false });
       mapRef.current = map;
       addOsmLayer(map);
+      map.setView(centerRef.current, 10, { animate: false });
 
       const circle = L.circle(centerRef.current, {
         radius: radiusRef.current * MILES_TO_M,
