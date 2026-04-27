@@ -1,0 +1,46 @@
+Objective:
+Build a Python-based web application (using Flask or Streamlit) that serves as a comprehensive onboarding wizard for service-based businesses. This app must consolidate operational data, pricing models, and service policies into a standardized tenantConfig JSON object used by AI voice agents and business documentation tools.
+
+1. Dual-Path Data Architecture:
+
+The Bridge: On the landing page, the user enters a Business Phone Number.
+
+The Logic:
+
+Attempt Fetch: Call https://app.scooppilot.com/api/retell/tenant-profile?to=[phone_number].
+
+Data Merge: If data is found, pre-populate the onboarding forms. If not, initialize a blank "Voice-Only" profile.
+
+Storage: Save all finalized configurations to a local persistent database (Replit KV or TinyDB) to ensure "Agent-Only" users are fully supported even without a ScooPilot subscription.
+
+2. Onboarding Modules (The "Business DNA"):
+
+General Profile: Legal Name, Primary Service (e.g., Pet Waste, Bin Cleaning, Lawn Care), Service Area (ZIP codes), and Business Timezone.
+
+Pricing Engine:
+
+Create a dynamic table for service frequencies (One-Time, Weekly, Bi-Weekly, Monthly).
+
+Include a "Niche Variable" section for dog counts or yard sizes.
+
+Add a specific field for "Initial Cleanup Surcharge" logic.
+
+Operational Policies:
+
+Access: Rules for gates, codes, and aggressive dogs.
+
+Scheduling: Vacation hold policies (requires start/end dates) and rescheduling rules.
+
+Escalation: The managerPhone for AI-to-Human transfers.
+
+3. Voice Agent Extraction & Sync:
+
+Variable Mapping: Automatically map the captured data into the exact tenantConfig structure required by the Retell AI Agent.
+
+Preview Mode: Show a "What the AI will say" preview, using the greeting logic: "Thanks for calling [Business Name], how can I help you today?"
+
+4. Documentation & API Output:
+
+Handbooks: Generate a Markdown "Agent Handbook" that summarizes the business rules for the AI to use as a knowledge base.
+
+Retell Endpoint: Create a secure GET endpoint at /api/config/<phone_number> that returns the cleaned JSON for the Retell LOADTENANTPROFILEANDKB tool.
