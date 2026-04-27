@@ -2,13 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Prevent Tailwind base resets from breaking Leaflet tile images */
+/* Prevent Tailwind base resets from breaking Leaflet tile rendering */
 .leaflet-container img {
-  max-width: none;
-  display: inline;
+  max-width: none !important;
+  display: inline !important;
+  box-sizing: content-box !important;
 }
 .leaflet-container {
   font: inherit;
+  box-sizing: content-box;
+}
+.leaflet-tile-pane img {
+  width: 256px !important;
+  height: 256px !important;
 }
 
 :root {
