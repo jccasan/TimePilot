@@ -8,7 +8,7 @@ const COLOR_UNSEL = "#4b9e5f";
 const COLOR_SEL   = "#16a34a";
 const COLOR_HOVER = "#bbf7d0";
 const MILES_TO_M  = 1609.34;
-const DEFAULT_ZOOM = 11;   // ~15-mile view
+const DEFAULT_ZOOM = 11;
 
 function isZip(s: string) { return /^\d{5}$/.test(s); }
 
@@ -31,22 +31,34 @@ function addOsmLayer(map: L.Map) {
   }).addTo(map);
 }
 
-/** Hook up a ResizeObserver so invalidateSize fires whenever the container changes. */
-function observeSize(el: HTMLElement, map: L.Map): () => void {
-  let lastW = 0;
-  let lastH = 0;
-  const ro = new ResizeObserver(entries => {
-    for (const e of entries) {
-      const { width, height } = e.contentRect;
-      if (width !== lastW || height !== lastH) {
-        lastW = width;
-        lastH = height;
-        if (width > 0 && height > 0) map.invalidateSize();
+/**
+ * Poll with rAF until the element's clientWidth and clientHeight are both
+ * non-zero and stable for at least NEEDED consecutive frames.
+ * Uses clientWidth/clientHeight (not getBoundingClientRect) because Leaflet
+ * itself uses clientWidth/clientHeight for its size calculation.
+ */
+function waitForStableSize(el: HTMLElement, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let lastW = -1;
+    let lastH = -1;
+    let stable = 0;
+    const NEEDED = 4;
+
+    function check() {
+      if (signal.aborted) { reject(new Error("aborted")); return; }
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w > 0 && h > 0 && w === lastW && h === lastH) {
+        if (++stable >= NEEDED) { resolve(); return; }
+      } else {
+        stable = 0;
+        lastW = w;
+        lastH = h;
       }
+      requestAnimationFrame(check);
     }
+    requestAnimationFrame(check);
   });
-  ro.observe(el);
-  return () => ro.disconnect();
 }
 
 async function fetchZipsInViewport(w: number, s: number, e: number, n: number): Promise<string[]> {
@@ -94,7 +106,6 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
   const selectedRef  = useRef<Set<string>>(new Set());
   const loadingRef   = useRef(false);
 
-  // Only keep valid 5-digit ZIP codes from the stored value
   const [selectedZips, setSelectedZips] = useState<string[]>(() => {
     const initial = value
       ? value.split(",").map(z => z.trim()).filter(isZip)
@@ -115,107 +126,122 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
     const el = containerRef.current;
     if (!el || mapRef.current) return;
 
-    // Create map without an initial view — we set it after geocoding
-    const map = L.map(el, { zoomControl: true });
-    mapRef.current = map;
-    addOsmLayer(map);
-
-    // ResizeObserver: every time the container actually resizes, re-sync tiles
-    const stopObserving = observeSize(el, map);
-
-    async function loadZips() {
-      if (loadingRef.current || map.getZoom() < 8) return;
-      loadingRef.current = true;
-      setLoading(true);
-      try {
-        const b = map.getBounds();
-        const all = await fetchZipsInViewport(b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
-        const fresh = all.filter(z => !layersRef.current.has(z));
-        if (!fresh.length) return;
-        for (let i = 0; i < fresh.length; i += 50) {
-          const geo = await fetchZipPolygons(fresh.slice(i, i + 50));
-          geo.features.forEach(feat => {
-            const zip = (feat.properties as any)?.ZCTA5 as string;
-            if (!zip || !isZip(zip) || layersRef.current.has(zip)) return;
-            const isSel = selectedRef.current.has(zip);
-            const layer = L.geoJSON(feat as any, {
-              style: {
-                color: "#15803d", weight: 1.5,
-                fillColor: isSel ? COLOR_SEL : COLOR_UNSEL,
-                fillOpacity: isSel ? 0.45 : 0.12,
-              },
-            });
-            layer.on("mouseover", () => {
-              if (!selectedRef.current.has(zip))
-                layer.setStyle({ fillColor: COLOR_HOVER, fillOpacity: 0.35 });
-            });
-            layer.on("mouseout", () => {
-              if (!selectedRef.current.has(zip))
-                layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
-            });
-            layer.on("click", () => {
-              const next = new Set(selectedRef.current);
-              if (next.has(zip)) {
-                next.delete(zip);
-                layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
-              } else {
-                next.add(zip);
-                layer.setStyle({ fillColor: COLOR_SEL, fillOpacity: 0.45 });
-              }
-              syncSelected(next);
-            });
-            // ZIP label at polygon centroid
-            const ring =
-              feat.geometry.type === "Polygon" ? feat.geometry.coordinates[0] :
-              feat.geometry.type === "MultiPolygon" ? feat.geometry.coordinates[0][0] : null;
-            if (ring?.length) {
-              const xs = (ring as number[][]).map(c => c[0]);
-              const ys = (ring as number[][]).map(c => c[1]);
-              const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-              const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-              L.marker([cy, cx], {
-                icon: L.divIcon({
-                  className: "",
-                  html: `<span style="font-size:10px;font-weight:700;color:#14532d;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff">${zip}</span>`,
-                  iconSize: [40, 14],
-                  iconAnchor: [20, 7],
-                }),
-                interactive: false,
-              }).addTo(map);
-            }
-            layer.addTo(map);
-            layersRef.current.set(zip, layer);
-          });
-        }
-      } finally {
-        loadingRef.current = false;
-        setLoading(false);
-      }
-    }
-
-    map.on("moveend zoomend", loadZips);
+    const ac = new AbortController();
+    let map: L.Map | null = null;
+    let ro: ResizeObserver | null = null;
 
     (async () => {
-      let pos: L.LatLngExpression = [38.5, -97]; // US fallback
+      // Wait until Leaflet will see a non-zero clientWidth/clientHeight.
+      // Without this, Leaflet initialises at 0×0 and tiles appear at wrong offsets.
+      try {
+        await waitForStableSize(el, ac.signal);
+      } catch { return; }
+      if (ac.signal.aborted || mapRef.current) return;
+
+      map = L.map(el, { zoomControl: true });
+      mapRef.current = map;
+      addOsmLayer(map);
+
+      // Resize observer: re-sync Leaflet whenever the element size changes at runtime
+      ro = new ResizeObserver(() => {
+        if (mapRef.current) mapRef.current.invalidateSize({ animate: false });
+      });
+      ro.observe(el);
+
+      async function loadZips() {
+        if (!mapRef.current || loadingRef.current || mapRef.current.getZoom() < 8) return;
+        loadingRef.current = true;
+        setLoading(true);
+        try {
+          const b = mapRef.current.getBounds();
+          const all = await fetchZipsInViewport(b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
+          const fresh = all.filter(z => !layersRef.current.has(z));
+          if (!fresh.length) return;
+          for (let i = 0; i < fresh.length; i += 50) {
+            if (!mapRef.current) return;
+            const geo = await fetchZipPolygons(fresh.slice(i, i + 50));
+            geo.features.forEach(feat => {
+              const zip = (feat.properties as any)?.ZCTA5 as string;
+              if (!zip || !isZip(zip) || layersRef.current.has(zip)) return;
+              const isSel = selectedRef.current.has(zip);
+              const layer = L.geoJSON(feat as any, {
+                style: {
+                  color: "#15803d", weight: 1.5,
+                  fillColor: isSel ? COLOR_SEL : COLOR_UNSEL,
+                  fillOpacity: isSel ? 0.45 : 0.12,
+                },
+              });
+              layer.on("mouseover", () => {
+                if (!selectedRef.current.has(zip))
+                  layer.setStyle({ fillColor: COLOR_HOVER, fillOpacity: 0.35 });
+              });
+              layer.on("mouseout", () => {
+                if (!selectedRef.current.has(zip))
+                  layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
+              });
+              layer.on("click", () => {
+                const next = new Set(selectedRef.current);
+                if (next.has(zip)) {
+                  next.delete(zip);
+                  layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
+                } else {
+                  next.add(zip);
+                  layer.setStyle({ fillColor: COLOR_SEL, fillOpacity: 0.45 });
+                }
+                syncSelected(next);
+              });
+              const ring =
+                feat.geometry.type === "Polygon" ? feat.geometry.coordinates[0] :
+                feat.geometry.type === "MultiPolygon" ? feat.geometry.coordinates[0][0] : null;
+              if (ring?.length) {
+                const xs = (ring as number[][]).map(c => c[0]);
+                const ys = (ring as number[][]).map(c => c[1]);
+                const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+                const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+                L.marker([cy, cx], {
+                  icon: L.divIcon({
+                    className: "",
+                    html: `<span style="font-size:10px;font-weight:700;color:#14532d;text-shadow:0 0 3px #fff,0 0 3px #fff">${zip}</span>`,
+                    iconSize: [40, 14],
+                    iconAnchor: [20, 7],
+                  }),
+                  interactive: false,
+                }).addTo(map!);
+              }
+              layer.addTo(map!);
+              layersRef.current.set(zip, layer);
+            });
+          }
+        } finally {
+          loadingRef.current = false;
+          setLoading(false);
+        }
+      }
+
+      map.on("moveend zoomend", loadZips);
+
+      let pos: L.LatLngExpression = [38.5, -97];
       if (addressHint) {
         const geocoded = await geocodeAddress(addressHint);
         if (geocoded) pos = geocoded;
       }
-      if (!mapRef.current) return;
+      if (ac.signal.aborted || !mapRef.current) return;
       map.setView(pos, DEFAULT_ZOOM);
-      // Load ZIPs for the initial view
+      map.invalidateSize({ animate: false });
       setTimeout(loadZips, 400);
     })();
 
     return () => {
-      stopObserving();
-      map.remove();
-      mapRef.current = null;
-      layersRef.current.clear();
+      ac.abort();
+      ro?.disconnect();
+      if (map) {
+        map.remove();
+        mapRef.current = null;
+        layersRef.current.clear();
+      }
     };
   }, []);
 
-  // Recolour layers when selection changes externally
   useEffect(() => {
     layersRef.current.forEach((layer, zip) => {
       layer.setStyle(
@@ -229,17 +255,23 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
   return (
     <div className="space-y-2">
       {/*
-        The wrapper must NOT use overflow-hidden — that creates a scroll-container
-        BFC which breaks Leaflet's tile-position math.
-        border-radius is applied to the inner div instead.
+        Layout rules:
+        - The OUTER div owns height (340px) and clips with overflow:hidden.
+          It must be position:relative so children can reference it.
+        - The INNER div (containerRef = Leaflet root) gets width:100% height:100%.
+          Leaflet will set position:relative on it — that's fine because the
+          parent has an explicit height, so height:100% still resolves correctly.
+        - Do NOT put overflow:hidden on containerRef. Leaflet measures
+          clientWidth/clientHeight of its own element. Overflow on a parent
+          wrapper does not interfere with those measurements.
       */}
       <div
-        className="relative border border-border"
-        style={{ height: 340, borderRadius: 6 }}
+        className="relative border border-border rounded-md"
+        style={{ height: 340, overflow: "hidden" }}
       >
         <div
           ref={containerRef}
-          style={{ height: "100%", width: "100%", borderRadius: 6 }}
+          style={{ width: "100%", height: "100%" }}
           data-testid="zip-map"
         />
         {loading && (
@@ -295,18 +327,31 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
     const el = containerRef.current;
     if (!el || mapRef.current) return;
 
-    const map = L.map(el, { zoomControl: true, scrollWheelZoom: false });
-    mapRef.current = map;
-    addOsmLayer(map);
-
-    const stopObserving = observeSize(el, map);
+    const ac = new AbortController();
+    let map: L.Map | null = null;
+    let ro: ResizeObserver | null = null;
 
     (async () => {
+      try {
+        await waitForStableSize(el, ac.signal);
+      } catch { return; }
+      if (ac.signal.aborted || mapRef.current) return;
+
+      map = L.map(el, { zoomControl: true, scrollWheelZoom: false });
+      mapRef.current = map;
+      addOsmLayer(map);
+
+      ro = new ResizeObserver(() => {
+        if (mapRef.current) mapRef.current.invalidateSize({ animate: false });
+      });
+      ro.observe(el);
+
       if (addressHint) {
         const pos = await geocodeAddress(addressHint);
         if (pos) centerRef.current = pos;
       }
-      if (!mapRef.current) return;
+      if (ac.signal.aborted || !mapRef.current) return;
+
       const circle = L.circle(centerRef.current, {
         radius: radiusMiles * MILES_TO_M,
         color: "#15803d",
@@ -316,13 +361,17 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
       }).addTo(map);
       circleRef.current = circle;
       map.fitBounds(circle.getBounds(), { padding: [24, 24] });
+      map.invalidateSize({ animate: false });
     })();
 
     return () => {
-      stopObserving();
-      map.remove();
-      mapRef.current = null;
-      circleRef.current = null;
+      ac.abort();
+      ro?.disconnect();
+      if (map) {
+        map.remove();
+        mapRef.current = null;
+        circleRef.current = null;
+      }
     };
   }, []);
 
@@ -335,12 +384,12 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
   return (
     <div className="space-y-2">
       <div
-        className="border border-border"
-        style={{ height: 260, borderRadius: 6 }}
+        className="relative border border-border rounded-md"
+        style={{ height: 260, overflow: "hidden" }}
       >
         <div
           ref={containerRef}
-          style={{ height: "100%", width: "100%", borderRadius: 6 }}
+          style={{ width: "100%", height: "100%" }}
           data-testid="radius-map"
         />
       </div>
