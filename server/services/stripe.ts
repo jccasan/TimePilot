@@ -17,6 +17,21 @@ export function isStripeConfigured(): boolean {
   return !!process.env.STRIPE_SECRET_KEY;
 }
 
+/**
+ * Build per-request options for Stripe SDK v20.
+ *
+ * Stripe SDK v20 validates extra arguments via isOptionsHash(), which returns
+ * false for an empty object {}. Passing an empty {} as the second argument
+ * causes "Stripe: Unknown arguments ([object Object])". Returning undefined
+ * instead is safe — the SDK filters it out with args.filter(x => x != null).
+ *
+ * When stripeAccount IS provided, { stripeAccount } is a valid options hash
+ * (isOptionsHash returns true) and is processed correctly by the SDK.
+ */
+function reqOpts(stripeAccount?: string | null): Stripe.RequestOptions | undefined {
+  return stripeAccount ? { stripeAccount } : undefined;
+}
+
 export async function createStripeCustomer(params: {
   email?: string;
   name: string;
@@ -25,16 +40,12 @@ export async function createStripeCustomer(params: {
   stripeAccount?: string | null;
 }): Promise<string> {
   const stripe = getStripe();
-  const opts: Stripe.RequestOptions = {};
-  if (params.stripeAccount) {
-    opts.stripeAccount = params.stripeAccount;
-  }
   const customer = await stripe.customers.create({
     email: params.email || undefined,
     name: params.name,
     phone: params.phone || undefined,
     metadata: params.metadata || {},
-  }, opts);
+  }, reqOpts(params.stripeAccount));
   return customer.id;
 }
 
@@ -43,14 +54,10 @@ export async function createSetupIntent(customerId: string, stripeAccount?: stri
   setupIntentId: string;
 }> {
   const stripe = getStripe();
-  const opts: Stripe.RequestOptions = {};
-  if (stripeAccount) {
-    opts.stripeAccount = stripeAccount;
-  }
   const setupIntent = await stripe.setupIntents.create({
     customer: customerId,
     payment_method_types: ["card"],
-  }, opts);
+  }, reqOpts(stripeAccount));
   return {
     clientSecret: setupIntent.client_secret!,
     setupIntentId: setupIntent.id,
@@ -59,14 +66,10 @@ export async function createSetupIntent(customerId: string, stripeAccount?: stri
 
 export async function getCustomerPaymentMethods(customerId: string, stripeAccount?: string | null) {
   const stripe = getStripe();
-  const opts: Stripe.RequestOptions = {};
-  if (stripeAccount) {
-    opts.stripeAccount = stripeAccount;
-  }
   const methods = await stripe.paymentMethods.list({
     customer: customerId,
     type: "card",
-  }, opts);
+  }, reqOpts(stripeAccount));
   return methods.data.map((pm) => ({
     id: pm.id,
     brand: pm.card?.brand || "unknown",
@@ -110,10 +113,7 @@ export async function createPaymentIntent(params: {
     automatic_payment_methods: { enabled: true },
   };
 
-  const opts: Stripe.RequestOptions = {};
-
   if (params.stripeConnectAccountId) {
-    opts.stripeAccount = params.stripeConnectAccountId;
     piParams.application_fee_amount = computeApplicationFee(amountCents);
   }
 
@@ -124,7 +124,7 @@ export async function createPaymentIntent(params: {
     piParams.automatic_payment_methods = undefined;
   }
 
-  const paymentIntent = await stripe.paymentIntents.create(piParams, opts);
+  const paymentIntent = await stripe.paymentIntents.create(piParams, reqOpts(params.stripeConnectAccountId));
   return {
     clientSecret: paymentIntent.client_secret!,
     paymentIntentId: paymentIntent.id,
@@ -147,16 +147,11 @@ export async function chargeInvoiceAutomatically(params: {
 }> {
   const stripe = getStripe();
 
-  const listOpts: Stripe.RequestOptions = {};
-  if (params.stripeConnectAccountId) {
-    listOpts.stripeAccount = params.stripeConnectAccountId;
-  }
-
   const methods = await stripe.paymentMethods.list({
     customer: params.customerId,
     type: "card",
     limit: 1,
-  }, listOpts);
+  }, reqOpts(params.stripeConnectAccountId));
 
   if (methods.data.length === 0) {
     return { paymentIntentId: "", status: "no_payment_method", error: "No payment method on file" };
@@ -179,13 +174,11 @@ export async function chargeInvoiceAutomatically(params: {
       },
     };
 
-    const opts: Stripe.RequestOptions = {};
     if (params.stripeConnectAccountId) {
-      opts.stripeAccount = params.stripeConnectAccountId;
       piParams.application_fee_amount = computeApplicationFee(amountCents);
     }
 
-    const pi = await stripe.paymentIntents.create(piParams, opts);
+    const pi = await stripe.paymentIntents.create(piParams, reqOpts(params.stripeConnectAccountId));
     return { paymentIntentId: pi.id, status: pi.status };
   } catch (err: any) {
     return {
@@ -245,25 +238,19 @@ export async function createCheckoutSession(params: {
     cancel_url: params.cancelUrl,
   };
 
-  const opts: Stripe.RequestOptions = {};
   if (params.stripeConnectAccountId) {
-    opts.stripeAccount = params.stripeConnectAccountId;
     sessionParams.payment_intent_data = {
       application_fee_amount: computeApplicationFee(amountCents),
     };
   }
 
-  const session = await stripe.checkout.sessions.create(sessionParams, opts);
+  const session = await stripe.checkout.sessions.create(sessionParams, reqOpts(params.stripeConnectAccountId));
   return { url: session.url!, sessionId: session.id };
 }
 
 export async function detachPaymentMethod(paymentMethodId: string, stripeAccount?: string | null): Promise<void> {
   const stripe = getStripe();
-  const opts: Stripe.RequestOptions = {};
-  if (stripeAccount) {
-    opts.stripeAccount = stripeAccount;
-  }
-  await stripe.paymentMethods.detach(paymentMethodId, opts);
+  await stripe.paymentMethods.detach(paymentMethodId, reqOpts(stripeAccount));
 }
 
 export async function isCustomerOnPlatform(customerId: string): Promise<boolean> {
@@ -306,7 +293,7 @@ export async function ensureConnectedCustomer(params: {
 
   const stripe = getStripe();
   try {
-    await stripe.customers.retrieve(params.currentCustomerId, { stripeAccount: params.stripeAccount });
+    await stripe.customers.retrieve(params.currentCustomerId, reqOpts(params.stripeAccount));
     return { customerId: params.currentCustomerId, wasRecreated: false };
   } catch (err: unknown) {
     if (isStaleCustomerError(err)) {
@@ -346,7 +333,7 @@ export async function migrateCustomerToConnectedAccount(params: {
     email: params.email || undefined,
     name: params.name,
     metadata: { ...params.metadata, migratedFromPlatform: params.platformCustomerId },
-  }, { stripeAccount: params.stripeAccount });
+  }, reqOpts(params.stripeAccount));
 
   const platformMethods = await stripe.paymentMethods.list({
     customer: params.platformCustomerId,
@@ -363,10 +350,10 @@ export async function migrateCustomerToConnectedAccount(params: {
     try {
       const cloned = await stripe.paymentMethods.create({
         payment_method: pm.id,
-      }, { stripeAccount: params.stripeAccount });
+      }, reqOpts(params.stripeAccount));
       await stripe.paymentMethods.attach(cloned.id, {
         customer: newCustomer.id,
-      }, { stripeAccount: params.stripeAccount });
+      }, reqOpts(params.stripeAccount));
       migratedCount++;
     } catch (cloneErr: any) {
       failedMethods.push(pm.id);
@@ -377,7 +364,7 @@ export async function migrateCustomerToConnectedAccount(params: {
   const destMethods = await stripe.paymentMethods.list({
     customer: newCustomer.id,
     type: "card",
-  }, { stripeAccount: params.stripeAccount });
+  }, reqOpts(params.stripeAccount));
   if (destMethods.data.length !== migratedCount) {
     console.warn(`[Stripe Migration] PM count mismatch for customer ${newCustomer.id}: expected ${migratedCount}, found ${destMethods.data.length}`);
   }
@@ -479,14 +466,10 @@ export async function retrievePaymentIntentFees(
   stripeAccount?: string | null
 ): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
   const stripe = getStripe();
-  const opts: Stripe.RequestOptions = {};
-  if (stripeAccount) {
-    opts.stripeAccount = stripeAccount;
-  }
   const pi = await stripe.paymentIntents.retrieve(
     paymentIntentId,
     { expand: ["latest_charge.balance_transaction"] },
-    opts
+    reqOpts(stripeAccount)
   );
   const piData = pi as unknown as Record<string, unknown>;
   const charge = piData.latest_charge as Record<string, unknown> | string | null;
