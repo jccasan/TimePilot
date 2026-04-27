@@ -19485,7 +19485,35 @@ Respond with exactly one category from the list above and nothing else.`;
   const ERROR_EMAIL_DEBOUNCE_MS = 15 * 60 * 1000;
   const recentErrorEmails = new Map<string, number>();
 
-  function shouldSendErrorEmail(message: string): boolean {
+  type ErrorSeverity = "low" | "medium" | "high" | "critical";
+
+  function classifyErrorSeverity(message: string, errorType: "react" | "js" | "api"): ErrorSeverity {
+    const msg = message.toLowerCase();
+
+    // Critical: app-breaking crashes or security/payment related
+    if (errorType === "react") return "critical";
+    if (msg.includes("chunkloaderror") || msg.includes("loading chunk")) return "critical";
+    if (msg.includes("payment") || msg.includes("stripe") || msg.includes("billing")) return "critical";
+    if (msg.includes("unauthorized") || msg.includes("403") || msg.includes("401")) return "high";
+
+    // High: data loss risk or persistent functional failures
+    if (errorType === "api" && (msg.includes("500") || msg.includes("internal server"))) return "high";
+    if (msg.includes("cannot read properties") || msg.includes("is not a function")) return "high";
+    if (msg.includes("typeerror") || msg.includes("referenceerror")) return "high";
+    if (msg.includes("failed to fetch") || msg.includes("networkerror")) return "high";
+
+    // Low: known environmental / browser capability issues
+    if (msg.includes("webgl") || msg.includes("webgl2")) return "low";
+    if (msg.includes("resizeobserver") || msg.includes("intersectionobserver")) return "low";
+    if (msg.includes("script error") && !msg.includes("stack")) return "low";
+    if (msg.includes("non-error promise rejection")) return "low";
+
+    // Default
+    return "medium";
+  }
+
+  function shouldSendErrorEmail(message: string, severity: ErrorSeverity): boolean {
+    if (severity !== "high" && severity !== "critical") return false;
     const key = message.slice(0, 200);
     const now = Date.now();
     const lastSent = recentErrorEmails.get(key);
@@ -19493,6 +19521,13 @@ Respond with exactly one category from the list above and nothing else.`;
     recentErrorEmails.set(key, now);
     return true;
   }
+
+  const SEVERITY_COLORS: Record<ErrorSeverity, string> = {
+    critical: "#ff4444",
+    high: "#ff8c00",
+    medium: "#ffd700",
+    low: "#858585",
+  };
 
   app.post("/api/errors/report", async (req: Request, res: Response) => {
     try {
@@ -19503,6 +19538,7 @@ Respond with exactly one category from the list above and nothing else.`;
       const { message, stack, errorType, pageUrl, userId, companyId, userAgent } = req.body;
       if (!message || typeof message !== "string") return res.status(400).json({ error: "message required" });
       const safeType: "react" | "js" | "api" = (errorType === "react" || errorType === "js" || errorType === "api") ? errorType : "js";
+      const severity = classifyErrorSeverity(message, safeType);
 
       const report = await storage.createErrorReport({
         message: message.slice(0, 4000),
@@ -19513,20 +19549,22 @@ Respond with exactly one category from the list above and nothing else.`;
         companyId: companyId ? String(companyId).slice(0, 255) : null,
         userAgent: userAgent ? String(userAgent).slice(0, 500) : null,
         status: "open",
+        severity,
       });
 
-      if (shouldSendErrorEmail(message)) {
+      if (shouldSendErrorEmail(message, severity)) {
         sendEmail({
           to: ERROR_ALERT_EMAIL,
-          subject: `[ScooPilot Error] ${safeType.toUpperCase()}: ${message.slice(0, 80)}`,
-          text: `Error Report #${report.id}\n\nType: ${safeType}\nPage: ${pageUrl || "unknown"}\nUser: ${userId || "anonymous"}\nCompany: ${companyId || "unknown"}\nTime: ${new Date().toISOString()}\n\nMessage:\n${message}\n\nStack:\n${stack || "(none)"}`,
+          subject: `[ScooPilot ${severity.toUpperCase()}] ${safeType.toUpperCase()}: ${message.slice(0, 80)}`,
+          text: `Error Report #${report.id}\n\nSeverity: ${severity.toUpperCase()}\nType: ${safeType}\nPage: ${pageUrl || "unknown"}\nUser: ${userId || "anonymous"}\nCompany: ${companyId || "unknown"}\nTime: ${new Date().toISOString()}\n\nMessage:\n${message}\n\nStack:\n${stack || "(none)"}`,
           html: `<div style="font-family:monospace;max-width:700px;margin:0 auto;">
-          <div style="background:#1e1e1e;color:#f8f8f2;padding:16px 20px;border-radius:6px 6px 0 0;">
+          <div style="background:#1e1e1e;color:#f8f8f2;padding:16px 20px;border-radius:6px 6px 0 0;border-top:3px solid ${SEVERITY_COLORS[severity]};">
             <h2 style="margin:0;font-size:16px;color:#ff6b6b;">⚠ ScooPilot Error Report</h2>
           </div>
           <div style="background:#252526;color:#d4d4d4;padding:20px;border-radius:0 0 6px 6px;">
             <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px;">
               <tr><td style="padding:4px 12px 4px 0;color:#858585;">ID</td><td>${escapeHtml(report.id)}</td></tr>
+              <tr><td style="padding:4px 12px 4px 0;color:#858585;">Severity</td><td><span style="background:${SEVERITY_COLORS[severity]}33;color:${SEVERITY_COLORS[severity]};border:1px solid ${SEVERITY_COLORS[severity]}55;padding:2px 8px;border-radius:3px;font-weight:600;">${severity.toUpperCase()}</span></td></tr>
               <tr><td style="padding:4px 12px 4px 0;color:#858585;">Type</td><td><span style="background:#264f78;color:#9cdcfe;padding:2px 8px;border-radius:3px;">${escapeHtml(safeType)}</span></td></tr>
               <tr><td style="padding:4px 12px 4px 0;color:#858585;">Page</td><td>${escapeHtml(pageUrl || "unknown")}</td></tr>
               <tr><td style="padding:4px 12px 4px 0;color:#858585;">User</td><td>${escapeHtml(userId || "anonymous")}</td></tr>
@@ -19576,9 +19614,10 @@ Respond with exactly one category from the list above and nothing else.`;
 
   app.get("/api/admin/error-reports/grouped", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { status, limit, offset, fromDate, toDate } = req.query;
+      const { status, severity, limit, offset, fromDate, toDate } = req.query;
       const groups = await storage.listGroupedErrorReports({
         status: status as string | undefined,
+        severity: severity as string | undefined,
         fromDate: fromDate ? new Date(String(fromDate)) : undefined,
         toDate: toDate ? new Date(String(toDate)) : undefined,
         limit: limit ? parseInt(String(limit)) : 50,

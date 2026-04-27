@@ -21,6 +21,8 @@ import { useToast } from "@/hooks/use-toast";
 
 const PAGE_SIZE = 50;
 
+type ErrorSeverity = "low" | "medium" | "high" | "critical";
+
 type ErrorReport = {
   id: string;
   message: string;
@@ -31,6 +33,7 @@ type ErrorReport = {
   companyId: string | null;
   userAgent: string | null;
   status: "open" | "acknowledged" | "resolved";
+  severity: ErrorSeverity;
   createdAt: string;
   fixTask: { id: string; title: string; status: "open" | "done"; createdAt: string } | null;
 };
@@ -39,6 +42,7 @@ type GroupedErrorReport = {
   message: string;
   errorType: "react" | "js" | "api";
   status: "open" | "acknowledged" | "resolved";
+  severity: ErrorSeverity;
   count: number;
   firstSeen: string;
   lastSeen: string;
@@ -55,6 +59,20 @@ const STATUS_COLORS: Record<string, string> = {
   open: "bg-red-500/20 text-red-400 border-red-500/30",
   acknowledged: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
   resolved: "bg-green-500/20 text-green-400 border-green-500/30",
+};
+
+const SEVERITY_COLORS: Record<string, string> = {
+  critical: "bg-red-600/30 text-red-300 border-red-500/50",
+  high: "bg-orange-500/20 text-orange-300 border-orange-500/40",
+  medium: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+  low: "bg-[#3c3c3c] text-[#858585] border-[#555]",
+};
+
+const SEVERITY_ICONS: Record<string, string> = {
+  critical: "🔴",
+  high: "🟠",
+  medium: "🟡",
+  low: "⚪",
 };
 
 function formatTs(ts: string) {
@@ -96,9 +114,10 @@ function parseOS(ua: string | null) {
   return "Unknown OS";
 }
 
-function buildQueryUrl(statusFilter: string, fromDate: string, toDate: string, page: number, grouped: boolean) {
+function buildQueryUrl(statusFilter: string, severityFilter: string, fromDate: string, toDate: string, page: number, grouped: boolean) {
   const params = new URLSearchParams();
   if (statusFilter !== "all") params.set("status", statusFilter);
+  if (severityFilter !== "all") params.set("severity", severityFilter);
   if (fromDate) params.set("fromDate", new Date(fromDate).toISOString());
   if (toDate) {
     const d = new Date(toDate);
@@ -189,6 +208,7 @@ function ExpandedGroupRows({
 export default function AdminErrors() {
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
   const [page, setPage] = useState(0);
@@ -199,17 +219,15 @@ export default function AdminErrors() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState<{ message: string; status: string; count: number } | null>(null);
 
-  const queryUrl = buildQueryUrl(statusFilter, fromDate, toDate, page, viewMode === "grouped");
-
   const { data: allReports = [], isLoading: allLoading } = useQuery<ErrorReport[]>({
-    queryKey: ["/api/admin/error-reports", statusFilter, fromDate, toDate, page],
-    queryFn: adminFetchFn(buildQueryUrl(statusFilter, fromDate, toDate, page, false)),
+    queryKey: ["/api/admin/error-reports", statusFilter, severityFilter, fromDate, toDate, page],
+    queryFn: adminFetchFn(buildQueryUrl(statusFilter, severityFilter, fromDate, toDate, page, false)),
     enabled: viewMode === "all",
   });
 
   const { data: groupedReports = [], isLoading: groupedLoading } = useQuery<GroupedErrorReport[]>({
-    queryKey: ["/api/admin/error-reports/grouped", statusFilter, fromDate, toDate, page],
-    queryFn: adminFetchFn(buildQueryUrl(statusFilter, fromDate, toDate, page, true)),
+    queryKey: ["/api/admin/error-reports/grouped", statusFilter, severityFilter, fromDate, toDate, page],
+    queryFn: adminFetchFn(buildQueryUrl(statusFilter, severityFilter, fromDate, toDate, page, true)),
     enabled: viewMode === "grouped",
   });
 
@@ -245,6 +263,16 @@ export default function AdminErrors() {
       setSelectedId(null);
       setExpandedGroups(new Set());
     };
+  }
+
+  function resetFilters() {
+    setStatusFilter("all");
+    setSeverityFilter("all");
+    setFromDate("");
+    setToDate("");
+    setPage(0);
+    setSelectedId(null);
+    setExpandedGroups(new Set());
   }
 
   function toggleGroup(message: string) {
@@ -379,6 +407,18 @@ export default function AdminErrors() {
               className="h-7 w-[130px] text-xs bg-[#252526] border-[#3c3c3c] text-[#d4d4d4] px-2"
               data-testid="input-to-date"
             />
+            <Select value={severityFilter} onValueChange={handleFilterChange(setSeverityFilter)}>
+              <SelectTrigger className="h-7 w-[130px] text-xs bg-[#252526] border-[#3c3c3c] text-[#d4d4d4]" data-testid="select-severity-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-[#252526] border-[#3c3c3c] text-[#d4d4d4]">
+                <SelectItem value="all">All severities</SelectItem>
+                <SelectItem value="critical">🔴 Critical</SelectItem>
+                <SelectItem value="high">🟠 High</SelectItem>
+                <SelectItem value="medium">🟡 Medium</SelectItem>
+                <SelectItem value="low">⚪ Low</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={statusFilter} onValueChange={handleFilterChange(setStatusFilter)}>
               <SelectTrigger className="h-7 w-[140px] text-xs bg-[#252526] border-[#3c3c3c] text-[#d4d4d4]" data-testid="select-status-filter">
                 <SelectValue />
@@ -417,6 +457,11 @@ export default function AdminErrors() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
+                      {report.severity && (
+                        <span className={`text-[10px] border px-1.5 py-0.5 rounded font-semibold ${SEVERITY_COLORS[report.severity] || ""}`} data-testid={`badge-severity-${report.id}`}>
+                          {SEVERITY_ICONS[report.severity]} {report.severity.toUpperCase()}
+                        </span>
+                      )}
                       <span className={`text-[10px] border px-1.5 py-0.5 rounded font-medium ${TYPE_COLORS[report.errorType] || ""}`} data-testid={`badge-type-${report.id}`}>
                         {report.errorType.toUpperCase()}
                       </span>
@@ -457,6 +502,11 @@ export default function AdminErrors() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
+                          {group.severity && (
+                            <span className={`text-[10px] border px-1.5 py-0.5 rounded font-semibold ${SEVERITY_COLORS[group.severity] || ""}`} data-testid={`badge-severity-${group.latestId}`}>
+                              {SEVERITY_ICONS[group.severity]} {group.severity.toUpperCase()}
+                            </span>
+                          )}
                           <span className={`text-[10px] border px-1.5 py-0.5 rounded font-medium ${TYPE_COLORS[group.errorType] || ""}`}>
                             {group.errorType.toUpperCase()}
                           </span>
@@ -574,6 +624,7 @@ export default function AdminErrors() {
             <div className="grid grid-cols-2 gap-2 text-xs">
               {[
                 { label: "ID", value: detailReport.id },
+                { label: "Severity", value: detailReport.severity ? `${SEVERITY_ICONS[detailReport.severity]} ${detailReport.severity.toUpperCase()}` : "—" },
                 { label: "Type", value: detailReport.errorType.toUpperCase() },
                 { label: "Status", value: detailReport.status },
                 { label: "Time", value: formatTs(detailReport.createdAt) },
@@ -582,9 +633,9 @@ export default function AdminErrors() {
                 { label: "Browser", value: parseUA(detailReport.userAgent) },
                 { label: "OS", value: parseOS(detailReport.userAgent) },
               ].map(({ label, value }) => (
-                <div key={label} className="bg-[#252526] rounded p-2" data-testid={`detail-${label.toLowerCase()}`}>
+                <div key={label} className={`bg-[#252526] rounded p-2 ${label === "Severity" && detailReport.severity ? SEVERITY_COLORS[detailReport.severity].replace(/text-\S+/, "").replace(/border-\S+/, "").trim() : ""}`} data-testid={`detail-${label.toLowerCase()}`}>
                   <div className="text-[#858585] text-[10px] mb-0.5">{label}</div>
-                  <div className="text-[#d4d4d4] break-all">{value}</div>
+                  <div className={`break-all font-medium ${label === "Severity" && detailReport.severity ? SEVERITY_COLORS[detailReport.severity].split(" ").find(c => c.startsWith("text-")) || "text-[#d4d4d4]" : "text-[#d4d4d4]"}`}>{value}</div>
                 </div>
               ))}
             </div>

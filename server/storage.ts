@@ -473,9 +473,9 @@ export interface IStorage {
   // Error Reports
   createErrorReport(data: InsertErrorReport): Promise<ErrorReport>;
   listErrorReports(filters?: { status?: string; message?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<ErrorReport[]>;
-  listGroupedErrorReports(filters?: { status?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<GroupedErrorReport[]>;
+  listGroupedErrorReports(filters?: { status?: string; severity?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<GroupedErrorReport[]>;
   getErrorReport(id: string): Promise<ErrorReport | undefined>;
-  updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status">>): Promise<ErrorReport>;
+  updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status" | "severity">>): Promise<ErrorReport>;
   bulkUpdateErrorReportStatus(message: string, status: "open" | "acknowledged" | "resolved"): Promise<number>;
   createErrorFixTask(data: InsertErrorFixTask): Promise<ErrorFixTask>;
   getErrorFixTask(errorReportId: string): Promise<ErrorFixTask | undefined>;
@@ -2912,10 +2912,11 @@ export class DatabaseStorage implements IStorage {
       .offset(filters?.offset ?? 0);
   }
 
-  async listGroupedErrorReports(filters?: { status?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<GroupedErrorReport[]> {
-    const { status, fromDate, toDate, limit = 50, offset = 0 } = filters ?? {};
+  async listGroupedErrorReports(filters?: { status?: string; severity?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<GroupedErrorReport[]> {
+    const { status, severity, fromDate, toDate, limit = 50, offset = 0 } = filters ?? {};
     const whereParts: ReturnType<typeof sql>[] = [];
     if (status) whereParts.push(sql`status = ${status}`);
+    if (severity) whereParts.push(sql`severity = ${severity}`);
     if (fromDate) whereParts.push(sql`created_at >= ${fromDate}`);
     if (toDate) whereParts.push(sql`created_at <= ${toDate}`);
     const whereClause = whereParts.length > 0
@@ -2934,7 +2935,7 @@ export class DatabaseStorage implements IStorage {
       ),
       latest AS (
         SELECT DISTINCT ON (message)
-          id, message, error_type, status
+          id, message, error_type, status, severity
         FROM error_reports
         ${whereClause}
         ORDER BY message, created_at DESC
@@ -2946,10 +2947,14 @@ export class DatabaseStorage implements IStorage {
         g.last_seen AS "lastSeen",
         l.id AS "latestId",
         l.error_type AS "errorType",
-        l.status
+        l.status,
+        l.severity
       FROM grouped g
       JOIN latest l ON l.message = g.message
-      ORDER BY g.cnt DESC, g.last_seen DESC
+      ORDER BY
+        CASE l.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
+        g.cnt DESC,
+        g.last_seen DESC
       LIMIT ${limit} OFFSET ${offset}
     `);
     return result.rows as GroupedErrorReport[];
@@ -2960,7 +2965,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status">>): Promise<ErrorReport> {
+  async updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status" | "severity">>): Promise<ErrorReport> {
     const [row] = await db.update(errorReports).set(data).where(eq(errorReports.id, id)).returning();
     return row;
   }

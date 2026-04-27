@@ -1909,6 +1909,7 @@ export type InsertQuoteFormEvent = z.infer<typeof insertQuoteFormEventSchema>;
 
 export const errorReportStatusEnum = pgEnum("error_report_status", ["open", "acknowledged", "resolved"]);
 export const errorReportTypeEnum = pgEnum("error_report_type", ["react", "js", "api"]);
+export const errorReportSeverityEnum = pgEnum("error_report_severity", ["low", "medium", "high", "critical"]);
 
 export const errorReports = pgTable("error_reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1920,10 +1921,12 @@ export const errorReports = pgTable("error_reports", {
   companyId: varchar("company_id", { length: 255 }),
   userAgent: text("user_agent"),
   status: errorReportStatusEnum("status").notNull().default("open"),
+  severity: errorReportSeverityEnum("severity").notNull().default("medium"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_er_status").on(table.status),
   index("idx_er_created").on(table.createdAt),
+  index("idx_er_severity").on(table.severity),
 ]);
 
 export const insertErrorReportSchema = createInsertSchema(errorReports).omit({ id: true, createdAt: true });
