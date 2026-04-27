@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
 import { DEFAULT_PRICING_CONFIG, DEFAULT_PRICING_RULES, type PricingConfig } from "@shared/schema";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { ZipMapSelector } from "@/components/zip-map-selector";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -501,15 +502,12 @@ function BusinessIntelligenceStep({
               </label>
             </div>
             {serviceAreaMode === "zip" ? (
-              <div>
-                <Input
+              <div className="mt-2">
+                <ZipMapSelector
                   value={serviceArea}
-                  onChange={(e) => setServiceArea(e.target.value)}
-                  placeholder="e.g. 23220, 23235, 23234"
-                  className="mt-1"
-                  data-testid="input-service-area"
+                  onChange={setServiceArea}
+                  addressHint={companyData.address}
                 />
-                <p className="text-xs text-muted-foreground mt-1">Enter comma-separated ZIP codes you serve</p>
               </div>
             ) : (
               <div className="mt-1 space-y-1">
