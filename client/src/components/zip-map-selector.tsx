@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 
-const TIGER_URL =
-  "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/PUMA_TAD_TAZ_UGA_ZCTA/MapServer/1/query";
+const ESRI_ZIP_URL =
+  "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_ZIP_Code_Areas_anaylsis/FeatureServer/0/query";
 
 const COLOR_UNSEL = "#4b9e5f";
 const COLOR_SEL   = "#16a34a";
@@ -33,32 +33,22 @@ function addOsmLayer(map: L.Map) {
 }
 
 
-async function fetchZipsInViewport(w: number, s: number, e: number, n: number): Promise<string[]> {
+async function fetchZipPolygonsInViewport(
+  w: number, s: number, e: number, n: number
+): Promise<GeoJSON.FeatureCollection> {
   const p = new URLSearchParams({
     geometry: `${w},${s},${e},${n}`,
     geometryType: "esriGeometryEnvelope",
     spatialRel: "esriSpatialRelIntersects",
-    outFields: "ZCTA5",
+    inSR: "4326",
     outSR: "4326",
-    f: "json",
-    resultRecordCount: "150",
+    outFields: "ZIP_CODE,PO_NAME,STATE",
+    returnGeometry: "true",
+    f: "geojson",
+    resultRecordCount: "200",
   });
   try {
-    const r = await fetch(`${TIGER_URL}?${p}`);
-    const d = await r.json();
-    return (d.features ?? []).map((f: any) => f.attributes?.ZCTA5 as string).filter(isZip);
-  } catch { return []; }
-}
-
-async function fetchZipPolygons(zips: string[]): Promise<GeoJSON.FeatureCollection> {
-  if (!zips.length) return { type: "FeatureCollection", features: [] };
-  const where = "ZCTA5 IN (" + zips.map(z => `'${z}'`).join(",") + ")";
-  const p = new URLSearchParams({
-    where, outFields: "ZCTA5", outSR: "4326", f: "geojson",
-    simplifyFactor: "0.002", resultRecordCount: "150",
-  });
-  try {
-    const r = await fetch(`${TIGER_URL}?${p}`);
+    const r = await fetch(`${ESRI_ZIP_URL}?${p}`);
     return await r.json();
   } catch { return { type: "FeatureCollection", features: [] }; }
 }
@@ -109,66 +99,62 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
       setLoading(true);
       try {
         const b = mapRef.current.getBounds();
-        const all = await fetchZipsInViewport(b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
+        const geo = await fetchZipPolygonsInViewport(
+          b.getWest(), b.getSouth(), b.getEast(), b.getNorth()
+        );
         if (cancelled) return;
-        const fresh = all.filter(z => !layersRef.current.has(z));
-        if (!fresh.length) return;
-        for (let i = 0; i < fresh.length; i += 50) {
-          if (cancelled || !mapRef.current) return;
-          const geo = await fetchZipPolygons(fresh.slice(i, i + 50));
-          geo.features.forEach(feat => {
-            if (!mapRef.current) return;
-            const zip = (feat.properties as any)?.ZCTA5 as string;
-            if (!zip || !isZip(zip) || layersRef.current.has(zip)) return;
-            const isSel = selectedRef.current.has(zip);
-            const layer = L.geoJSON(feat as any, {
-              style: {
-                color: "#15803d", weight: 1.5,
-                fillColor: isSel ? COLOR_SEL : COLOR_UNSEL,
-                fillOpacity: isSel ? 0.45 : 0.12,
-              },
-            });
-            layer.on("mouseover", () => {
-              if (!selectedRef.current.has(zip))
-                layer.setStyle({ fillColor: COLOR_HOVER, fillOpacity: 0.35 });
-            });
-            layer.on("mouseout", () => {
-              if (!selectedRef.current.has(zip))
-                layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
-            });
-            layer.on("click", () => {
-              const next = new Set(selectedRef.current);
-              if (next.has(zip)) {
-                next.delete(zip);
-                layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
-              } else {
-                next.add(zip);
-                layer.setStyle({ fillColor: COLOR_SEL, fillOpacity: 0.45 });
-              }
-              syncSelected(next);
-            });
-            const ring =
-              feat.geometry.type === "Polygon" ? feat.geometry.coordinates[0] :
-              feat.geometry.type === "MultiPolygon" ? feat.geometry.coordinates[0][0] : null;
-            if (ring?.length) {
-              const xs = (ring as number[][]).map(c => c[0]);
-              const ys = (ring as number[][]).map(c => c[1]);
-              const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-              const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-              L.marker([cy, cx], {
-                icon: L.divIcon({
-                  className: "",
-                  html: `<span style="font-size:10px;font-weight:700;color:#14532d;text-shadow:0 0 3px #fff,0 0 3px #fff">${zip}</span>`,
-                  iconSize: [40, 14],
-                  iconAnchor: [20, 7],
-                }),
-                interactive: false,
-              }).addTo(mapRef.current!);
-            }
-            layer.addTo(mapRef.current!);
-            layersRef.current.set(zip, layer);
+        geo.features.forEach(feat => {
+          if (!mapRef.current) return;
+          const zip = (feat.properties as any)?.ZIP_CODE as string;
+          if (!zip || !isZip(zip) || layersRef.current.has(zip)) return;
+          const isSel = selectedRef.current.has(zip);
+          const layer = L.geoJSON(feat as any, {
+            style: {
+              color: "#15803d", weight: 1.5,
+              fillColor: isSel ? COLOR_SEL : COLOR_UNSEL,
+              fillOpacity: isSel ? 0.45 : 0.12,
+            },
           });
-        }
+          layer.on("mouseover", () => {
+            if (!selectedRef.current.has(zip))
+              layer.setStyle({ fillColor: COLOR_HOVER, fillOpacity: 0.35 });
+          });
+          layer.on("mouseout", () => {
+            if (!selectedRef.current.has(zip))
+              layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
+          });
+          layer.on("click", () => {
+            const next = new Set(selectedRef.current);
+            if (next.has(zip)) {
+              next.delete(zip);
+              layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
+            } else {
+              next.add(zip);
+              layer.setStyle({ fillColor: COLOR_SEL, fillOpacity: 0.45 });
+            }
+            syncSelected(next);
+          });
+          const ring =
+            feat.geometry.type === "Polygon" ? feat.geometry.coordinates[0] :
+            feat.geometry.type === "MultiPolygon" ? feat.geometry.coordinates[0][0] : null;
+          if (ring?.length) {
+            const xs = (ring as number[][]).map(c => c[0]);
+            const ys = (ring as number[][]).map(c => c[1]);
+            const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+            const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+            L.marker([cy, cx], {
+              icon: L.divIcon({
+                className: "",
+                html: `<span style="font-size:10px;font-weight:700;color:#14532d;text-shadow:0 0 3px #fff,0 0 3px #fff">${zip}</span>`,
+                iconSize: [40, 14],
+                iconAnchor: [20, 7],
+              }),
+              interactive: false,
+            }).addTo(mapRef.current!);
+          }
+          layer.addTo(mapRef.current!);
+          layersRef.current.set(zip, layer);
+        });
       } finally {
         if (!cancelled) {
           loadingRef.current = false;
