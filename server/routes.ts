@@ -1062,7 +1062,9 @@ export async function registerRoutes(
 
   // OSM tile proxy — avoids browser-side CSP/CORS issues with tile.openstreetmap.org
   app.get("/api/map/tiles/:z/:x/:y", async (req: Request, res: Response) => {
-    const { z, x, y } = req.params;
+    const z = String(req.params.z);
+    const x = String(req.params.x);
+    const y = String(req.params.y);
     if (!/^\d+$/.test(z) || !/^\d+$/.test(x) || !/^\d+$/.test(y)) {
       return res.status(400).send("Invalid tile coordinates");
     }
