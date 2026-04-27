@@ -29,9 +29,21 @@ db = TinyDB(str(DB_DIR / "wizard.json"))
 Tenant = Query()
 
 RETELL_API_KEY = os.environ.get("RETELL_API_KEY", "")
-WIZARD_API_KEY = os.environ.get("WIZARD_API_KEY", "changeme-wizard-key")
-WIZARD_ADMIN_KEY = os.environ.get("WIZARD_ADMIN_KEY", "changeme-admin-key")
 SCOOPILOT_API = "https://app.scooppilot.com"
+
+# Auth keys — fail-closed: if not set, those endpoints are unreachable
+_WIZARD_API_KEY = os.environ.get("WIZARD_API_KEY", "")
+_WIZARD_ADMIN_KEY = os.environ.get("WIZARD_ADMIN_KEY", "")
+
+def _check_wizard_key(provided: str) -> bool:
+    if not _WIZARD_API_KEY:
+        return False  # env var not set → deny all
+    return provided == _WIZARD_API_KEY
+
+def _check_admin_key(provided: str) -> bool:
+    if not _WIZARD_ADMIN_KEY:
+        return False
+    return provided == _WIZARD_ADMIN_KEY
 
 ALLOWED_EXTENSIONS = {
     "csv", "xlsx", "xls", "pdf", "png", "jpg", "jpeg", "gif",
@@ -293,6 +305,15 @@ def onboard_save(phone: str):
                 row[col] = val
         if row:
             base_grid[freq] = row
+    # Quick fill rules (formula: base + floor((dogs-1)/Y) * X)
+    qf_x = f.get("qf_X_saved", "").strip()
+    qf_y = f.get("qf_Y_saved", "").strip()
+    quick_fill_rules = {}
+    if qf_x:
+        quick_fill_rules["X"] = qf_x
+    if qf_y:
+        quick_fill_rules["Y"] = qf_y
+
     pricing = {
         "baseGrid": base_grid,
         "yardMultipliers": {
@@ -305,6 +326,7 @@ def onboard_save(phone: str):
             "medium": f.get("cleanup_medium", ""),
             "heavy": f.get("cleanup_heavy", ""),
         },
+        "quickFillRules": quick_fill_rules,
     }
 
     policies = {
@@ -382,6 +404,72 @@ def zips_in_bounds():
     from geo import zips_in_radius
     zips = zips_in_radius(lat, lon, miles)
     return jsonify({"zips": zips})
+
+
+# Census TIGER API for ZCTA polygon GeoJSON — with server-side disk cache
+_TIGER_URL = (
+    "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb"
+    "/PUMA_TAD_TAZ_UGA_ZCTA/MapServer/1/query"
+)
+_POLY_CACHE_DIR = DB_DIR / "polygon_cache"
+_POLY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+import requests as _http
+
+
+@app.get("/api/zip-polygons")
+def zip_polygons():
+    """Return GeoJSON FeatureCollection of ZCTA polygon boundaries.
+    Accepts ?zips=23220,23221,... (up to 50 per call).
+    Results cached on disk to avoid repeated Census API calls.
+    """
+    raw = request.args.get("zips", "")
+    requested = [z.strip().zfill(5) for z in raw.split(",") if z.strip()][:50]
+    if not requested:
+        return jsonify({"type": "FeatureCollection", "features": []})
+
+    features = []
+    need_fetch = []
+
+    for zip_code in requested:
+        cache_path = _POLY_CACHE_DIR / f"{zip_code}.json"
+        if cache_path.exists():
+            try:
+                feat = json.loads(cache_path.read_text())
+                features.append(feat)
+                continue
+            except Exception:
+                pass
+        need_fetch.append(zip_code)
+
+    if need_fetch:
+        # Batch fetch from Census TIGER (up to 50 at once)
+        where_clause = "ZCTA5 IN (" + ",".join(f"'{z}'" for z in need_fetch) + ")"
+        try:
+            resp = _http.get(
+                _TIGER_URL,
+                params={
+                    "where": where_clause,
+                    "outFields": "ZCTA5",
+                    "outSR": "4326",
+                    "f": "geojson",
+                    "simplifyFactor": "0.002",
+                    "resultRecordCount": "50",
+                },
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                for feat in data.get("features", []):
+                    zip_code = feat.get("properties", {}).get("ZCTA5", "")
+                    if zip_code:
+                        cache_path = _POLY_CACHE_DIR / f"{zip_code.zfill(5)}.json"
+                        cache_path.write_text(json.dumps(feat))
+                    features.append(feat)
+        except Exception as exc:
+            app.logger.warning(f"[wizard] Census TIGER fetch failed: {exc}")
+
+    return jsonify({"type": "FeatureCollection", "features": features})
 
 
 # ──────────────────────────────────────────
@@ -518,7 +606,7 @@ def handbook(phone: str):
 @app.get("/api/config/<path:phone>")
 def api_config(phone: str):
     key = request.headers.get("X-Wizard-Key", "") or request.args.get("key", "")
-    if key != WIZARD_API_KEY:
+    if not _check_wizard_key(key):
         abort(401)
     phone = normalize_phone(phone) if not phone.startswith("+") else phone
     safe_phone = phone.replace("+", "").replace(" ", "")
@@ -538,10 +626,36 @@ def verify_location_api():
     phone = data.get("phone", "")
     if phone and not phone.startswith("+"):
         phone = normalize_phone(phone)
-    tenant = get_tenant(phone)
-    if not tenant:
-        abort(404)
-    territory = tenant.get("territory", {})
+
+    # Source-of-truth: load from territory_data.json first
+    safe_phone = phone.replace("+", "").replace(" ", "")
+    territory_path = OUTPUT_DIR / safe_phone / "territory_data.json"
+    territory = None
+
+    if territory_path.exists():
+        try:
+            raw = json.loads(territory_path.read_text())
+            # Normalise keys to match geo.verify_location expectations
+            territory = {
+                "mode": raw.get("mode", "zip"),
+                "zipList": raw.get("zipList", []),
+                "hqLat": raw.get("hqLat"),
+                "hqLon": raw.get("hqLon"),
+                "radiusMiles": raw.get("radiusMiles"),
+            }
+        except Exception:
+            pass
+
+    # Fallback to TinyDB record if file not available yet
+    if territory is None:
+        tenant = get_tenant(phone)
+        if not tenant:
+            abort(404)
+        t = tenant.get("territory", {})
+        if not t:
+            abort(404, description="Territory not configured for this tenant")
+        territory = t
+
     caller_zip = data.get("callerZip")
     caller_lat = data.get("callerLat")
     caller_lon = data.get("callerLon")
@@ -561,7 +675,7 @@ def admin_credentials(phone: str):
         or request.args.get("admin_key", "")
         or request.form.get("admin_key", "")
     )
-    if provided_key != WIZARD_ADMIN_KEY:
+    if not _check_admin_key(provided_key):
         return render_template("admin_creds.html", phone=phone, tenant=None,
                                error="Invalid admin key. Access denied.", admin_key=""), 403
 

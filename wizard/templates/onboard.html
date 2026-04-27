@@ -37,6 +37,7 @@
 {% set base_grid = pricing.get('baseGrid', {}) %}
 {% set ym = pricing.get('yardMultipliers', {}) %}
 {% set cs = pricing.get('cleanupSurcharges', {}) %}
+{% set qf = pricing.get('quickFillRules', {}) %}
 
 <div class="container page">
 
@@ -51,7 +52,7 @@
 
   <form method="POST" id="onboard-form" enctype="multipart/form-data">
 
-    <!-- ─── GENERAL PROFILE ─── -->
+    <!-- ─── 1. GENERAL PROFILE ─── -->
     <div class="section-card" id="sec-profile">
       <div class="section-header">
         <h2>General Profile</h2>
@@ -105,13 +106,14 @@
           <label for="businessAddress">Business / HQ Address</label>
           <input type="text" id="businessAddress" name="businessAddress" class="form-control"
                  value="{{ profile.get('businessAddress','') }}"
-                 placeholder="123 Main St, City, State ZIP"/>
-          <div class="helper">Used to center the territory map and pre-fill territory selection.</div>
+                 placeholder="123 Main St, City, State ZIP"
+                 onblur="onAddressBlur()"/>
+          <div class="helper">This is your initial route starting address — used to center the territory map. Geocodes automatically when you leave the field.</div>
         </div>
       </div>
     </div>
 
-    <!-- ─── TERRITORY ─── -->
+    <!-- ─── 2. TERRITORY ─── -->
     <div class="section-card" id="sec-territory">
       <div class="section-header">
         <h2>Service Territory</h2>
@@ -134,7 +136,7 @@
             </label>
           </div>
           <div class="radius-control" id="radius-control" style="{{ '' if territory.get('mode') == 'radius' else 'display:none' }}">
-            <label for="radiusMiles" style="font-weight:600;font-size:13px">Radius:</label>
+            <label style="font-weight:600;font-size:13px">Radius:</label>
             <input type="range" id="radiusMiles-range" min="5" max="100" step="5"
                    value="{{ territory.get('radiusMiles',30)|int }}"
                    oninput="updateRadius(this.value)"/>
@@ -142,22 +144,20 @@
             <input type="hidden" id="radiusMiles" name="radiusMiles"
                    value="{{ territory.get('radiusMiles',30) }}"/>
           </div>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="geocodeAndCenter()">
-            Center on Business Address
-          </button>
           <button type="button" class="btn btn-secondary btn-sm" id="clear-zips-btn"
                   onclick="clearAllZips()" style="{{ 'display:none' if territory.get('mode') == 'radius' else '' }}">
             Clear All ZIPs
           </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="geocodeAndCenter()">
+            Re-center Map
+          </button>
         </div>
 
-        <div class="map-banner" id="map-banner">
-          Loading ZIP code data for this area...
-        </div>
+        <div class="map-banner" id="map-banner">Loading territory data...</div>
 
         <div id="territory-map"></div>
 
-        <div class="selected-zips" id="zip-summary">
+        <div class="selected-zips" id="zip-summary" style="{{ 'display:none' if territory.get('mode') == 'radius' else '' }}">
           <strong id="zip-count">{{ territory.get('zipList',[])|length }}</strong> ZIP codes selected
           <span id="zip-list-preview" style="margin-left:8px;color:var(--green-dark)">
             {% if territory.get('zipList') %}
@@ -176,7 +176,51 @@
       </div>
     </div>
 
-    <!-- ─── PRICING ─── -->
+    <!-- ─── 3. DOCUMENT UPLOADS ─── -->
+    <div class="section-card" id="sec-docs">
+      <div class="section-header">
+        <h2>Reference Documents</h2>
+        <span class="badge badge-gray">Optional</span>
+      </div>
+      <div class="section-body">
+        <p style="font-size:13px;color:var(--gray);margin-bottom:14px">
+          Upload pricing sheets, competitor analysis, customer lists, contracts, or other reference materials
+          for AI training. Supported: CSV, Excel, PDF, images, Word, ZIP.
+        </p>
+        <div class="upload-row" id="upload-form-row">
+          <div class="form-group">
+            <label>Category</label>
+            <select id="upload-category" class="form-control" style="min-width:180px">
+              {% for cat in upload_categories %}
+              <option value="{{ cat }}">{{ cat }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>File</label>
+            <input type="file" id="upload-file" class="form-control"
+                   accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.txt,.zip"/>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="uploadDoc()">Upload</button>
+        </div>
+        <div id="upload-status" style="font-size:13px;margin-bottom:8px"></div>
+        <div class="file-list" id="file-list">
+          {% for doc in docs %}
+          <div class="file-item" id="file-{{ loop.index }}">
+            <span class="file-name">{{ doc.filename }}</span>
+            <span class="file-cat badge badge-gray">{{ doc.category }}</span>
+            <button type="button" class="btn btn-danger btn-sm"
+                    onclick="removeDoc('{{ doc.savedAs or doc.filename }}', this.closest('.file-item'))">Remove</button>
+          </div>
+          {% if doc.preview %}
+          <div class="file-preview">{{ doc.preview|safe }}</div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── 4. PRICING ─── -->
     <div class="section-card" id="sec-pricing">
       <div class="section-header">
         <h2>Pricing Matrix</h2>
@@ -184,17 +228,26 @@
       </div>
       <div class="section-body">
         <div class="quick-fill">
-          <label>Quick Fill:</label>
-          <span class="qf-text">Base (1 dog):</span>
+          <label>Quick Fill</label>
+          <span class="qf-text">Base prices (1 dog) per frequency:</span>
           {% for freq in frequencies %}
           {% set fkey = freq.replace(' ','_').replace('-','_') %}
-          <input type="number" id="qf_{{ fkey }}" placeholder="{{ freq[:4] }}.." step="0.01" min="0"
-                 style="width:70px" oninput="quickFill()"/>
+          <div style="display:flex;align-items:center;gap:4px">
+            <span class="qf-text" style="font-size:11px">{{ freq[:6] }}:</span>
+            <input type="number" id="qf_{{ fkey }}" placeholder="$" step="0.01" min="0"
+                   style="width:65px" oninput="quickFill()"/>
+          </div>
           {% endfor %}
-          <span class="qf-text">+$</span>
-          <input type="number" id="qf_step" placeholder="step" step="0.01" min="0" style="width:65px" oninput="quickFill()"/>
-          <span class="qf-text">per additional dog</span>
+          <span class="qf-text" style="margin-left:8px">Add&nbsp;$</span>
+          <input type="number" id="qf_X" placeholder="amt" step="0.01" min="0" style="width:60px" oninput="quickFill()"/>
+          <span class="qf-text">every</span>
+          <input type="number" id="qf_Y" placeholder="N" step="1" min="1" value="1" style="width:45px" oninput="quickFill()"/>
+          <span class="qf-text">dog(s) &nbsp;<em style="color:var(--gray)">[formula: base + floor((dogs&minus;1)&divide;N)&times;$]</em></span>
         </div>
+
+        <!-- Hidden quick-fill rule storage -->
+        <input type="hidden" name="qf_X_saved" id="qf_X_saved" value="{{ qf.get('X','') }}"/>
+        <input type="hidden" name="qf_Y_saved" id="qf_Y_saved" value="{{ qf.get('Y','') }}"/>
 
         <table class="pricing-table">
           <thead>
@@ -212,7 +265,7 @@
           {% set row = base_grid.get(freq, {}) %}
           <tr>
             <td>{{ freq }}</td>
-            {% for col, label in [('1',''), ('2',''), ('3',''), ('4p','')] %}
+            {% for col in ['1','2','3','4p'] %}
             <td>
               <input type="number" name="price_{{ fkey }}_{{ col }}"
                      id="price_{{ fkey }}_{{ col }}"
@@ -267,7 +320,7 @@
       </div>
     </div>
 
-    <!-- ─── POLICIES ─── -->
+    <!-- ─── 5. POLICIES ─── -->
     <div class="section-card" id="sec-policies">
       <div class="section-header">
         <h2>Operational Policies</h2>
@@ -329,7 +382,7 @@
       </div>
     </div>
 
-    <!-- ─── API CREDENTIALS ─── -->
+    <!-- ─── 6. API CREDENTIALS ─── -->
     <div class="section-card" id="sec-creds">
       <div class="section-header">
         <h2>API Credentials</h2>
@@ -346,12 +399,12 @@
         </div>
         <div class="creds-note">
           This key is auto-generated and read-only. Supply it as <code>X-Wizard-Key</code> when calling
-          <code>/api/config/{{ phone }}</code>. Sysadmin rotation available at <code>/admin/credentials/{{ phone }}</code>.
+          <code>GET /api/config/{{ phone }}</code>. Sysadmin rotation: <code>GET /admin/credentials/{{ phone }}</code>.
         </div>
       </div>
     </div>
 
-    <!-- ─── VOICE AGENT CONFIG ─── -->
+    <!-- ─── 7. VOICE AGENT CONFIG ─── -->
     <div class="section-card" id="sec-voice">
       <div class="section-header">
         <h2>Voice Agent Configuration</h2>
@@ -378,7 +431,7 @@
           <label for="serviceAreaOverride">Service Area Description (voice-friendly)</label>
           <textarea id="serviceAreaOverride" name="serviceAreaOverride" class="form-control"
                     placeholder="e.g. We serve the greater Richmond area including ZIP codes 23220 through 23235">{{ voice.get('serviceAreaOverride','') }}</textarea>
-          <div class="helper">Natural-language description for the agent to read aloud when asked about your coverage area.</div>
+          <div class="helper">Natural-language description the agent reads aloud when asked about your coverage area.</div>
         </div>
         <div class="form-group">
           <label for="specialLines">Special Handling Lines</label>
@@ -386,7 +439,6 @@
                     placeholder="e.g. If caller mentions a wedding or event, offer our one-time large event cleanup package">{{ voice.get('specialLines','') }}</textarea>
           <div class="helper">Edge-case instructions, upsell triggers, or topic-specific talking points for the agent.</div>
         </div>
-
         <div style="background:var(--gray-light);border:1px solid var(--gray-border);border-radius:6px;padding:12px 14px;margin-top:12px">
           <p style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Hardcoded Protocol (read-only)</p>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
@@ -399,7 +451,7 @@
       </div>
     </div>
 
-    <!-- ─── CHAT AGENT CONFIG ─── -->
+    <!-- ─── 8. CHAT AGENT CONFIG ─── -->
     <div class="section-card" id="sec-chat">
       <div class="section-header">
         <h2>Chat Agent Configuration</h2>
@@ -423,51 +475,6 @@
       </div>
     </div>
 
-    <!-- ─── DOCUMENT UPLOADS ─── -->
-    <div class="section-card" id="sec-docs">
-      <div class="section-header">
-        <h2>Reference Documents</h2>
-        <span class="badge badge-gray">Optional</span>
-      </div>
-      <div class="section-body">
-        <p style="font-size:13px;color:var(--gray);margin-bottom:14px">
-          Upload pricing sheets, competitor analysis, customer lists, contracts, or other reference materials
-          for AI training. Supported: CSV, Excel, PDF, images, Word, ZIP.
-        </p>
-        <div class="upload-row" id="upload-form-row">
-          <div class="form-group">
-            <label>Category</label>
-            <select id="upload-category" class="form-control" style="min-width:180px">
-              {% for cat in upload_categories %}
-              <option value="{{ cat }}">{{ cat }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group" style="flex:1">
-            <label>File</label>
-            <input type="file" id="upload-file" class="form-control"
-                   accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.txt,.zip"/>
-          </div>
-          <button type="button" class="btn btn-primary" onclick="uploadDoc()">Upload</button>
-        </div>
-        <div id="upload-status" style="font-size:13px;margin-bottom:8px"></div>
-
-        <div class="file-list" id="file-list">
-          {% for doc in docs %}
-          <div class="file-item" id="file-{{ loop.index }}">
-            <span class="file-name">{{ doc.filename }}</span>
-            <span class="file-cat badge badge-gray">{{ doc.category }}</span>
-            <button type="button" class="btn btn-danger btn-sm"
-                    onclick="removeDoc('{{ doc.savedAs or doc.filename }}', this.closest('.file-item'))">Remove</button>
-          </div>
-          {% if doc.preview %}
-          <div class="file-preview">{{ doc.preview|safe }}</div>
-          {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-
     <!-- ─── SAVE ─── -->
     <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:24px;padding-bottom:20px">
       <a href="{{ url_for('ready', phone=phone) }}" class="btn btn-secondary">View Ready Page</a>
@@ -487,11 +494,48 @@ var PHONE = {{ phone|tojson }};
 var territoryMode = {{ _t.get('mode','zip')|tojson }};
 var selectedZips = new Set({{ _t.get('zipList', [])|tojson }});
 var zipCentroids = {{ _t.get('zipCentroids', {})|tojson }};
-var hqLat = {{ (_t.get('hqLat') or 39.5)|float }};
-var hqLon = {{ (_t.get('hqLon') or -98.35)|float }};
+var hqLat = {{ (_t.get('hqLat') or 0)|float }};
+var hqLon = {{ (_t.get('hqLon') or 0)|float }};
 var radiusMiles = {{ (_t.get('radiusMiles') or 30)|float }};
+var FREQUENCIES = {{ frequencies|tojson }};
 
-// Agent type toggles
+// ─── Map init ───
+var DEFAULT_LAT = 39.5, DEFAULT_LON = -98.35;
+var startLat = hqLat || DEFAULT_LAT;
+var startLon = hqLon || DEFAULT_LON;
+var startZoom = (hqLat && hqLon) ? 9 : 4;
+
+var map = L.map('territory-map').setView([startLat, startLon], startZoom);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 13
+}).addTo(map);
+
+// ─── Layer groups ───
+var polygonLayer = L.layerGroup().addTo(map);
+var zipPolygons = {};   // zip → L.geoJSON layer
+var radiusCircle = null;
+var hqMarker = null;
+var isLoadingPolygons = false;
+var pendingZipFetch = null;
+
+// ─── HQ marker (draggable) ───
+function placeHqMarker(lat, lon) {
+  if (hqMarker) map.removeLayer(hqMarker);
+  hqMarker = L.marker([lat, lon], {
+    draggable: true,
+    title: 'Drag to adjust HQ location'
+  }).addTo(map);
+  hqMarker.on('dragend', function(e) {
+    var pos = e.target.getLatLng();
+    hqLat = pos.lat; hqLon = pos.lng;
+    document.getElementById('hqLat').value = hqLat;
+    document.getElementById('hqLon').value = hqLon;
+    if (territoryMode === 'radius') drawRadiusCircle();
+    else loadZipsForViewport();
+  });
+}
+
+// ─── Agent type toggles ───
 var voiceToggle = document.getElementById('toggle-voice');
 var chatToggle = document.getElementById('toggle-chat');
 
@@ -500,36 +544,24 @@ function updateLocks() {
   var hasChat = chatToggle.checked;
   var hasEither = hasVoice || hasChat;
 
-  var secVoice = document.getElementById('sec-voice');
-  var secChat = document.getElementById('sec-chat');
-  var voiceBadge = document.getElementById('voice-lock-badge');
-  var chatBadge = document.getElementById('chat-lock-badge');
-
-  if (hasVoice) {
-    secVoice.classList.remove('section-locked');
-    voiceBadge.textContent = 'Active';
-    voiceBadge.className = 'lock-badge badge badge-green';
-  } else {
-    secVoice.classList.add('section-locked');
-    voiceBadge.textContent = 'Select Voice to unlock';
-    voiceBadge.className = 'lock-badge';
+  function setLock(id, locked, badgeId, activeText, inactiveText) {
+    var el = document.getElementById(id);
+    var badge = document.getElementById(badgeId);
+    if (locked) {
+      el.classList.add('section-locked');
+      badge.textContent = inactiveText;
+      badge.className = 'lock-badge';
+    } else {
+      el.classList.remove('section-locked');
+      badge.textContent = activeText;
+      badge.className = 'lock-badge badge badge-green';
+    }
   }
-
-  if (hasChat) {
-    secChat.classList.remove('section-locked');
-    chatBadge.textContent = 'Active';
-    chatBadge.className = 'lock-badge badge badge-green';
-  } else {
-    secChat.classList.add('section-locked');
-    chatBadge.textContent = 'Select Chat to unlock';
-    chatBadge.className = 'lock-badge';
-  }
-
-  // Pricing + Policies unlock for either
+  setLock('sec-voice', !hasVoice, 'voice-lock-badge', 'Active', 'Select Voice to unlock');
+  setLock('sec-chat', !hasChat, 'chat-lock-badge', 'Active', 'Select Chat to unlock');
   document.getElementById('sec-pricing').classList.toggle('section-locked', !hasEither);
   document.getElementById('sec-policies').classList.toggle('section-locked', !hasEither);
 
-  // Persist
   var types = [];
   if (hasVoice) types.push('voice');
   if (hasChat) types.push('chat');
@@ -539,35 +571,30 @@ function updateLocks() {
     body: JSON.stringify({agentTypes: types})
   });
 }
-
 voiceToggle.addEventListener('change', updateLocks);
 chatToggle.addEventListener('change', updateLocks);
 updateLocks();
 
-// ─── Map ───
-var map = L.map('territory-map').setView([hqLat || 39.5, hqLon || -98.35],
-  (hqLat && hqLon) ? 9 : 4);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap contributors', maxZoom: 13
-}).addTo(map);
-
-var zipMarkers = {};
-var radiusCircle = null;
-var isLoading = false;
-
+// ─── Territory mode ───
 function setTerritoryMode(mode) {
   territoryMode = mode;
   var radiusCtrl = document.getElementById('radius-control');
   var clearBtn = document.getElementById('clear-zips-btn');
+  var zipSummary = document.getElementById('zip-summary');
   if (mode === 'radius') {
     radiusCtrl.style.display = '';
     clearBtn.style.display = 'none';
+    zipSummary.style.display = 'none';
+    polygonLayer.clearLayers();
+    zipPolygons = {};
     drawRadiusCircle();
+    if (hqLat && hqLon) placeHqMarker(hqLat, hqLon);
   } else {
     radiusCtrl.style.display = 'none';
     clearBtn.style.display = '';
+    zipSummary.style.display = '';
     if (radiusCircle) { map.removeLayer(radiusCircle); radiusCircle = null; }
-    loadZipsInBounds();
+    loadZipsForViewport();
   }
 }
 
@@ -581,66 +608,83 @@ function updateRadius(val) {
 function drawRadiusCircle() {
   if (radiusCircle) map.removeLayer(radiusCircle);
   if (!hqLat || !hqLon) return;
-  var meters = radiusMiles * 1609.34;
   radiusCircle = L.circle([hqLat, hqLon], {
-    radius: meters, color: '#2d8a5e', fillColor: '#2d8a5e', fillOpacity: 0.12, weight: 2
+    radius: radiusMiles * 1609.34,
+    color: '#2d8a5e', fillColor: '#2d8a5e', fillOpacity: 0.12, weight: 2
   }).addTo(map);
 }
 
-function loadZipsInBounds() {
+// ─── ZIP polygon map ───
+function loadZipsForViewport() {
   if (territoryMode !== 'zip') return;
   if (!hqLat || !hqLon) return;
-  if (isLoading) return;
-  isLoading = true;
-  var banner = document.getElementById('map-banner');
-  banner.classList.add('visible');
+  if (isLoadingPolygons) return;
 
-  var bounds = map.getBounds();
-  var miles = Math.min(geodesicDistance(bounds.getNorth(), bounds.getWest(), bounds.getSouth(), bounds.getEast()) / 2, 80);
+  setBanner(true, 'Loading ZIP boundaries...');
+  isLoadingPolygons = true;
 
-  fetch('/api/zips-in-bounds?lat=' + hqLat + '&lon=' + hqLon + '&miles=' + Math.max(miles, 30))
+  // Step 1: Get ZIP centroids in the area
+  fetch('/api/zips-in-bounds?lat=' + hqLat + '&lon=' + hqLon + '&miles=' + Math.min(radiusMiles + 15, 80))
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      (data.zips || []).forEach(function(z) {
-        if (zipMarkers[z.zip]) return;
-        var isSelected = selectedZips.has(z.zip);
-        var marker = L.circleMarker([z.lat, z.lon], {
-          radius: 8,
-          color: isSelected ? '#2d8a5e' : '#d1d5db',
-          fillColor: isSelected ? '#2d8a5e' : '#f9fafb',
-          fillOpacity: isSelected ? 0.75 : 0.6,
-          weight: 2
-        }).addTo(map);
-        marker.bindTooltip(z.zip + ' — ' + z.city + ', ' + z.state);
-        marker.zipData = z;
-        marker.on('click', function() { toggleZip(z.zip, z.lat, z.lon, this); });
-        zipMarkers[z.zip] = marker;
+      var zips = (data.zips || []).map(function(z) { return z.zip; });
+      var newZips = zips.filter(function(z) { return !zipPolygons[z]; });
+      if (!newZips.length) {
+        setBanner(false);
+        isLoadingPolygons = false;
+        return;
+      }
+      // Step 2: Batch fetch polygons (max 50 at once)
+      var batches = [];
+      for (var i = 0; i < newZips.length; i += 50) {
+        batches.push(newZips.slice(i, i + 50));
+      }
+      var promises = batches.map(function(batch) {
+        return fetch('/api/zip-polygons?zips=' + batch.join(','))
+          .then(function(r) { return r.json(); });
       });
-      banner.classList.remove('visible');
-      isLoading = false;
+      return Promise.all(promises).then(function(results) {
+        results.forEach(function(geojsonFC) {
+          (geojsonFC.features || []).forEach(function(feat) {
+            var zip = (feat.properties || {}).ZCTA5;
+            if (!zip || zipPolygons[zip]) return;
+            var isSelected = selectedZips.has(zip);
+            var layer = L.geoJSON(feat, {
+              style: function() { return zipStyle(isSelected); },
+              onEachFeature: function(f, l) {
+                l.bindTooltip(zip, {sticky: true});
+                l.on('click', function() { toggleZip(zip, l); });
+              }
+            }).addTo(polygonLayer);
+            zipPolygons[zip] = layer;
+          });
+        });
+        setBanner(false);
+        isLoadingPolygons = false;
+      });
     })
-    .catch(function() { banner.classList.remove('visible'); isLoading = false; });
+    .catch(function() { setBanner(false); isLoadingPolygons = false; });
 }
 
-function geodesicDistance(lat1, lon1, lat2, lon2) {
-  var R = 3959;
-  var dLat = (lat2 - lat1) * Math.PI / 180;
-  var dLon = (lon2 - lon1) * Math.PI / 180;
-  var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
-          Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
-          Math.sin(dLon/2)*Math.sin(dLon/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+function zipStyle(selected) {
+  return selected
+    ? { color: '#1f6444', weight: 2, fillColor: '#2d8a5e', fillOpacity: 0.45 }
+    : { color: '#9ca3af', weight: 1, fillColor: '#f3f4f6', fillOpacity: 0.35 };
 }
 
-function toggleZip(zip, lat, lon, marker) {
+function toggleZip(zip, layer) {
   if (selectedZips.has(zip)) {
     selectedZips.delete(zip);
     delete zipCentroids[zip];
-    marker.setStyle({ color: '#d1d5db', fillColor: '#f9fafb', fillOpacity: 0.6 });
+    layer.setStyle(zipStyle(false));
   } else {
     selectedZips.add(zip);
-    zipCentroids[zip] = {lat: lat, lon: lon};
-    marker.setStyle({ color: '#2d8a5e', fillColor: '#2d8a5e', fillOpacity: 0.75 });
+    // Compute centroid from layer bounds
+    try {
+      var c = layer.getBounds().getCenter();
+      zipCentroids[zip] = {lat: c.lat, lon: c.lng};
+    } catch(e) {}
+    layer.setStyle(zipStyle(true));
   }
   updateHiddenZips();
 }
@@ -648,8 +692,8 @@ function toggleZip(zip, lat, lon, marker) {
 function clearAllZips() {
   selectedZips.clear();
   zipCentroids = {};
-  Object.values(zipMarkers).forEach(function(m) {
-    m.setStyle({ color: '#d1d5db', fillColor: '#f9fafb', fillOpacity: 0.6 });
+  Object.keys(zipPolygons).forEach(function(z) {
+    zipPolygons[z].setStyle(zipStyle(false));
   });
   updateHiddenZips();
 }
@@ -663,9 +707,33 @@ function updateHiddenZips() {
   document.getElementById('zip-list-preview').textContent = preview;
 }
 
+function setBanner(visible, text) {
+  var b = document.getElementById('map-banner');
+  if (visible) { b.textContent = text || ''; b.classList.add('visible'); }
+  else b.classList.remove('visible');
+}
+
+// Load polygons when map moves
+map.on('moveend zoomend', function() {
+  if (territoryMode === 'zip' && hqLat && hqLon && !isLoadingPolygons) loadZipsForViewport();
+});
+
+// ─── Geocoding ───
+var _geocodeTimer = null;
+
+function onAddressBlur() {
+  var addr = document.getElementById('businessAddress').value.trim();
+  if (!addr) return;
+  doGeocode(addr);
+}
+
 function geocodeAndCenter() {
   var addr = document.getElementById('businessAddress').value.trim();
   if (!addr) return;
+  doGeocode(addr);
+}
+
+function doGeocode(addr) {
   fetch('/geocode', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -678,36 +746,49 @@ function geocodeAndCenter() {
       document.getElementById('hqLat').value = d.lat;
       document.getElementById('hqLon').value = d.lon;
       map.setView([d.lat, d.lon], 9);
-      L.marker([d.lat, d.lon]).addTo(map).bindTooltip('HQ: ' + d.display).openTooltip();
+      placeHqMarker(d.lat, d.lon);
       if (territoryMode === 'radius') drawRadiusCircle();
-      else loadZipsInBounds();
+      else { polygonLayer.clearLayers(); zipPolygons = {}; loadZipsForViewport(); }
     }
   });
 }
 
-map.on('moveend', function() {
-  if (territoryMode === 'zip' && hqLat && hqLon) loadZipsInBounds();
-});
-
+// ─── Init ───
 if (hqLat && hqLon) {
+  placeHqMarker(hqLat, hqLon);
   if (territoryMode === 'radius') drawRadiusCircle();
-  else loadZipsInBounds();
+  else loadZipsForViewport();
+} else {
+  var initAddr = document.getElementById('businessAddress').value.trim();
+  if (initAddr) doGeocode(initAddr);
+  else setBanner(true, 'Enter a business address above to center the map and load ZIP territories.');
 }
 
-// ─── Pricing quick fill ───
-var FREQUENCIES = {{ frequencies|tojson }};
-
+// ─── Pricing Quick Fill — base + floor((dogs-1)/Y) * X ───
 function quickFill() {
-  var step = parseFloat(document.getElementById('qf_step').value) || 0;
+  var X = parseFloat(document.getElementById('qf_X').value);
+  var Y = parseFloat(document.getElementById('qf_Y').value) || 1;
+  if (isNaN(X)) X = 0;
+
+  // dog column index: col '1'→dogs=1, '2'→dogs=2, '3'→dogs=3, '4p'→dogs=4
+  var colDogs = {'1': 1, '2': 2, '3': 3, '4p': 4};
+
   FREQUENCIES.forEach(function(freq) {
     var fkey = freq.replace(/ /g,'_').replace(/-/g,'_');
-    var base = parseFloat(document.getElementById('qf_' + fkey).value);
+    var base = parseFloat(document.getElementById('qf_' + fkey) ? document.getElementById('qf_' + fkey).value : '');
     if (isNaN(base)) return;
-    ['1','2','3','4p'].forEach(function(col, i) {
+    Object.keys(colDogs).forEach(function(col) {
       var el = document.getElementById('price_' + fkey + '_' + col);
-      if (el) el.value = (base + step * i).toFixed(2);
+      if (!el) return;
+      var dogs = colDogs[col];
+      var price = base + Math.floor((dogs - 1) / Y) * X;
+      el.value = price.toFixed(2);
     });
   });
+
+  // Save quick-fill rules to hidden inputs
+  document.getElementById('qf_X_saved').value = X;
+  document.getElementById('qf_Y_saved').value = Y;
 }
 
 // ─── Greeting preview ───
@@ -776,12 +857,6 @@ function removeDoc(filename, el) {
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.ok && el) el.remove();
   });
-}
-
-// Auto-geocode if no coords yet
-if (!hqLat || hqLat == 0) {
-  var initAddr = document.getElementById('businessAddress').value.trim();
-  if (initAddr) geocodeAndCenter();
 }
 </script>
 {% endblock %}
