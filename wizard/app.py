@@ -591,6 +591,22 @@ def admin_credentials(phone: str):
 # Run
 # ──────────────────────────────────────────
 
+def _startup_preload():
+    """Preload ZIP centroid data in a background thread so the first map
+    request is fast.  Runs once at startup; safe to call multiple times."""
+    import threading
+    def _load():
+        try:
+            from geo import preload_zip_data
+            n = preload_zip_data()
+            app.logger.info(f"[wizard] ZIP centroid cache ready — {n} ZIPs loaded")
+        except Exception as exc:
+            app.logger.warning(f"[wizard] ZIP preload failed: {exc}")
+    t = threading.Thread(target=_load, daemon=True)
+    t.start()
+
+
 if __name__ == "__main__":
+    _startup_preload()
     port = int(os.environ.get("WIZARD_PORT", 5001))
     app.run(host="0.0.0.0", port=port, debug=False)
