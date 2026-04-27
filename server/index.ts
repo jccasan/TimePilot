@@ -25,7 +25,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "blob:", "https://*.googleapis.com", "https://*.gstatic.com", "https://*.mapbox.com", "https://*.tile.openstreetmap.org", "https://tile.openstreetmap.org"],
-      connectSrc: ["'self'", "https://api.mapbox.com", "https://*.tiles.mapbox.com", "https://events.mapbox.com", "wss:", "https://tigerweb.geo.census.gov", "https://nominatim.openstreetmap.org"],
+      connectSrc: ["'self'", "https://api.mapbox.com", "https://*.tiles.mapbox.com", "https://events.mapbox.com", "wss:", "https://services.arcgis.com", "https://nominatim.openstreetmap.org"],
       workerSrc: ["'self'", "blob:"],
       childSrc: ["'self'", "blob:"],
       frameSrc: ["'self'"],
