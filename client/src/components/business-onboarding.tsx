@@ -856,7 +856,7 @@ function ReviewLaunchStep({
   );
 }
 
-export default function BusinessOnboarding({ onComplete }: { onComplete: () => void }) {
+export default function BusinessOnboarding({ onComplete, onDismiss }: { onComplete: () => void; onDismiss?: () => void }) {
   const { toast } = useToast();
   const { data: status, isLoading } = useQuery<BusinessOnboardingStatus>({
     queryKey: ["/api/onboarding/business-status"],
@@ -940,12 +940,15 @@ export default function BusinessOnboarding({ onComplete }: { onComplete: () => v
           size="sm"
           className="text-xs text-muted-foreground hover:text-foreground"
           onClick={() => {
-            completeMutation.mutate();
+            if (onDismiss) {
+              onDismiss();
+            } else {
+              completeMutation.mutate();
+            }
           }}
-          disabled={completeMutation.isPending}
           data-testid="button-skip-onboarding"
         >
-          Skip Setup
+          Do this later
         </Button>
       </header>
 

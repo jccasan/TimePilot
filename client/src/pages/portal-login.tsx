@@ -172,17 +172,7 @@ export default function PortalLogin() {
               />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground hover:text-primary underline"
-                  onClick={() => setShowForgotPassword(true)}
-                  data-testid="link-forgot-password"
-                >
-                  Forgot Password?
-                </button>
-              </div>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -196,6 +186,16 @@ export default function PortalLogin() {
               <LogIn className="mr-2 h-4 w-4" />
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
+            <div className="text-center">
+              <button
+                type="button"
+                className="text-sm text-primary hover:underline font-medium"
+                onClick={() => setShowForgotPassword(true)}
+                data-testid="link-forgot-password"
+              >
+                Forgot Password?
+              </button>
+            </div>
           </form>
         </CardContent>
       </Card>

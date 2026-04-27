@@ -380,9 +380,9 @@ async function sendServiceRemindersForRule(
             replyTo: companyEmail || undefined,
           });
           emailOk = emailRes.success;
-          if (!emailOk) console.error(`[reminders] Email delivery failed for ${maskEmail(contact.email)}: ${emailRes.error}`);
+          if (!emailOk) console.error(`[reminders] Email delivery failed for ${maskEmail(contact.email ?? '')}: ${emailRes.error}`);
         } catch (err) {
-          console.error(`[reminders] Failed to send email to ${maskEmail(contact.email)}:`, err);
+          console.error(`[reminders] Failed to send email to ${maskEmail(contact.email ?? '')}:`, err);
         }
       }
 
@@ -573,10 +573,10 @@ async function sendInvoiceReminders(
         if (emailRes.success) {
           emailOk = true;
         } else {
-          console.error(`[reminders] Invoice email delivery failed for ${maskEmail(contact.email)}: ${emailRes.error}`);
+          console.error(`[reminders] Invoice email delivery failed for ${maskEmail(contact.email ?? '')}: ${emailRes.error}`);
         }
       } catch (err) {
-        console.error(`[reminders] Failed to send invoice email to ${maskEmail(contact.email)}:`, err);
+        console.error(`[reminders] Failed to send invoice email to ${maskEmail(contact.email ?? '')}:`, err);
       }
     }
 

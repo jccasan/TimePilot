@@ -259,10 +259,15 @@ function AuthenticatedLayout() {
       );
     }
     return (
-      <BusinessOnboarding onComplete={() => {
-        setBusinessOnboardingDone(true);
-        queryClient.invalidateQueries({ queryKey: ["/api/onboarding/business-status"] });
-      }} />
+      <BusinessOnboarding
+        onComplete={() => {
+          setBusinessOnboardingDone(true);
+          queryClient.invalidateQueries({ queryKey: ["/api/onboarding/business-status"] });
+        }}
+        onDismiss={() => {
+          setBusinessOnboardingDone(true);
+        }}
+      />
     );
   }
 

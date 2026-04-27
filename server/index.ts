@@ -1189,7 +1189,7 @@ async function seedDemoCompany() {
       return;
     }
 
-    const pwHash = 'c432304d6d32bf305f0c66b607e05581:bad70236ce9513ae6733fca4b215d4baabf4609144cb108386d2603ddf1d6307db2ea6b81414d068a0fbe3a0d6e42dfa8bc2dfbaf1842ec15f6c4b15f427b7e8';
+    const pwHash = '6415d9a7e2946fb4151eff58f0d70ade:6ac05bd83e9fd5bb4250cfd95beb3c6e8aae77382c0ae6bcc7c49a8e3be66b419697c4450b961eb85a4d1d31ee444dbe3c965c64dc55c3d9aa70d2b0f6bacdd3';
 
     const userRes = await pool.query(
       `INSERT INTO users (email, password_hash, first_name, last_name, must_change_password) VALUES ($1, $2, 'Alex', 'Demo', false) RETURNING id`,

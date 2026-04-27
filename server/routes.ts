@@ -1702,6 +1702,10 @@ export async function registerRoutes(
       const userId = (req.session as any).userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const result = await ensureCompanySetup(userId);
+      const demoId = await getDemoCompanyId();
+      if (demoId && demoId === result.companyId) {
+        await db.execute(sql`UPDATE companies SET business_onboarding_step = 0, business_onboarding_complete = false WHERE id = ${result.companyId}`);
+      }
       return res.json(result);
     } catch (err) { handleError(res, err); }
   });
@@ -1767,6 +1771,10 @@ export async function registerRoutes(
   app.get("/api/onboarding/business-status", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const demoId = await getDemoCompanyId();
+      if (demoId && demoId === companyId) {
+        await db.execute(sql`UPDATE companies SET business_onboarding_step = 0, business_onboarding_complete = false WHERE id = ${companyId} AND business_onboarding_complete = true`);
+      }
       const result = await db.execute(sql`SELECT name, email, phone, address, logo_url, website_url, business_description, service_area_description, pricing_config, stripe_connect_account_id, stripe_connect_onboarded, business_onboarding_step, business_onboarding_complete FROM companies WHERE id = ${companyId}`);
       const rows = result.rows as Record<string, unknown>[];
       if (!rows || rows.length === 0) return res.status(404).json({ error: "Company not found" });
@@ -6561,7 +6569,9 @@ Return ONLY valid JSON, no markdown.`,
         visit = await storage.updateVisit(p(req.params.id), companyId, updates);
       } catch (updateErr: unknown) {
         const msg = updateErr instanceof Error ? updateErr.message : String(updateErr);
-        if (msg.includes("unique constraint") || msg.includes("duplicate key")) {
+        const causeMsg = (updateErr instanceof Error && updateErr.cause instanceof Error) ? updateErr.cause.message : "";
+        if (msg.includes("unique constraint") || msg.includes("duplicate key") ||
+            causeMsg.includes("unique constraint") || causeMsg.includes("duplicate key")) {
           return res.status(409).json({ error: "A visit with this service plan already exists on the selected date" });
         }
         throw updateErr;
