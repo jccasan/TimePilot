@@ -9,6 +9,7 @@ const COLOR_SEL   = "#16a34a";
 const COLOR_HOVER = "#bbf7d0";
 const MILES_TO_M  = 1609.34;
 const DEFAULT_ZOOM = 11;
+const FALLBACK: L.LatLngExpression = [38.5, -97];
 
 function isZip(s: string) { return /^\d{5}$/.test(s); }
 
@@ -32,33 +33,13 @@ function addOsmLayer(map: L.Map) {
 }
 
 /**
- * Poll with rAF until the element's clientWidth and clientHeight are both
- * non-zero and stable for at least NEEDED consecutive frames.
- * Uses clientWidth/clientHeight (not getBoundingClientRect) because Leaflet
- * itself uses clientWidth/clientHeight for its size calculation.
+ * Correct call order to reposition Leaflet tiles:
+ *   1. invalidateSize  → updates Leaflet's stored container dimensions
+ *   2. setView         → positions tiles using the now-correct dimensions
  */
-function waitForStableSize(el: HTMLElement, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let lastW = -1;
-    let lastH = -1;
-    let stable = 0;
-    const NEEDED = 4;
-
-    function check() {
-      if (signal.aborted) { reject(new Error("aborted")); return; }
-      const w = el.clientWidth;
-      const h = el.clientHeight;
-      if (w > 0 && h > 0 && w === lastW && h === lastH) {
-        if (++stable >= NEEDED) { resolve(); return; }
-      } else {
-        stable = 0;
-        lastW = w;
-        lastH = h;
-      }
-      requestAnimationFrame(check);
-    }
-    requestAnimationFrame(check);
-  });
+function resync(map: L.Map, pos: L.LatLngExpression, zoom: number) {
+  map.invalidateSize({ animate: false });
+  map.setView(pos, zoom, { animate: false });
 }
 
 async function fetchZipsInViewport(w: number, s: number, e: number, n: number): Promise<string[]> {
@@ -126,113 +107,150 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
     const el = containerRef.current;
     if (!el || mapRef.current) return;
 
-    const ac = new AbortController();
+    let cancelled = false;
     let map: L.Map | null = null;
     let ro: ResizeObserver | null = null;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
-    (async () => {
-      // Wait until Leaflet will see a non-zero clientWidth/clientHeight.
-      // Without this, Leaflet initialises at 0×0 and tiles appear at wrong offsets.
-      try {
-        await waitForStableSize(el, ac.signal);
-      } catch { return; }
-      if (ac.signal.aborted || mapRef.current) return;
+    function createMap() {
+      if (cancelled || mapRef.current || !el) return;
 
-      map = L.map(el, { zoomControl: true });
+      map = L.map(el as HTMLElement, { zoomControl: true });
       mapRef.current = map;
       addOsmLayer(map);
 
-      // Resize observer: re-sync Leaflet whenever the element size changes at runtime
       ro = new ResizeObserver(() => {
         if (mapRef.current) mapRef.current.invalidateSize({ animate: false });
       });
-      ro.observe(el);
+      ro.observe(el as HTMLElement);
+    }
 
-      async function loadZips() {
-        if (!mapRef.current || loadingRef.current || mapRef.current.getZoom() < 8) return;
-        loadingRef.current = true;
-        setLoading(true);
-        try {
-          const b = mapRef.current.getBounds();
-          const all = await fetchZipsInViewport(b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
-          const fresh = all.filter(z => !layersRef.current.has(z));
-          if (!fresh.length) return;
-          for (let i = 0; i < fresh.length; i += 50) {
+    async function loadZips() {
+      if (!mapRef.current || loadingRef.current || mapRef.current.getZoom() < 8) return;
+      loadingRef.current = true;
+      setLoading(true);
+      try {
+        const b = mapRef.current.getBounds();
+        const all = await fetchZipsInViewport(b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
+        if (cancelled) return;
+        const fresh = all.filter(z => !layersRef.current.has(z));
+        if (!fresh.length) return;
+        for (let i = 0; i < fresh.length; i += 50) {
+          if (cancelled || !mapRef.current) return;
+          const geo = await fetchZipPolygons(fresh.slice(i, i + 50));
+          geo.features.forEach(feat => {
             if (!mapRef.current) return;
-            const geo = await fetchZipPolygons(fresh.slice(i, i + 50));
-            geo.features.forEach(feat => {
-              const zip = (feat.properties as any)?.ZCTA5 as string;
-              if (!zip || !isZip(zip) || layersRef.current.has(zip)) return;
-              const isSel = selectedRef.current.has(zip);
-              const layer = L.geoJSON(feat as any, {
-                style: {
-                  color: "#15803d", weight: 1.5,
-                  fillColor: isSel ? COLOR_SEL : COLOR_UNSEL,
-                  fillOpacity: isSel ? 0.45 : 0.12,
-                },
-              });
-              layer.on("mouseover", () => {
-                if (!selectedRef.current.has(zip))
-                  layer.setStyle({ fillColor: COLOR_HOVER, fillOpacity: 0.35 });
-              });
-              layer.on("mouseout", () => {
-                if (!selectedRef.current.has(zip))
-                  layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
-              });
-              layer.on("click", () => {
-                const next = new Set(selectedRef.current);
-                if (next.has(zip)) {
-                  next.delete(zip);
-                  layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
-                } else {
-                  next.add(zip);
-                  layer.setStyle({ fillColor: COLOR_SEL, fillOpacity: 0.45 });
-                }
-                syncSelected(next);
-              });
-              const ring =
-                feat.geometry.type === "Polygon" ? feat.geometry.coordinates[0] :
-                feat.geometry.type === "MultiPolygon" ? feat.geometry.coordinates[0][0] : null;
-              if (ring?.length) {
-                const xs = (ring as number[][]).map(c => c[0]);
-                const ys = (ring as number[][]).map(c => c[1]);
-                const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-                const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-                L.marker([cy, cx], {
-                  icon: L.divIcon({
-                    className: "",
-                    html: `<span style="font-size:10px;font-weight:700;color:#14532d;text-shadow:0 0 3px #fff,0 0 3px #fff">${zip}</span>`,
-                    iconSize: [40, 14],
-                    iconAnchor: [20, 7],
-                  }),
-                  interactive: false,
-                }).addTo(map!);
-              }
-              layer.addTo(map!);
-              layersRef.current.set(zip, layer);
+            const zip = (feat.properties as any)?.ZCTA5 as string;
+            if (!zip || !isZip(zip) || layersRef.current.has(zip)) return;
+            const isSel = selectedRef.current.has(zip);
+            const layer = L.geoJSON(feat as any, {
+              style: {
+                color: "#15803d", weight: 1.5,
+                fillColor: isSel ? COLOR_SEL : COLOR_UNSEL,
+                fillOpacity: isSel ? 0.45 : 0.12,
+              },
             });
-          }
-        } finally {
+            layer.on("mouseover", () => {
+              if (!selectedRef.current.has(zip))
+                layer.setStyle({ fillColor: COLOR_HOVER, fillOpacity: 0.35 });
+            });
+            layer.on("mouseout", () => {
+              if (!selectedRef.current.has(zip))
+                layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
+            });
+            layer.on("click", () => {
+              const next = new Set(selectedRef.current);
+              if (next.has(zip)) {
+                next.delete(zip);
+                layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
+              } else {
+                next.add(zip);
+                layer.setStyle({ fillColor: COLOR_SEL, fillOpacity: 0.45 });
+              }
+              syncSelected(next);
+            });
+            const ring =
+              feat.geometry.type === "Polygon" ? feat.geometry.coordinates[0] :
+              feat.geometry.type === "MultiPolygon" ? feat.geometry.coordinates[0][0] : null;
+            if (ring?.length) {
+              const xs = (ring as number[][]).map(c => c[0]);
+              const ys = (ring as number[][]).map(c => c[1]);
+              const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+              const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+              L.marker([cy, cx], {
+                icon: L.divIcon({
+                  className: "",
+                  html: `<span style="font-size:10px;font-weight:700;color:#14532d;text-shadow:0 0 3px #fff,0 0 3px #fff">${zip}</span>`,
+                  iconSize: [40, 14],
+                  iconAnchor: [20, 7],
+                }),
+                interactive: false,
+              }).addTo(mapRef.current!);
+            }
+            layer.addTo(mapRef.current!);
+            layersRef.current.set(zip, layer);
+          });
+        }
+      } finally {
+        if (!cancelled) {
           loadingRef.current = false;
           setLoading(false);
         }
       }
+    }
+
+    // Use rAF to wait until the container has non-zero clientWidth/clientHeight.
+    // rAF fires after paint, guaranteeing CSS layout is complete.
+    let rafId: number;
+    function tryInit() {
+      if (cancelled || !el) return;
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w === 0 || h === 0) {
+        // Container not sized yet — try again next frame
+        rafId = requestAnimationFrame(tryInit);
+        return;
+      }
+
+      // Container has correct dimensions → create map synchronously
+      createMap();
+      if (!map) return;
 
       map.on("moveend zoomend", loadZips);
 
-      let pos: L.LatLngExpression = [38.5, -97];
-      if (addressHint) {
-        const geocoded = await geocodeAddress(addressHint);
-        if (geocoded) pos = geocoded;
-      }
-      if (ac.signal.aborted || !mapRef.current) return;
-      map.setView(pos, DEFAULT_ZOOM);
-      map.invalidateSize({ animate: false });
-      setTimeout(loadZips, 400);
-    })();
+      // Geocode then apply correct view.
+      // Key: invalidateSize() BEFORE setView() so Leaflet knows the right dimensions.
+      (async () => {
+        let pos: L.LatLngExpression = FALLBACK;
+        if (addressHint) {
+          const geocoded = await geocodeAddress(addressHint);
+          if (geocoded && !cancelled) pos = geocoded;
+        }
+        if (cancelled || !mapRef.current) return;
+
+        // ① First sync — correct order: invalidate → setView
+        resync(mapRef.current, pos, DEFAULT_ZOOM);
+
+        // ② 150 ms pass — catches any layout settling after first paint
+        timers.push(setTimeout(() => {
+          if (cancelled || !mapRef.current) return;
+          resync(mapRef.current, pos, DEFAULT_ZOOM);
+        }, 150));
+
+        // ③ 600 ms pass — safety net for slow renderers / transitions
+        timers.push(setTimeout(() => {
+          if (cancelled || !mapRef.current) return;
+          resync(mapRef.current, pos, DEFAULT_ZOOM);
+          timers.push(setTimeout(loadZips, 50));
+        }, 600));
+      })();
+    }
+    rafId = requestAnimationFrame(tryInit);
 
     return () => {
-      ac.abort();
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+      timers.forEach(clearTimeout);
       ro?.disconnect();
       if (map) {
         map.remove();
@@ -254,17 +272,6 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
 
   return (
     <div className="space-y-2">
-      {/*
-        Layout rules:
-        - The OUTER div owns height (340px) and clips with overflow:hidden.
-          It must be position:relative so children can reference it.
-        - The INNER div (containerRef = Leaflet root) gets width:100% height:100%.
-          Leaflet will set position:relative on it — that's fine because the
-          parent has an explicit height, so height:100% still resolves correctly.
-        - Do NOT put overflow:hidden on containerRef. Leaflet measures
-          clientWidth/clientHeight of its own element. Overflow on a parent
-          wrapper does not interfere with those measurements.
-      */}
       <div
         className="relative border border-border rounded-md"
         style={{ height: 340, overflow: "hidden" }}
@@ -321,61 +328,72 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef       = useRef<L.Map | null>(null);
   const circleRef    = useRef<L.Circle | null>(null);
-  const centerRef    = useRef<L.LatLngExpression>([38.5, -97]);
+  const centerRef    = useRef<L.LatLngExpression>(FALLBACK);
+  const radiusRef    = useRef(radiusMiles);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el || mapRef.current) return;
 
-    const ac = new AbortController();
+    let cancelled = false;
     let map: L.Map | null = null;
     let ro: ResizeObserver | null = null;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let rafId: number;
 
-    (async () => {
-      try {
-        await waitForStableSize(el, ac.signal);
-      } catch { return; }
-      if (ac.signal.aborted || mapRef.current) return;
+    function tryInit() {
+      if (cancelled || !el) return;
+      if (el.clientWidth === 0 || el.clientHeight === 0) {
+        rafId = requestAnimationFrame(tryInit);
+        return;
+      }
 
-      map = L.map(el, { zoomControl: true, scrollWheelZoom: false });
+      map = L.map(el as HTMLElement, { zoomControl: true, scrollWheelZoom: false });
       mapRef.current = map;
       addOsmLayer(map);
 
       ro = new ResizeObserver(() => {
         if (mapRef.current) mapRef.current.invalidateSize({ animate: false });
       });
-      ro.observe(el);
+      ro.observe(el as HTMLElement);
 
-      if (addressHint) {
-        const pos = await geocodeAddress(addressHint);
-        if (pos) centerRef.current = pos;
-      }
-      if (ac.signal.aborted || !mapRef.current) return;
+      (async () => {
+        if (addressHint) {
+          const pos = await geocodeAddress(addressHint);
+          if (pos && !cancelled) centerRef.current = pos;
+        }
+        if (cancelled || !mapRef.current) return;
 
-      const circle = L.circle(centerRef.current, {
-        radius: radiusMiles * MILES_TO_M,
-        color: "#15803d",
-        fillColor: "#16a34a",
-        fillOpacity: 0.2,
-        weight: 2,
-      }).addTo(map);
-      circleRef.current = circle;
-      map.fitBounds(circle.getBounds(), { padding: [24, 24] });
-      map.invalidateSize({ animate: false });
-    })();
+        const circle = L.circle(centerRef.current, {
+          radius: radiusRef.current * MILES_TO_M,
+          color: "#15803d", fillColor: "#16a34a",
+          fillOpacity: 0.2, weight: 2,
+        }).addTo(map!);
+        circleRef.current = circle;
+
+        mapRef.current.invalidateSize({ animate: false });
+        mapRef.current.fitBounds(circle.getBounds(), { padding: [24, 24] });
+
+        timers.push(setTimeout(() => {
+          if (cancelled || !mapRef.current || !circleRef.current) return;
+          mapRef.current.invalidateSize({ animate: false });
+          mapRef.current.fitBounds(circleRef.current.getBounds(), { padding: [24, 24] });
+        }, 400));
+      })();
+    }
+    rafId = requestAnimationFrame(tryInit);
 
     return () => {
-      ac.abort();
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+      timers.forEach(clearTimeout);
       ro?.disconnect();
-      if (map) {
-        map.remove();
-        mapRef.current = null;
-        circleRef.current = null;
-      }
+      if (map) { map.remove(); mapRef.current = null; circleRef.current = null; }
     };
   }, []);
 
   useEffect(() => {
+    radiusRef.current = radiusMiles;
     if (!circleRef.current || !mapRef.current) return;
     circleRef.current.setRadius(radiusMiles * MILES_TO_M);
     mapRef.current.fitBounds(circleRef.current.getBounds(), { padding: [24, 24] });
