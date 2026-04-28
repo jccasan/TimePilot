@@ -590,13 +590,14 @@ async function runTests() {
 
   await test("POST /api/skills/run rejects unauthenticated requests", "Skills", async () => {
     const r = await req("POST", "/api/skills/run", { skill: "optimize_route", params: {} }, { Authorization: "" });
-    assert(r.status === 401 || r.status === 403, `Expected 401/403 unauthenticated, got ${r.status}`);
+    assert(r.status === 401, `Expected 401 unauthenticated, got ${r.status}`);
   });
 
   await test("POST /api/skills/run returns 400 for unknown skill", "Skills", async () => {
     const r = await req("POST", "/api/skills/run", { skill: "nonexistent_skill_xyz", params: {} });
     assert(r.status === 400, `Expected 400 for unknown skill, got ${r.status}`);
-    assert(r.data.error, "Expected error message");
+    assert(r.data.success === false, "Expected success: false for unknown skill");
+    assert(r.data.error === "SKILL_NOT_FOUND", `Expected error SKILL_NOT_FOUND, got ${r.data.error}`);
   });
 
   await test("POST /api/skills/run returns 400 for missing skill name", "Skills", async () => {
@@ -604,9 +605,11 @@ async function runTests() {
     assert(r.status === 400, `Expected 400 for missing skill name, got ${r.status}`);
   });
 
-  await test("POST /api/skills/run optimize_route returns 400 for invalid params", "Skills", async () => {
+  await test("POST /api/skills/run optimize_route returns invalid-params error for missing routeId", "Skills", async () => {
     const r = await req("POST", "/api/skills/run", { skill: "optimize_route", params: {} });
     assert(r.status === 400, `Expected 400 for missing routeId, got ${r.status}`);
+    assert(r.data.success === false, "Expected success: false for invalid params");
+    assert(r.data.message === "Invalid parameters", `Expected message 'Invalid parameters', got '${r.data.message}'`);
   });
 
   await test("POST /api/skills/run optimize_route is callable with a route id", "Skills", async () => {
@@ -615,7 +618,17 @@ async function runTests() {
     if (Array.isArray(routes.data) && routes.data.length > 0) {
       const routeId = routes.data[0].id;
       const skillR = await req("POST", "/api/skills/run", { skill: "optimize_route", params: { routeId } });
-      assert([200, 400, 402, 409].includes(skillR.status), `Expected 200/400/402/409 from skill run, got ${skillR.status}`);
+      const knownStatuses = [200, 400, 402, 404, 409];
+      assert(knownStatuses.includes(skillR.status), `Expected one of ${knownStatuses.join("/")} from skill run, got ${skillR.status}`);
+      assert(typeof skillR.data.success === "boolean", "Expected 'success' boolean in skill response");
+      assert(typeof skillR.data.message === "string", "Expected 'message' string in skill response");
+      if (skillR.status === 200) {
+        assert(skillR.data.success === true, "Expected success: true on HTTP 200 response");
+      } else {
+        assert(skillR.data.success === false, `Expected success: false on HTTP ${skillR.status} failure`);
+        const knownErrors = ["INSUFFICIENT_CREDITS", "LOCKED", "ROUTE_NOT_FOUND", "SKILL_EXECUTION_ERROR"];
+        assert(typeof skillR.data.error === "string", "Expected 'error' string in failure response");
+      }
     }
   });
 
