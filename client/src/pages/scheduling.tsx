@@ -1397,13 +1397,6 @@ function VisitDetailSheet({
 
   const statusActions: { status: string; label: string; icon: typeof CheckCircle; color: string; show: boolean }[] = [
     {
-      status: "in_progress",
-      label: "Start Job",
-      icon: Play,
-      color: "text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30 border-orange-200 dark:border-orange-800",
-      show: visit.status === "scheduled",
-    },
-    {
       status: "skipped",
       label: "Skip Visit",
       icon: XCircle,
@@ -1699,12 +1692,25 @@ function VisitDetailSheet({
                     {contactHasPhone ? "On My Way" : "On My Way (No phone)"}
                   </Button>
 
+                  {visit.status === "scheduled" && (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-center sm:justify-start gap-2 h-11 sm:h-9 text-base sm:text-sm font-semibold sm:font-normal text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30 border-orange-200 dark:border-orange-800"
+                      onClick={() => statusMutation.mutate({ visitId: visit.id, status: "in_progress" })}
+                      disabled={statusMutation.isPending}
+                      data-testid="button-action-in_progress"
+                    >
+                      {updatingStatus === "in_progress" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                      Start Job
+                    </Button>
+                  )}
+
                   {(visit.status === "scheduled" || visit.status === "in_progress") && (
                     <>
                       {!showCompletePanel ? (
                         <Button
                           variant="outline"
-                          className="justify-start gap-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 border-green-200 dark:border-green-800"
+                          className="w-full justify-center sm:justify-start gap-2 h-11 sm:h-9 text-base sm:text-sm font-semibold sm:font-normal text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 border-green-200 dark:border-green-800"
                           onClick={() => setShowCompletePanel(true)}
                           disabled={statusMutation.isPending || isCompletingWithPhoto}
                           data-testid="button-action-completed"
