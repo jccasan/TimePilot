@@ -207,7 +207,9 @@ GUIDELINES:
   DESCRIPTION: <detailed description based on the conversation>
 - You can query live business data using your available tools. Use them when the user asks about their specific metrics.
 - Format numbers nicely (e.g., "$1,234.56" for currency).
-- For lists, use bullet points. Keep responses under 200 words unless the topic requires more detail.`;
+- For lists, use bullet points. Keep responses under 200 words unless the topic requires more detail.
+- When a generate_invoice tool result includes a "contactName" field, always name the client in your reply (e.g., "Generated a draft invoice for Jane Doe totalling $120.00."). Never invoice silently.
+- When a generate_invoice tool result has error "AMBIGUOUS_CONTACT", do not proceed. Instead, relay the clarification question from the message field verbatim so the user can pick the right client.`;
 }
 
 export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -393,12 +395,25 @@ export async function executeToolCall(
       case "generate_invoice": {
         const contactRef: string = args.contactRef ? String(args.contactRef).trim() : "";
         let contactId: string | undefined;
+        let resolvedContactName: string | undefined;
         if (contactRef) {
           const resolved = await resolveContactRef(contactRef, companyId);
-          if (!resolved) {
+          if (resolved.type === "not_found") {
             return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
           }
-          contactId = resolved;
+          if (resolved.type === "ambiguous") {
+            const nameList = resolved.matches
+              .map(m => (m.hint ? `${m.name} (${m.hint})` : m.name))
+              .join(", ");
+            return JSON.stringify({
+              success: false,
+              error: "AMBIGUOUS_CONTACT",
+              message: `Multiple clients match "${contactRef}": ${nameList}. Please provide the full name of the client you want to invoice so I can proceed with the right one.`,
+              matches: resolved.matches,
+            });
+          }
+          contactId = resolved.id;
+          resolvedContactName = resolved.name;
         }
         const { runSkill } = await import("./skills/index");
         const skillParams: Record<string, unknown> = contactId
@@ -409,7 +424,36 @@ export async function executeToolCall(
           skillParams,
           { companyId, userId: userId ?? "", role: role ?? "system" }
         );
-        return JSON.stringify(result);
+        const resultObj = result as Record<string, unknown>;
+        if (resolvedContactName) {
+          // Always surface who was matched, regardless of skill success/failure.
+          resultObj.contactName = resolvedContactName;
+          if (resultObj.success) {
+            const baseMsg = typeof resultObj.message === "string" ? resultObj.message : "";
+            // Transform "Generated 1 draft invoice totalling …" →
+            // "Generated 1 draft invoice for Jane Doe totalling …"
+            const transformed = baseMsg.replace(
+              /^(Generated \d+ draft invoices?) /,
+              `$1 for ${resolvedContactName} `
+            );
+            // If the regex didn't fire (e.g., "No uninvoiced work found…"), prefix the
+            // message with the client name so the matched contact is always visible.
+            resultObj.message =
+              transformed !== baseMsg
+                ? transformed
+                : baseMsg
+                ? `${resolvedContactName}: ${baseMsg}`
+                : `Checked invoices for ${resolvedContactName}.`;
+          } else {
+            // On failure (e.g., no uninvoiced work), prefix the message with the
+            // resolved client name so the user knows which client was checked.
+            const baseMsg = typeof resultObj.message === "string" ? resultObj.message : "";
+            if (baseMsg && !baseMsg.includes(resolvedContactName)) {
+              resultObj.message = `${resolvedContactName}: ${baseMsg}`;
+            }
+          }
+        }
+        return JSON.stringify(resultObj);
       }
       case "get_client_visits": {
         const contactRef: string = String(args.contactRef ?? "").trim();
@@ -480,39 +524,70 @@ async function resolveRouteRef(routeRef: string, companyId: string): Promise<str
   return null;
 }
 
-async function resolveContactRef(contactRef: string, companyId: string): Promise<string | null> {
+type ContactMatch = { id: string; name: string; hint: string };
+type ContactRefResult =
+  | { type: "found"; id: string; name: string }
+  | { type: "ambiguous"; matches: ContactMatch[] }
+  | { type: "not_found" };
+
+async function resolveContactRef(contactRef: string, companyId: string): Promise<ContactRefResult> {
   const normalized = contactRef.trim().toLowerCase();
-  if (!normalized) return null;
+  if (!normalized) return { type: "not_found" };
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (uuidPattern.test(normalized)) {
-    const [row] = await db.select({ id: contacts.id }).from(contacts)
-      .where(and(eq(contacts.id, contactRef), eq(contacts.companyId, companyId))).limit(1);
-    return row?.id ?? null;
+    const [row] = await db
+      .select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email })
+      .from(contacts)
+      .where(and(eq(contacts.id, contactRef), eq(contacts.companyId, companyId)))
+      .limit(1);
+    if (!row) return { type: "not_found" };
+    return { type: "found", id: row.id, name: `${row.firstName} ${row.lastName}`.trim() };
   }
   const allContacts = await db
-    .select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName })
+    .select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email })
     .from(contacts)
     .where(eq(contacts.companyId, companyId));
-  // Exact full-name match
-  const exact = allContacts.find(c =>
-    `${c.firstName} ${c.lastName}`.toLowerCase() === normalized ||
+
+  const toName = (c: { firstName: string; lastName: string }) => `${c.firstName} ${c.lastName}`.trim();
+  const toHint = (c: { email: string | null }) =>
+    c.email ? c.email.replace(/(?<=^.{2}).+(?=@)/, "…") : "";
+  const toMatch = (c: { id: string; firstName: string; lastName: string; email: string | null }): ContactMatch =>
+    ({ id: c.id, name: toName(c), hint: toHint(c) });
+
+  // Exact full-name match (could still be multiple people with the same name)
+  const exactMatches = allContacts.filter(c =>
+    toName(c).toLowerCase() === normalized ||
     `${c.lastName} ${c.firstName}`.toLowerCase() === normalized
   );
-  if (exact) return exact.id;
-  // Partial / fuzzy match — any contact whose full name contains the ref
-  if (normalized.length >= 2) {
-    const partial = allContacts.find(c =>
-      `${c.firstName} ${c.lastName}`.toLowerCase().includes(normalized)
-    );
-    if (partial) return partial.id;
-    // Match on last name alone
-    const lastNameMatch = allContacts.find(c => c.lastName.toLowerCase() === normalized);
-    if (lastNameMatch) return lastNameMatch.id;
-    // Match on first name alone
-    const firstNameMatch = allContacts.find(c => c.firstName.toLowerCase() === normalized);
-    if (firstNameMatch) return firstNameMatch.id;
+  if (exactMatches.length === 1) return { type: "found", id: exactMatches[0].id, name: toName(exactMatches[0]) };
+  if (exactMatches.length > 1) {
+    return { type: "ambiguous", matches: exactMatches.map(toMatch) };
   }
-  return null;
+
+  if (normalized.length >= 2) {
+    // Partial / fuzzy match — contacts whose full name contains the ref
+    const partialMatches = allContacts.filter(c => toName(c).toLowerCase().includes(normalized));
+    if (partialMatches.length === 1) return { type: "found", id: partialMatches[0].id, name: toName(partialMatches[0]) };
+    if (partialMatches.length > 1) {
+      return { type: "ambiguous", matches: partialMatches.map(toMatch) };
+    }
+
+    // Match on last name alone
+    const lastNameMatches = allContacts.filter(c => c.lastName.toLowerCase() === normalized);
+    if (lastNameMatches.length === 1) return { type: "found", id: lastNameMatches[0].id, name: toName(lastNameMatches[0]) };
+    if (lastNameMatches.length > 1) {
+      return { type: "ambiguous", matches: lastNameMatches.map(toMatch) };
+    }
+
+    // Match on first name alone
+    const firstNameMatches = allContacts.filter(c => c.firstName.toLowerCase() === normalized);
+    if (firstNameMatches.length === 1) return { type: "found", id: firstNameMatches[0].id, name: toName(firstNameMatches[0]) };
+    if (firstNameMatches.length > 1) {
+      return { type: "ambiguous", matches: firstNameMatches.map(toMatch) };
+    }
+  }
+
+  return { type: "not_found" };
 }
 
 async function getClientVisits(companyId: string, contactId: string, limit: number): Promise<string> {
