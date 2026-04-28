@@ -89,6 +89,9 @@ function getActionLabel(rule: AutomationRule): string {
       if (skill === "optimize_route" && config.params?.routeId) {
         label += config.params.routeId === "__all__" ? " (all routes)" : " (specific route)";
       }
+      if (skill === "generate_invoice" && config.params?.scopeToContact === true) {
+        label += " (contact only)";
+      }
       return label;
     }
     return "run skill";
