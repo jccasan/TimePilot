@@ -1236,6 +1236,7 @@ function VisitDetailSheet({
   const [editDate, setEditDate] = useState("");
   const [editRouteId, setEditRouteId] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     if (visit && editing) {
@@ -1427,7 +1428,7 @@ function VisitDetailSheet({
 
   return (
     <>
-    <Sheet open={open} onOpenChange={(o) => { if (!o) { setEditing(false); setShowCompletePanel(false); setGatePhotoFile(null); setGatePhotoPreview(null); } onOpenChange(o); }}>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) { setEditing(false); setShowCompletePanel(false); setGatePhotoFile(null); setGatePhotoPreview(null); setEnlargedPhoto(null); } onOpenChange(o); }}>
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto" data-testid="sheet-visit-detail">
         <SheetHeader className="pb-4">
           <SheetTitle className="text-lg" data-testid="text-sheet-title">Visit Details</SheetTitle>
@@ -1641,7 +1642,46 @@ function VisitDetailSheet({
                     </div>
                   </div>
                 )}
+
+                {visit.gateClosedPhoto && (
+                  <div className="flex items-start gap-3">
+                    <Camera className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Gate closed photo</p>
+                      <button
+                        type="button"
+                        className="mt-1 block rounded-md overflow-hidden border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => setEnlargedPhoto(visit.gateClosedPhoto!)}
+                        data-testid="button-gate-closed-photo"
+                        aria-label="View gate closed photo full size"
+                      >
+                        <img
+                          src={visit.gateClosedPhoto}
+                          alt="Gate closed photo"
+                          className="h-28 w-auto object-cover hover:opacity-90 transition-opacity"
+                          data-testid="img-gate-closed-photo"
+                        />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
+
+              <Dialog open={!!enlargedPhoto} onOpenChange={(open) => { if (!open) setEnlargedPhoto(null); }}>
+                <DialogContent className="max-w-2xl p-2">
+                  <DialogHeader className="px-2 pt-2 pb-0">
+                    <DialogTitle className="text-sm font-medium">Gate closed photo</DialogTitle>
+                  </DialogHeader>
+                  {enlargedPhoto && (
+                    <img
+                      src={enlargedPhoto}
+                      alt="Gate closed photo enlarged"
+                      className="w-full h-auto rounded-md"
+                      data-testid="img-gate-closed-photo-enlarged"
+                    />
+                  )}
+                </DialogContent>
+              </Dialog>
 
               <Separator />
 
