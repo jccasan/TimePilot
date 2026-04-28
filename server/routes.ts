@@ -15827,11 +15827,11 @@ Rules:
     try {
       const company = await storage.getCompany(p(req.params.id));
       if (!company) return res.status(404).json({ error: "Company not found" });
-      const companyUsers = await storage.listCompanyUsers(company.id);
-      const ownerEntry = companyUsers.find(cu => cu.role === "owner");
+      const companyUserRecords = await storage.getCompanyUsers(company.id);
+      const ownerEntry = companyUserRecords.find((cu: { role: string }) => cu.role === "owner");
       if (!ownerEntry) return res.status(404).json({ error: "No owner found for company" });
-      const owner = await storage.getUser(ownerEntry.userId);
-      if (!owner) return res.status(404).json({ error: "Owner user record not found" });
+      const owner = await getUserById((ownerEntry as { userId: string }).userId);
+      if (!owner || !owner.email) return res.status(404).json({ error: "Owner user record not found" });
       const protocol = req.headers["x-forwarded-proto"] || "https";
       const host = req.headers.host || "app.scoopilot.com";
       const appUrl = `${protocol}://${host}`;
