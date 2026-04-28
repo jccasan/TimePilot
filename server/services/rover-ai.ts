@@ -461,11 +461,11 @@ export async function executeToolCall(
           return JSON.stringify({ success: false, message: "A client name or ID is required.", error: "MISSING_CONTACT_REF" });
         }
         const resolvedId = await resolveContactRef(contactRef, companyId);
-        if (!resolvedId) {
+        if (resolvedId.type !== "found") {
           return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
         }
         const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 20);
-        return await getClientVisits(companyId, resolvedId, limit);
+        return await getClientVisits(companyId, resolvedId.id, limit);
       }
       case "get_client_service_plan": {
         const contactRef: string = String(args.contactRef ?? "").trim();
@@ -473,10 +473,10 @@ export async function executeToolCall(
           return JSON.stringify({ success: false, message: "A client name or ID is required.", error: "MISSING_CONTACT_REF" });
         }
         const resolvedId = await resolveContactRef(contactRef, companyId);
-        if (!resolvedId) {
+        if (resolvedId.type !== "found") {
           return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
         }
-        return await getClientServicePlan(companyId, resolvedId);
+        return await getClientServicePlan(companyId, resolvedId.id);
       }
       case "send_portal_invite": {
         const contactRef: string = String(args.contactRef ?? "").trim();
@@ -484,10 +484,10 @@ export async function executeToolCall(
           return JSON.stringify({ success: false, message: "A client name or ID is required.", error: "MISSING_CONTACT_REF" });
         }
         const resolvedId = await resolveContactRef(contactRef, companyId);
-        if (!resolvedId) {
+        if (resolvedId.type !== "found") {
           return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
         }
-        return await sendPortalInvite(companyId, resolvedId);
+        return await sendPortalInvite(companyId, resolvedId.id);
       }
       default:
         return JSON.stringify({ error: "Unknown tool" });
