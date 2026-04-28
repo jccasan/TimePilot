@@ -32,6 +32,54 @@ const VERIFIED_SENDER = "jeremy@scoopilot.com";
 const OUTBOUND_DOMAIN = process.env.OUTBOUND_EMAIL_DOMAIN || "scoopilot.com";
 const FALLBACK_SENDER = `notifications@${OUTBOUND_DOMAIN}`;
 
+export function buildWelcomeEmailContent(opts: {
+  firstName: string;
+  companyName: string;
+  appUrl: string;
+  email?: string;
+  tempPassword?: string;
+}): { subject: string; text: string; html: string } {
+  const { firstName, companyName, appUrl, email, tempPassword } = opts;
+  const subject = `Welcome to ScooPilot, ${companyName}!`;
+
+  const credentialsSection = (email && tempPassword) ? `\n\nYour login credentials:\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.` : "";
+  const text = `Hi ${firstName},\n\nWelcome to ScooPilot — we're really glad to have you on board!\n\nYour account is all set up and ready to go. To get started, just head to the app and log in. The setup wizard will walk you through everything — it only takes a few minutes.${credentialsSection}\n\nLog in at: ${appUrl}\n\nIf you run into anything or have questions, we're here to help:\n• Instagram or Facebook: Shoot us a DM — we're responsive there\n• Email: jeremy@scoopilot.com\n\nLooking forward to helping you grow your business.\n\n— The ScooPilot Team`;
+
+  const credentialsHtml = (email && tempPassword) ? `
+              <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2d8a5e;">
+                <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Your Login Credentials</p>
+                <p style="margin: 4px 0; font-size: 14px;"><strong>Email:</strong> ${email}</p>
+                <p style="margin: 4px 0; font-size: 14px;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+                <p style="margin: 8px 0 0; font-size: 12px; color: #6b7280;">You'll be asked to set a new password when you first log in.</p>
+              </div>` : "";
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9fafb;">
+      <div style="background-color: #2d8a5e; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 24px; letter-spacing: 0.5px;">ScooPilot</h1>
+      </div>
+      <div style="padding: 28px 24px; background: #ffffff; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <h2 style="margin-top: 0; color: #111827; font-size: 20px;">Welcome, ${firstName}!</h2>
+        <p style="color: #374151; line-height: 1.6;">We're really glad to have <strong>${companyName}</strong> on board. Your account is all set up and ready to go.</p>
+        <p style="color: #374151; line-height: 1.6;">To get started, log in below — the setup wizard will walk you through everything in just a few minutes.</p>
+        ${credentialsHtml}
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 15px; display: inline-block;">Log In Now</a>
+        </div>
+        <div style="border-top: 1px solid #e5e7eb; margin-top: 28px; padding-top: 20px;">
+          <p style="margin: 0 0 8px; color: #374151; font-weight: 600;">Need help? We're here for you:</p>
+          <p style="margin: 4px 0; color: #374151; font-size: 14px;">📱 <strong>Instagram or Facebook:</strong> Shoot us a DM — we're responsive there</p>
+          <p style="margin: 4px 0; color: #374151; font-size: 14px;">✉️ <strong>Email:</strong> <a href="mailto:jeremy@scoopilot.com" style="color: #2d8a5e;">jeremy@scoopilot.com</a></p>
+        </div>
+        <p style="margin-top: 24px; color: #6b7280; font-size: 14px;">Looking forward to helping you grow your business.</p>
+        <p style="margin: 4px 0; color: #6b7280; font-size: 14px;">— The ScooPilot Team</p>
+      </div>
+    </div>
+  `;
+
+  return { subject, text, html };
+}
+
 export function buildCompanySenderAddress(companyId: string): string {
   const shortId = companyId.split("-")[0];
   return `notifications+${shortId}@${OUTBOUND_DOMAIN}`;

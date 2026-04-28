@@ -14,7 +14,7 @@ import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
-import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, logEmailSent } from "./services/email";
+import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, logEmailSent, buildWelcomeEmailContent } from "./services/email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd } from "./utils/company-date";
 import { sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "./services/sms";
 import {
@@ -1404,29 +1404,12 @@ export async function registerRoutes(
       const appUrl = `${protocol}://${host}`;
       const resolvedCompanyName = companyName?.trim() || `${displayName}'s Company`;
 
+      const _selfSignupWelcome = buildWelcomeEmailContent({ firstName: displayName, companyName: resolvedCompanyName, appUrl });
       sendEmail({
         to: email,
-        subject: "Welcome to ScooPilot — Your 14-day free trial is active",
-        text: `Hi ${displayName},\n\nWelcome to ScooPilot! Your account "${resolvedCompanyName}" has been created with a 14-day free trial.\n\nLog in at: ${appUrl}\nEmail: ${email}\n\nThank you for choosing ScooPilot!`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-              <h1 style="color: white; margin: 0;">ScooPilot</h1>
-            </div>
-            <div style="padding: 20px; border: 1px solid #e5e7eb;">
-              <h2 style="margin-top: 0;">Welcome, ${displayName}!</h2>
-              <p>Your account <strong>"${resolvedCompanyName}"</strong> has been created with a <strong>14-day free trial</strong>.</p>
-              <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 4px 0;"><strong>Email:</strong> ${email}</p>
-                <p style="margin: 4px 0;"><strong>Trial ends:</strong> ${new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
-              </div>
-              <div style="text-align: center; margin: 24px 0;">
-                <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
-              </div>
-              <p style="margin-top: 20px; color: #6b7280; font-size: 14px;">Thank you for choosing ScooPilot!</p>
-            </div>
-          </div>
-        `,
+        subject: _selfSignupWelcome.subject,
+        text: _selfSignupWelcome.text,
+        html: _selfSignupWelcome.html,
       }).catch((err) => console.error("Failed to send welcome email:", err));
 
       if (companyInfo && !companyInfo.alreadySetup) {
@@ -12018,27 +12001,13 @@ Rules:
               const protocol = req.headers["x-forwarded-proto"] || "https";
               const host = req.headers.host || "localhost:5000";
               const appUrl = `${protocol}://${host}`;
+              const _stripeWelcome = buildWelcomeEmailContent({ firstName, companyName, appUrl, email, tempPassword });
               await sendEmail({
                 companyId: company.id,
                 to: email,
-                subject: `Your ScooPilot account is ready`,
-                text: `Hi ${firstName},\n\nYour ScooPilot account "${companyName}" has been created.\n\nLog in at: ${appUrl}\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
-                html: `
-                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-                      <h1 style="color: white; margin: 0;">ScooPilot</h1>
-                    </div>
-                    <div style="padding: 20px; border: 1px solid #e5e7eb;">
-                      <h2 style="margin-top: 0;">Welcome to ScooPilot!</h2>
-                      <p>Hi ${firstName},</p>
-                      <p>Your account <strong>"${companyName}"</strong> has been created and is ready to use.</p>
-                      <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
-                        <p style="margin: 4px 0;"><strong>Email:</strong> ${email}</p>
-                        <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
-                      </div>
-                      <a href="${appUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Log In Now</a>
-                    </div>
-                  </div>`,
+                subject: _stripeWelcome.subject,
+                text: _stripeWelcome.text,
+                html: _stripeWelcome.html,
               });
               console.log(`[Stripe Subscription] Welcome email sent to ${maskEmail(email)}`);
             } catch (emailErr) {
@@ -12390,27 +12359,13 @@ Rules:
       const appUrl = `${protocol}://${host}`;
 
       try {
+        const _tenantWelcome = buildWelcomeEmailContent({ firstName: first_name, companyName: company, appUrl, email, tempPassword });
         await sendEmail({
           companyId: newCompany.id,
           to: email,
-          subject: "Your ScooPilot account is ready",
-          text: `Hi ${first_name}, your ScooPilot account "${company}" is ready. Email: ${email}, Temporary Password: ${tempPassword}. Login at ${appUrl}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-                <h1 style="color: white; margin: 0;">ScooPilot</h1>
-              </div>
-              <div style="padding: 20px; border: 1px solid #e5e7eb;">
-                <h2 style="margin-top: 0;">Welcome to ScooPilot!</h2>
-                <p>Hi ${first_name},</p>
-                <p>Your account <strong>"${company}"</strong> has been created and is ready to use.</p>
-                <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
-                  <p style="margin: 4px 0;"><strong>Email:</strong> ${email}</p>
-                  <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
-                </div>
-                <a href="${appUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Log In Now</a>
-              </div>
-            </div>`,
+          subject: _tenantWelcome.subject,
+          text: _tenantWelcome.text,
+          html: _tenantWelcome.html,
         });
         console.log(`[Create Tenant] Welcome email sent to ${maskEmail(email)}`);
       } catch (emailErr) {
@@ -15762,31 +15717,13 @@ Rules:
         const appUrl = `${protocol}://${host}`;
 
         if (tempPassword) {
+          const _adminWelcome = buildWelcomeEmailContent({ firstName: ownerFirstName, companyName, appUrl, email: ownerEmail, tempPassword });
           await sendEmail({
             companyId: company.id,
             to: ownerEmail,
-            subject: `Your ScooPilot account is ready`,
-            text: `Hi ${ownerFirstName},\n\nYour ScooPilot account "${companyName}" has been created.\n\nLog in at: ${appUrl}\nEmail: ${ownerEmail}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-                  <h1 style="color: white; margin: 0;">ScooPilot</h1>
-                </div>
-                <div style="padding: 20px; border: 1px solid #e5e7eb;">
-                  <h2 style="margin-top: 0;">Welcome to ScooPilot!</h2>
-                  <p>Hi ${ownerFirstName},</p>
-                  <p>Your account <strong>"${companyName}"</strong> has been created and is ready to use.</p>
-                  <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
-                    <p style="margin: 4px 0;"><strong>Email:</strong> ${ownerEmail}</p>
-                    <p style="margin: 4px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
-                  </div>
-                  <div style="text-align: center; margin: 24px 0;">
-                    <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
-                  </div>
-                  <p style="color: #6b7280; font-size: 14px;">You'll be asked to set a new password when you first log in.</p>
-                </div>
-              </div>
-            `,
+            subject: _adminWelcome.subject,
+            text: _adminWelcome.text,
+            html: _adminWelcome.html,
           });
           emailSent = true;
         } else {
@@ -15883,6 +15820,27 @@ Rules:
       const totalSkipped = results.reduce((sum, r) => sum + r.skippedContacts, 0);
       const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);
       res.json({ dryRun, totalMigrated, totalSkipped, totalErrors, results });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/companies/:id/resend-welcome", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const company = await storage.getCompany(p(req.params.id));
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const companyUsers = await storage.listCompanyUsers(company.id);
+      const ownerEntry = companyUsers.find(cu => cu.role === "owner");
+      if (!ownerEntry) return res.status(404).json({ error: "No owner found for company" });
+      const owner = await storage.getUser(ownerEntry.userId);
+      if (!owner) return res.status(404).json({ error: "Owner user record not found" });
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host || "app.scoopilot.com";
+      const appUrl = `${protocol}://${host}`;
+      const firstName = owner.firstName || owner.email.split("@")[0];
+      const welcome = buildWelcomeEmailContent({ firstName, companyName: company.name, appUrl });
+      const result = await sendEmail({ companyId: company.id, to: owner.email, subject: welcome.subject, text: welcome.text, html: welcome.html });
+      if (!result.success) return res.status(500).json({ error: result.error });
+      console.log(`[Admin] Resent welcome email to ${owner.email} for company "${company.name}"`);
+      res.json({ success: true, sentTo: owner.email });
     } catch (err) { handleError(res, err); }
   });
 
