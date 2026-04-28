@@ -81,7 +81,14 @@ function getActionLabel(rule: AutomationRule): string {
   if (!config?.type) return "unknown";
   if (config.type === "run_skill") {
     const skill = config.params?.skillName;
-    return typeof skill === "string" ? `run skill: ${skill.replace(/_/g, " ")}` : "run skill";
+    if (typeof skill === "string") {
+      let label = `run skill: ${skill.replace(/_/g, " ")}`;
+      if (skill === "optimize_route" && config.params?.routeId) {
+        label += config.params.routeId === "__all__" ? " (all routes)" : " (specific route)";
+      }
+      return label;
+    }
+    return "run skill";
   }
   return config.type.replace(/_/g, " ");
 }
@@ -234,6 +241,7 @@ export default function Automation() {
                       <Select onValueChange={field.onChange} value={field.value ?? ""}>
                         <FormControl><SelectTrigger data-testid="select-skill-route-id"><SelectValue placeholder="Select a route" /></SelectTrigger></FormControl>
                         <SelectContent>
+                          <SelectItem value="__all__">All active routes</SelectItem>
                           {(routes ?? []).map((r) => (
                             <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                           ))}

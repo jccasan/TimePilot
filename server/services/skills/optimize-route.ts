@@ -15,15 +15,8 @@ function computeStopHash(stopIds: string[]): string {
   return crypto.createHash("sha256").update(sorted).digest("hex").substring(0, 64);
 }
 
-registerSkill({
-  name: "optimize_route",
-  description: "Optimize the stop order for a route to minimize total drive distance. Returns the number of stops reordered and miles saved.",
-  parameterSchema: z.object({
-    routeId: z.string().min(1, "routeId is required"),
-  }),
-  async execute(params: Record<string, unknown>, context: SkillContext): Promise<SkillResult> {
-    const { routeId } = params as { routeId: string };
-    const { companyId } = context;
+/** Internal helper – optimizes a single route by ID. */
+async function optimizeSingleRoute(routeId: string, companyId: string): Promise<SkillResult> {
 
     const route = await storage.getRoute(routeId, companyId);
     if (!route) {
@@ -206,5 +199,39 @@ registerSkill({
         order: result.orderedIds,
       },
     };
+}
+
+registerSkill({
+  name: "optimize_route",
+  description: "Optimize the stop order for a route to minimize total drive distance. Pass routeId as a specific route UUID, or \"__all__\" to optimize every active route for the company.",
+  parameterSchema: z.object({
+    routeId: z.string().min(1, "routeId is required"),
+  }),
+  async execute(params: Record<string, unknown>, context: SkillContext): Promise<SkillResult> {
+    const { routeId } = params as { routeId: string };
+    const { companyId } = context;
+
+    if (routeId === "__all__") {
+      const allRoutes = await storage.getRoutes(companyId);
+      if (allRoutes.length === 0) {
+        return { success: false, message: "No routes found to optimize.", error: "NO_ROUTES" };
+      }
+      const results: SkillResult[] = [];
+      for (const r of allRoutes) {
+        results.push(await optimizeSingleRoute(r.id, companyId));
+      }
+      const succeeded = results.filter(r => r.success);
+      const failed = results.filter(r => !r.success);
+      const summary = succeeded.length === results.length
+        ? `Optimized all ${results.length} route${results.length !== 1 ? "s" : ""} successfully.`
+        : `Optimized ${succeeded.length} of ${results.length} routes. ${failed.length} failed: ${failed.map(r => r.message).join("; ")}`;
+      return {
+        success: succeeded.length > 0,
+        message: summary,
+        data: { total: results.length, succeeded: succeeded.length, failed: failed.length },
+      };
+    }
+
+    return optimizeSingleRoute(routeId, companyId);
   },
 });
