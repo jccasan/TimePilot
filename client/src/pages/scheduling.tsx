@@ -729,7 +729,7 @@ export default function Scheduling() {
 
   const rescheduleMutation = useMutation({
     mutationFn: async ({ visitId, scheduledDate }: { visitId: string; scheduledDate: string }) => {
-      await apiRequest("PATCH", `/api/visits/${visitId}`, { scheduledDate });
+      await apiRequest("PATCH", `/api/visits/${visitId}`, { scheduledDate, routeId: null });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
@@ -761,7 +761,7 @@ export default function Scheduling() {
     if (newDate === visit.scheduledDate) return;
     queryClient.setQueryData<Visit[]>(
       [`/api/visits/range?start=${startStr}&end=${endStr}`],
-      (old) => old?.map((v) => v.id === visit.id ? { ...v, scheduledDate: newDate } : v)
+      (old) => old?.map((v) => v.id === visit.id ? { ...v, scheduledDate: newDate, routeId: null } : v)
     );
     rescheduleMutation.mutate({ visitId: visit.id, scheduledDate: newDate });
   }, [startStr, endStr, rescheduleMutation]);

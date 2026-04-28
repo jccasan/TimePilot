@@ -1352,6 +1352,8 @@ export default function RoutesPage() {
   const stopsByRoute = useMemo(() => {
     const map: Record<string, ServicePlan[]> = {};
     for (const r of allRoutes) map[r.id] = [];
+    // Only assign stops to routes that actually run on the selected day
+    const dayRouteIds = new Set(routesForDay.map(r => r.id));
     // Build plan → today's visit route lookup so date-specific routes take priority
     const planToVisitRoute = new Map<string, string>();
     for (const v of dayVisits) {
@@ -1359,13 +1361,15 @@ export default function RoutesPage() {
     }
     for (const sp of visiblePlans) {
       const visitRouteId = planToVisitRoute.get(sp.id);
-      // Prefer the visit's route (date-specific) if it exists in the map; fall back to plan's route
-      const routeId = (visitRouteId && map[visitRouteId] !== undefined) ? visitRouteId : sp.routeId;
+      // Only use visit's routeId if that route runs today; fall back to plan's route if it runs today
+      const routeId = (visitRouteId && dayRouteIds.has(visitRouteId))
+        ? visitRouteId
+        : (sp.routeId && dayRouteIds.has(sp.routeId)) ? sp.routeId : null;
       if (!routeId || !(routeId in map)) continue;
       map[routeId].push(sp);
     }
     return map;
-  }, [allRoutes, visiblePlans, dayVisits]);
+  }, [allRoutes, visiblePlans, dayVisits, routesForDay]);
 
   const fetchRouteMetrics = useCallback(async (routeId: string) => {
     try {
@@ -1390,11 +1394,17 @@ export default function RoutesPage() {
   }, [routesForDay, stopsByRoute, routeMetrics, fetchRouteMetrics]);
 
   const unassignedPlans = useMemo(() => {
-    // Plans routed via their visit's route should not appear here as unassigned
+    const dayRouteIds = new Set(routesForDay.map(r => r.id));
+    // Only treat as "routed via visit" when the visit's route actually runs today
     const routedViaVisit = new Set(
-      dayVisits.filter(v => v.routeId && v.servicePlanId).map(v => v.servicePlanId as string)
+      dayVisits.filter(v => v.routeId && v.servicePlanId && dayRouteIds.has(v.routeId)).map(v => v.servicePlanId as string)
     );
-    return visiblePlans.filter(sp => !sp.routeId && !routedViaVisit.has(sp.id)).filter(sp => {
+    return visiblePlans.filter(sp => {
+      // Already properly assigned via a today-visit's route
+      if (routedViaVisit.has(sp.id)) return false;
+      // Plan's own route runs today — it belongs in stopsByRoute, not unassigned
+      if (sp.routeId && dayRouteIds.has(sp.routeId)) return false;
+      // No today-route (either no route, or route is for a different day) → show as unassigned
       if (!unassignedSearch) return true;
       const contact = contacts.find(c => c.id === sp.contactId);
       const property = properties.find(p => p.id === sp.propertyId);
@@ -1404,7 +1414,7 @@ export default function RoutesPage() {
         (property && property.streetAddress?.toLowerCase().includes(search))
       );
     });
-  }, [visiblePlans, dayVisits, unassignedSearch, contacts, properties]);
+  }, [visiblePlans, dayVisits, routesForDay, unassignedSearch, contacts, properties]);
 
   const activeDragStop = useMemo(() => {
     if (!activeDragId) return null;
