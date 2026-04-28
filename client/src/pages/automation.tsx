@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Zap } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const triggers = [
   { value: "lead_created", label: "Lead Created" },
@@ -62,6 +63,7 @@ const ruleFormSchema = z.object({
   actionType: z.string().min(1, "Action type is required"),
   skillName: z.string().optional(),
   skillRouteId: z.string().optional(),
+  sendAfterGenerate: z.boolean().optional(),
   description: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.actionType === "run_skill" && !data.skillName) {
@@ -114,6 +116,7 @@ export default function Automation() {
       actionType: "create_task",
       skillName: "",
       skillRouteId: "",
+      sendAfterGenerate: false,
       description: "",
     },
   });
@@ -131,6 +134,9 @@ export default function Automation() {
         }
         if (data.skillName === "generate_invoice") {
           params.allPending = true;
+          if (data.sendAfterGenerate) {
+            params.sendAfterGenerate = true;
+          }
         }
       }
       await apiRequest("POST", "/api/automation-rules", {
@@ -222,7 +228,7 @@ export default function Automation() {
                   <FormField control={form.control} name="skillName" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Skill</FormLabel>
-                      <Select onValueChange={(v) => { field.onChange(v); form.setValue("skillRouteId", ""); }} value={field.value ?? ""}>
+                      <Select onValueChange={(v) => { field.onChange(v); form.setValue("skillRouteId", ""); form.setValue("sendAfterGenerate", false); }} value={field.value ?? ""}>
                         <FormControl><SelectTrigger data-testid="select-skill-name"><SelectValue placeholder="Select a skill" /></SelectTrigger></FormControl>
                         <SelectContent>
                           {availableSkills.map((s) => (
@@ -231,6 +237,20 @@ export default function Automation() {
                         </SelectContent>
                       </Select>
                       <FormMessage />
+                    </FormItem>
+                  )} />
+                )}
+                {watchedActionType === "run_skill" && watchedSkillName === "generate_invoice" && (
+                  <FormField control={form.control} name="sendAfterGenerate" render={({ field }) => (
+                    <FormItem className="flex items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value ?? false}
+                          onCheckedChange={field.onChange}
+                          data-testid="checkbox-send-after-generate"
+                        />
+                      </FormControl>
+                      <FormLabel className="cursor-pointer font-normal">Send after generating</FormLabel>
                     </FormItem>
                   )} />
                 )}

@@ -15,6 +15,7 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
 import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, logEmailSent, buildWelcomeEmailContent } from "./services/email";
+import { sendInvoiceEmail } from "./services/invoice-email";
 import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd } from "./utils/company-date";
 import { sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "./services/sms";
 import {
@@ -11138,189 +11139,13 @@ Rules:
   app.post("/api/invoices/:id/send-email", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const invoice = await storage.getInvoice(p(req.params.id), companyId);
-      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-      if (invoice.status === "paid") return res.status(400).json({ error: "Invoice is already paid" });
-
-      const contact = await storage.getContact(invoice.contactId, companyId);
-      if (!contact?.email) return res.status(400).json({ error: "Contact has no email address" });
-
-      const company = await storage.getCompany(companyId);
-      const lineItems = await storage.getInvoiceLineItems(invoice.id);
-
-      let paymentUrl: string | undefined;
-      if (isStripeConfigured()) {
-        const invoiceTotal = parseFloat(invoice.total);
-        const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-        if (invoiceTotal > 0) {
-          try {
-            let stripeCustomerId = contact.stripeCustomerId;
-            const contactName = `${contact.firstName} ${contact.lastName}`.trim();
-            const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
-              currentCustomerId: contact.stripeCustomerId,
-              stripeAccount: connectAccountId,
-              email: contact.email || undefined,
-              name: contactName,
-              metadata: { contactId: contact.id, companyId },
-            });
-            if (wasRecreated) {
-              await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustId });
-            }
-            stripeCustomerId = resolvedCustId;
-
-            const baseUrl = getBaseUrl(req);
-            const checkoutResult = await createCheckoutSession({
-              customerId: stripeCustomerId,
-              invoiceId: invoice.id,
-              invoiceNumber: invoice.invoiceNumber,
-              amount: invoiceTotal,
-              successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
-              cancelUrl: `${baseUrl}/portal`,
-              stripeConnectAccountId: connectAccountId,
-              tenantId: companyId,
-            });
-            paymentUrl = checkoutResult.url;
-          } catch (stripeErr: any) {
-            console.error("[send-email] Could not generate Stripe checkout URL, sending without payment link:", stripeErr?.message || stripeErr);
-          }
-        } else {
-          // $0 invoice — link to tip page so customers can leave a tip
-          const baseUrl = getBaseUrl(req);
-          paymentUrl = `${baseUrl}/invoice/${invoice.id}/pay`;
-        }
+      const invoiceId = p(req.params.id);
+      const result = await sendInvoiceEmail(invoiceId, companyId, { sentBy: userId, baseUrl: getBaseUrl(req) });
+      if (!result.success) {
+        const status = result.error === "Invoice not found" ? 404 : result.error === "Invoice already paid" ? 400 : result.error === "Contact has no email address" ? 400 : 500;
+        return res.status(status).json({ error: result.error });
       }
-
-      const properties = await storage.getProperties(companyId, contact.id);
-      const serviceAddr = properties.length > 0 ? properties[0] : null;
-      const taxRateNum = parseFloat(invoice.taxRate || "0") / 100;
-      const discountNum = parseFloat(invoice.discountAmount || "0");
-      const paidNum = invoice.paidAt ? parseFloat(invoice.total) : 0;
-      const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : "";
-
-      const fromAddress = company?.email || "jeremy@scoopilot.com";
-
-      const emailFormattedDueDate = invoice.dueDate
-        ? new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-        : "";
-
-      const emailBillingAddr = contact.streetAddress ? {
-        line1: contact.streetAddress,
-        line2: contact.address2 || "",
-        city: contact.city || "",
-        state: contact.state || "",
-        zip: contact.zipCode || "",
-      } : null;
-      const emailServiceAddr = serviceAddr ? {
-        line1: serviceAddr.streetAddress || "",
-        line2: "",
-        city: serviceAddr.city || "",
-        state: serviceAddr.state || "",
-        zip: serviceAddr.zipCode || "",
-      } : null;
-      const emailBillingLine = emailBillingAddr ? `${emailBillingAddr.line1} ${emailBillingAddr.city} ${emailBillingAddr.state} ${emailBillingAddr.zip}`.trim() : "";
-      const emailServiceLine = emailServiceAddr ? `${emailServiceAddr.line1} ${emailServiceAddr.city} ${emailServiceAddr.state} ${emailServiceAddr.zip}`.trim() : "";
-      const emailShowServiceAddr = emailServiceAddr && emailServiceLine && emailServiceLine !== emailBillingLine;
-
-      const invoiceData = {
-        business: {
-          name: company?.name || "",
-          address: company?.address || "",
-          phone: company?.phone || "",
-          website: "",
-          logo: logoUrl,
-        },
-        invoice: {
-          number: invoice.invoiceNumber,
-          status: invoice.status || "pending",
-          issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
-          due_date: emailFormattedDueDate,
-          terms: "Net 30",
-          service_period: "",
-        },
-        customer: {
-          name: `${contact.firstName} ${contact.lastName || ""}`.trim(),
-        },
-        billing_address: emailBillingAddr,
-        service_address: emailServiceAddr,
-        show_service_address: emailShowServiceAddr ? emailServiceAddr : null,
-        line_items: lineItems.map(li => ({
-          description: li.description,
-          details: "",
-          qty: li.quantity,
-          unit_price: parseFloat(li.unitPrice),
-          line_total: parseFloat(li.total),
-        })),
-        totals: {
-          subtotal: parseFloat(invoice.subtotal),
-          discount: discountNum,
-          tax_rate: taxRateNum,
-          paid: paidNum,
-        },
-        visits: undefined as { date: string; time: string; status: string }[] | undefined,
-        notes: "",
-        payment_instructions: "",
-        thank_you: "Thank you for your business!",
-        hasFooter: true,
-        paymentUrl: paymentUrl || "",
-        venmoHandle: company?.venmoHandle || "",
-        venmoHandleOnly: !paymentUrl && !!company?.venmoHandle ? company.venmoHandle : "",
-      };
-
-      const computed = computeInvoice(invoiceData);
-      const tpl = loadTemplate(getDefaultTemplatePath());
-      const defaultTheme = loadTheme(getDefaultThemePath());
-      let theme = defaultTheme;
-      if (company?.invoiceTheme) {
-        try {
-          const custom = JSON.parse(company.invoiceTheme);
-          theme = { ...defaultTheme, ...custom };
-        } catch {}
-      }
-      const renderedHtml = renderInvoice(tpl, theme, computed);
-
-      const subject = `Invoice ${invoice.invoiceNumber} from ${company?.name || "ScooPilot"}`;
-      const venmoTextLine = company?.venmoHandle ? `\nOr pay via Venmo: @${company.venmoHandle}` : "";
-      const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}${venmoTextLine}\n\nThank you for your business!`;
-
-      const msg = await storage.createMessage({
-        companyId,
-        contactId: contact.id,
-        channel: "email",
-        direction: "outbound",
-        status: "queued",
-        fromAddress,
-        toAddress: contact.email,
-        subject,
-        body: textBody,
-        htmlBody: renderedHtml,
-        sentBy: userId,
-        metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
-      });
-
-      console.log(`[send-email] Sending invoice ${invoice.invoiceNumber} to ${maskEmail(contact.email)} from ${maskEmail(fromAddress)}`);
-      const result = await sendEmail({
-        companyId: companyId,
-        to: contact.email,
-        from: fromAddress,
-        subject,
-        text: textBody,
-        html: renderedHtml,
-        senderName: company?.name || undefined,
-        replyTo: company?.email || undefined,
-      });
-
-      if (result.success) {
-        console.log(`[send-email] Successfully sent invoice ${invoice.invoiceNumber} to ${maskEmail(contact.email)}`);
-        await storage.updateMessageStatus(msg.id, "sent");
-        if (invoice.status === "pending" || invoice.status === "draft") {
-          await storage.updateInvoice(invoice.id, companyId, { status: "sent" });
-        }
-        res.json({ success: true, messageId: msg.id, paymentUrl: paymentUrl || null });
-      } else {
-        console.error(`[send-email] Failed to send invoice ${invoice.invoiceNumber}: ${result.error}`);
-        await storage.updateMessageStatus(msg.id, "failed", result.error);
-        res.status(500).json({ error: result.error });
-      }
+      return res.json({ success: true, messageId: result.messageId || null, paymentUrl: result.paymentUrl || null });
     } catch (err) { handleError(res, err); }
   });
 

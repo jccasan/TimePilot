@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { storage } from "../../storage";
 import { registerSkill, type SkillContext, type SkillResult } from "./index";
+import { sendInvoiceEmail } from "../invoice-email";
 
 async function buildLineItems(
   visits: { id: string; scheduledDate: string; servicePlanId: string }[],
@@ -49,13 +50,14 @@ registerSkill({
   parameterSchema: z.object({
     contactId: z.string().optional(),
     allPending: z.boolean().optional(),
+    sendAfterGenerate: z.boolean().optional(),
   }).refine(
     data => data.contactId || data.allPending,
     { message: "Provide contactId or set allPending: true" }
   ),
 
   async execute(params: Record<string, unknown>, context: SkillContext): Promise<SkillResult> {
-    const { contactId, allPending } = params as { contactId?: string; allPending?: boolean };
+    const { contactId, allPending, sendAfterGenerate } = params as { contactId?: string; allPending?: boolean; sendAfterGenerate?: boolean };
     const { companyId } = context;
 
     const dueDate = (() => {
@@ -91,6 +93,8 @@ registerSkill({
 
     let created = 0;
     let totalCents = 0;
+    let sent = 0;
+    let sendFailed = 0;
     const createdIds: string[] = [];
 
     for (const contactEntry of targetContacts) {
@@ -126,6 +130,21 @@ registerSkill({
           await storage.updateVisit(visit.id, companyId, { invoiceId: invoice.id });
         }
 
+        if (sendAfterGenerate) {
+          try {
+            const emailResult = await sendInvoiceEmail(invoice.id, companyId);
+            if (emailResult.success) {
+              sent++;
+            } else {
+              sendFailed++;
+              console.error(`[generate_invoice skill] Email failed for invoice ${invoice.id}: ${emailResult.error}`);
+            }
+          } catch (emailErr) {
+            sendFailed++;
+            console.error(`[generate_invoice skill] Email error for invoice ${invoice.id}:`, emailErr);
+          }
+        }
+
         createdIds.push(invoice.id);
         totalCents += Math.round(subtotal * 100);
         created++;
@@ -144,13 +163,24 @@ registerSkill({
 
     const totalDollars = totalCents / 100;
     const plural = created !== 1;
+    let message = `Generated ${created} draft invoice${plural ? "s" : ""} totalling $${totalDollars.toFixed(2)}.`;
+    if (sendAfterGenerate) {
+      if (sendFailed === 0) {
+        message = `Generated and sent ${created} invoice${plural ? "s" : ""} totalling $${totalDollars.toFixed(2)}.`;
+      } else if (sent > 0) {
+        message = `Generated ${created} invoice${plural ? "s" : ""} totalling $${totalDollars.toFixed(2)}. Sent ${sent}, failed to send ${sendFailed}.`;
+      } else {
+        message = `Generated ${created} invoice${plural ? "s" : ""} totalling $${totalDollars.toFixed(2)}. Failed to send all ${sendFailed} — check server logs.`;
+      }
+    }
     return {
       success: true,
-      message: `Generated ${created} draft invoice${plural ? "s" : ""} totalling $${totalDollars.toFixed(2)}.`,
+      message,
       data: {
         created,
         totalDollars,
         invoiceIds: createdIds,
+        ...(sendAfterGenerate ? { sent, sendFailed } : {}),
       },
     };
   },
