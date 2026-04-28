@@ -1355,20 +1355,30 @@ function VisitDetailSheet({
     if (!visit) return;
     setIsCompletingWithPhoto(true);
     try {
-      let gatePhotoPath: string | null = null;
       if (gatePhotoFile) {
-        gatePhotoPath = await uploadFileDirect(gatePhotoFile);
+        if (visit.status === "scheduled") {
+          await apiRequest("PATCH", `/api/visits/${visit.id}`, {
+            status: "in_progress",
+            startedAt: new Date().toISOString(),
+          });
+        }
+        const gatePhotoPath = await uploadFileDirect(gatePhotoFile);
+        await apiRequest("POST", `/api/visits/${visit.id}/complete-notify`, {
+          gateClosedPhoto: gatePhotoPath,
+        });
+      } else {
+        await apiRequest("PATCH", `/api/visits/${visit.id}`, {
+          status: "completed",
+          completedAt: new Date().toISOString(),
+        });
       }
-      await apiRequest("POST", `/api/visits/${visit.id}/complete-notify`, {
-        gateClosedPhoto: gatePhotoPath,
-      });
       queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
-      toast({ title: "Visit marked complete", description: "Open the invoice dialog to bill for this visit." });
       const completedPlan = servicePlans?.find(sp => sp.id === visit.servicePlanId);
+      toast({ title: "Visit marked complete", description: "Open the invoice dialog to bill for this visit." });
       onOpenChange(false);
       if (onShowInvoiceDialog && !visit.invoiceId) {
         onShowInvoiceDialog(completedPlan?.contactId);
@@ -1649,7 +1659,7 @@ function VisitDetailSheet({
                     {contactHasPhone ? "On My Way" : "On My Way (No phone)"}
                   </Button>
 
-                  {visit.status !== "completed" && (
+                  {(visit.status === "scheduled" || visit.status === "in_progress") && (
                     <>
                       {!showCompletePanel ? (
                         <Button
