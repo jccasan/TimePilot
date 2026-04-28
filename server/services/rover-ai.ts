@@ -1,8 +1,11 @@
 import OpenAI from "openai";
 import { db } from "../db";
-import { contacts, invoices, visits, routes, servicePlans, companyUsers, users, companies, notifications } from "@shared/schema";
+import { contacts, invoices, visits, routes, servicePlans, companyUsers, users, companies, notifications, properties } from "@shared/schema";
 import { desc } from "drizzle-orm";
-import { eq, and, sql, gte, lte, count } from "drizzle-orm";
+import { eq, and, sql, gte, lte, count, inArray } from "drizzle-orm";
+import { storage } from "../storage";
+import { sendEmail } from "./email";
+import * as crypto from "crypto";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -296,6 +299,61 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_client_visits",
+      description: "Look up recent visit history for a specific client. Use when the user asks about a client's past visits, service history, or upcoming scheduled visits. Supply the client's name or UUID as contactRef.",
+      parameters: {
+        type: "object",
+        properties: {
+          contactRef: {
+            type: "string",
+            description: "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
+          },
+          limit: {
+            type: "number",
+            description: "Number of recent visits to return (default 10, max 20).",
+          },
+        },
+        required: ["contactRef"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_client_service_plan",
+      description: "Check the active service plan(s) for a specific client — frequency, day of week, property, and whether the plan is active. Use when the user asks what schedule or plan a client is on. Supply the client's name or UUID as contactRef.",
+      parameters: {
+        type: "object",
+        properties: {
+          contactRef: {
+            type: "string",
+            description: "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
+          },
+        },
+        required: ["contactRef"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_portal_invite",
+      description: "Send a client portal invite to a specific client, granting them access to the self-service portal. Use when the user asks to send a portal invite or enable portal access for a client. The client must have an email address on file. Supply the client's name or UUID as contactRef.",
+      parameters: {
+        type: "object",
+        properties: {
+          contactRef: {
+            type: "string",
+            description: "The client to invite — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
+          },
+        },
+        required: ["contactRef"],
+      },
+    },
+  },
 ];
 
 export async function executeToolCall(
@@ -352,6 +410,40 @@ export async function executeToolCall(
           { companyId, userId: userId ?? "", role: role ?? "system" }
         );
         return JSON.stringify(result);
+      }
+      case "get_client_visits": {
+        const contactRef: string = String(args.contactRef ?? "").trim();
+        if (!contactRef) {
+          return JSON.stringify({ success: false, message: "A client name or ID is required.", error: "MISSING_CONTACT_REF" });
+        }
+        const resolvedId = await resolveContactRef(contactRef, companyId);
+        if (!resolvedId) {
+          return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
+        }
+        const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 20);
+        return await getClientVisits(companyId, resolvedId, limit);
+      }
+      case "get_client_service_plan": {
+        const contactRef: string = String(args.contactRef ?? "").trim();
+        if (!contactRef) {
+          return JSON.stringify({ success: false, message: "A client name or ID is required.", error: "MISSING_CONTACT_REF" });
+        }
+        const resolvedId = await resolveContactRef(contactRef, companyId);
+        if (!resolvedId) {
+          return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
+        }
+        return await getClientServicePlan(companyId, resolvedId);
+      }
+      case "send_portal_invite": {
+        const contactRef: string = String(args.contactRef ?? "").trim();
+        if (!contactRef) {
+          return JSON.stringify({ success: false, message: "A client name or ID is required.", error: "MISSING_CONTACT_REF" });
+        }
+        const resolvedId = await resolveContactRef(contactRef, companyId);
+        if (!resolvedId) {
+          return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
+        }
+        return await sendPortalInvite(companyId, resolvedId);
       }
       default:
         return JSON.stringify({ error: "Unknown tool" });
@@ -421,6 +513,181 @@ async function resolveContactRef(contactRef: string, companyId: string): Promise
     if (firstNameMatch) return firstNameMatch.id;
   }
   return null;
+}
+
+async function getClientVisits(companyId: string, contactId: string, limit: number): Promise<string> {
+  const contactPlans = await db
+    .select({ id: servicePlans.id, propertyId: servicePlans.propertyId, frequency: servicePlans.frequency })
+    .from(servicePlans)
+    .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.contactId, contactId)));
+
+  if (contactPlans.length === 0) {
+    return JSON.stringify({ visits: [], total: 0, note: "No service plans found for this client." });
+  }
+
+  const planIds = contactPlans.map(p => p.id);
+
+  const [countResult] = await db
+    .select({ count: count() })
+    .from(visits)
+    .where(and(eq(visits.companyId, companyId), inArray(visits.servicePlanId, planIds)));
+  const total = countResult?.count ?? 0;
+
+  const recentVisits = await db
+    .select({
+      id: visits.id,
+      scheduledDate: visits.scheduledDate,
+      status: visits.status,
+      servicePlanId: visits.servicePlanId,
+      completedAt: visits.completedAt,
+    })
+    .from(visits)
+    .where(and(eq(visits.companyId, companyId), inArray(visits.servicePlanId, planIds)))
+    .orderBy(desc(visits.scheduledDate))
+    .limit(limit);
+
+  const planMap = new Map(contactPlans.map(p => [p.id, p]));
+  const propertyIds = Array.from(new Set(contactPlans.map(p => p.propertyId)));
+  const propsList = propertyIds.length > 0
+    ? await db.select({ id: properties.id, streetAddress: properties.streetAddress, city: properties.city }).from(properties).where(inArray(properties.id, propertyIds))
+    : [];
+  const propMap = new Map(propsList.map(p => [p.id, p]));
+
+  const enriched = recentVisits.map(v => {
+    const plan = planMap.get(v.servicePlanId);
+    const prop = plan ? propMap.get(plan.propertyId) : undefined;
+    return {
+      id: v.id,
+      scheduledDate: v.scheduledDate,
+      status: v.status,
+      servicePlanFrequency: plan?.frequency ?? "unknown",
+      propertyAddress: prop ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}` : "Unknown",
+      completedAt: v.completedAt ?? null,
+    };
+  });
+
+  return JSON.stringify({ visits: enriched, total, showing: enriched.length });
+}
+
+async function getClientServicePlan(companyId: string, contactId: string): Promise<string> {
+  const plans = await db
+    .select({
+      id: servicePlans.id,
+      frequency: servicePlans.frequency,
+      dayOfWeek: servicePlans.dayOfWeek,
+      isActive: servicePlans.isActive,
+      propertyId: servicePlans.propertyId,
+    })
+    .from(servicePlans)
+    .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.contactId, contactId)));
+
+  if (plans.length === 0) {
+    return JSON.stringify({ plans: [], note: "No service plans found for this client." });
+  }
+
+  const propertyIds = Array.from(new Set(plans.map(p => p.propertyId)));
+  const propsList = propertyIds.length > 0
+    ? await db.select({ id: properties.id, streetAddress: properties.streetAddress, city: properties.city }).from(properties).where(inArray(properties.id, propertyIds))
+    : [];
+  const propMap = new Map(propsList.map(p => [p.id, p]));
+
+  const enriched = plans.map(plan => {
+    const prop = propMap.get(plan.propertyId);
+    return {
+      id: plan.id,
+      frequency: plan.frequency,
+      dayOfWeek: plan.dayOfWeek,
+      isActive: plan.isActive,
+      propertyAddress: prop ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}` : "Unknown",
+    };
+  });
+
+  return JSON.stringify({ plans: enriched, total: enriched.length });
+}
+
+async function sendPortalInvite(companyId: string, contactId: string): Promise<string> {
+  const [contact] = await db
+    .select({
+      id: contacts.id,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
+      email: contacts.email,
+      hasPortalAccess: contacts.hasPortalAccess,
+    })
+    .from(contacts)
+    .where(and(eq(contacts.id, contactId), eq(contacts.companyId, companyId)))
+    .limit(1);
+
+  if (!contact) {
+    return JSON.stringify({ success: false, message: "Contact not found.", error: "CONTACT_NOT_FOUND" });
+  }
+  if (!contact.email) {
+    return JSON.stringify({ success: false, message: `${contact.firstName} ${contact.lastName} does not have an email address on file. Add an email to their contact record before sending a portal invite.`, error: "NO_EMAIL" });
+  }
+
+  const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
+  const salt = crypto.randomBytes(16).toString("hex");
+  const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+    crypto.scrypt(tempPassword, salt, 64, (err, key) => {
+      if (err) return reject(err);
+      resolve(`${salt}:${key.toString("hex")}`);
+    });
+  });
+
+  await storage.updateContact(contactId, companyId, { hasPortalAccess: true, portalPasswordHash });
+
+  const [company] = await db
+    .select({ name: companies.name, email: companies.email })
+    .from(companies)
+    .where(eq(companies.id, companyId))
+    .limit(1);
+
+  const portalBaseUrl = process.env.PUBLIC_URL
+    || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "");
+  const portalUrl = `${portalBaseUrl}/portal/login`;
+
+  try {
+    await sendEmail({
+      companyId,
+      to: contact.email,
+      subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
+      senderName: company?.name || undefined,
+      replyTo: company?.email || undefined,
+      text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password.\n\nThank you!`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0;">${company?.name || "ScooPilot"}</h1>
+          </div>
+          <div style="padding: 20px; border: 1px solid #e5e7eb;">
+            <p>Hi ${contact.firstName},</p>
+            <p>You now have access to the client portal.</p>
+            <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+              <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
+              <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>
+              <p style="margin: 0;">Temporary Password: <strong>${tempPassword}</strong></p>
+            </div>
+            <a href="${portalUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Log In to Portal</a>
+            <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${portalUrl}</p>
+            <p style="color: #6b7280; font-size: 14px;">View your service schedule, invoices, and manage your account.</p>
+          </div>
+        </div>
+      `,
+    });
+  } catch (emailErr) {
+    console.error("Rover: Failed to send portal access email:", emailErr);
+    return JSON.stringify({
+      success: false,
+      message: `Portal access was enabled for ${contact.firstName} ${contact.lastName}, but the invite email could not be delivered to ${contact.email}. You can resend it from their contact page.`,
+      error: "EMAIL_DELIVERY_FAILED",
+    });
+  }
+
+  return JSON.stringify({
+    success: true,
+    message: `Portal invite sent to ${contact.firstName} ${contact.lastName} at ${contact.email}. They will receive a temporary password by email.`,
+    alreadyHadAccess: contact.hasPortalAccess,
+  });
 }
 
 async function getBusinessStats(companyId: string): Promise<string> {
