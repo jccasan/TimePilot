@@ -24,7 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
-import { ArrowLeft, ArrowRight, FileText, CalendarDays, Send, CheckCircle2, Minus, Plus } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileText, CalendarDays, Send, CheckCircle2, Minus, Plus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function formatPhone(raw: string): string {
@@ -81,6 +81,9 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
   const [step, setStep] = useState<1 | 2>(1);
   const [createdContact, setCreatedContact] = useState<{ id: string; firstName: string } | null>(null);
   const [sendingPortalInvite, setSendingPortalInvite] = useState(false);
+  const [addressCoords, setAddressCoords] = useState<{ lat: string; lng: string } | null>(null);
+  const [suggestedDay, setSuggestedDay] = useState<string | null>(null);
+  const [isFetchingSuggestion, setIsFetchingSuggestion] = useState(false);
   const scheduleNowRef = useRef(false);
   const servicePrefRef = useRef<{ frequency: string; serviceDay: string }>({ frequency: "", serviceDay: "" });
 
@@ -135,6 +138,8 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
     setStep(1);
     setCreatedContact(null);
     setSendingPortalInvite(false);
+    setAddressCoords(null);
+    setSuggestedDay(null);
     onOpenChange(false);
   };
 
@@ -158,7 +163,25 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
 
   const goToStep2 = async () => {
     const valid = await form.trigger(["firstName", "email"]);
-    if (valid) setStep(2);
+    if (!valid) return;
+    setStep(2);
+    // Fetch day suggestion in background if we have coordinates
+    if (addressCoords) {
+      setIsFetchingSuggestion(true);
+      try {
+        const res = await apiRequest("GET", `/api/routes/suggest-day?lat=${addressCoords.lat}&lng=${addressCoords.lng}`);
+        const data = await res.json();
+        if (data?.day) {
+          setSuggestedDay(data.day);
+          // Pre-select only if nothing picked yet
+          if (!form.getValues("serviceDay")) {
+            form.setValue("serviceDay", data.day);
+          }
+        }
+      } catch { /* suggestion is best-effort */ } finally {
+        setIsFetchingSuggestion(false);
+      }
+    }
   };
 
   const submit = async (scheduleNow: boolean) => {
@@ -244,6 +267,10 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
                   isPending={createMutation.isPending}
                   onContinue={goToStep2}
                   onSaveAndFinish={() => submit(false)}
+                  onAddressSelect={(lat, lng) => {
+                    setAddressCoords({ lat, lng });
+                    setSuggestedDay(null);
+                  }}
                 />
               ) : (
                 <Step2
@@ -252,6 +279,8 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
                   serviceDay={serviceDay}
                   dogs={dogs}
                   isPending={createMutation.isPending}
+                  suggestedDay={suggestedDay}
+                  isFetchingSuggestion={isFetchingSuggestion}
                   onBack={() => setStep(1)}
                   onCreateAndSchedule={() => submit(true)}
                   onCreateOnly={() => submit(false)}
@@ -288,11 +317,12 @@ function StepIndicator({ current }: { current: 1 | 2 }) {
   );
 }
 
-function Step1({ form, isPending, onContinue, onSaveAndFinish }: {
+function Step1({ form, isPending, onContinue, onSaveAndFinish, onAddressSelect }: {
   form: ReturnType<typeof useForm<ContactFormValues>>;
   isPending: boolean;
   onContinue: () => void;
   onSaveAndFinish: () => void;
+  onAddressSelect: (lat: string, lng: string) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -383,6 +413,9 @@ function Step1({ form, isPending, onContinue, onSaveAndFinish }: {
                   form.setValue("city", addr.city);
                   form.setValue("state", addr.state);
                   form.setValue("zipCode", addr.zipCode);
+                  if (addr.latitude && addr.longitude) {
+                    onAddressSelect(addr.latitude, addr.longitude);
+                  }
                 }}
                 placeholder="Start typing an address..."
                 data-testid="input-street-address"
@@ -435,12 +468,14 @@ function Step1({ form, isPending, onContinue, onSaveAndFinish }: {
   );
 }
 
-function Step2({ form, frequency, serviceDay, dogs, isPending, onBack, onCreateAndSchedule, onCreateOnly }: {
+function Step2({ form, frequency, serviceDay, dogs, isPending, suggestedDay, isFetchingSuggestion, onBack, onCreateAndSchedule, onCreateOnly }: {
   form: ReturnType<typeof useForm<ContactFormValues>>;
   frequency: string;
   serviceDay: string;
   dogs: number;
   isPending: boolean;
+  suggestedDay: string | null;
+  isFetchingSuggestion: boolean;
   onBack: () => void;
   onCreateAndSchedule: () => void;
   onCreateOnly: () => void;
@@ -470,7 +505,18 @@ function Step2({ form, frequency, serviceDay, dogs, isPending, onBack, onCreateA
       </div>
 
       <div className="space-y-2">
-        <p className="text-sm font-medium">Preferred service day</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium">Preferred service day</p>
+          {isFetchingSuggestion && (
+            <span className="text-xs text-muted-foreground animate-pulse">Finding best day…</span>
+          )}
+          {!isFetchingSuggestion && suggestedDay && (
+            <span className="flex items-center gap-1 text-xs text-primary font-medium">
+              <Sparkles className="h-3 w-3" />
+              Suggested for your area
+            </span>
+          )}
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {DAYS.map((d) => (
             <button
@@ -482,7 +528,8 @@ function Step2({ form, frequency, serviceDay, dogs, isPending, onBack, onCreateA
                 "w-9 h-9 rounded-full border text-sm font-medium transition-colors",
                 serviceDay === d.value
                   ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-background text-foreground hover:bg-muted"
+                  : "border-border bg-background text-foreground hover:bg-muted",
+                suggestedDay === d.value && serviceDay !== d.value && "ring-2 ring-primary/30"
               )}
             >
               {d.label}

@@ -7947,6 +7947,78 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Route Day Suggestion ================
+
+  function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  async function suggestServiceDay(
+    companyId: string,
+    lat: number,
+    lng: number
+  ): Promise<{ day: string; routeName: string; distanceKm: number } | null> {
+    const routes = await storage.getRoutes(companyId);
+    const recurringRoutes = routes.filter(r => r.dayOfWeek && !r.date);
+    if (!recurringRoutes.length) return null;
+
+    const plans = await storage.getServicePlans(companyId, { isActive: true });
+    const properties = await storage.getProperties(companyId);
+    const propMap = new Map(properties.map(p => [p.id, p]));
+
+    // For each recurring route, find the distance to the nearest stop
+    type DayBest = { day: string; routeName: string; distanceKm: number };
+    const dayBest = new Map<string, DayBest>();
+
+    for (const route of recurringRoutes) {
+      if (!route.dayOfWeek) continue;
+      const routePlans = plans.filter(sp => sp.routeId === route.id);
+      for (const sp of routePlans) {
+        if (!sp.propertyId) continue;
+        const prop = propMap.get(sp.propertyId);
+        if (!prop?.latitude || !prop?.longitude) continue;
+        const km = haversineKm(lat, lng, Number(prop.latitude), Number(prop.longitude));
+        const existing = dayBest.get(route.dayOfWeek);
+        if (!existing || km < existing.distanceKm) {
+          dayBest.set(route.dayOfWeek, { day: route.dayOfWeek, routeName: route.name || route.dayOfWeek, distanceKm: km });
+        }
+      }
+    }
+
+    if (!dayBest.size) {
+      // No stops with coordinates — fall back to day with most stops
+      const dayCounts = new Map<string, number>();
+      for (const route of recurringRoutes) {
+        if (!route.dayOfWeek) continue;
+        const count = plans.filter(sp => sp.routeId === route.id).length;
+        dayCounts.set(route.dayOfWeek, (dayCounts.get(route.dayOfWeek) || 0) + count);
+      }
+      if (!dayCounts.size) return null;
+      const bestDay = [...dayCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      const route = recurringRoutes.find(r => r.dayOfWeek === bestDay);
+      return { day: bestDay, routeName: route?.name || bestDay, distanceKm: -1 };
+    }
+
+    return [...dayBest.values()].sort((a, b) => a.distanceKm - b.distanceKm)[0];
+  }
+
+  app.get("/api/routes/suggest-day", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const lat = parseFloat(req.query.lat as string);
+      const lng = parseFloat(req.query.lng as string);
+      if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: "lat and lng are required" });
+      const result = await suggestServiceDay(companyId, lat, lng);
+      res.json(result ?? null);
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Retell AI Voice Agent Routes ================
 
   function verifyRetellApiKey(req: Request, res: Response): boolean {
@@ -8242,6 +8314,56 @@ Return ONLY valid JSON, no markdown.`,
         contactId: contact.id,
         propertyId: property?.id || null,
         message: "Booking request recorded; team will confirm by email.",
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/retell/suggest-day", async (req: Request, res: Response) => {
+    if (!verifyRetellApiKey(req, res)) return;
+    try {
+      const { tenantId, lat, lng, zipCode, address } = req.body;
+      if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
+
+      const company = await storage.getCompany(tenantId);
+      if (!company) return res.status(404).json({ error: "Tenant not found" });
+
+      let resolvedLat: number | null = lat ? parseFloat(lat) : null;
+      let resolvedLng: number | null = lng ? parseFloat(lng) : null;
+
+      // If no coordinates, geocode from address or zip using Mapbox
+      if ((!resolvedLat || !resolvedLng) && (address || zipCode)) {
+        const query = address || zipCode;
+        const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
+        if (token && query) {
+          try {
+            const params = new URLSearchParams({ q: query, access_token: token, types: "address,postcode", limit: "1" });
+            const geoRes = await fetch(`https://api.mapbox.com/search/geocode/v6/forward?${params}`);
+            if (geoRes.ok) {
+              const geoData = await geoRes.json();
+              const coords = geoData.features?.[0]?.geometry?.coordinates;
+              if (coords) { resolvedLng = coords[0]; resolvedLat = coords[1]; }
+            }
+          } catch { /* ignore geocode failure, fall through to fallback */ }
+        }
+      }
+
+      if (!resolvedLat || !resolvedLng) {
+        return res.status(400).json({ error: "Could not determine coordinates. Provide lat/lng or a valid address/zipCode." });
+      }
+
+      const result = await suggestServiceDay(tenantId, resolvedLat, resolvedLng);
+      if (!result) return res.json({ suggestedDay: null, message: "No routes configured yet." });
+
+      const dayLabel = result.day.charAt(0).toUpperCase() + result.day.slice(1);
+      const distanceMi = result.distanceKm > 0 ? (result.distanceKm * 0.621371).toFixed(1) : null;
+
+      res.json({
+        suggestedDay: dayLabel,
+        routeName: result.routeName,
+        distanceMiles: distanceMi ? parseFloat(distanceMi) : null,
+        message: distanceMi
+          ? `Based on your location, ${dayLabel} works best — our nearest stop is about ${distanceMi} miles away.`
+          : `Based on your location, ${dayLabel} is recommended.`,
       });
     } catch (err) { handleError(res, err); }
   });
