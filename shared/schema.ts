@@ -1125,7 +1125,7 @@ export const costConfig = pgTable("cost_config", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const usageEventTypeEnum = pgEnum("usage_event_type", ["sms_segment", "voice_minute", "user_seat"]);
+export const usageEventTypeEnum = pgEnum("usage_event_type", ["sms_segment", "voice_minute", "user_seat", "api_call"]);
 
 export const usageEvents = pgTable("usage_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

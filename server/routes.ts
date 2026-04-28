@@ -16507,7 +16507,7 @@ Rules:
 
       const apiCallResult = await db.select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
         .from(usageEvents)
-        .where(and(eq(usageEvents.companyId, companyId), eq(usageEvents.eventType, "api_call" as any), gte(usageEvents.recordedAt, periodStart)));
+        .where(and(eq(usageEvents.companyId, companyId), eq(usageEvents.eventType, "api_call"), gte(usageEvents.recordedAt, periodStart)));
 
       const msgCount = await db.select({ total: sql<number>`count(*)` })
         .from(messagesTable)
