@@ -53,6 +53,7 @@ const actionTypes = [
 
 const availableSkills = [
   { value: "optimize_route", label: "Optimize Route" },
+  { value: "generate_invoice", label: "Generate Invoice" },
 ];
 
 const ruleFormSchema = z.object({
@@ -120,6 +121,9 @@ export default function Automation() {
         params.skillName = data.skillName;
         if (data.skillName === "optimize_route" && data.skillRouteId) {
           params.routeId = data.skillRouteId;
+        }
+        if (data.skillName === "generate_invoice") {
+          params.allPending = true;
         }
       }
       await apiRequest("POST", "/api/automation-rules", {

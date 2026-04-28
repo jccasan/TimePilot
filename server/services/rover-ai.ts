@@ -269,6 +269,27 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "generate_invoice",
+      description: "Generate draft invoice(s) for completed, uninvoiced visits. Use when the user says something like 'generate invoices for all clients', 'invoice all pending work', or 'create an invoice for [client name/id]'. If a specific client is mentioned, supply their contactId; otherwise use allPending: true to invoice everyone with outstanding work.",
+      parameters: {
+        type: "object",
+        properties: {
+          contactId: {
+            type: "string",
+            description: "The UUID of a specific contact to invoice. Omit to invoice all pending clients.",
+          },
+          allPending: {
+            type: "boolean",
+            description: "Set to true to generate invoices for all contacts with uninvoiced completed visits.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 export async function executeToolCall(
@@ -301,6 +322,22 @@ export async function executeToolCall(
         const result = await runSkill(
           "optimize_route",
           { routeId: resolvedRouteId },
+          { companyId, userId: userId ?? "", role: role ?? "system" }
+        );
+        return JSON.stringify(result);
+      }
+      case "generate_invoice": {
+        const { runSkill } = await import("./skills/index");
+        const contactId = args.contactId ? String(args.contactId) : undefined;
+        const allPending = !contactId || args.allPending === true;
+        const skillParams: Record<string, unknown> = allPending && !contactId
+          ? { allPending: true }
+          : contactId
+          ? { contactId }
+          : { allPending: true };
+        const result = await runSkill(
+          "generate_invoice",
+          skillParams,
           { companyId, userId: userId ?? "", role: role ?? "system" }
         );
         return JSON.stringify(result);

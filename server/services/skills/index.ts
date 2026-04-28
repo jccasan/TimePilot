@@ -48,7 +48,10 @@ let skillsLoadPromise: Promise<void> | null = null;
 
 async function ensureSkillsLoaded(): Promise<void> {
   if (!skillsLoadPromise) {
-    skillsLoadPromise = import("./optimize-route").then(() => undefined);
+    skillsLoadPromise = Promise.all([
+      import("./optimize-route"),
+      import("./generate-invoice"),
+    ]).then(() => undefined);
   }
   await skillsLoadPromise;
 }
