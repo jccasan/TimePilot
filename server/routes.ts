@@ -86,6 +86,15 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
           userId = sess.userId;
           (req.session as any).userId = userId;
           authMethod = "bearer-token";
+          // Update lastLoginAt at most once per day for bearer-token sessions so the
+          // admin inactive-users dashboard reflects real activity even for users who
+          // stay logged in via a long-lived session and never re-enter their password.
+          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          db.execute(sql`
+            UPDATE users SET last_login_at = NOW()
+            WHERE id = ${userId}
+              AND (last_login_at IS NULL OR last_login_at < ${oneDayAgo})
+          `).catch(() => {});
         }
       } else {
         authMethod = "bearer-token-invalid";
@@ -15667,7 +15676,10 @@ Rules:
           .innerJoin(companyUsers, eq(companyUsers.userId, users.id))
           .innerJoin(companies, eq(companies.id, companyUsers.companyId))
           .where(
-            sql`(${users.lastLoginAt} IS NULL OR ${users.lastLoginAt} < ${cutoff})`
+            and(
+              sql`(${users.lastLoginAt} IS NULL OR ${users.lastLoginAt} < ${cutoff})`,
+              eq(companies.demoUnlimitedCredits, false)
+            )
           );
         result[`${days}d`] = rows;
       }
