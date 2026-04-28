@@ -64,6 +64,7 @@ const ruleFormSchema = z.object({
   skillName: z.string().optional(),
   skillRouteId: z.string().optional(),
   sendAfterGenerate: z.boolean().optional(),
+  scopeToContact: z.boolean().optional(),
   description: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.actionType === "run_skill" && !data.skillName) {
@@ -117,6 +118,7 @@ export default function Automation() {
       skillName: "",
       skillRouteId: "",
       sendAfterGenerate: false,
+      scopeToContact: false,
       description: "",
     },
   });
@@ -133,7 +135,11 @@ export default function Automation() {
           params.routeId = data.skillRouteId;
         }
         if (data.skillName === "generate_invoice") {
-          params.allPending = true;
+          if (data.scopeToContact) {
+            params.scopeToContact = true;
+          } else {
+            params.allPending = true;
+          }
           if (data.sendAfterGenerate) {
             params.sendAfterGenerate = true;
           }
@@ -228,7 +234,7 @@ export default function Automation() {
                   <FormField control={form.control} name="skillName" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Skill</FormLabel>
-                      <Select onValueChange={(v) => { field.onChange(v); form.setValue("skillRouteId", ""); form.setValue("sendAfterGenerate", false); }} value={field.value ?? ""}>
+                      <Select onValueChange={(v) => { field.onChange(v); form.setValue("skillRouteId", ""); form.setValue("sendAfterGenerate", false); form.setValue("scopeToContact", false); }} value={field.value ?? ""}>
                         <FormControl><SelectTrigger data-testid="select-skill-name"><SelectValue placeholder="Select a skill" /></SelectTrigger></FormControl>
                         <SelectContent>
                           {availableSkills.map((s) => (
@@ -241,18 +247,35 @@ export default function Automation() {
                   )} />
                 )}
                 {watchedActionType === "run_skill" && watchedSkillName === "generate_invoice" && (
-                  <FormField control={form.control} name="sendAfterGenerate" render={({ field }) => (
-                    <FormItem className="flex items-center gap-2 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value ?? false}
-                          onCheckedChange={field.onChange}
-                          data-testid="checkbox-send-after-generate"
-                        />
-                      </FormControl>
-                      <FormLabel className="cursor-pointer font-normal">Send after generating</FormLabel>
-                    </FormItem>
-                  )} />
+                  <>
+                    <FormField control={form.control} name="scopeToContact" render={({ field }) => (
+                      <FormItem className="flex items-center gap-2 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value ?? false}
+                            onCheckedChange={field.onChange}
+                            data-testid="checkbox-scope-to-contact"
+                          />
+                        </FormControl>
+                        <div>
+                          <FormLabel className="cursor-pointer font-normal">Scope to triggering contact</FormLabel>
+                          <p className="text-xs text-muted-foreground">Only invoice the contact who triggered this rule, instead of all pending clients.</p>
+                        </div>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="sendAfterGenerate" render={({ field }) => (
+                      <FormItem className="flex items-center gap-2 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value ?? false}
+                            onCheckedChange={field.onChange}
+                            data-testid="checkbox-send-after-generate"
+                          />
+                        </FormControl>
+                        <FormLabel className="cursor-pointer font-normal">Send after generating</FormLabel>
+                      </FormItem>
+                    )} />
+                  </>
                 )}
                 {watchedActionType === "run_skill" && watchedSkillName === "optimize_route" && (
                   <FormField control={form.control} name="skillRouteId" render={({ field }) => (

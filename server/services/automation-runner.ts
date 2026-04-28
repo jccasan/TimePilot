@@ -70,8 +70,19 @@ async function executeRuleAction(
         return { success: false, message: "run_skill action missing skillName in params", error: "MISSING_SKILL_NAME" };
       }
       const normalizedParams = skillParams as Record<string, unknown>;
-      if (skillName === "generate_invoice" && !normalizedParams.contactId && !normalizedParams.allPending) {
-        normalizedParams.allPending = true;
+      if (skillName === "generate_invoice") {
+        if (normalizedParams.scopeToContact) {
+          delete normalizedParams.scopeToContact;
+          const triggeredContactId =
+            typeof payload.contactId === "string" ? payload.contactId : undefined;
+          if (triggeredContactId) {
+            normalizedParams.contactId = triggeredContactId;
+          } else {
+            normalizedParams.allPending = true;
+          }
+        } else if (!normalizedParams.contactId && !normalizedParams.allPending) {
+          normalizedParams.allPending = true;
+        }
       }
       const { runSkill } = await import("./skills/index");
       return runSkill(String(skillName), normalizedParams, makeSystemContext(companyId));
