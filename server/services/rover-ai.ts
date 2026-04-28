@@ -273,13 +273,19 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "generate_invoice",
-      description: "Generate draft invoice(s) for completed, uninvoiced visits. Use when the user says something like 'generate invoices for all clients', 'invoice all pending work', or 'create an invoice for [client name/id]'. If a specific client is mentioned, supply their contactId; otherwise use allPending: true to invoice everyone with outstanding work.",
+      /**
+       * Rover uses `contactRef` (name or UUID) instead of the raw `contactId` UUID
+       * that `/api/skills/run` accepts. This is intentional: Rover resolves the human-
+       * readable reference via `resolveContactRef()` before calling `runSkill`, so users
+       * can say "generate invoice for Jane Doe" without knowing the underlying UUID.
+       */
+      description: "Generate draft invoice(s) for completed, uninvoiced visits. Use when the user says something like 'generate invoices for all clients', 'invoice all pending work', or 'create an invoice for [client name/id]'. If a specific client is mentioned, supply their name or UUID as contactRef; otherwise use allPending: true to invoice everyone with outstanding work.",
       parameters: {
         type: "object",
         properties: {
-          contactId: {
+          contactRef: {
             type: "string",
-            description: "The UUID of a specific contact to invoice. Omit to invoice all pending clients.",
+            description: "The client to invoice — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact. Omit to invoice all pending clients.",
           },
           allPending: {
             type: "boolean",
@@ -327,12 +333,17 @@ export async function executeToolCall(
         return JSON.stringify(result);
       }
       case "generate_invoice": {
+        const contactRef: string = args.contactRef ? String(args.contactRef).trim() : "";
+        let contactId: string | undefined;
+        if (contactRef) {
+          const resolved = await resolveContactRef(contactRef, companyId);
+          if (!resolved) {
+            return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
+          }
+          contactId = resolved;
+        }
         const { runSkill } = await import("./skills/index");
-        const contactId = args.contactId ? String(args.contactId) : undefined;
-        const allPending = !contactId || args.allPending === true;
-        const skillParams: Record<string, unknown> = allPending && !contactId
-          ? { allPending: true }
-          : contactId
+        const skillParams: Record<string, unknown> = contactId
           ? { contactId }
           : { allPending: true };
         const result = await runSkill(
@@ -373,6 +384,41 @@ async function resolveRouteRef(routeRef: string, companyId: string): Promise<str
   if (normalized.length >= 2) {
     const partial = allRoutes.find(r => r.name.toLowerCase().includes(normalized));
     if (partial) return partial.id;
+  }
+  return null;
+}
+
+async function resolveContactRef(contactRef: string, companyId: string): Promise<string | null> {
+  const normalized = contactRef.trim().toLowerCase();
+  if (!normalized) return null;
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidPattern.test(normalized)) {
+    const [row] = await db.select({ id: contacts.id }).from(contacts)
+      .where(and(eq(contacts.id, contactRef), eq(contacts.companyId, companyId))).limit(1);
+    return row?.id ?? null;
+  }
+  const allContacts = await db
+    .select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName })
+    .from(contacts)
+    .where(eq(contacts.companyId, companyId));
+  // Exact full-name match
+  const exact = allContacts.find(c =>
+    `${c.firstName} ${c.lastName}`.toLowerCase() === normalized ||
+    `${c.lastName} ${c.firstName}`.toLowerCase() === normalized
+  );
+  if (exact) return exact.id;
+  // Partial / fuzzy match — any contact whose full name contains the ref
+  if (normalized.length >= 2) {
+    const partial = allContacts.find(c =>
+      `${c.firstName} ${c.lastName}`.toLowerCase().includes(normalized)
+    );
+    if (partial) return partial.id;
+    // Match on last name alone
+    const lastNameMatch = allContacts.find(c => c.lastName.toLowerCase() === normalized);
+    if (lastNameMatch) return lastNameMatch.id;
+    // Match on first name alone
+    const firstNameMatch = allContacts.find(c => c.firstName.toLowerCase() === normalized);
+    if (firstNameMatch) return firstNameMatch.id;
   }
   return null;
 }
