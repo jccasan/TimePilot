@@ -46,7 +46,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, CalendarDays, CalendarRange,
   CheckCircle, XCircle, Ban, Clock, MapPin, DollarSign, User, CalendarCheck, Loader2, GripVertical,
-  Send, MessageSquare, Trash2, Search, Eye, EyeOff, Pencil, ChevronsUpDown,
+  Send, MessageSquare, Trash2, Search, Eye, EyeOff, Pencil, ChevronsUpDown, Play, Camera, X,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -1175,6 +1175,23 @@ export default function Scheduling() {
   );
 }
 
+async function uploadFileDirect(file: File): Promise<string> {
+  const token = localStorage.getItem("sessionToken");
+  const hdrs: Record<string, string> = {};
+  if (token) hdrs["Authorization"] = `Bearer ${token}`;
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch("/api/uploads/direct", {
+    method: "POST",
+    credentials: "include",
+    headers: hdrs,
+    body: formData,
+  });
+  if (!response.ok) throw new Error("Failed to upload photo");
+  const data = await response.json();
+  return data.objectPath;
+}
+
 function VisitDetailSheet({
   visit,
   open,
@@ -1212,6 +1229,10 @@ function VisitDetailSheet({
   const [smsMessage, setSmsMessage] = useState("");
   const [smsSending, setSmsSending] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [showCompletePanel, setShowCompletePanel] = useState(false);
+  const [gatePhotoFile, setGatePhotoFile] = useState<File | null>(null);
+  const [gatePhotoPreview, setGatePhotoPreview] = useState<string | null>(null);
+  const [isCompletingWithPhoto, setIsCompletingWithPhoto] = useState(false);
   const [editDate, setEditDate] = useState("");
   const [editRouteId, setEditRouteId] = useState("");
   const [editNotes, setEditNotes] = useState("");
@@ -1229,6 +1250,7 @@ function VisitDetailSheet({
       setUpdatingStatus(status);
       const body: Record<string, unknown> = { status };
       if (status === "completed") body.completedAt = new Date().toISOString();
+      if (status === "in_progress") body.startedAt = new Date().toISOString();
       if (status === "scheduled") {
         body.completedAt = null;
         body.startedAt = null;
@@ -1320,13 +1342,55 @@ function VisitDetailSheet({
     editMutation.mutate({ visitId: visit.id, data: updates });
   };
 
+  const handleGatePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setGatePhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setGatePhotoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleCompleteConfirm = async () => {
+    if (!visit) return;
+    setIsCompletingWithPhoto(true);
+    try {
+      let gatePhotoPath: string | null = null;
+      if (gatePhotoFile) {
+        gatePhotoPath = await uploadFileDirect(gatePhotoFile);
+      }
+      await apiRequest("POST", `/api/visits/${visit.id}/complete-notify`, {
+        gateClosedPhoto: gatePhotoPath,
+      });
+      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
+      toast({ title: "Visit marked complete", description: "Open the invoice dialog to bill for this visit." });
+      const completedPlan = servicePlans?.find(sp => sp.id === visit.servicePlanId);
+      onOpenChange(false);
+      if (onShowInvoiceDialog && !visit.invoiceId) {
+        onShowInvoiceDialog(completedPlan?.contactId);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to complete visit";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setIsCompletingWithPhoto(false);
+      setShowCompletePanel(false);
+      setGatePhotoFile(null);
+      setGatePhotoPreview(null);
+    }
+  };
+
   const statusActions: { status: string; label: string; icon: typeof CheckCircle; color: string; show: boolean }[] = [
     {
-      status: "completed",
-      label: "Mark Complete",
-      icon: CheckCircle,
-      color: "text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 border-green-200 dark:border-green-800",
-      show: visit.status !== "completed",
+      status: "in_progress",
+      label: "Start Job",
+      icon: Play,
+      color: "text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30 border-orange-200 dark:border-orange-800",
+      show: visit.status === "scheduled",
     },
     {
       status: "skipped",
@@ -1353,7 +1417,7 @@ function VisitDetailSheet({
 
   return (
     <>
-    <Sheet open={open} onOpenChange={(o) => { if (!o) setEditing(false); onOpenChange(o); }}>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) { setEditing(false); setShowCompletePanel(false); setGatePhotoFile(null); setGatePhotoPreview(null); } onOpenChange(o); }}>
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto" data-testid="sheet-visit-detail">
         <SheetHeader className="pb-4">
           <SheetTitle className="text-lg" data-testid="text-sheet-title">Visit Details</SheetTitle>
@@ -1584,6 +1648,82 @@ function VisitDetailSheet({
                     <Send className="h-4 w-4" />
                     {contactHasPhone ? "On My Way" : "On My Way (No phone)"}
                   </Button>
+
+                  {visit.status !== "completed" && (
+                    <>
+                      {!showCompletePanel ? (
+                        <Button
+                          variant="outline"
+                          className="justify-start gap-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 border-green-200 dark:border-green-800"
+                          onClick={() => setShowCompletePanel(true)}
+                          disabled={statusMutation.isPending || isCompletingWithPhoto}
+                          data-testid="button-action-completed"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                          Mark Complete
+                        </Button>
+                      ) : (
+                        <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20 p-3 space-y-3" data-testid="panel-complete-visit">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-green-700 dark:text-green-400">Complete this visit</p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => { setShowCompletePanel(false); setGatePhotoFile(null); setGatePhotoPreview(null); }}
+                              data-testid="button-cancel-complete-panel"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">Gate closed photo (optional)</p>
+                            {gatePhotoPreview ? (
+                              <div className="relative">
+                                <img src={gatePhotoPreview} alt="Gate closed preview" className="w-full rounded-md max-h-32 object-cover" data-testid="img-gate-preview" />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="absolute top-1 right-1 h-6 w-6 p-0 bg-black/40 hover:bg-black/60 text-white rounded-full"
+                                  onClick={() => { setGatePhotoFile(null); setGatePhotoPreview(null); }}
+                                  data-testid="button-remove-gate-photo"
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <label className="flex items-center gap-2 cursor-pointer rounded-md border border-dashed border-green-300 dark:border-green-700 p-2 hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors" data-testid="label-gate-photo-upload">
+                                <Camera className="h-4 w-4 text-green-600 shrink-0" />
+                                <span className="text-xs text-muted-foreground">Tap to add gate photo</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  className="hidden"
+                                  onChange={handleGatePhotoChange}
+                                  data-testid="input-gate-photo"
+                                />
+                              </label>
+                            )}
+                          </div>
+
+                          <div className="flex gap-2">
+                            <Button
+                              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                              onClick={handleCompleteConfirm}
+                              disabled={isCompletingWithPhoto}
+                              data-testid="button-confirm-complete"
+                            >
+                              {isCompletingWithPhoto ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                              {gatePhotoFile ? "Complete & Save Photo" : "Complete Visit"}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
                   {statusActions.filter(a => a.show).map((action) => {
                     const Icon = action.icon;
                     const isUpdating = updatingStatus === action.status;
