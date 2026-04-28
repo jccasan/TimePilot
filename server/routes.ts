@@ -758,10 +758,18 @@ export async function registerRoutes(
       // No card on file — leave the invoice in its current status so it can still be paid via link
       updateData.status = invoice.status === "draft" ? "draft" : "sent";
       notify(companyId, "payment_failed", "No Payment Method", `No payment method on file for ${contactName} (invoice #${invoice.invoiceNumber}). Send them a payment link to collect their card.`, `/invoices`);
+      try {
+        const { fireAutomationTrigger } = await import("./services/automation-runner");
+        await fireAutomationTrigger("payment_failed", companyId, { invoiceId: invoice.id, reason: "no_payment_method" });
+      } catch (autoErr) { console.error("[automation] payment_failed trigger error:", autoErr); }
     } else {
       updateData.status = "failed";
       if (result.paymentIntentId) updateData.stripePaymentIntentId = result.paymentIntentId;
       notify(companyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}. The card on file was declined.`, `/invoices`);
+      try {
+        const { fireAutomationTrigger } = await import("./services/automation-runner");
+        await fireAutomationTrigger("payment_failed", companyId, { invoiceId: invoice.id, reason: "card_declined" });
+      } catch (autoErr) { console.error("[automation] payment_failed trigger error:", autoErr); }
     }
     const updated = await storage.updateInvoice(invoice.id, companyId, updateData as Parameters<typeof storage.updateInvoice>[2]);
     auditLog(companyId, userId, "invoice", invoice.id, "update", {
@@ -4004,6 +4012,10 @@ Return ONLY valid JSON, no markdown.`,
 
       if (contact.status === "lead") {
         notify(companyId, "new_lead", "New Lead", `${contact.firstName} ${contact.lastName} was added as a new lead.`, `/contacts/${contact.id}`);
+        try {
+          const { fireAutomationTrigger } = await import("./services/automation-runner");
+          await fireAutomationTrigger("lead_created", companyId, { contactId: contact.id, status: contact.status });
+        } catch (autoErr) { console.error("[automation] lead_created trigger error:", autoErr); }
       }
 
       if (contact.email && contact.status !== "lead") {
@@ -4541,151 +4553,58 @@ Return ONLY valid JSON, no markdown.`,
 
   app.post("/api/routes/:id/optimize", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, userId, role } = await getCompanyContext(req);
       const route = await storage.getRoute(p(req.params.id), companyId);
       if (!route) return res.status(404).json({ error: "Route not found" });
 
-      if (route.isLocked) {
-        return res.status(409).json({ error: "Route is locked. Unlock it before optimizing." });
-      }
+      const { runSkill } = await import("./services/skills/index");
+      const result = await runSkill("optimize_route", { routeId: route.id }, { companyId, userId, role });
 
-      const plans = await storage.getServicePlans(companyId, { isActive: true });
-      const routePlans = plans.filter(sp => sp.routeId === route.id);
-
-      if (routePlans.length <= 1) {
-        return res.json({ optimized: false, message: "Not enough stops to optimize", totalDistance: 0, stopCount: routePlans.length });
-      }
-
-      if (routePlans.length > 60) {
-        return res.status(400).json({ error: "Route exceeds maximum of 60 stops. Please split into smaller routes." });
-      }
-
-      const creditsRequired = routePlans.length <= 30 ? 1 : 2;
-
-      const company = await storage.getCompany(companyId);
-      const currentCredits = company?.routeCredits ?? 0;
-
-      // Demo unlimited-credits bypass
-      const demoUnlimitedCredits = !!(company as any).demoUnlimitedCredits;
-      const isDemoCompanyForCredits = demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
-
-      if (!isDemoCompanyForCredits && currentCredits < creditsRequired) {
-        return res.status(402).json({
-          error: "Insufficient route credits",
-          creditsRequired,
-          creditsAvailable: currentCredits,
-        });
-      }
-
-      const allProperties = await storage.getProperties(companyId);
-      let propertyMap = new Map(allProperties.map(p => [p.id, p]));
-
-      const needsGeocode = routePlans.filter(sp => {
-        const prop = propertyMap.get(sp.propertyId);
-        return prop && prop.streetAddress && (!prop.latitude || !prop.longitude);
-      });
-      if (needsGeocode.length > 0) {
-        for (const sp of needsGeocode) {
-          const prop = propertyMap.get(sp.propertyId)!;
-          const coords = await geocodeAddress(prop.streetAddress!, prop.city, prop.state, prop.zipCode);
-          if (coords) {
-            const updated = await storage.updateProperty(prop.id, companyId, { latitude: coords.latitude, longitude: coords.longitude });
-            propertyMap.set(prop.id, updated);
-          }
+      if (!result.success) {
+        if (result.error === "LOCKED") return res.status(409).json({ error: result.message });
+        if (result.error === "INSUFFICIENT_CREDITS") return res.status(402).json({ error: result.message, ...result.data });
+        if (result.error === "TOO_MANY_STOPS") return res.status(400).json({ error: result.message });
+        if (result.error === "INSUFFICIENT_STOPS" || result.error === "GEOCODE_FAILURE") {
+          return res.json({ optimized: false, message: result.message, totalDistance: 0, stopCount: result.data?.stopCount ?? 0 });
         }
+        return res.status(500).json({ error: result.message });
       }
 
-      const stops = routePlans
-        .map(sp => {
-          const prop = propertyMap.get(sp.propertyId);
-          if (!prop || !prop.latitude || !prop.longitude) return null;
-          return {
-            id: sp.id,
-            latitude: parseFloat(String(prop.latitude)),
-            longitude: parseFloat(String(prop.longitude)),
-          };
-        })
-        .filter((s): s is NonNullable<typeof s> => s !== null);
+      const d = result.data!;
+      res.json({ optimized: true, ...d });
+    } catch (err) { handleError(res, err); }
+  });
 
-      const ungeocoded = routePlans.length - stops.length;
-      if (stops.length < 2) {
-        return res.json({ optimized: false, message: `${ungeocoded} of ${routePlans.length} stops could not be geocoded. Ensure addresses are complete (street, city, state, zip).`, totalDistance: 0, stopCount: routePlans.length });
+  /**
+   * POST /api/skills/run
+   * Run a registered skill by name with typed params.
+   * Company context is always derived from the authenticated session — any
+   * companyId in the request body is intentionally ignored.
+   *
+   * Body: { skill: string; params?: Record<string, unknown> }
+   * - optimize_route: params.routeId (UUID, required)
+   *
+   * Automation actionConfig contract (run_skill):
+   * { type: "run_skill", params: { skillName: string, ...skillParams } }
+   * e.g. { type: "run_skill", params: { skillName: "optimize_route", routeId: "<uuid>" } }
+   * Executed by automation-runner.ts which spreads params (minus skillName) into runSkill().
+   */
+  app.post("/api/skills/run", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId, role } = await getCompanyContext(req);
+      const { skill: skillName, params } = req.body as { skill: string; params?: Record<string, unknown> };
+      if (!skillName || typeof skillName !== "string") {
+        return res.status(400).json({ error: "skill name is required" });
       }
-
-      let startPoint: { latitude: number; longitude: number } | undefined;
-      if (company?.startLatitude && company?.startLongitude) {
-        startPoint = {
-          latitude: parseFloat(String(company.startLatitude)),
-          longitude: parseFloat(String(company.startLongitude)),
-        };
+      const { runSkill } = await import("./services/skills/index");
+      const result = await runSkill(skillName, params ?? {}, { companyId, userId, role });
+      if (!result.success) {
+        if (result.error === "INSUFFICIENT_CREDITS") return res.status(402).json(result);
+        if (result.error === "LOCKED") return res.status(409).json(result);
+        if (result.error === "ROUTE_NOT_FOUND") return res.status(404).json(result);
+        return res.status(400).json(result);
       }
-
-      const originalMapbox = await getMapboxRouteMetrics(stops, startPoint);
-      const originalDistance = originalMapbox?.distance ?? calculateTotalDistance(stops, startPoint);
-      const originalMinutes = originalMapbox?.duration ?? (originalDistance / 25) * 60;
-
-      const result = optimizeRoute(stops, startPoint);
-
-      const stopsById = new Map(stops.map(s => [s.id, s]));
-      const optimizedStops = result.orderedIds.map(id => stopsById.get(id)!);
-
-      for (let i = 0; i < result.orderedIds.length; i++) {
-        await storage.updateServicePlan(result.orderedIds[i], companyId, { stopOrder: i + 1 });
-      }
-
-      const plansWithoutCoords = routePlans.filter(sp => {
-        const prop = propertyMap.get(sp.propertyId);
-        return !prop || !prop.latitude || !prop.longitude;
-      });
-      for (const plan of plansWithoutCoords) {
-        await storage.updateServicePlan(plan.id, companyId, { stopOrder: result.orderedIds.length + 1 });
-      }
-
-      if (!isDemoCompanyForCredits) {
-        await storage.updateCompany(companyId, { routeCredits: currentCredits - creditsRequired } as any);
-      }
-
-      const optimizedMapbox = await getMapboxRouteMetrics(optimizedStops, startPoint);
-      const optimizedDistance = optimizedMapbox?.distance ?? result.totalDistance;
-      const optimizedMinutes = optimizedMapbox?.duration ?? (result.totalDistance / 25) * 60;
-
-      const milesSaved = Math.max(0, Math.round((originalDistance - optimizedDistance) * 10) / 10);
-      const minutesSaved = Math.max(0, Math.round(originalMinutes - optimizedMinutes));
-
-      try {
-        const affectedPlanIds = routePlans.map(p => p.id);
-        const tz = company?.timezone || "America/New_York";
-        const today = getCompanyToday(tz);
-        await storage.deleteFutureScheduledVisitsForPlans(affectedPlanIds, today);
-        const { generateVisitsForPlans } = await import("./jobs/auto-visits");
-        const startDate = new Date(today + "T00:00:00Z");
-        startDate.setUTCDate(startDate.getUTCDate() + 1);
-        const endDate = new Date(today + "T00:00:00Z");
-        endDate.setUTCDate(endDate.getUTCDate() + 182);
-        await generateVisitsForPlans(companyId, affectedPlanIds, startDate.toISOString().split("T")[0], endDate.toISOString().split("T")[0]);
-      } catch (genErr) {
-        console.error("[route-optimize] Failed to regenerate visits after optimization:", genErr);
-      }
-
-      const stopHash = computeStopHash(routePlans.map(p => p.id));
-      await db.update(routes).set({ lastOptimizedAt: new Date(), optimizedStopHash: stopHash, updatedAt: new Date() }).where(and(eq(routes.id, route.id), eq(routes.companyId, companyId)));
-
-      res.json({
-        optimized: true,
-        totalDistance: Math.round(optimizedDistance * 10) / 10,
-        originalDistance: Math.round(originalDistance * 10) / 10,
-        milesSaved,
-        minutesSaved,
-        stopCount: routePlans.length,
-        geocodedCount: stops.length,
-        hasStartPoint: !!startPoint,
-        order: result.orderedIds,
-        creditsUsed: isDemoCompanyForCredits ? 0 : creditsRequired,
-        creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - creditsRequired,
-        routingEngine: optimizedMapbox ? "mapbox" : "haversine",
-        lastOptimizedAt: new Date().toISOString(),
-        optimizedStopHash: stopHash,
-      });
+      res.json(result);
     } catch (err) { handleError(res, err); }
   });
 
@@ -6624,6 +6543,10 @@ Return ONLY valid JSON, no markdown.`,
         }
         notify(companyId, "visit_completed", "Visit Completed", `Visit on ${visit.scheduledDate} has been marked as completed.`, `/scheduling`);
         try {
+          const { fireAutomationTrigger } = await import("./services/automation-runner");
+          await fireAutomationTrigger("service_completed", companyId, { visitId: visit.id, servicePlanId: visit.servicePlanId, scheduledDate: visit.scheduledDate });
+        } catch (autoErr) { console.error("[automation] service_completed trigger error:", autoErr); }
+        try {
           const planForReview = await storage.getServicePlan(visit.servicePlanId, companyId);
           if (planForReview?.contactId) {
             await maybeFireReviewRequest(companyId, planForReview.contactId, visit.id);
@@ -7216,6 +7139,10 @@ Return ONLY valid JSON, no markdown.`,
       qboAutoSync(companyId, invoice.id, "invoice");
       const { userId: auditUserId } = await getCompanyContext(req);
       auditLog(companyId, auditUserId, "invoice", invoice.id, "create", { new: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, contactId: invoice.contactId } }, req.ip || undefined);
+      try {
+        const { fireAutomationTrigger } = await import("./services/automation-runner");
+        await fireAutomationTrigger("invoice_created", companyId, { invoiceId: invoice.id, contactId: invoice.contactId, total: invoice.total });
+      } catch (autoErr) { console.error("[automation] invoice_created trigger error:", autoErr); }
       res.status(201).json({ ...invoice, lineItems: createdLineItems });
     } catch (err) { handleError(res, err); }
   });
@@ -7891,6 +7818,24 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId } = await getCompanyContext(req);
       await storage.deleteAutomationRule(p(req.params.id), companyId);
       res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/automation-rules/:id/logs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const ruleId = p(req.params.id);
+      const logs = await db
+        .select()
+        .from(automationEventLogs)
+        .where(
+          and(
+            eq(automationEventLogs.companyId, companyId),
+            eq(automationEventLogs.ruleId, ruleId)
+          )
+        )
+        .orderBy(automationEventLogs.createdAt);
+      res.json(logs);
     } catch (err) { handleError(res, err); }
   });
 
@@ -12790,6 +12735,10 @@ Rules:
       };
 
       const quote = await storage.createQuote(quoteData);
+      try {
+        const { fireAutomationTrigger } = await import("./services/automation-runner");
+        await fireAutomationTrigger("quote_created", companyId, { quoteId: quote.id, contactId: quote.contactId });
+      } catch (autoErr) { console.error("[automation] quote_created trigger error:", autoErr); }
       res.status(201).json(quote);
     } catch (err: any) {
       console.error("Error creating quote:", err);
@@ -18611,17 +18560,12 @@ Respond with exactly one category from the list above and nothing else.`;
           source: leadSource,
         });
 
-        const matchedRules = await db.select().from(automationRules)
-          .where(and(eq(automationRules.companyId, companyId), eq(automationRules.trigger, "quote_created"), eq(automationRules.isActive, true)));
-        for (const rule of matchedRules) {
-          await db.insert(automationEventLogs).values({
-            companyId,
-            ruleId: rule.id,
-            trigger: "quote_created",
-            payload: { quoteId: quote.id, contactId, source: leadSource },
-            result: { success: true },
-          });
-        }
+        const { fireAutomationTrigger } = await import("./services/automation-runner");
+        await fireAutomationTrigger("quote_created", companyId, {
+          quoteId: quote.id,
+          contactId,
+          source: leadSource,
+        });
       } catch (autoErr) {
         console.error("[webhook-quote] Automation trigger error:", autoErr);
       }

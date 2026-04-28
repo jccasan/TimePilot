@@ -542,8 +542,119 @@ async function runTests() {
     assert(Array.isArray(r.data), "Expected array");
   });
 
+  await test("Automation run_skill trigger executes skill and logs event", "Automation", async () => {
+    const routesResp = await req("GET", "/api/routes");
+    assert(routesResp.status === 200, `Expected 200 for routes, got ${routesResp.status}`);
+    if (!Array.isArray(routesResp.data) || routesResp.data.length === 0) return;
+    const routeId = routesResp.data[0].id;
+
+    const ruleResp = await req("POST", "/api/automation-rules", {
+      name: "E2E Skill Trigger Test",
+      trigger: "lead_created",
+      isActive: true,
+      actionConfig: { type: "run_skill", params: { skillName: "optimize_route", routeId } },
+    });
+    assert(ruleResp.status === 201, `Expected 201 creating rule, got ${ruleResp.status}`);
+    const ruleId = ruleResp.data.id;
+
+    try {
+      const ts = Date.now();
+      const contactResp = await req("POST", "/api/contacts", {
+        firstName: "AutoTrigger", lastName: `Test_${ts}`, email: `autotrigger_${ts}@test.com`,
+      });
+      assert(contactResp.status === 201, `Expected 201 creating contact, got ${contactResp.status}`);
+      const contactId = contactResp.data.id;
+
+      await new Promise(r => setTimeout(r, 1500));
+
+      const logsResp = await req("GET", `/api/automation-rules/${ruleId}/logs`);
+      assert(logsResp.status === 200, `Expected 200 from logs endpoint, got ${logsResp.status}`);
+      assert(Array.isArray(logsResp.data), "Expected logs array");
+      assert(logsResp.data.length >= 1, `Expected at least 1 log entry, got ${logsResp.data.length}`);
+      const log = logsResp.data[0];
+      assert(log.ruleId === ruleId, "Log ruleId should match");
+      assert(log.trigger === "lead_created", `Expected trigger lead_created, got ${log.trigger}`);
+      assert(log.result !== null && typeof log.result === "object", "Log result should be an object");
+      assert(typeof log.result.success === "boolean", "Log result should have success field");
+      assert(typeof log.result.durationMs === "number", "Log result should include durationMs telemetry");
+
+      await req("DELETE", `/api/contacts/${contactId}`);
+    } finally {
+      await req("DELETE", `/api/automation-rules/${ruleId}`);
+    }
+  });
+
   // ==========================================
-  // 11. REPORTS
+  // 11. SKILLS API
+  // ==========================================
+
+  await test("POST /api/skills/run rejects unauthenticated requests", "Skills", async () => {
+    const r = await req("POST", "/api/skills/run", { skill: "optimize_route", params: {} }, { Authorization: "" });
+    assert(r.status === 401 || r.status === 403, `Expected 401/403 unauthenticated, got ${r.status}`);
+  });
+
+  await test("POST /api/skills/run returns 400 for unknown skill", "Skills", async () => {
+    const r = await req("POST", "/api/skills/run", { skill: "nonexistent_skill_xyz", params: {} });
+    assert(r.status === 400, `Expected 400 for unknown skill, got ${r.status}`);
+    assert(r.data.error, "Expected error message");
+  });
+
+  await test("POST /api/skills/run returns 400 for missing skill name", "Skills", async () => {
+    const r = await req("POST", "/api/skills/run", { params: {} });
+    assert(r.status === 400, `Expected 400 for missing skill name, got ${r.status}`);
+  });
+
+  await test("POST /api/skills/run optimize_route returns 400 for invalid params", "Skills", async () => {
+    const r = await req("POST", "/api/skills/run", { skill: "optimize_route", params: {} });
+    assert(r.status === 400, `Expected 400 for missing routeId, got ${r.status}`);
+  });
+
+  await test("POST /api/skills/run optimize_route is callable with a route id", "Skills", async () => {
+    const routes = await req("GET", "/api/routes");
+    assert(routes.status === 200, `Expected 200 for routes list, got ${routes.status}`);
+    if (Array.isArray(routes.data) && routes.data.length > 0) {
+      const routeId = routes.data[0].id;
+      const skillR = await req("POST", "/api/skills/run", { skill: "optimize_route", params: { routeId } });
+      assert([200, 400, 402, 409].includes(skillR.status), `Expected 200/400/402/409 from skill run, got ${skillR.status}`);
+    }
+  });
+
+  await test("optimize_route skill response has required fields (success, message, data)", "Skills", async () => {
+    const routes = await req("GET", "/api/routes");
+    assert(routes.status === 200, `Expected 200 for routes list, got ${routes.status}`);
+    if (Array.isArray(routes.data) && routes.data.length > 0) {
+      const routeId = routes.data[0].id;
+      const skillR = await req("POST", "/api/skills/run", { skill: "optimize_route", params: { routeId } });
+      assert([200, 400, 402, 409].includes(skillR.status), `Expected 200/400/402/409, got ${skillR.status}`);
+      assert(typeof skillR.data.success === "boolean", "Expected 'success' boolean in skill response");
+      assert(typeof skillR.data.message === "string", "Expected 'message' string in skill response");
+      if (skillR.data.success && skillR.data.data) {
+        const d = skillR.data.data;
+        assert(typeof d.stopsReordered === "number", "Expected stopsReordered number on success");
+        assert(typeof d.milesSaved === "number", "Expected milesSaved number on success");
+        assert(Array.isArray(d.order), "Expected order array on success");
+        assert(typeof d.optimizedStopHash === "string", "Expected optimizedStopHash string on success");
+      }
+    }
+  });
+
+  await test("Route endpoint and skill endpoint agree on outcome for same route (parity)", "Skills", async () => {
+    const created = await req("POST", "/api/routes", { name: "SkillParityTestRoute", dayOfWeek: "friday" });
+    assert(created.status === 201, `Expected 201 creating route, got ${created.status}`);
+    const parityRouteId = created.data.id;
+    try {
+      const routeEndpointR = await req("POST", `/api/routes/${parityRouteId}/optimize`);
+      const skillEndpointR = await req("POST", "/api/skills/run", { skill: "optimize_route", params: { routeId: parityRouteId } });
+      const routeOptimized = routeEndpointR.data.optimized === true;
+      const skillSuccess = skillEndpointR.data.success === true;
+      assert(routeOptimized === skillSuccess, `Parity check: route endpoint (optimized=${routeOptimized}) and skill (success=${skillSuccess}) disagree`);
+    } finally {
+      await req("DELETE", `/api/routes/${parityRouteId}`);
+    }
+  });
+
+  // ==========================================
+  // 12. REPORTS
   // ==========================================
 
   await test("Reports summary default period returns valid data", "Reports", async () => {

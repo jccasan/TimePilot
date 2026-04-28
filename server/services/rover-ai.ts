@@ -246,12 +246,37 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "optimize_route",
+      /**
+       * Rover uses `routeRef` (name / number / UUID) instead of the raw `routeId` UUID
+       * that `/api/skills/run` accepts. This is intentional: Rover resolves the human-
+       * readable reference via `resolveRouteRef()` before calling `runSkill`, so users can
+       * say "optimize route 3" without knowing the underlying UUID.
+       */
+      description: "Optimize the stop order for a specific route to minimize drive distance and time. Use this when the user asks to optimize a route or says something like 'optimize route 3' or 'optimize the Monday route'. Supply routeRef as the route name, number, or UUID.",
+      parameters: {
+        type: "object",
+        properties: {
+          routeRef: {
+            type: "string",
+            description: "The route to optimize — can be a route name (e.g. 'Route 3', 'Monday'), a number (e.g. '3'), or a UUID. The system will resolve this to the correct route.",
+          },
+        },
+        required: ["routeRef"],
+      },
+    },
+  },
 ];
 
 export async function executeToolCall(
   toolName: string,
   args: Record<string, any>,
-  companyId: string
+  companyId: string,
+  userId?: string,
+  role?: string
 ): Promise<string> {
   try {
     switch (toolName) {
@@ -263,6 +288,23 @@ export async function executeToolCall(
         return await getUpcomingVisits(companyId, args.days || 7);
       case "get_recent_activity":
         return await getRecentActivity(companyId);
+      case "optimize_route": {
+        const routeRef: string = String(args.routeRef ?? "").trim();
+        if (!routeRef) {
+          return JSON.stringify({ success: false, message: "A route name or ID is required. Please specify which route to optimize (e.g. 'optimize route 3').", error: "MISSING_ROUTE_REF" });
+        }
+        const resolvedRouteId = await resolveRouteRef(routeRef, companyId);
+        if (!resolvedRouteId) {
+          return JSON.stringify({ success: false, message: `Could not find a route matching "${routeRef}". Check the route name and try again.`, error: "ROUTE_NOT_FOUND" });
+        }
+        const { runSkill } = await import("./skills/index");
+        const result = await runSkill(
+          "optimize_route",
+          { routeId: resolvedRouteId },
+          { companyId, userId: userId ?? "", role: role ?? "system" }
+        );
+        return JSON.stringify(result);
+      }
       default:
         return JSON.stringify({ error: "Unknown tool" });
     }
@@ -270,6 +312,32 @@ export async function executeToolCall(
     console.error(`Rover tool error (${toolName}):`, err);
     return JSON.stringify({ error: "Failed to fetch data" });
   }
+}
+
+async function resolveRouteRef(routeRef: string, companyId: string): Promise<string | null> {
+  const normalized = routeRef.trim().toLowerCase();
+  if (!normalized) return null;
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidPattern.test(normalized)) {
+    const [row] = await db.select({ id: routes.id }).from(routes)
+      .where(and(eq(routes.id, routeRef), eq(routes.companyId, companyId))).limit(1);
+    return row?.id ?? null;
+  }
+  const allRoutes = await db.select({ id: routes.id, name: routes.name }).from(routes)
+    .where(eq(routes.companyId, companyId));
+  const exact = allRoutes.find(r => r.name.toLowerCase() === normalized);
+  if (exact) return exact.id;
+  // For pure numeric refs like "3", match routes whose name contains the number
+  // as a word boundary (e.g. "Route 3", "3rd Route") — deterministic digit resolution.
+  if (/^\d+$/.test(normalized)) {
+    const numericMatch = allRoutes.find(r => new RegExp(`\\b${normalized}\\b`).test(r.name.toLowerCase()));
+    if (numericMatch) return numericMatch.id;
+  }
+  if (normalized.length >= 2) {
+    const partial = allRoutes.find(r => r.name.toLowerCase().includes(normalized));
+    if (partial) return partial.id;
+  }
+  return null;
 }
 
 async function getBusinessStats(companyId: string): Promise<string> {
@@ -508,7 +576,7 @@ export async function streamRoverChat(
         } catch {
           args = {};
         }
-        const result = await executeToolCall(tc.name, args, companyId);
+        const result = await executeToolCall(tc.name, args, companyId, userId, userCtx.userRole);
         toolResults.push({
           role: "tool",
           tool_call_id: tc.id,

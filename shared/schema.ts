@@ -625,7 +625,7 @@ export const automationRules = pgTable("automation_rules", {
   trigger: automationTriggerEnum("trigger").notNull(),
   isActive: boolean("is_active").notNull().default(true),
   actionConfig: jsonb("action_config").$type<{
-    type: "create_task" | "send_email" | "send_webhook";
+    type: "create_task" | "send_email" | "send_webhook" | "run_skill";
     params: Record<string, any>;
   }>().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

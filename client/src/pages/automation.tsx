@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { AutomationRule } from "@shared/schema";
+import type { AutomationRule, Route } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,16 +48,42 @@ const actionTypes = [
   { value: "create_task", label: "Create Task" },
   { value: "send_email", label: "Send Email" },
   { value: "send_webhook", label: "Send Webhook" },
+  { value: "run_skill", label: "Run Skill" },
+];
+
+const availableSkills = [
+  { value: "optimize_route", label: "Optimize Route" },
 ];
 
 const ruleFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   trigger: z.enum(["lead_created", "quote_created", "service_completed", "payment_failed", "invoice_created"]),
   actionType: z.string().min(1, "Action type is required"),
+  skillName: z.string().optional(),
+  skillRouteId: z.string().optional(),
   description: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.actionType === "run_skill" && !data.skillName) {
+    ctx.addIssue({ code: "custom", path: ["skillName"], message: "Skill is required" });
+  }
+  if (data.actionType === "run_skill" && data.skillName === "optimize_route" && !data.skillRouteId) {
+    ctx.addIssue({ code: "custom", path: ["skillRouteId"], message: "Route is required for optimize_route" });
+  }
 });
 
 type RuleFormValues = z.infer<typeof ruleFormSchema>;
+
+type RouteItem = { id: string; name: string };
+
+function getActionLabel(rule: AutomationRule): string {
+  const config = rule.actionConfig;
+  if (!config?.type) return "unknown";
+  if (config.type === "run_skill") {
+    const skill = config.params?.skillName;
+    return typeof skill === "string" ? `run skill: ${skill.replace(/_/g, " ")}` : "run skill";
+  }
+  return config.type.replace(/_/g, " ");
+}
 
 export default function Automation() {
   const { toast } = useToast();
@@ -67,23 +93,40 @@ export default function Automation() {
     queryKey: ["/api/automation-rules"],
   });
 
+  const { data: routes } = useQuery<Route[], Error, RouteItem[]>({
+    queryKey: ["/api/routes"],
+    select: (data) => data.map((r) => ({ id: r.id, name: r.name })),
+  });
+
   const form = useForm<RuleFormValues>({
     resolver: zodResolver(ruleFormSchema),
     defaultValues: {
       name: "",
       trigger: "lead_created",
       actionType: "create_task",
+      skillName: "",
+      skillRouteId: "",
       description: "",
     },
   });
 
+  const watchedActionType = form.watch("actionType");
+  const watchedSkillName = form.watch("skillName");
+
   const createMutation = useMutation({
     mutationFn: async (data: RuleFormValues) => {
+      const params: Record<string, unknown> = {};
+      if (data.actionType === "run_skill" && data.skillName) {
+        params.skillName = data.skillName;
+        if (data.skillName === "optimize_route" && data.skillRouteId) {
+          params.routeId = data.skillRouteId;
+        }
+      }
       await apiRequest("POST", "/api/automation-rules", {
         name: data.name,
         trigger: data.trigger,
         description: data.description,
-        actionConfig: { type: data.actionType, params: {} },
+        actionConfig: { type: data.actionType, params },
       });
     },
     onSuccess: () => {
@@ -153,7 +196,7 @@ export default function Automation() {
                 <FormField control={form.control} name="actionType" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Action</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={(v) => { field.onChange(v); form.setValue("skillName", ""); form.setValue("skillRouteId", ""); }} value={field.value}>
                       <FormControl><SelectTrigger data-testid="select-action"><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>
                         {actionTypes.map((a) => (
@@ -164,6 +207,38 @@ export default function Automation() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                {watchedActionType === "run_skill" && (
+                  <FormField control={form.control} name="skillName" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Skill</FormLabel>
+                      <Select onValueChange={(v) => { field.onChange(v); form.setValue("skillRouteId", ""); }} value={field.value ?? ""}>
+                        <FormControl><SelectTrigger data-testid="select-skill-name"><SelectValue placeholder="Select a skill" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          {availableSkills.map((s) => (
+                            <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                )}
+                {watchedActionType === "run_skill" && watchedSkillName === "optimize_route" && (
+                  <FormField control={form.control} name="skillRouteId" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Route to optimize</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                        <FormControl><SelectTrigger data-testid="select-skill-route-id"><SelectValue placeholder="Select a route" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          {(routes ?? []).map((r) => (
+                            <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                )}
                 <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-rule">
                   {createMutation.isPending ? "Creating..." : "Create Rule"}
                 </Button>
@@ -190,10 +265,10 @@ export default function Automation() {
                     <p className="font-medium" data-testid={`text-rule-name-${rule.id}`}>{rule.name}</p>
                     <div className="flex flex-wrap items-center gap-2 mt-1">
                       <Badge variant="outline" data-testid={`badge-trigger-${rule.id}`}>
-                        {rule.trigger.replace("_", " ")}
+                        {rule.trigger.replace(/_/g, " ")}
                       </Badge>
                       <Badge variant="outline" data-testid={`badge-action-${rule.id}`}>
-                        {(rule.actionConfig as any)?.type?.replace("_", " ") || "unknown"}
+                        {getActionLabel(rule)}
                       </Badge>
                     </div>
                   </div>
