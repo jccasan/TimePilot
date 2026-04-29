@@ -11849,10 +11849,14 @@ Rules:
               if (!company.dedicatedPhoneNumber) {
                 const areaCodeField = customFields.find((f) => f.key === "preferred_area_code");
                 const areaCode = areaCodeField?.text?.value?.trim() || "703";
-
-                const dedicatedPhoneNumber = await provisionRetellNumber({ areaCode });
-                companyUpdates.dedicatedPhoneNumber = dedicatedPhoneNumber;
-                console.log(`[Retell] Provisioned number ${maskPhone(dedicatedPhoneNumber)} for company "${company.name}" (${company.id})`);
+                try {
+                  const dedicatedPhoneNumber = await provisionRetellNumber({ areaCode });
+                  companyUpdates.dedicatedPhoneNumber = dedicatedPhoneNumber;
+                  console.log(`[Retell] Provisioned number ${maskPhone(dedicatedPhoneNumber)} for company "${company.name}" (${company.id})`);
+                } catch (phoneErr: any) {
+                  console.warn(`[Retell] Failed to provision phone number for company "${company.name}" (${company.id}): ${phoneErr.message}`);
+                  notify(tenantId, "system_warning", "Phone Number Setup Failed", `Your voice plan is active but we could not automatically provision a phone number (${phoneErr.message}). Please contact support to complete setup.`, `/settings`);
+                }
               }
 
               const websiteField = customFields.find((f) => f.key === "business_website");
@@ -11860,11 +11864,11 @@ Rules:
 
               let kbId: string | null = null;
               const effectiveAgentId = company.retellAgentId || process.env.RETELL_AGENT_ID || null;
-              if (businessWebsite && company.retellAgentId) {
+              if (businessWebsite && effectiveAgentId) {
                 try {
                   kbId = await seedRetellKnowledgeBase({
                     tenantId: company.id,
-                    agentId: company.retellAgentId,
+                    agentId: effectiveAgentId,
                     websiteUrl: businessWebsite,
                   });
                   console.log(`[Retell KB] Created knowledge base "${kbId}" for company "${company.name}" (${company.id}) from ${businessWebsite}`);

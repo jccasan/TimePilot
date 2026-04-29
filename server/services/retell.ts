@@ -35,24 +35,31 @@ async function retellFetch(path: string, options: RequestInit = {}): Promise<Res
 export async function provisionRetellNumber(params: {
   areaCode?: string;
 }): Promise<string> {
-  const areaCode = params.areaCode?.replace(/\D/g, "").slice(0, 3) || "703";
+  const preferredAreaCode = params.areaCode?.replace(/\D/g, "").slice(0, 3) || "703";
   const agentId = process.env.RETELL_AGENT_ID;
 
-  const searchRes = await retellFetch(
-    `/v2/get-available-numbers?area_code=${areaCode}&type=local`,
-  );
+  const tryAreaCode = async (areaCode: string): Promise<string[]> => {
+    const res = await retellFetch(`/v2/get-available-numbers?area_code=${areaCode}&type=local`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.numbers ?? data.available_numbers ?? data.phone_numbers ?? [];
+  };
 
-  if (!searchRes.ok) {
-    const errText = await searchRes.text();
-    throw new Error(`Retell number search failed (${searchRes.status}): ${errText}`);
+  let availableNumbers = await tryAreaCode(preferredAreaCode);
+
+  if (!availableNumbers.length && preferredAreaCode !== "800") {
+    console.warn(`[Retell] No numbers in area code ${preferredAreaCode}, trying fallback area codes`);
+    for (const fallback of ["206", "425", "503", "650", "214", "312"]) {
+      availableNumbers = await tryAreaCode(fallback);
+      if (availableNumbers.length) {
+        console.log(`[Retell] Using fallback area code ${fallback}`);
+        break;
+      }
+    }
   }
 
-  const searchData = await searchRes.json();
-  const availableNumbers: string[] =
-    searchData.numbers ?? searchData.available_numbers ?? searchData.phone_numbers ?? [];
-
   if (!availableNumbers.length) {
-    throw new Error(`No available numbers found for area code ${areaCode}`);
+    throw new Error(`No available phone numbers found (preferred area code: ${preferredAreaCode})`);
   }
 
   const chosenNumber = availableNumbers[0];
