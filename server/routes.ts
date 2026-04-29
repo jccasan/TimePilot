@@ -42,6 +42,7 @@ import {
   migrateCustomerToConnectedAccount,
   isCustomerOnPlatform,
   ensureConnectedCustomer,
+  createCustomerSession,
 } from "./services/stripe";
 import { seedRetellKnowledgeBase, provisionRetellNumber, registerRetellWebhook, checkRetellWebhookSync, getRetellAgentWebhookUrl, getAppBaseUrl } from "./services/retell";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
@@ -4653,6 +4654,18 @@ Return ONLY valid JSON, no markdown.`,
       const currentCredits = company?.routeCredits ?? 0;
       const updated = await storage.updateCompany(companyId, { routeCredits: currentCredits + amount } as any);
       res.json({ credits: updated.routeCredits });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/route-credits/customer-session", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Only owners/admins can purchase credits" });
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!company.stripeCustomerId) return res.json({ clientSecret: null });
+      const clientSecret = await createCustomerSession(company.stripeCustomerId);
+      res.json({ clientSecret });
     } catch (err) { handleError(res, err); }
   });
 
@@ -11940,6 +11953,40 @@ Rules:
 
           if (!resolved) {
             console.warn(`[Stripe Webhook] checkout.session.completed: could not resolve invoice ${invoiceId} (session ${session.id}, tenant_id=${tenantId || "missing"}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`);
+          }
+        }
+
+        // Route credit purchase via Stripe Pricing Table
+        // Products in the pricing table must have metadata: { type: "route_credits", credits: "N" }
+        // The pricing table element sets client-reference-id to the company ID
+        const refCompanyId = session.client_reference_id as string | null;
+        if (refCompanyId && !meta.invoiceId && meta.checkout_type !== "voice_addon") {
+          try {
+            const { default: StripeLib } = await import("stripe");
+            const stripeLib = new StripeLib(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-01-28.clover" as any });
+            const fullSession = await stripeLib.checkout.sessions.retrieve(session.id, {
+              expand: ["line_items.data.price.product"],
+            });
+            let creditsToAdd = 0;
+            for (const item of (fullSession.line_items?.data ?? [])) {
+              const product = (item.price as any)?.product;
+              if (product && typeof product === "object" && product.metadata?.type === "route_credits") {
+                const credits = parseInt(product.metadata.credits ?? "0", 10);
+                creditsToAdd += credits * (item.quantity ?? 1);
+              }
+            }
+            if (creditsToAdd > 0) {
+              const company = await storage.getCompany(refCompanyId);
+              if (company) {
+                const newTotal = (company.routeCredits ?? 0) + creditsToAdd;
+                await storage.updateCompany(refCompanyId, { routeCredits: newTotal } as any);
+                console.log(`[Stripe Credits] Added ${creditsToAdd} route credits to company "${company.name}" (${refCompanyId}). New total: ${newTotal}`);
+              } else {
+                console.warn(`[Stripe Credits] checkout.session.completed: company ${refCompanyId} not found (session ${session.id})`);
+              }
+            }
+          } catch (creditErr: any) {
+            console.error(`[Stripe Credits] Failed to process route credit purchase (session ${session.id}): ${creditErr.message}`);
           }
         }
       }

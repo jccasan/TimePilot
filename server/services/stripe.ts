@@ -461,6 +461,15 @@ export async function createSubscriptionCheckout(params: {
   return { url: session.url!, sessionId: session.id };
 }
 
+export async function createCustomerSession(customerId: string): Promise<string | null> {
+  const stripe = getStripe();
+  const session = await stripe.customers.createSession({
+    customer: customerId,
+    components: { pricing_table: { enabled: true } },
+  });
+  return session.client_secret ?? null;
+}
+
 export async function retrievePaymentIntentFees(
   paymentIntentId: string,
   stripeAccount?: string | null

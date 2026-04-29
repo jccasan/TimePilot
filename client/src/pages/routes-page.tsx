@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { WeeklyOptimizerPanel } from "@/components/WeeklyOptimizerPanel";
+import { useAuth } from "@/hooks/use-auth";
 import { Link } from "wouter";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
@@ -54,6 +55,22 @@ import {
   useSensor, useSensors, useDroppable, useDraggable,
   type DragStartEvent, type DragEndEvent, type DragOverEvent,
 } from "@dnd-kit/core";
+
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "stripe-pricing-table": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+        "pricing-table-id"?: string;
+        "publishable-key"?: string;
+        "client-reference-id"?: string;
+        "customer-session-client-secret"?: string;
+      };
+    }
+  }
+}
+
+const STRIPE_PRICING_TABLE_ID = "prctbl_1TRXCrGVMaTr43jX0eJZMaLt";
+const STRIPE_PUBLISHABLE_KEY = "pk_live_51T15sMGVMaTr43jX4fB9ug4zBSlaiVqyszuuCW6wbIqHxFMXfizszb9g938KPPAspd1PpjyrAqlJdVh3LC7cqWil00ZtXS9t6F";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 type DayOfWeek = typeof DAYS[number];
@@ -883,31 +900,56 @@ function SavingsSummaryDialog({ open, onOpenChange, result }: {
   );
 }
 
-function PurchaseCreditsDialog({ open, onOpenChange, onPurchase, isPurchasing, topUpNeeded = 0, weeklyBaseline = 0 }: {
+function StripePricingTableDialog({ open, onOpenChange, companyId, topUpNeeded = 0, weeklyBaseline = 0, initialCredits = 0 }: {
   open: boolean; onOpenChange: (open: boolean) => void;
-  onPurchase: (amount: number) => void; isPurchasing: boolean;
-  topUpNeeded?: number; weeklyBaseline?: number;
+  companyId: string | null | undefined;
+  topUpNeeded?: number; weeklyBaseline?: number; initialCredits?: number;
 }) {
-  const [amount, setAmount] = useState(10);
+  const { toast } = useToast();
+  const [customerSecret, setCustomerSecret] = useState<string | null>(null);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const creditsAtOpenRef = useRef(initialCredits);
 
   useEffect(() => {
-    if (open && topUpNeeded > 0) {
-      const packs = [5, 10, 25, 50];
-      const suggested = packs.find(p => p >= topUpNeeded) ?? topUpNeeded;
-      setAmount(suggested);
-    }
-  }, [open, topUpNeeded]);
+    if (typeof window === "undefined") return;
+    if (document.querySelector('script[src*="pricing-table"]')) { setScriptLoaded(true); return; }
+    const script = document.createElement("script");
+    script.src = "https://js.stripe.com/v3/pricing-table.js";
+    script.async = true;
+    script.onload = () => setScriptLoaded(true);
+    document.head.appendChild(script);
+  }, []);
 
-  const packs = [
-    { credits: 5, label: "5 Credits" },
-    { credits: 10, label: "10 Credits" },
-    { credits: 25, label: "25 Credits" },
-    { credits: 50, label: "50 Credits" },
-  ];
+  useEffect(() => {
+    if (!open) { setCustomerSecret(null); creditsAtOpenRef.current = initialCredits; return; }
+    creditsAtOpenRef.current = initialCredits;
+    apiRequest("POST", "/api/route-credits/customer-session")
+      .then(r => r.json())
+      .then(data => setCustomerSecret(data.clientSecret ?? null))
+      .catch(() => setCustomerSecret(null));
+  }, [open, initialCredits]);
+
+  const { data: pollData } = useQuery<{ credits: number; weeklyBaseline: number }>({
+    queryKey: ["/api/route-credits"],
+    refetchInterval: open ? 5000 : false,
+    enabled: open,
+  });
+
+  useEffect(() => {
+    if (!open || pollData === undefined) return;
+    const current = pollData.credits ?? 0;
+    const baseline = creditsAtOpenRef.current;
+    if (current > baseline && baseline >= 0) {
+      const added = current - baseline;
+      queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
+      toast({ title: "Credits added!", description: `${added} route credit${added !== 1 ? "s" : ""} added to your account.` });
+      onOpenChange(false);
+    }
+  }, [pollData?.credits, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm" data-testid="dialog-purchase-credits">
+      <DialogContent className="sm:max-w-2xl" data-testid="dialog-purchase-credits">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" />
@@ -925,22 +967,21 @@ function PurchaseCreditsDialog({ open, onOpenChange, onPurchase, isPurchasing, t
             Top up at least <span className="font-semibold">{topUpNeeded} credit{topUpNeeded !== 1 ? "s" : ""}</span> to unlock the Weekly Optimizer.
           </div>
         )}
-        <div className="grid grid-cols-2 gap-2">
-          {packs.map(p => (
-            <Button key={p.credits} variant={amount === p.credits ? "default" : "outline"}
-              onClick={() => setAmount(p.credits)} className="flex flex-col h-auto py-3"
-              data-testid={`button-pack-${p.credits}`}
-            >
-              <span className="text-lg font-bold">{p.credits}</span>
-              <span className="text-xs">{topUpNeeded > 0 && p.credits < topUpNeeded ? "not enough" : "credits"}</span>
-            </Button>
-          ))}
+        <div className="min-h-[300px] flex items-center justify-center">
+          {!scriptLoaded ? (
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          ) : (
+            <stripe-pricing-table
+              pricing-table-id={STRIPE_PRICING_TABLE_ID}
+              publishable-key={STRIPE_PUBLISHABLE_KEY}
+              client-reference-id={companyId ?? undefined}
+              customer-session-client-secret={customerSecret ?? undefined}
+            />
+          )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => onPurchase(amount)} disabled={isPurchasing} data-testid="button-confirm-purchase">
-            {isPurchasing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Add {amount} Credits
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-close-purchase">
+            Close
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -951,6 +992,7 @@ function PurchaseCreditsDialog({ open, onOpenChange, onPurchase, isPurchasing, t
 export default function RoutesPage() {
   const tz = useCompanyTimezone();
   const { toast } = useToast();
+  const { user } = useAuth();
   const { startTutorial, isTutorialCompleted } = useTutorialContext();
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(() => {
     const today = new Date().toLocaleDateString("en-US", { weekday: "long" }).toLowerCase() as DayOfWeek;
@@ -1606,18 +1648,6 @@ export default function RoutesPage() {
     },
   });
 
-  const purchaseCreditsMutation = useMutation({
-    mutationFn: async (amount: number) => {
-      const res = await apiRequest("POST", "/api/route-credits/add", { amount }); return res.json();
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
-      setShowPurchase(false);
-      toast({ title: "Credits added", description: `You now have ${data.credits} route credits.` });
-    },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
-  });
-
   const unassignAllMutation = useMutation({
     mutationFn: async (routeId: string) => {
       setUnassigningRouteId(routeId);
@@ -2032,11 +2062,11 @@ export default function RoutesPage() {
       </AlertDialog>
 
       <SavingsSummaryDialog open={showSavings} onOpenChange={setShowSavings} result={savingsResult} />
-      <PurchaseCreditsDialog open={showPurchase} onOpenChange={setShowPurchase}
-        onPurchase={(amount) => purchaseCreditsMutation.mutate(amount)}
-        isPurchasing={purchaseCreditsMutation.isPending}
+      <StripePricingTableDialog open={showPurchase} onOpenChange={setShowPurchase}
+        companyId={user?.companyId}
         topUpNeeded={weeklyBaseline > credits ? weeklyBaseline - credits : 0}
-        weeklyBaseline={weeklyBaseline} />
+        weeklyBaseline={weeklyBaseline}
+        initialCredits={credits} />
 
       <RouteVisitDetailSheet
         visit={detailVisit}
