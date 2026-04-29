@@ -63,7 +63,9 @@ import {
   Sparkles,
   ChevronsUpDown,
   Check,
+  CalendarClock,
 } from "lucide-react";
+import { BulkServicePlanSetup } from "@/components/bulk-service-plan-setup";
 
 interface ParsedInvoicePreview {
   summary: {
@@ -142,6 +144,89 @@ interface ImportRun {
 
 function formatDollars(amount: number): string {
   return `$${amount.toFixed(2)}`;
+}
+
+function TransferResultView({ importResult, onReset }: { importResult: CompetitorImportResult; onReset: () => void }) {
+  const [bulkSetupOpen, setBulkSetupOpen] = useState(false);
+
+  return (
+    <div className="space-y-6">
+      <Alert data-testid="alert-transfer-result">
+        <CheckCircle2 className="h-4 w-4" />
+        <AlertTitle>Transfer Complete</AlertTitle>
+        <AlertDescription>
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <p className="text-muted-foreground">Source</p>
+                <p className="font-medium" data-testid="text-result-platform">{importResult.platformLabel}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Imported</p>
+                <p className="font-medium text-green-600" data-testid="text-result-imported">{importResult.imported}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Updated</p>
+                <p className="font-medium text-blue-600" data-testid="text-result-updated">{importResult.updated}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Skipped</p>
+                <p className="font-medium text-muted-foreground" data-testid="text-result-skipped">{importResult.skipped}</p>
+              </div>
+            </div>
+          </div>
+        </AlertDescription>
+      </Alert>
+
+      {importResult.errors.length > 0 && (
+        <Alert variant="destructive" data-testid="alert-transfer-import-errors">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Import Issues ({importResult.errors.length})</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
+              {importResult.errors.slice(0, 20).map((err, i) => (
+                <li key={i}>Row {err.row}: {err.message}</li>
+              ))}
+              {importResult.errors.length > 20 && (
+                <li className="text-muted-foreground">...and {importResult.errors.length - 20} more</li>
+              )}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {importResult.imported > 0 && (
+        <Card className="border-primary/30 bg-primary/5" data-testid="card-finish-setup">
+          <CardContent className="pt-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <CalendarClock className="h-4 w-4 text-primary" />
+                <span className="font-semibold text-sm">Finish Setup — Schedule Your New Clients</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Create service plans and assign stops to routes for the {importResult.imported} clients you just imported. This takes just a few clicks.
+              </p>
+            </div>
+            <Button onClick={() => setBulkSetupOpen(true)} data-testid="button-finish-setup">
+              Finish Setup
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <Button variant="outline" onClick={onReset} data-testid="button-new-transfer">
+        Transfer More Data
+      </Button>
+
+      <BulkServicePlanSetup
+        open={bulkSetupOpen}
+        onOpenChange={setBulkSetupOpen}
+        importRunId={importResult.importRunId}
+        title="Finish Setup — Create Service Plans for Imported Clients"
+      />
+    </div>
+  );
 }
 
 function TransferTab() {
@@ -618,55 +703,10 @@ function TransferTab() {
 
   if (step === "result" && importResult) {
     return (
-      <div className="space-y-6">
-        <Alert data-testid="alert-transfer-result">
-          <CheckCircle2 className="h-4 w-4" />
-          <AlertTitle>Transfer Complete</AlertTitle>
-          <AlertDescription>
-            <div className="mt-3 space-y-2 text-sm">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-muted-foreground">Source</p>
-                  <p className="font-medium" data-testid="text-result-platform">{importResult.platformLabel}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Imported</p>
-                  <p className="font-medium text-green-600" data-testid="text-result-imported">{importResult.imported}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Updated</p>
-                  <p className="font-medium text-blue-600" data-testid="text-result-updated">{importResult.updated}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Skipped</p>
-                  <p className="font-medium text-muted-foreground" data-testid="text-result-skipped">{importResult.skipped}</p>
-                </div>
-              </div>
-            </div>
-          </AlertDescription>
-        </Alert>
-
-        {importResult.errors.length > 0 && (
-          <Alert variant="destructive" data-testid="alert-transfer-import-errors">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Import Issues ({importResult.errors.length})</AlertTitle>
-            <AlertDescription>
-              <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
-                {importResult.errors.slice(0, 20).map((err, i) => (
-                  <li key={i}>Row {err.row}: {err.message}</li>
-                ))}
-                {importResult.errors.length > 20 && (
-                  <li className="text-muted-foreground">...and {importResult.errors.length - 20} more</li>
-                )}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <Button variant="outline" onClick={resetAll} data-testid="button-new-transfer">
-          Transfer More Data
-        </Button>
-      </div>
+      <TransferResultView
+        importResult={importResult}
+        onReset={resetAll}
+      />
     );
   }
 

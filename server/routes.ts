@@ -4265,6 +4265,82 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/contacts/unscheduled", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const importRunId = req.query.importRunId as string | undefined;
+
+      const allPlans = await storage.getServicePlans(companyId);
+      const contactsWithPlans = new Set(allPlans.map(p => p.contactId));
+
+      const allContacts = await storage.getContacts(companyId);
+
+      let importWindowStart: Date | null = null;
+      let importWindowEnd: Date | null = null;
+      if (importRunId) {
+        const importRun = await storage.getImportRun(importRunId, companyId);
+        if (importRun) {
+          importWindowStart = new Date(importRun.createdAt);
+          if (importRun.completedAt) {
+            const end = new Date(importRun.completedAt);
+            end.setMinutes(end.getMinutes() + 2);
+            importWindowEnd = end;
+          }
+        }
+      }
+
+      const allProperties = await storage.getProperties(companyId);
+      const propertiesByContact = new Map<string, typeof allProperties[0][]>();
+      for (const prop of allProperties) {
+        if (!propertiesByContact.has(prop.contactId)) propertiesByContact.set(prop.contactId, []);
+        propertiesByContact.get(prop.contactId)!.push(prop);
+      }
+
+      const unscheduled = allContacts.filter(c => {
+        if (contactsWithPlans.has(c.id)) return false;
+        if (importWindowStart) {
+          const ct = new Date(c.createdAt);
+          if (ct < importWindowStart) return false;
+          if (importWindowEnd && ct > importWindowEnd) return false;
+        }
+        return true;
+      });
+
+      const result = unscheduled.map(contact => {
+        const contactProps = propertiesByContact.get(contact.id) || [];
+        const primaryProperty = contactProps[0] || null;
+        const hasProperty = !!primaryProperty;
+        const hasAddress = !!(contact.streetAddress || primaryProperty?.streetAddress);
+        const hasFrequency = !!contact.serviceFrequency;
+        const issues: string[] = [];
+        if (!hasProperty) issues.push("Missing property");
+        else if (!hasAddress) issues.push("Missing address");
+        if (!hasFrequency) issues.push("Missing frequency");
+        if (!contact.serviceDay) issues.push("Missing service day");
+        return {
+          id: contact.id,
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          email: contact.email,
+          serviceFrequency: contact.serviceFrequency,
+          serviceDay: contact.serviceDay,
+          streetAddress: contact.streetAddress || primaryProperty?.streetAddress || null,
+          city: contact.city || primaryProperty?.city || null,
+          state: contact.state || primaryProperty?.state || null,
+          zipCode: contact.zipCode || primaryProperty?.zipCode || null,
+          propertyId: primaryProperty?.id || null,
+          hasProperty,
+          hasAddress,
+          hasFrequency,
+          issues,
+          createdAt: contact.createdAt,
+        };
+      });
+
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -6175,6 +6251,180 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       res.status(201).json({ ...plan, addOns: planAddOns });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/service-plans/bulk", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+
+      const DAY_OF_WEEK_VALUES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "tbd"] as const;
+      type DayOfWeekValue = typeof DAY_OF_WEEK_VALUES[number];
+
+      const bulkSchema = z.object({
+        items: z.array(z.object({
+          contactId: z.string(),
+          propertyId: z.string(),
+          frequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]),
+          dayOfWeek: z.enum(DAY_OF_WEEK_VALUES).optional().nullable(),
+          startDate: z.string(),
+          pricePerVisit: z.string(),
+        })),
+        autoAssign: z.boolean().optional().default(false),
+      });
+
+      const { items, autoAssign } = bulkSchema.parse(req.body);
+
+      const allProperties = await storage.getProperties(companyId);
+      const propertyById = new Map(allProperties.map(p => [p.id, p]));
+
+      const createdPlans: { planId: string; contactId: string; propertyId: string; dayOfWeek: DayOfWeekValue | null }[] = [];
+      const failures: { contactId: string; reason: string }[] = [];
+
+      for (const item of items) {
+        try {
+          const contact = await storage.getContact(item.contactId, companyId);
+          if (!contact) {
+            failures.push({ contactId: item.contactId, reason: "Contact not found or access denied" });
+            continue;
+          }
+          const property = propertyById.get(item.propertyId);
+          if (!property || property.companyId !== companyId || property.contactId !== item.contactId) {
+            failures.push({ contactId: item.contactId, reason: "Property not found or does not belong to this contact" });
+            continue;
+          }
+
+          const plan = await storage.createServicePlan({
+            companyId,
+            contactId: item.contactId,
+            propertyId: item.propertyId,
+            frequency: item.frequency,
+            dayOfWeek: item.dayOfWeek ?? null,
+            pricePerVisit: item.pricePerVisit,
+            startDate: item.startDate,
+            isActive: true,
+          });
+          createdPlans.push({
+            planId: plan.id,
+            contactId: item.contactId,
+            propertyId: item.propertyId,
+            dayOfWeek: item.dayOfWeek ?? null,
+          });
+
+          if (contact.status === "lead" || contact.status === "estimate") {
+            await storage.updateContact(item.contactId, companyId, { status: "active" });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          failures.push({ contactId: item.contactId, reason: msg });
+        }
+      }
+
+      const createdPlanIds = createdPlans.map(p => p.planId);
+
+      let visitsCreated = 0;
+      if (createdPlanIds.length > 0) {
+        try {
+          const { generateVisitsForPlans } = await import("./jobs/auto-visits");
+          const today = new Date();
+          const sixMonthsOut = new Date(today);
+          sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+          visitsCreated = await generateVisitsForPlans(
+            companyId,
+            createdPlanIds,
+            today.toISOString().split("T")[0],
+            sixMonthsOut.toISOString().split("T")[0]
+          );
+        } catch (genErr) {
+          console.error("[bulk-service-plans] Failed to generate visits:", genErr);
+        }
+      }
+
+      let stopsAssigned = 0;
+      let routesCreated = 0;
+      const routeSummary: { day: string; routeName: string; stopsPlaced: number }[] = [];
+
+      if (autoAssign && createdPlans.length > 0) {
+        const { assignNewStopsToRoutes } = await import("./services/weekly-optimizer");
+
+        const allExistingPlans = await storage.getServicePlans(companyId);
+        const existingPlansByRoute = new Map<string, number>();
+        const existingPlanCoordsByRoute = new Map<string, { lat: number; lng: number }[]>();
+        for (const ep of allExistingPlans) {
+          if (!ep.routeId) continue;
+          existingPlansByRoute.set(ep.routeId, (existingPlansByRoute.get(ep.routeId) || 0) + 1);
+          if (ep.propertyId) {
+            const prop = propertyById.get(ep.propertyId);
+            if (prop?.latitude && prop?.longitude) {
+              if (!existingPlanCoordsByRoute.has(ep.routeId)) existingPlanCoordsByRoute.set(ep.routeId, []);
+              existingPlanCoordsByRoute.get(ep.routeId)!.push({ lat: Number(prop.latitude), lng: Number(prop.longitude) });
+            }
+          }
+        }
+
+        const daysNeeded = [...new Set(createdPlans.filter(p => p.dayOfWeek).map(p => p.dayOfWeek!))];
+        const existingRouteInfos = [];
+        for (const day of daysNeeded) {
+          const dayRoutes = (await storage.getRoutes(companyId, day)).filter(r => !r.date);
+          for (const r of dayRoutes) {
+            existingRouteInfos.push({
+              id: r.id,
+              name: r.name,
+              dayOfWeek: day,
+              stopCount: existingPlansByRoute.get(r.id) || 0,
+              stopCoords: existingPlanCoordsByRoute.get(r.id) || [],
+            });
+          }
+        }
+
+        const newStops = createdPlans
+          .filter(cp => cp.dayOfWeek)
+          .map(cp => {
+            const prop = propertyById.get(cp.propertyId);
+            return {
+              planId: cp.planId,
+              propertyId: cp.propertyId,
+              dayOfWeek: cp.dayOfWeek!,
+              lat: prop?.latitude ? Number(prop.latitude) : null,
+              lng: prop?.longitude ? Number(prop.longitude) : null,
+            };
+          });
+
+        const { assignments, newRoutes } = await assignNewStopsToRoutes(
+          newStops,
+          existingRouteInfos,
+          async (name, day) => {
+            const created = await storage.createRoute({
+              companyId,
+              name,
+              dayOfWeek: day as DayOfWeekValue,
+            });
+            return { id: created.id, name: created.name };
+          }
+        );
+
+        routesCreated = newRoutes.length;
+
+        for (const assignment of assignments) {
+          await storage.updateServicePlan(assignment.planId, companyId, { routeId: assignment.routeId });
+          stopsAssigned++;
+          const existing = routeSummary.find(r => r.day === assignment.day && r.routeName === assignment.routeName);
+          if (existing) {
+            existing.stopsPlaced++;
+          } else {
+            routeSummary.push({ day: assignment.day, routeName: assignment.routeName, stopsPlaced: 1 });
+          }
+        }
+      }
+
+      res.json({
+        created: createdPlans.length,
+        failures,
+        visitsCreated,
+        stopsAssigned,
+        routesCreated,
+        routeSummary,
+      });
     } catch (err) { handleError(res, err); }
   });
 

@@ -558,3 +558,120 @@ function assignByGeoClustering(
 
   return result;
 }
+
+export interface NewStopInput {
+  planId: string;
+  propertyId: string;
+  dayOfWeek: string;
+  lat: number | null;
+  lng: number | null;
+}
+
+export interface ExistingRouteInfo {
+  id: string;
+  name: string;
+  dayOfWeek: string;
+  stopCount: number;
+  stopCoords: { lat: number; lng: number }[];
+}
+
+export interface RouteAssignment {
+  planId: string;
+  routeId: string;
+  routeName: string;
+  day: string;
+  isNewRoute: boolean;
+}
+
+export interface AssignStopsResult {
+  assignments: RouteAssignment[];
+  newRoutes: { id: string; name: string; day: string }[];
+}
+
+const MAX_STOPS_PER_ROUTE_ASSIGN = 25;
+
+export async function assignNewStopsToRoutes(
+  newStops: NewStopInput[],
+  existingRoutes: ExistingRouteInfo[],
+  createRouteFn: (name: string, day: string) => Promise<{ id: string; name: string }>
+): Promise<AssignStopsResult> {
+  const routeMap = new Map<string, ExistingRouteInfo & { mutable: true }>(
+    existingRoutes.map(r => [r.id, { ...r, mutable: true as const }])
+  );
+  const newRoutes: { id: string; name: string; day: string }[] = [];
+  const assignments: RouteAssignment[] = [];
+
+  const stopsByDay = new Map<string, NewStopInput[]>();
+  for (const stop of newStops) {
+    if (!stopsByDay.has(stop.dayOfWeek)) stopsByDay.set(stop.dayOfWeek, []);
+    stopsByDay.get(stop.dayOfWeek)!.push(stop);
+  }
+
+  for (const [day, dayStops] of stopsByDay) {
+    const dayRoutes = [...routeMap.values()].filter(r => r.dayOfWeek === day);
+    const dayNewRouteCount = { count: 0 };
+
+    for (const stop of dayStops) {
+      let bestRouteId: string | null = null;
+
+      if (stop.lat !== null && stop.lng !== null) {
+        let bestDist = Infinity;
+        for (const route of dayRoutes) {
+          if (route.stopCount >= MAX_STOPS_PER_ROUTE_ASSIGN) continue;
+          if (route.stopCoords.length === 0) {
+            if (bestDist === Infinity) bestRouteId = route.id;
+            continue;
+          }
+          const centLat = route.stopCoords.reduce((s, c) => s + c.lat, 0) / route.stopCoords.length;
+          const centLng = route.stopCoords.reduce((s, c) => s + c.lng, 0) / route.stopCoords.length;
+          const dist = haversineDistance(stop.lat, stop.lng, centLat, centLng);
+          if (dist < bestDist) { bestDist = dist; bestRouteId = route.id; }
+        }
+      } else {
+        const leastFull = dayRoutes
+          .filter(r => r.stopCount < MAX_STOPS_PER_ROUTE_ASSIGN)
+          .sort((a, b) => a.stopCount - b.stopCount)[0];
+        if (leastFull) bestRouteId = leastFull.id;
+      }
+
+      if (!bestRouteId) {
+        const dayLabel = day.charAt(0).toUpperCase() + day.slice(1);
+        const existingTotal = dayRoutes.length;
+        const suffix = existingTotal > 0 || dayNewRouteCount.count > 0
+          ? ` ${String.fromCharCode(65 + dayNewRouteCount.count)}`
+          : "";
+        const newName = `${dayLabel} Route${suffix}`;
+        const created = await createRouteFn(newName, day);
+        dayNewRouteCount.count++;
+        const newRouteInfo: ExistingRouteInfo & { mutable: true } = {
+          id: created.id,
+          name: created.name,
+          dayOfWeek: day,
+          stopCount: 0,
+          stopCoords: [],
+          mutable: true,
+        };
+        routeMap.set(created.id, newRouteInfo);
+        dayRoutes.push(newRouteInfo);
+        newRoutes.push({ id: created.id, name: created.name, day });
+        bestRouteId = created.id;
+      }
+
+      const chosenRoute = routeMap.get(bestRouteId)!;
+      chosenRoute.stopCount++;
+      if (stop.lat !== null && stop.lng !== null) {
+        chosenRoute.stopCoords.push({ lat: stop.lat, lng: stop.lng });
+      }
+
+      assignments.push({
+        planId: stop.planId,
+        routeId: bestRouteId,
+        routeName: chosenRoute.name,
+        day,
+        isNewRoute: newRoutes.some(r => r.id === bestRouteId),
+      });
+    }
+  }
+
+  return { assignments, newRoutes };
+}

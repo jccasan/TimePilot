@@ -31,11 +31,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Trash2, Tags, RefreshCw, Send, SlidersHorizontal } from "lucide-react";
+import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Trash2, Tags, RefreshCw, Send, SlidersHorizontal, CalendarClock } from "lucide-react";
 import { DialogFooter } from "@/components/ui/dialog";
 import { AddContactDialog } from "@/components/add-contact-dialog";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
+import { BulkServicePlanSetup } from "@/components/bulk-service-plan-setup";
 
 type OnboardingStatus = { pending: boolean; completed: boolean } | null;
 type EnrichedContact = Contact & { onboardingStatus: OnboardingStatus };
@@ -93,6 +94,7 @@ export default function Contacts() {
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkEditDayOfWeek, setBulkEditDayOfWeek] = useState("");
   const [bulkEditFrequency, setBulkEditFrequency] = useState("");
+  const [bulkServicePlanOpen, setBulkServicePlanOpen] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 350);
@@ -469,6 +471,16 @@ export default function Contacts() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => setBulkServicePlanOpen(true)}
+                data-testid="button-bulk-create-service-plans"
+              >
+                <CalendarClock className="mr-1 h-4 w-4" />
+                Create Service Plans
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setBulkEditOpen(true)}
                 data-testid="button-bulk-edit-service-plans"
               >
@@ -799,6 +811,13 @@ export default function Contacts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BulkServicePlanSetup
+        open={bulkServicePlanOpen}
+        onOpenChange={setBulkServicePlanOpen}
+        preselectedContactIds={Array.from(selectedIds)}
+        title="Create Service Plans for Selected Contacts"
+      />
     </div>
   );
 }
