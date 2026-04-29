@@ -878,8 +878,37 @@ function QuickBooksSection() {
   );
 }
 
+type RetellWebhookStatus = {
+  configured: boolean;
+  reason?: string;
+  agentId?: string;
+  registered?: boolean;
+  currentUrl?: string | null;
+  expectedUrl?: string | null;
+};
+
+function useRetellWebhook() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const statusQuery = useQuery<RetellWebhookStatus>({
+    queryKey: ["/api/settings/retell-webhook-status"],
+  });
+  const reregisterMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/settings/retell-register-webhook"),
+    onSuccess: () => {
+      toast({ title: "Webhook registered", description: "The Retell webhook has been successfully re-registered." });
+      qc.invalidateQueries({ queryKey: ["/api/settings/retell-webhook-status"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Registration failed", description: err?.message || "Could not re-register the webhook.", variant: "destructive" });
+    },
+  });
+  return { statusQuery, reregisterMutation, status: statusQuery.data };
+}
+
 function VoiceApiDocsSection() {
   const [copiedEndpoint, setCopiedEndpoint] = useState<string | null>(null);
+  const { statusQuery: webhookStatusQuery, reregisterMutation, status: webhookStatus } = useRetellWebhook();
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -999,6 +1028,39 @@ function VoiceApiDocsSection() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5" data-testid="div-voice-webhook-status-banner">
+          <div className="flex items-center gap-2">
+            <Webhook className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-sm font-medium">Call Tracking</span>
+            {webhookStatusQuery.isLoading ? (
+              <Skeleton className="h-5 w-20" />
+            ) : webhookStatus ? (
+              <Badge
+                variant={!webhookStatus.configured ? "secondary" : webhookStatus.registered ? "default" : "destructive"}
+                className={webhookStatus.registered ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                data-testid="badge-voice-webhook-status"
+              >
+                {!webhookStatus.configured ? "Not configured" : webhookStatus.registered ? "Registered" : "Not registered"}
+              </Badge>
+            ) : null}
+          </div>
+          {webhookStatus?.configured && (
+            <Button
+              variant={webhookStatus.registered ? "outline" : "default"}
+              size="sm"
+              onClick={() => reregisterMutation.mutate()}
+              disabled={reregisterMutation.isPending}
+              data-testid="button-voice-reregister-webhook"
+            >
+              {reregisterMutation.isPending ? (
+                <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Registering…</>
+              ) : (
+                <><RefreshCw className="h-3.5 w-3.5 mr-1" /> Re-register</>
+              )}
+            </Button>
+          )}
+        </div>
+
         <div className="bg-muted/50 rounded-lg p-4 border">
           <div className="flex items-start gap-3">
             <Info className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
@@ -1074,35 +1136,8 @@ function VoiceApiDocsSection() {
   );
 }
 
-type RetellWebhookStatus = {
-  configured: boolean;
-  reason?: string;
-  agentId?: string;
-  registered?: boolean;
-  currentUrl?: string | null;
-  expectedUrl?: string | null;
-};
-
 function CallTrackingSection() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const statusQuery = useQuery<RetellWebhookStatus>({
-    queryKey: ["/api/settings/retell-webhook-status"],
-  });
-
-  const reregisterMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/settings/retell-register-webhook"),
-    onSuccess: () => {
-      toast({ title: "Webhook registered", description: "The Retell webhook has been successfully re-registered." });
-      queryClient.invalidateQueries({ queryKey: ["/api/settings/retell-webhook-status"] });
-    },
-    onError: (err: any) => {
-      toast({ title: "Registration failed", description: err?.message || "Could not re-register the webhook.", variant: "destructive" });
-    },
-  });
-
-  const status = statusQuery.data;
+  const { statusQuery, reregisterMutation, status } = useRetellWebhook();
 
   return (
     <Card data-testid="card-call-tracking">
