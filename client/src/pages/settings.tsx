@@ -97,6 +97,7 @@ type Company = {
   voicePlanStatus?: string | null;
   voicePlanTier?: string | null;
   retellAgentId?: string | null;
+  passStripeFees?: boolean;
 };
 
 type SettingsLayoutItem = {
@@ -271,6 +272,28 @@ function StripeConnectSection() {
 
   const { data: currentUser } = useQuery<{ id: string; role?: string }>({
     queryKey: ["/api/auth/user"],
+  });
+
+  const { data: company } = useQuery<Company>({
+    queryKey: ["/api/company"],
+  });
+
+  const passStripeFeessMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await apiRequest("PATCH", "/api/company", { passStripeFees: enabled });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save setting");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Fee passthrough setting saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
   });
 
   const canManageStripeConnect = currentUser?.role === "owner" || currentUser?.role === "admin";
@@ -464,6 +487,26 @@ function StripeConnectSection() {
                     Disconnect
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {canManageStripeConnect && (
+              <div className="border rounded-lg p-4 space-y-2 bg-muted/30">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Pass Stripe processing fees to clients (2.9% + $0.30 per invoice)</span>
+                  </div>
+                  <Switch
+                    checked={!!company?.passStripeFees}
+                    onCheckedChange={(v) => passStripeFeessMutation.mutate(v)}
+                    disabled={passStripeFeessMutation.isPending}
+                    data-testid="switch-pass-stripe-fees"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, a "Payment Processing Fee" line item is automatically added to new invoices. When off, your business absorbs the Stripe fees.
+                </p>
               </div>
             )}
           </>

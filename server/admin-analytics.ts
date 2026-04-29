@@ -636,7 +636,9 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
         const smsCostCents = Math.round(smsSegments * SMS_COST_PER_SEGMENT_CENTS / 100);
         const emailCostCents = Math.round(emailCount * EMAIL_COST_PER_UNIT_CENTS / 100);
         const voiceCostCents = voiceMinutes * VOICE_COST_PER_MINUTE_CENTS;
-        const stripeFeesCents = Math.round(paidTotal * STRIPE_PCT) + (paidInvs.length * STRIPE_FIXED_CENTS);
+        const stripeFeesPassedThrough = !!c.passStripeFees;
+        const stripeFeesCents = stripeFeesPassedThrough ? 0 : (Math.round(paidTotal * STRIPE_PCT) + (paidInvs.length * STRIPE_FIXED_CENTS));
+        const rawStripeFeesCents = Math.round(paidTotal * STRIPE_PCT) + (paidInvs.length * STRIPE_FIXED_CENTS);
 
         const accountWeight = getPlanWeight(c.subscriptionTier);
         const allocatedInfraCents = Math.round(accountWeight * fixedCostPerWeight * 100);
@@ -661,7 +663,10 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
           voiceCostCents,
           voiceMinutes,
           stripeFeesCents,
+          rawStripeFeesCents,
+          stripeFeesPassedThrough,
           paidInvoiceCount: paidInvs.length,
+          paidInvoiceTotal: Math.round(paidTotal * 100) / 100,
           allocatedInfraCents,
           totalCostCents,
           netMarginCents,

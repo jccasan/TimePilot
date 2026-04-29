@@ -14,6 +14,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Building2, DollarSign, TrendingUp, AlertTriangle,
   CreditCard, Repeat, Target, MessageSquare, Calculator, Search,
   ChevronRight, ArrowUpRight, ArrowDownRight, Activity,
@@ -791,6 +794,7 @@ function CustomerCostsTab() {
   );
 
   return (
+    <TooltipProvider>
     <div className="space-y-6" data-testid="tab-content-overhead">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Total Platform Cost" value={cFmt(summary?.totalPlatformCostCents ?? 0)} icon={Wallet} subtitle="last 30 days" />
@@ -829,6 +833,15 @@ function CustomerCostsTab() {
                   const tierConfig = TIER_CONFIG[r.subscriptionTier as keyof typeof TIER_CONFIG];
                   const barPct = Math.min(r.costRatioPct, 100);
                   const barColor = r.costRatioPct > 100 ? "bg-red-500" : r.costRatioPct > 70 ? "bg-yellow-500" : "bg-green-500";
+                  const smsTip = `${r.smsSegments} segments × $0.0075 = ${cFmt(r.smsCostCents)}`;
+                  const emailTip = `${r.emailCount} emails × $0.001 = ${cFmt(r.emailCostCents)}`;
+                  const voiceTip = `${r.voiceMinutes} min × $0.50 = ${cFmt(r.voiceCostCents)}`;
+                  const stripeTip = r.stripeFeesPassedThrough
+                    ? "Passed to clients"
+                    : `${r.paidInvoiceCount} inv × $0.30 + $${Number(r.paidInvoiceTotal ?? 0).toFixed(2)} × 2.9% = ${cFmt(r.stripeFeesCents)}`;
+                  const infraTip = `Plan weight allocation = ${cFmt(r.allocatedInfraCents)}`;
+                  const totalTip = `SMS ${cFmt(r.smsCostCents)} + Email ${cFmt(r.emailCostCents)} + Voice ${cFmt(r.voiceCostCents)} + Stripe ${cFmt(r.stripeFeesCents)} + Infra ${cFmt(r.allocatedInfraCents)} = ${cFmt(r.totalCostCents)}`;
+                  const marginTip = `MRR ${cFmt(r.mrrCents)} − SMS ${cFmt(r.smsCostCents)} − Email ${cFmt(r.emailCostCents)} − Voice ${cFmt(r.voiceCostCents)} − Stripe ${cFmt(r.stripeFeesCents)} − Infra ${cFmt(r.allocatedInfraCents)} = ${cFmt(r.netMarginCents)}`;
                   return (
                     <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/admin/companies/${r.id}`)} data-testid={`row-customer-cost-${r.id}`}>
                       <TableCell>
@@ -838,22 +851,74 @@ function CustomerCostsTab() {
                             <div className="flex items-center gap-1">
                               <Badge variant="outline" className="text-[10px] px-1 py-0">{tierConfig?.name || r.subscriptionTier}</Badge>
                               {r.subscriptionStatus !== "active" && <Badge variant="destructive" className="text-[10px] px-1 py-0">{r.subscriptionStatus}</Badge>}
+                              {r.stripeFeesPassedThrough && <Badge variant="outline" className="text-[10px] px-1 py-0 border-blue-400 text-blue-600 dark:text-blue-400">fees→client</Badge>}
                             </div>
                           </div>
                           <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-medium" data-testid={`text-mrr-${r.id}`}>{cFmt(r.mrrCents)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-sms-cost-${r.id}`}>{cFmt(r.smsCostCents)}<span className="text-[10px] block">{r.smsSegments} seg</span></TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-email-cost-${r.id}`}>{cFmt(r.emailCostCents)}<span className="text-[10px] block">{r.emailCount}</span></TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-voice-cost-${r.id}`}>{cFmt(r.voiceCostCents)}<span className="text-[10px] block">{r.voiceMinutes} min</span></TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-stripe-cost-${r.id}`}>{cFmt(r.stripeFeesCents)}<span className="text-[10px] block">{r.paidInvoiceCount} inv</span></TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-infra-cost-${r.id}`}>{cFmt(r.allocatedInfraCents)}</TableCell>
-                      <TableCell className="text-right font-medium" data-testid={`text-total-cost-${r.id}`}>{cFmt(r.totalCostCents)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-sms-cost-${r.id}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted">{cFmt(r.smsCostCents)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">{smsTip}</p></TooltipContent>
+                        </Tooltip>
+                        <span className="text-[10px] block">{r.smsSegments} seg</span>
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-email-cost-${r.id}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted">{cFmt(r.emailCostCents)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">{emailTip}</p></TooltipContent>
+                        </Tooltip>
+                        <span className="text-[10px] block">{r.emailCount}</span>
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-voice-cost-${r.id}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted">{cFmt(r.voiceCostCents)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">{voiceTip}</p></TooltipContent>
+                        </Tooltip>
+                        <span className="text-[10px] block">{r.voiceMinutes} min</span>
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-stripe-cost-${r.id}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted">{r.stripeFeesPassedThrough ? "$0.00" : cFmt(r.stripeFeesCents)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs max-w-[240px]">{stripeTip}</p></TooltipContent>
+                        </Tooltip>
+                        <span className="text-[10px] block">{r.paidInvoiceCount} inv</span>
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-infra-cost-${r.id}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted">{cFmt(r.allocatedInfraCents)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">{infraTip}</p></TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell className="text-right font-medium" data-testid={`text-total-cost-${r.id}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted">{cFmt(r.totalCostCents)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs max-w-[280px]">{totalTip}</p></TooltipContent>
+                        </Tooltip>
+                      </TableCell>
                       <TableCell className="text-right">
-                        <span className={`font-medium ${r.netMarginCents >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`} data-testid={`text-margin-${r.id}`}>
-                          {cFmt(r.netMarginCents)}
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={`font-medium cursor-help underline decoration-dotted ${r.netMarginCents >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`} data-testid={`text-margin-${r.id}`}>
+                              {cFmt(r.netMarginCents)}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs max-w-[320px]">{marginTip}</p></TooltipContent>
+                        </Tooltip>
                       </TableCell>
                       <TableCell className="text-right" data-testid={`text-cost-ratio-${r.id}`}>
                         <div className="flex items-center justify-end gap-2">
@@ -874,6 +939,7 @@ function CustomerCostsTab() {
 
       <FixedCostsSection />
     </div>
+    </TooltipProvider>
   );
 }
 

@@ -2591,7 +2591,7 @@ Return ONLY valid JSON, no markdown.`,
         "billingCadence", "billingTrigger", "defaultPaymentBehavior",
         "reviewRequestEnabled", "googleReviewUrl", "reviewRequestAfterVisits", "reviewRequestCustomMessage",
         "reviewRouterEnabled",
-        "clientNotificationsSuppressed", "onboardingCompleteSentAt"];
+        "clientNotificationsSuppressed", "onboardingCompleteSentAt", "passStripeFees"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -7746,6 +7746,7 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
+      const company = await storage.getCompany(companyId);
 
       let subtotal = 0;
       const processedLineItems: any[] = [];
@@ -7774,7 +7775,19 @@ Return ONLY valid JSON, no markdown.`,
       }
       const afterDiscount = Math.max(0, subtotal - discountAmount);
       const taxAmount = afterDiscount * (parsedTaxRate / 100);
-      const total = afterDiscount + taxAmount;
+
+      if (company?.passStripeFees) {
+        const feeUnitPrice = Math.round((afterDiscount * 0.029 + 0.30) * 100) / 100;
+        processedLineItems.push({
+          description: "Payment Processing Fee",
+          quantity: 1,
+          unitPrice: feeUnitPrice.toFixed(2),
+          total: feeUnitPrice.toFixed(2),
+        });
+        subtotal += feeUnitPrice;
+      }
+
+      const total = afterDiscount + taxAmount + (company?.passStripeFees ? (Math.round((afterDiscount * 0.029 + 0.30) * 100) / 100) : 0);
 
       const parsed = insertInvoiceSchema.parse({
         ...invoiceData,

@@ -252,6 +252,7 @@ export const companies = pgTable("companies", {
   reviewRequestCustomMessage: text("review_request_custom_message"),
   clientNotificationsSuppressed: boolean("client_notifications_suppressed").notNull().default(true),
   onboardingCompleteSentAt: timestamp("onboarding_complete_sent_at"),
+  passStripeFees: boolean("pass_stripe_fees").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
