@@ -1,12 +1,14 @@
 import os
 import re
+import secrets
 import uuid
 import json
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    jsonify, send_from_directory, abort, Response, flash
+    jsonify, send_from_directory, abort, Response, flash, session
 )
 from tinydb import TinyDB, Query
 from dotenv import load_dotenv
@@ -16,7 +18,19 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).parent
 app = Flask(__name__, template_folder=str(BASE_DIR / "templates"), static_folder=str(BASE_DIR / "static"))
-app.secret_key = os.environ.get("FLASK_SECRET", "scoopilot-wizard-dev-secret")
+
+_raw_secret = os.environ.get("FLASK_SECRET", "")
+if _raw_secret:
+    app.secret_key = _raw_secret
+else:
+    # No FLASK_SECRET set — generate a random key so sessions are valid within
+    # this process lifetime but the key can never be guessed/forged externally.
+    app.secret_key = secrets.token_bytes(32)
+
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# Enable Secure flag only when not running over plain HTTP (dev mode).
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("WIZARD_ENV", "") == "production"
 
 # Directories
 UPLOADS_DIR = BASE_DIR / "uploads"
@@ -44,6 +58,36 @@ def _check_admin_key(provided: str) -> bool:
     if not _WIZARD_ADMIN_KEY:
         return False
     return provided == _WIZARD_ADMIN_KEY
+
+
+def _is_admin_authed() -> bool:
+    """Return True if the request carries valid admin credentials (session or header/param)."""
+    if session.get("wizard_admin_authed"):
+        return True
+    provided = (
+        request.headers.get("X-Admin-Key", "")
+        or request.args.get("admin_key", "")
+        or request.form.get("admin_key", "")
+    )
+    return bool(provided and _check_admin_key(provided))
+
+
+def _require_admin():
+    """Redirect to login or abort(403) if not admin-authenticated."""
+    if not _is_admin_authed():
+        return redirect(url_for("login", next=request.full_path.rstrip("?")))
+    return None
+
+
+def _is_wizard_or_admin_authed() -> bool:
+    """Return True if the request has a valid wizard key OR valid admin auth."""
+    wizard_key = (
+        request.headers.get("X-Wizard-Key", "")
+        or request.args.get("key", "")
+    )
+    if wizard_key and _check_wizard_key(wizard_key):
+        return True
+    return _is_admin_authed()
 
 ALLOWED_EXTENSIONS = {
     "csv", "xlsx", "xls", "pdf", "png", "jpg", "jpeg", "gif",
@@ -165,11 +209,48 @@ def preview_file(filepath: Path, filename: str) -> str | None:
 
 
 # ──────────────────────────────────────────
+# Routes: Login / Logout
+# ──────────────────────────────────────────
+
+def _safe_next(url: str) -> str:
+    """Return url only if it is a safe relative path on this host, else dashboard."""
+    if not url:
+        return url_for("dashboard")
+    parsed = urlparse(url)
+    # Accept relative paths (no scheme/netloc) and same-host absolute URLs.
+    if parsed.scheme or parsed.netloc:
+        return url_for("dashboard")
+    return url or url_for("dashboard")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    next_url = _safe_next(request.args.get("next") or request.form.get("next", ""))
+    if request.method == "POST":
+        provided = request.form.get("admin_key", "").strip()
+        if _check_admin_key(provided):
+            session["wizard_admin_authed"] = True
+            return redirect(next_url)
+        error = "Invalid admin key. Please try again."
+    return render_template("login.html", error=error, next=next_url)
+
+
+@app.get("/logout")
+def logout():
+    session.pop("wizard_admin_authed", None)
+    return redirect(url_for("login"))
+
+
+# ──────────────────────────────────────────
 # Routes: Dashboard
 # ──────────────────────────────────────────
 
 @app.get("/")
 def dashboard():
+    gate = _require_admin()
+    if gate:
+        return gate
     all_tenants = db.all()
     all_tenants.sort(key=lambda t: t.get("updatedAt", ""), reverse=True)
     enriched = []
@@ -185,6 +266,9 @@ def dashboard():
 
 @app.route("/start", methods=["GET", "POST"])
 def landing():
+    gate = _require_admin()
+    if gate:
+        return gate
     error = None
     if request.method == "POST":
         raw_phone = request.form.get("phone", "").strip()
@@ -242,6 +326,9 @@ def landing():
 
 @app.get("/onboard/<phone>")
 def onboard(phone: str):
+    gate = _require_admin()
+    if gate:
+        return gate
     tenant = get_tenant(phone)
     if not tenant:
         return redirect(url_for("landing"))
@@ -259,6 +346,9 @@ def onboard(phone: str):
 
 @app.post("/onboard/<phone>")
 def onboard_save(phone: str):
+    gate = _require_admin()
+    if gate:
+        return gate
     tenant = get_tenant(phone)
     if not tenant:
         return redirect(url_for("landing"))
@@ -374,6 +464,8 @@ def onboard_save(phone: str):
 
 @app.post("/update-agent-types/<phone>")
 def update_agent_types(phone: str):
+    if not _is_wizard_or_admin_authed():
+        abort(401)
     agent_types = request.json.get("agentTypes", [])
     merge_tenant(phone, {"agentTypes": agent_types})
     return jsonify({"ok": True})
@@ -477,6 +569,8 @@ def zip_polygons():
 
 @app.post("/upload/<phone>")
 def upload_doc(phone: str):
+    if not _is_wizard_or_admin_authed():
+        abort(401)
     tenant = get_tenant(phone)
     if not tenant:
         return jsonify({"error": "Tenant not found"}), 404
@@ -524,6 +618,8 @@ def upload_doc(phone: str):
 
 @app.post("/remove-doc/<phone>")
 def remove_doc(phone: str):
+    if not _is_wizard_or_admin_authed():
+        abort(401)
     tenant = get_tenant(phone)
     if not tenant:
         return jsonify({"error": "Tenant not found"}), 404
@@ -543,6 +639,8 @@ def remove_doc(phone: str):
 
 @app.get("/uploads/<phone>/<filename>")
 def serve_upload(phone: str, filename: str):
+    if not _is_wizard_or_admin_authed():
+        abort(401)
     safe_phone = phone.replace("+", "").replace(" ", "")
     upload_dir = UPLOADS_DIR / safe_phone
     return send_from_directory(str(upload_dir), filename)
@@ -554,6 +652,9 @@ def serve_upload(phone: str, filename: str):
 
 @app.get("/ready/<phone>")
 def ready(phone: str):
+    gate = _require_admin()
+    if gate:
+        return gate
     tenant = get_tenant(phone)
     if not tenant:
         return redirect(url_for("landing"))
@@ -571,6 +672,8 @@ def ready(phone: str):
 
 @app.get("/download/<phone>/<filename>")
 def download_output(phone: str, filename: str):
+    if not _is_wizard_or_admin_authed():
+        abort(401)
     safe_phone = phone.replace("+", "").replace(" ", "")
     out_dir = OUTPUT_DIR / safe_phone
     if not (out_dir / filename).exists():
@@ -584,6 +687,8 @@ def download_output(phone: str, filename: str):
 
 @app.get("/handbook/<phone>")
 def handbook(phone: str):
+    if not _is_wizard_or_admin_authed():
+        abort(401)
     safe_phone = phone.replace("+", "").replace(" ", "")
     md_path = OUTPUT_DIR / safe_phone / "agent_handbook.md"
     if md_path.exists():
