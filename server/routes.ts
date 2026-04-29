@@ -1069,7 +1069,7 @@ export async function registerRoutes(
         if (co?.country === "ca") countryFilter = "ca";
       } catch {}
 
-      const cached = getAutocompleteCached(q, countryFilter);
+      const cached = await getAutocompleteCached(q, countryFilter);
       if (cached) return res.json(cached);
 
       const params = new URLSearchParams({

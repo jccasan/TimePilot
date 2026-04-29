@@ -1970,3 +1970,13 @@ export const geocodeCacheTable = pgTable("geocode_cache", {
 ]);
 
 export type GeocodeCache = typeof geocodeCacheTable.$inferSelect;
+
+export const autocompleteCacheTable = pgTable("autocomplete_cache", {
+  queryKey: varchar("query_key", { length: 512 }).primaryKey(),
+  results: jsonb("results").notNull(),
+  cachedAt: timestamp("cached_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_autocomplete_cache_cached_at").on(table.cachedAt),
+]);
+
+export type AutocompleteCache = typeof autocompleteCacheTable.$inferSelect;

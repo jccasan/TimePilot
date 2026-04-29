@@ -85,6 +85,8 @@ import {
   type ErrorFixTask, type InsertErrorFixTask,
   geocodeCacheTable,
   type GeocodeCache,
+  autocompleteCacheTable,
+  type AutocompleteCache,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -489,6 +491,11 @@ export interface IStorage {
   getGeocodeCache(addressKey: string): Promise<GeocodeCache | undefined>;
   setGeocodeCache(addressKey: string, latitude: string | null, longitude: string | null): Promise<void>;
   pruneGeocodeCache(olderThanDays: number): Promise<void>;
+
+  // Autocomplete Cache
+  getAutocompleteCache(queryKey: string): Promise<AutocompleteCache | undefined>;
+  setAutocompleteCache(queryKey: string, results: any[]): Promise<void>;
+  pruneAutocompleteCache(olderThanDays: number): Promise<void>;
 }
 
 export type GroupedErrorReport = {
@@ -3025,6 +3032,26 @@ export class DatabaseStorage implements IStorage {
   async pruneGeocodeCache(olderThanDays: number): Promise<void> {
     const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
     await db.delete(geocodeCacheTable).where(lt(geocodeCacheTable.cachedAt, cutoff));
+  }
+
+  async getAutocompleteCache(queryKey: string): Promise<AutocompleteCache | undefined> {
+    const [row] = await db.select().from(autocompleteCacheTable).where(eq(autocompleteCacheTable.queryKey, queryKey));
+    return row;
+  }
+
+  async setAutocompleteCache(queryKey: string, results: any[]): Promise<void> {
+    await db
+      .insert(autocompleteCacheTable)
+      .values({ queryKey, results, cachedAt: new Date() })
+      .onConflictDoUpdate({
+        target: autocompleteCacheTable.queryKey,
+        set: { results, cachedAt: new Date() },
+      });
+  }
+
+  async pruneAutocompleteCache(olderThanDays: number): Promise<void> {
+    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+    await db.delete(autocompleteCacheTable).where(lt(autocompleteCacheTable.cachedAt, cutoff));
   }
 }
 

@@ -5,6 +5,9 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 const DB_TTL_DAYS = 30;
 const DB_TTL_MS = DB_TTL_DAYS * 24 * 60 * 60 * 1000;
 
+const AUTOCOMPLETE_DB_TTL_DAYS = 7;
+const AUTOCOMPLETE_DB_TTL_MS = AUTOCOMPLETE_DB_TTL_DAYS * 24 * 60 * 60 * 1000;
+
 interface CacheEntry<T> {
   value: T;
   storedAt: number;
@@ -26,16 +29,34 @@ function isFresh(entry: CacheEntry<any>): boolean {
   return Date.now() - entry.storedAt < TTL_MS;
 }
 
-export function getAutocompleteCached(query: string, country: string = "us"): any[] | null {
+export async function getAutocompleteCached(query: string, country: string = "us"): Promise<any[] | null> {
   const key = `${country}:${normalizeAutocompleteQuery(query)}`;
+
+  // L1: in-memory cache
   const entry = autocompleteCache.get(key);
   if (entry && isFresh(entry)) return entry.value;
+
+  // L2: database cache
+  try {
+    const dbEntry = await storage.getAutocompleteCache(key);
+    if (dbEntry && Date.now() - dbEntry.cachedAt.getTime() < AUTOCOMPLETE_DB_TTL_MS) {
+      const results = dbEntry.results as any[];
+      autocompleteCache.set(key, { value: results, storedAt: Date.now() });
+      return results;
+    }
+  } catch (err) {
+    console.warn("[AutocompleteCache] DB read failed:", err instanceof Error ? err.message : err);
+  }
+
   return null;
 }
 
 export function setAutocompleteCache(query: string, country: string = "us", result: any[]): void {
   const key = `${country}:${normalizeAutocompleteQuery(query)}`;
   autocompleteCache.set(key, { value: result, storedAt: Date.now() });
+  storage.setAutocompleteCache(key, result).catch((err) => {
+    console.warn("[AutocompleteCache] DB write failed:", err instanceof Error ? err.message : err);
+  });
 }
 
 const EVICTION_INTERVAL_MS = 60 * 60 * 1000;
@@ -54,6 +75,11 @@ async function runPrune() {
     await storage.pruneGeocodeCache(DB_TTL_DAYS);
   } catch (err) {
     console.warn("[GeocodeCache] Prune failed:", err instanceof Error ? err.message : err);
+  }
+  try {
+    await storage.pruneAutocompleteCache(AUTOCOMPLETE_DB_TTL_DAYS);
+  } catch (err) {
+    console.warn("[AutocompleteCache] Prune failed:", err instanceof Error ? err.message : err);
   }
 }
 
