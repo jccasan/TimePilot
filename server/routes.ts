@@ -18028,10 +18028,14 @@ Respond with exactly one category from the list above and nothing else.`;
       // --- GeoIP + VPN detection ---
       const verifyClientIp = getClientIp(req as any);
       const verifyCfCountry = (req.headers["cf-ipcountry"] as string | undefined)?.trim().toUpperCase();
-      const [verifyIpRisk, verifyCountryCode] = await Promise.all([
-        checkIpRisk(verifyClientIp),
-        getCountryCode(verifyClientIp, verifyCfCountry),
-      ]).catch(() => [{ isVpn: false, isProxy: false, skipped: true } as import("./services/ip-risk").IpRiskResult, null as string | null]);
+      let verifyIpRisk: Awaited<ReturnType<typeof checkIpRisk>> = { ip: verifyClientIp, isVpn: false, isProxy: false, skipped: true };
+      let verifyCountryCode: string | null = null;
+      try {
+        [verifyIpRisk, verifyCountryCode] = await Promise.all([
+          checkIpRisk(verifyClientIp),
+          getCountryCode(verifyClientIp, verifyCfCountry),
+        ]);
+      } catch { /* fail open */ }
 
       if (verifyIpRisk.isVpn || verifyIpRisk.isProxy) {
         console.warn(`[Signup] Blocked VPN/proxy email verify from ${verifyClientIp} (country: ${verifyCountryCode ?? "unknown"}, email: ${record.email})`);
