@@ -12,7 +12,7 @@ import { users, companyUsers, companies, contacts, properties, invoices, routes,
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, parseLotSizeStringToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes, ObjectStorageService, ObjectNotFoundError } from "./replit_integrations/object_storage";
-import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
+import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword, claimOnboardingEmailSend, resetOnboardingEmailSent } from "./services/app-auth";
 import type { RequestHandler } from "express";
 import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, logEmailSent, buildWelcomeEmailContent } from "./services/email";
 import { sendInvoiceEmail } from "./services/invoice-email";
@@ -1550,13 +1550,25 @@ export async function registerRoutes(
       const appUrl = `${protocol}://${host}`;
       const resolvedCompanyName = companyName?.trim() || `${displayName}'s Company`;
 
-      const _selfSignupWelcome = buildWelcomeEmailContent({ firstName: displayName, companyName: resolvedCompanyName, appUrl });
-      sendEmail({
-        to: email,
-        subject: _selfSignupWelcome.subject,
-        text: _selfSignupWelcome.text,
-        html: _selfSignupWelcome.html,
-      }).catch((err) => console.error("Failed to send welcome email:", err));
+      claimOnboardingEmailSend(result.user.id).then(async (claimed) => {
+        if (!claimed) {
+          console.log(`[Register] Onboarding email already sent for ${maskEmail(email)}, skipping.`);
+          return;
+        }
+        try {
+          const _selfSignupWelcome = buildWelcomeEmailContent({ firstName: displayName, companyName: resolvedCompanyName, appUrl });
+          await sendEmail({
+            to: email,
+            subject: _selfSignupWelcome.subject,
+            text: _selfSignupWelcome.text,
+            html: _selfSignupWelcome.html,
+          });
+          console.log(`[Register] Welcome email sent to ${maskEmail(email)}`);
+        } catch (emailErr) {
+          console.error(`[Register] Failed to send welcome email to ${maskEmail(email)}, resetting flag:`, emailErr);
+          await resetOnboardingEmailSent(result.user.id).catch(() => {});
+        }
+      }).catch((err) => console.error("Failed to claim/send welcome email:", err));
 
       if (companyInfo && !companyInfo.alreadySetup) {
         sendAdminSignupNotification({
@@ -12533,21 +12545,27 @@ Rules:
             await seedDefaultLeadSources(company.id);
             await storage.seedDefaultPricing(company.id);
 
-            try {
-              const protocol = req.headers["x-forwarded-proto"] || "https";
-              const host = req.headers.host || "localhost:5000";
-              const appUrl = `${protocol}://${host}`;
-              const _stripeWelcome = buildWelcomeEmailContent({ firstName, companyName, appUrl, email, tempPassword });
-              await sendEmail({
-                companyId: company.id,
-                to: email,
-                subject: _stripeWelcome.subject,
-                text: _stripeWelcome.text,
-                html: _stripeWelcome.html,
-              });
-              console.log(`[Stripe Subscription] Welcome email sent to ${maskEmail(email)}`);
-            } catch (emailErr) {
-              console.error(`[Stripe Subscription] Failed to send welcome email to ${maskEmail(email)}:`, emailErr);
+            const claimed = await claimOnboardingEmailSend(user.id).catch(() => false);
+            if (!claimed) {
+              console.log(`[Stripe Subscription] Onboarding email already sent for ${maskEmail(email)}, skipping.`);
+            } else {
+              try {
+                const protocol = req.headers["x-forwarded-proto"] || "https";
+                const host = req.headers.host || "localhost:5000";
+                const appUrl = `${protocol}://${host}`;
+                const _stripeWelcome = buildWelcomeEmailContent({ firstName, companyName, appUrl, email, tempPassword });
+                await sendEmail({
+                  companyId: company.id,
+                  to: email,
+                  subject: _stripeWelcome.subject,
+                  text: _stripeWelcome.text,
+                  html: _stripeWelcome.html,
+                });
+                console.log(`[Stripe Subscription] Welcome email sent to ${maskEmail(email)}`);
+              } catch (emailErr) {
+                console.error(`[Stripe Subscription] Failed to send welcome email to ${maskEmail(email)}, resetting flag:`, emailErr);
+                await resetOnboardingEmailSent(user.id).catch(() => {});
+              }
             }
 
             console.log(`[Stripe Subscription] Provisioned new tenant "${companyName}" (${company.id}) for ${maskEmail(email)}, subscription ${subscription.id}`);
@@ -12895,18 +12913,24 @@ Rules:
       const host = req.headers.host || "app.scoopilot.com";
       const appUrl = `${protocol}://${host}`;
 
-      try {
-        const _tenantWelcome = buildWelcomeEmailContent({ firstName: first_name, companyName: company, appUrl, email, tempPassword });
-        await sendEmail({
-          companyId: newCompany.id,
-          to: email,
-          subject: _tenantWelcome.subject,
-          text: _tenantWelcome.text,
-          html: _tenantWelcome.html,
-        });
-        console.log(`[Create Tenant] Welcome email sent to ${maskEmail(email)}`);
-      } catch (emailErr) {
-        console.error(`[Create Tenant] Failed to send welcome email to ${maskEmail(email)}:`, emailErr);
+      const tenantClaimed = await claimOnboardingEmailSend(user.id).catch(() => false);
+      if (!tenantClaimed) {
+        console.log(`[Create Tenant] Onboarding email already sent for ${maskEmail(email)}, skipping.`);
+      } else {
+        try {
+          const _tenantWelcome = buildWelcomeEmailContent({ firstName: first_name, companyName: company, appUrl, email, tempPassword });
+          await sendEmail({
+            companyId: newCompany.id,
+            to: email,
+            subject: _tenantWelcome.subject,
+            text: _tenantWelcome.text,
+            html: _tenantWelcome.html,
+          });
+          console.log(`[Create Tenant] Welcome email sent to ${maskEmail(email)}`);
+        } catch (emailErr) {
+          console.error(`[Create Tenant] Failed to send welcome email to ${maskEmail(email)}, resetting flag:`, emailErr);
+          await resetOnboardingEmailSent(user.id).catch(() => {});
+        }
       }
 
       console.log(`[Create Tenant] Provisioned new tenant "${company}" (${newCompany.id}) for ${maskEmail(email)}`);
@@ -18418,7 +18442,7 @@ Respond with exactly one category from the list above and nothing else.`;
       const isDomestic = signupCountry === "US" || signupCountry === "CA";
       const newStatus = isDomestic ? "trialing" : "pending_approval";
 
-      const { company } = await db.transaction(async (tx) => {
+      const { user: verifiedUser, company } = await db.transaction(async (tx) => {
         const txUser = await createUserWithTempPassword(record.email, record.firstName, record.lastName || "", tempPassword);
 
         const baseSlug = (record.companyName || "company").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
@@ -18461,13 +18485,17 @@ Respond with exactly one category from the list above and nothing else.`;
       const appUrl = `${isLocalhost ? "http" : "https"}://${host}`;
 
       if (isDomestic) {
-        try {
-          await sendEmail({
-            companyId: company.id,
-            to: record.email,
-            subject: "Welcome to ScooPilot - Your login credentials",
-            text: `Hi ${record.firstName},\n\nYour ScooPilot free trial is active!\n\nCompany: ${record.companyName}\nLogin: ${appUrl}\nEmail: ${record.email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
-            html: `
+        const verifyClaimed = await claimOnboardingEmailSend(verifiedUser.id).catch(() => false);
+        if (!verifyClaimed) {
+          console.log(`[Verify Email] Onboarding email already sent for ${maskEmail(record.email)}, skipping.`);
+        } else {
+          try {
+            await sendEmail({
+              companyId: company.id,
+              to: record.email,
+              subject: "Welcome to ScooPilot - Your login credentials",
+              text: `Hi ${record.firstName},\n\nYour ScooPilot free trial is active!\n\nCompany: ${record.companyName}\nLogin: ${appUrl}\nEmail: ${record.email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
                   <h1 style="color: white; margin: 0;">ScooPilot</h1>
@@ -18487,9 +18515,12 @@ Respond with exactly one category from the list above and nothing else.`;
                 </div>
               </div>
             `,
-          });
-        } catch (emailErr) {
-          console.error("[Signup] Failed to send welcome email:", emailErr);
+            });
+            console.log(`[Verify Email] Welcome email sent to ${maskEmail(record.email)}`);
+          } catch (emailErr) {
+            console.error(`[Signup] Failed to send welcome email to ${maskEmail(record.email)}, resetting flag:`, emailErr);
+            await resetOnboardingEmailSent(verifiedUser.id).catch(() => {});
+          }
         }
 
         sendAdminSignupNotification({

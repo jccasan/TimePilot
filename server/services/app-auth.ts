@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { db } from "../db";
 import { users, passwordResetTokens } from "@shared/models/auth";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, sql } from "drizzle-orm";
 
 const SCRYPT_KEYLEN = 64;
 const RESET_TOKEN_EXPIRY_HOURS = 1;
@@ -101,6 +101,22 @@ export async function createUserWithTempPassword(email: string, firstName: strin
 export async function getUserByEmail(email: string) {
   const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
   return user || null;
+}
+
+export async function claimOnboardingEmailSend(userId: string): Promise<boolean> {
+  const result = await db
+    .update(users)
+    .set({ onboardingEmailSentAt: new Date() })
+    .where(and(eq(users.id, userId), sql`onboarding_email_sent_at IS NULL`))
+    .returning({ id: users.id });
+  return result.length > 0;
+}
+
+export async function resetOnboardingEmailSent(userId: string): Promise<void> {
+  await db
+    .update(users)
+    .set({ onboardingEmailSentAt: null })
+    .where(eq(users.id, userId));
 }
 
 export async function changePassword(userId: string, newPassword: string): Promise<{ success: boolean } | { error: string }> {

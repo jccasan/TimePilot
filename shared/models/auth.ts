@@ -21,6 +21,7 @@ export const users = pgTable("users", {
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   lastLoginAt: timestamp("last_login_at"),
   tourCompletions: jsonb("tour_completions").$type<Record<string, string>>().default({}),
+  onboardingEmailSentAt: timestamp("onboarding_email_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
