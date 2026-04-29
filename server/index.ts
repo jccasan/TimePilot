@@ -1808,6 +1808,16 @@ async function ensureCompanyNotificationColumns() {
       console.log("[Migration] client_notifications_suppressed backfill applied (one-time)");
     }
 
+    // Ops fix: Lake Erie Scoopers is onboarding — keep Import Mode ON until they send the
+    // welcome batch (which sets onboarding_complete_sent_at and turns suppression off).
+    // Guard: only applies while onboarding_complete_sent_at is still null.
+    await pool.query(`
+      UPDATE companies
+      SET client_notifications_suppressed = true
+      WHERE id = '8089c512-bec6-47e1-9678-ec3e3eda4e95'
+        AND onboarding_complete_sent_at IS NULL;
+    `);
+
     console.log("[Migration] client_notifications_suppressed + onboarding_complete_sent_at columns verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure company notification columns:", err);

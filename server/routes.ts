@@ -10521,6 +10521,7 @@ Rules:
 
       const result = await sendEmail({
         companyId: companyId,
+        contactId: contactId || undefined,
         to,
         from: fromAddress,
         subject,
@@ -16308,6 +16309,20 @@ Rules:
       const totalSkipped = results.reduce((sum, r) => sum + r.skippedContacts, 0);
       const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);
       res.json({ dryRun, totalMigrated, totalSkipped, totalErrors, results });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/api/admin/companies/:id/notifications", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const company = await storage.getCompany(p(req.params.id));
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const { clientNotificationsSuppressed } = req.body;
+      if (typeof clientNotificationsSuppressed !== "boolean") {
+        return res.status(400).json({ error: "clientNotificationsSuppressed must be a boolean" });
+      }
+      await storage.updateCompany(p(req.params.id), { clientNotificationsSuppressed });
+      console.log(`[admin] Set clientNotificationsSuppressed=${clientNotificationsSuppressed} for company ${p(req.params.id)} (${company.name})`);
+      res.json({ success: true, companyId: p(req.params.id), name: company.name, clientNotificationsSuppressed });
     } catch (err) { handleError(res, err); }
   });
 
