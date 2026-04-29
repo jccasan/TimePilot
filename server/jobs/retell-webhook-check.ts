@@ -205,7 +205,14 @@ export async function runRetellWebhookCheck(): Promise<void> {
       if (error) {
         console.warn(`[retell-webhook-check] Could not fetch webhook URL for global agent ${globalAgentId}: ${error}`);
       } else if (!registered) {
-        console.warn(`[retell-webhook-check] PLATFORM ALERT: Global RETELL_AGENT_ID webhook is missing/mismatched. Current: ${currentUrl ?? "none"}, Expected: ${expectedUrl}. Platform admins should re-register the webhook.`);
+        console.warn(`[retell-webhook-check] PLATFORM ALERT: Global RETELL_AGENT_ID webhook is missing/mismatched. Current: ${currentUrl ?? "none"}, Expected: ${expectedUrl}. Attempting auto-repair…`);
+        try {
+          await registerRetellWebhook(globalAgentId);
+          console.log(`[retell-webhook-check] Auto-repair succeeded for global RETELL_AGENT_ID (agent ${globalAgentId})`);
+        } catch (fixErr: unknown) {
+          const fixMsg = fixErr instanceof Error ? fixErr.message : String(fixErr);
+          console.error(`[retell-webhook-check] Auto-repair failed for global RETELL_AGENT_ID (agent ${globalAgentId}): ${fixMsg}`);
+        }
       } else {
         console.log(`[retell-webhook-check] Global RETELL_AGENT_ID webhook OK (agent ${globalAgentId})`);
       }
