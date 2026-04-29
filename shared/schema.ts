@@ -545,6 +545,7 @@ export const visits = pgTable("visits", {
   routeId: varchar("route_id").references(() => routes.id, { onDelete: "set null" }),
   scheduledDate: date("scheduled_date").notNull(),
   status: visitStatusEnum("status").notNull().default("scheduled"),
+  enRouteAt: timestamp("en_route_at"),
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
   completedBy: varchar("completed_by").references(() => users.id),

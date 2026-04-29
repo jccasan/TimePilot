@@ -558,6 +558,36 @@ function RouteVisitDetailSheet({
 }) {
   const { toast } = useToast();
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [enRouteSending, setEnRouteSending] = useState(false);
+
+  const handleSendEnRoute = () => {
+    if (!visit) return;
+    setEnRouteSending(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await apiRequest("POST", `/api/visits/${visit.id}/on-my-way`, {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          const data = await res.json();
+          queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+          toast({ title: "En-route SMS sent", description: `${data.contactName} notified — ETA ~${data.etaMinutes} min` });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Failed to send SMS";
+          toast({ title: "Failed to send SMS", description: msg, variant: "destructive" });
+        } finally {
+          setEnRouteSending(false);
+        }
+      },
+      (err) => {
+        setEnRouteSending(false);
+        toast({ title: "Location unavailable", description: err.message || "Could not get your current location", variant: "destructive" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const statusMutation = useMutation({
     mutationFn: async ({ visitId, status }: { visitId: string; status: string }) => {
@@ -597,7 +627,7 @@ function RouteVisitDetailSheet({
   const statusActions: { status: string; label: string; icon: typeof CheckCircle; color: string; show: boolean }[] = [
     {
       status: "in_progress",
-      label: "Mark In Progress",
+      label: "Start",
       icon: Play,
       color: "text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800",
       show: visit.status === "scheduled",
@@ -748,6 +778,18 @@ function RouteVisitDetailSheet({
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</p>
             <div className="grid grid-cols-1 gap-2">
+              {(visit.status === "scheduled" || visit.status === "in_progress") && (
+                <Button
+                  variant="outline"
+                  className="justify-start gap-2 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 border-teal-200 dark:border-teal-800"
+                  onClick={handleSendEnRoute}
+                  disabled={enRouteSending}
+                  data-testid="button-route-action-en_route"
+                >
+                  {enRouteSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
+                  Send En-Route
+                </Button>
+              )}
               {statusActions.filter(a => a.show).map((action) => {
                 const Icon = action.icon;
                 const isUpdating = updatingStatus === action.status;

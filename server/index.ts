@@ -1826,6 +1826,19 @@ async function ensureCompanyNotificationColumns() {
   }
 }
 
+async function ensureVisitEnRouteAtColumn() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`ALTER TABLE visits ADD COLUMN IF NOT EXISTS en_route_at TIMESTAMP`);
+    console.log("[Migration] visits en_route_at column verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure en_route_at column:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function ensureRetellWebhookRepairsTable() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -2085,6 +2098,7 @@ async function auditRetellWebhooks() {
   await ensureErrorReportsTable();
   await ensureCompanyNotificationColumns();
   await ensureRetellWebhookRepairsTable();
+  await ensureVisitEnRouteAtColumn();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
   setupSession(app);

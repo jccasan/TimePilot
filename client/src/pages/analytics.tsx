@@ -3,13 +3,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   TrendingUp, TrendingDown, DollarSign, Users, CalendarCheck,
-  Target, BarChart3, PieChart as PieChartIcon, Activity, Minus,
+  Target, BarChart3, PieChart as PieChartIcon, Activity, Minus, Clock,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
+
+type TimingMetrics = {
+  avgTravelMinutes: number | null;
+  travelSampleSize: number;
+  avgYardMinutes: number | null;
+  yardSampleSize: number;
+};
 
 type AnalyticsData = {
   monthlyRevenue: { month: string; revenue: number }[];
@@ -121,6 +128,9 @@ function ChartTooltipContent({ active, payload, label, prefix }: any) {
 export default function Analytics() {
   const { data, isLoading } = useQuery<AnalyticsData>({
     queryKey: ["/api/analytics/dashboard"],
+  });
+  const { data: timingData } = useQuery<TimingMetrics>({
+    queryKey: ["/api/analytics/timing-metrics"],
   });
 
   if (isLoading) {
@@ -380,6 +390,55 @@ export default function Analytics() {
                 <Bar dataKey="count" name="Clients" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-timing-metrics">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Service Timing Metrics
+            </CardTitle>
+            <CardDescription>Average travel and yard time per visit</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Avg Travel Time</p>
+                <p className="text-xl font-bold" data-testid="text-avg-travel-time">
+                  {timingData?.avgTravelMinutes != null
+                    ? `${timingData.avgTravelMinutes} min`
+                    : "—"}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {timingData?.travelSampleSize
+                    ? `${timingData.travelSampleSize} trips tracked`
+                    : "En-route tracking not yet active"}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Avg Yard Time</p>
+                <p className="text-xl font-bold" data-testid="text-avg-yard-time">
+                  {timingData?.avgYardMinutes != null
+                    ? `${timingData.avgYardMinutes} min`
+                    : "—"}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {timingData?.yardSampleSize
+                    ? `${timingData.yardSampleSize} visits tracked`
+                    : "Start/complete tracking active"}
+                </p>
+              </div>
+            </div>
+            <div className="rounded-md bg-muted/40 p-3 space-y-1.5">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">How these are calculated</p>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Travel time</span> — time from when "Send En-Route" is tapped to when the technician taps "Start Job"
+              </p>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Yard time</span> — time from "Start Job" to "Complete" on each visit
+              </p>
+            </div>
           </CardContent>
         </Card>
 

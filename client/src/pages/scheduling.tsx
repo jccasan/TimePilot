@@ -46,7 +46,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, CalendarDays, CalendarRange,
   CheckCircle, XCircle, Ban, Clock, MapPin, DollarSign, User, CalendarCheck, Loader2, GripVertical,
-  Send, MessageSquare, Trash2, Search, Eye, EyeOff, Pencil, ChevronsUpDown, Play, Camera, X,
+  Trash2, Search, Eye, EyeOff, Pencil, ChevronsUpDown, Play, Camera, X, Navigation,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -1225,9 +1225,7 @@ function VisitDetailSheet({
   });
   const isEditable = sheetAuthUser?.role === "owner" || sheetAuthUser?.role === "admin";
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
-  const [showSmsDialog, setShowSmsDialog] = useState(false);
-  const [smsMessage, setSmsMessage] = useState("");
-  const [smsSending, setSmsSending] = useState(false);
+  const [enRouteSending, setEnRouteSending] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showCompletePanel, setShowCompletePanel] = useState(false);
   const [gatePhotoFile, setGatePhotoFile] = useState<File | null>(null);
@@ -1305,30 +1303,33 @@ function VisitDetailSheet({
   const route = routes?.find((r) => r.id === visit.routeId);
   const frequencyLabel = plan ? plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1) : "";
   const pricePerVisit = plan ? parseFloat(plan.pricePerVisit) || 0 : 0;
-  const contactHasPhone = !!(contact?.phone);
-
-  const openOnMyWayDialog = () => {
-    const name = contact?.firstName || "there";
-    const defaultMsg = `Hi ${name}, we're on our way to your property! Please make sure your yard is accessible and any pets are inside. See you soon!`;
-    setSmsMessage(defaultMsg);
-    setShowSmsDialog(true);
-  };
-
-  const sendCustomSms = async () => {
-    if (!visit || !smsMessage.trim()) return;
-    setSmsSending(true);
-    try {
-      const res = await apiRequest("POST", `/api/visits/${visit.id}/send-custom-sms`, { message: smsMessage.trim() });
-      const data = await res.json();
-      toast({ title: "Message sent", description: `SMS sent to ${data.contactName}` });
-      setShowSmsDialog(false);
-      setSmsMessage("");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to send SMS";
-      toast({ title: "Error", description: msg, variant: "destructive" });
-    } finally {
-      setSmsSending(false);
-    }
+  const handleSendEnRoute = () => {
+    if (!visit) return;
+    setEnRouteSending(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await apiRequest("POST", `/api/visits/${visit.id}/on-my-way`, {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          const data = await res.json();
+          queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+          toast({ title: "En-route SMS sent", description: `${data.contactName} notified — ETA ~${data.etaMinutes} min` });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Failed to send SMS";
+          toast({ title: "Failed to send SMS", description: msg, variant: "destructive" });
+        } finally {
+          setEnRouteSending(false);
+        }
+      },
+      (err) => {
+        setEnRouteSending(false);
+        toast({ title: "Location unavailable", description: err.message || "Could not get your current location", variant: "destructive" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   const handleSaveEdit = () => {
@@ -1681,16 +1682,18 @@ function VisitDetailSheet({
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</p>
                 <div className="grid grid-cols-1 gap-2">
-                  <Button
-                    variant="outline"
-                    className="justify-start gap-2 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 border-teal-200 dark:border-teal-800"
-                    onClick={openOnMyWayDialog}
-                    disabled={!contactHasPhone}
-                    data-testid="button-on-my-way"
-                  >
-                    <Send className="h-4 w-4" />
-                    {contactHasPhone ? "On My Way" : "On My Way (No phone)"}
-                  </Button>
+                  {(visit.status === "scheduled" || visit.status === "in_progress") && (
+                    <Button
+                      variant="outline"
+                      className="justify-start gap-2 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 border-teal-200 dark:border-teal-800"
+                      onClick={handleSendEnRoute}
+                      disabled={enRouteSending}
+                      data-testid="button-action-en_route"
+                    >
+                      {enRouteSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
+                      Send En-Route
+                    </Button>
+                  )}
 
                   {visit.status === "scheduled" && (
                     <Button
@@ -1698,7 +1701,7 @@ function VisitDetailSheet({
                       className="w-full justify-center sm:justify-start gap-2 h-11 sm:h-9 text-base sm:text-sm font-semibold sm:font-normal text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30 border-orange-200 dark:border-orange-800"
                       onClick={() => statusMutation.mutate({ visitId: visit.id, status: "in_progress" })}
                       disabled={statusMutation.isPending}
-                      data-testid="button-action-in_progress"
+                      data-testid="button-action-start"
                     >
                       {updatingStatus === "in_progress" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                       Start Job
@@ -1804,55 +1807,6 @@ function VisitDetailSheet({
         </div>
       </SheetContent>
     </Sheet>
-    <Dialog open={showSmsDialog} onOpenChange={setShowSmsDialog}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-teal-600" />
-            Send "On My Way" Message
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <p className="text-sm text-muted-foreground">
-              To: <span className="font-medium text-foreground">{contact?.firstName} {contact?.lastName}</span>
-              {contact?.phone && <span className="ml-1 text-xs">({contact.phone})</span>}
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sms-message" className="text-sm font-medium">Message</Label>
-            <textarea
-              id="sms-message"
-              className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-              value={smsMessage}
-              onChange={(e) => setSmsMessage(e.target.value)}
-              maxLength={1000}
-              disabled={smsSending}
-              data-testid="textarea-sms-message"
-            />
-            <p className="text-xs text-muted-foreground text-right">{smsMessage.length}/1000</p>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowSmsDialog(false)}
-              disabled={smsSending}
-              data-testid="button-cancel-sms"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={sendCustomSms}
-              disabled={smsSending || !smsMessage.trim()}
-              data-testid="button-send-sms"
-            >
-              {smsSending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-              Send Message
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
     </>
   );
 }

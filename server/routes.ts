@@ -3839,6 +3839,30 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/analytics/timing-metrics", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { sql: sqlTag } = await import("drizzle-orm");
+      const result = await db.execute(sqlTag`
+        SELECT
+          ROUND(AVG(EXTRACT(EPOCH FROM (started_at - en_route_at)) / 60)::numeric, 1) AS avg_travel_minutes,
+          COUNT(*) FILTER (WHERE en_route_at IS NOT NULL AND started_at IS NOT NULL AND started_at > en_route_at) AS travel_sample_size,
+          ROUND(AVG(EXTRACT(EPOCH FROM (completed_at - started_at)) / 60)::numeric, 1) AS avg_yard_minutes,
+          COUNT(*) FILTER (WHERE started_at IS NOT NULL AND completed_at IS NOT NULL AND completed_at > started_at) AS yard_sample_size
+        FROM visits
+        WHERE company_id = ${companyId}
+          AND status = 'completed'
+      `);
+      const row = (result.rows?.[0] ?? {}) as Record<string, unknown>;
+      res.json({
+        avgTravelMinutes: row.avg_travel_minutes != null ? Number(row.avg_travel_minutes) : null,
+        travelSampleSize: Number(row.travel_sample_size ?? 0),
+        avgYardMinutes: row.avg_yard_minutes != null ? Number(row.avg_yard_minutes) : null,
+        yardSampleSize: Number(row.yard_sample_size ?? 0),
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Contact Routes ================
 
   const csvContactHeaders = ["firstName", "lastName", "email", "phone", "streetAddress", "address2", "city", "state", "zipCode", "numberOfDogs", "yardSize", "serviceFrequency", "serviceDay", "leadSource", "referralSource", "status", "notes"];
@@ -6962,6 +6986,12 @@ Return ONLY valid JSON, no markdown.`,
       if (!smsResult.success) return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
 
       onMyWayCooldowns.set(cooldownKey, Date.now());
+
+      try {
+        await storage.updateVisit(p(req.params.id), companyId, { enRouteAt: new Date() } as any);
+      } catch (stampErr) {
+        console.error("Failed to stamp enRouteAt on visit:", stampErr);
+      }
 
       try {
         const fromPhone = await getFromPhoneForCompany(companyId);
