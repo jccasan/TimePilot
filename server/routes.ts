@@ -384,6 +384,9 @@ export async function registerRoutes(
   // Object file download route — registered before registerObjectStorageRoutes so this
   // handler takes precedence and enforces ACL access control on private objects.
   const _objStorage = new ObjectStorageService();
+  // Tracks logo paths whose public ACL has already been backfilled this server
+  // session so the GET /api/company handler doesn't write metadata on every request.
+  const _backfilledLogoAcls = new Set<string>();
   app.get("/objects/{*objectPath}", async (req: Request, res: Response) => {
     try {
       const objectFile = await _objStorage.getObjectEntityFile(req.path);
@@ -2384,9 +2387,20 @@ Return ONLY valid JSON, no markdown.`,
 
   app.get("/api/company", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, userId } = await getCompanyContext(req);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
+      // Lazily backfill public ACL on existing logos that were saved before ACL
+      // enforcement was in place, so they continue to render in the sidebar and
+      // Settings preview without requiring a re-upload. The in-memory set ensures
+      // the metadata write only happens once per server process, not on every request.
+      if (company.logoUrl && typeof company.logoUrl === "string" && !_backfilledLogoAcls.has(company.logoUrl)) {
+        const logoUrlToBackfill = company.logoUrl;
+        const publicAcl = { owner: userId, visibility: "public" as const };
+        _objStorage.trySetObjectEntityAclPolicy(logoUrlToBackfill, publicAcl)
+          .then(() => { _backfilledLogoAcls.add(logoUrlToBackfill); })
+          .catch((err) => { console.warn("[Logo ACL backfill] Failed to set public ACL:", err?.message); });
+      }
       const sanitized = sanitizeCompany(company) as any;
       // Demo bypass: expose unlimited tier and force all feature flags
       if ((company as any).demoBypassLimits) {
@@ -2628,6 +2642,15 @@ Return ONLY valid JSON, no markdown.`,
         updates.venmoHandle = raw || null;
       }
       const company = await storage.updateCompany(companyId, updates);
+      // Mark the new logo as public so it can be served via /objects/ without auth.
+      // Awaited so the ACL is committed before the response reaches the client,
+      // preventing a transient 403 on the very first image load after upload.
+      // Company logos are intentionally customer-facing (invoices, quotes, portal).
+      if (updates.logoUrl && typeof updates.logoUrl === "string") {
+        const publicAcl = { owner: userId, visibility: "public" as const };
+        await _objStorage.trySetObjectEntityAclPolicy(updates.logoUrl, publicAcl)
+          .catch((err) => { console.warn("[Logo ACL] Failed to set public ACL on upload:", err?.message); });
+      }
       auditLog(companyId, userId, "company", companyId, "update", { old: sanitizeCompany(existing), new: sanitizeCompany(company) }, req.ip);
       res.json(sanitizeCompany(company));
     } catch (err) { handleError(res, err); }
