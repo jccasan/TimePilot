@@ -1957,4 +1957,5 @@ export const apiUsageDaily = pgTable("api_usage_daily", {
 }, (table) => [
   index("idx_api_usage_daily_date").on(table.date),
   index("idx_api_usage_daily_provider").on(table.provider),
+  uniqueIndex("idx_api_usage_daily_uniq").on(table.date, table.provider, table.metric),
 ]);

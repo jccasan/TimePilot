@@ -46,6 +46,7 @@ import {
 import { seedRetellKnowledgeBase, provisionRetellNumber } from "./services/retell";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress, getAutocompleteCached, setAutocompleteCache } from "./services/geocode";
+import { trackApiCall, getApiUsageStats } from "./services/api-usage";
 import { computeInvoice } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import { calculateQuotePricing, renderResidentialProposalHtml, renderCommercialProposalHtml, renderQuoteSmsText, type ResidentialQuoteInput, type CommercialQuoteInput } from "./services/quote-pricing";
@@ -1106,9 +1107,21 @@ export async function registerRoutes(
         };
       });
       setAutocompleteCache(q, countryFilter, features);
+      trackApiCall("mapbox", "autocomplete");
       res.json(features);
     } catch {
       res.json([]);
+    }
+  });
+
+  app.get("/api/geocode/usage", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const stats = await getApiUsageStats();
+      res.json(stats);
+    } catch (err) {
+      handleError(res, err);
     }
   });
 

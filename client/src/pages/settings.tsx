@@ -3110,6 +3110,17 @@ export default function Settings() {
     },
   });
 
+  const geocodeUsageQuery = useQuery<{
+    today: number;
+    thisWeek: number;
+    dailyThreshold: number;
+    isOverThreshold: boolean;
+    breakdown: { metric: string; today: number; thisWeek: number }[];
+  }>({
+    queryKey: ["/api/geocode/usage"],
+    refetchInterval: 60_000,
+  });
+
   const inviteMutation = useMutation({
     mutationFn: async (data: { email: string; firstName: string; lastName: string; role: string }) => {
       const res = await apiRequest("POST", "/api/company/invite", data);
@@ -3953,31 +3964,74 @@ export default function Settings() {
                 </Link>
               ))}
               {(currentUser?.role === "owner" || currentUser?.role === "admin") && (
-                <div className="flex items-center justify-between p-3 rounded-lg border">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center shrink-0">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                <>
+                  <div className="rounded-lg border p-3 space-y-2" data-testid="card-geocode-usage">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center shrink-0">
+                          <MapPin className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium leading-none">Geocode API Usage</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Mapbox calls used today and this week</p>
+                        </div>
+                      </div>
+                      {geocodeUsageQuery.data?.isOverThreshold && (
+                        <Badge variant="destructive" className="shrink-0 gap-1" data-testid="badge-geocode-over-threshold">
+                          <AlertTriangle className="h-3 w-3" />
+                          Over limit
+                        </Badge>
+                      )}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium leading-none">Re-geocode Missing Addresses</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Retry geocoding for properties that could not be located</p>
-                    </div>
+                    {geocodeUsageQuery.isLoading ? (
+                      <div className="flex gap-4 pt-1">
+                        <Skeleton className="h-8 w-24" />
+                        <Skeleton className="h-8 w-24" />
+                      </div>
+                    ) : geocodeUsageQuery.data ? (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div className={`rounded-md p-2 text-center ${geocodeUsageQuery.data.isOverThreshold ? "bg-destructive/10 border border-destructive/30" : "bg-muted/50"}`} data-testid="stat-geocode-today">
+                          <p className={`text-lg font-semibold tabular-nums ${geocodeUsageQuery.data.isOverThreshold ? "text-destructive" : ""}`}>
+                            {geocodeUsageQuery.data.today.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Today</p>
+                          <p className="text-xs text-muted-foreground">
+                            of {geocodeUsageQuery.data.dailyThreshold.toLocaleString()} limit
+                          </p>
+                        </div>
+                        <div className="rounded-md bg-muted/50 p-2 text-center" data-testid="stat-geocode-week">
+                          <p className="text-lg font-semibold tabular-nums">{geocodeUsageQuery.data.thisWeek.toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">This week</p>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => geocodeAllMutation.mutate()}
-                    disabled={geocodeAllMutation.isPending}
-                    data-testid="button-regeocode-addresses"
-                  >
-                    {geocodeAllMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" />
-                    )}
-                    <span className="ml-1.5">{geocodeAllMutation.isPending ? "Running..." : "Run"}</span>
-                  </Button>
-                </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg border">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center shrink-0">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium leading-none">Re-geocode Missing Addresses</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Retry geocoding for properties that could not be located</p>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => geocodeAllMutation.mutate()}
+                      disabled={geocodeAllMutation.isPending}
+                      data-testid="button-regeocode-addresses"
+                    >
+                      {geocodeAllMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      <span className="ml-1.5">{geocodeAllMutation.isPending ? "Running..." : "Run"}</span>
+                    </Button>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
