@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Access Logs — ScooPilot Voice Wizard{% endblock %}
+
+{% block nav %}
+<div class="topbar">
+  <span class="topbar-brand">ScooPilot Voice Wizard</span>
+  <span class="topbar-phone">Access Logs</span>
+  <span class="topbar-spacer"></span>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm">← Dashboard</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container page">
+  <div class="dash-header">
+    <h1>Sensitive Endpoint Access Logs</h1>
+    <span class="badge badge-gray">{{ total }} entr{{ 'ies' if total != 1 else 'y' }} matched</span>
+  </div>
+
+  <form method="get" action="{{ url_for('admin_access_logs') }}" style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
+    <label style="font-size:13px;font-weight:600;color:var(--gray)">Filter by tenant:</label>
+    <select name="phone" class="form-control" style="width:240px;font-size:13px" onchange="this.form.submit()">
+      <option value="">All tenants</option>
+      {% for p in all_phones %}
+      <option value="{{ p }}" {% if filter_phone == p or (filter_phone and filter_phone.startswith('+') and filter_phone == p) %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+    <label style="font-size:13px;font-weight:600;color:var(--gray)">Show last:</label>
+    <select name="limit" class="form-control" style="width:100px;font-size:13px" onchange="this.form.submit()">
+      {% for n in [50, 100, 200, 500, 1000] %}
+      <option value="{{ n }}" {% if limit == n %}selected{% endif %}>{{ n }}</option>
+      {% endfor %}
+    </select>
+    {% if filter_phone %}
+    <a href="{{ url_for('admin_access_logs') }}" class="btn btn-secondary btn-sm">Clear filter</a>
+    {% endif %}
+  </form>
+
+  {% if entries %}
+  <div style="overflow-x:auto">
+  <table class="dash-table" style="font-size:12px">
+    <thead>
+      <tr>
+        <th>Timestamp (UTC)</th>
+        <th>IP Address</th>
+        <th>Method</th>
+        <th>Endpoint</th>
+        <th>Path</th>
+        <th>Tenant Phone</th>
+        <th>Status</th>
+        <th>User Agent</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for e in entries %}
+    {% set status = e.get('status', 0) %}
+    <tr>
+      <td style="white-space:nowrap;font-family:monospace">{{ e.get('ts','')[:19].replace('T',' ') }}</td>
+      <td style="font-family:monospace">{{ e.get('ip','—') }}</td>
+      <td style="font-family:monospace">{{ e.get('method','') }}</td>
+      <td style="font-family:monospace;font-size:11px">{{ e.get('endpoint','') }}</td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="{{ e.get('path','') }}">{{ e.get('path','') }}</td>
+      <td style="font-family:monospace">{{ e.get('phone','—') }}</td>
+      <td>
+        {% if status >= 200 and status < 300 %}
+          <span class="badge badge-green">{{ status }}</span>
+        {% elif status == 401 or status == 403 %}
+          <span class="badge" style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb">{{ status }}</span>
+        {% elif status == 404 %}
+          <span class="badge badge-gray">{{ status }}</span>
+        {% else %}
+          <span class="badge" style="background:#fff3cd;color:#856404;border:1px solid #ffc107">{{ status }}</span>
+        {% endif %}
+      </td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray);font-size:11px" title="{{ e.get('ua','') }}">{{ e.get('ua','—') }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if total > limit %}
+  <p style="margin-top:12px;font-size:13px;color:var(--gray)">Showing {{ limit }} of {{ total }} entries. Increase the limit to see more.</p>
+  {% endif %}
+  {% else %}
+  <div class="empty-state">
+    <p>No access log entries found{% if filter_phone %} for {{ filter_phone }}{% endif %}.</p>
+    <p style="font-size:13px;color:var(--gray)">Logs are written when the sensitive endpoints (<code>/uploads/</code>, <code>/download/</code>, <code>/handbook/</code>, <code>/api/config/</code>) are accessed.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

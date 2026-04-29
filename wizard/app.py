@@ -41,6 +41,7 @@ for d in [UPLOADS_DIR, OUTPUT_DIR, DB_DIR]:
 
 db = TinyDB(str(DB_DIR / "wizard.json"))
 Tenant = Query()
+access_log_table = db.table("access_logs")
 
 RETELL_API_KEY = os.environ.get("RETELL_API_KEY", "")
 SCOOPILOT_API = "https://app.scooppilot.com"
@@ -107,6 +108,39 @@ TIMEZONES = [
     "America/Phoenix", "America/Indiana/Indianapolis",
     "America/Toronto", "America/Vancouver",
 ]
+
+
+# ──────────────────────────────────────────
+# Access Logging
+# ──────────────────────────────────────────
+
+SENSITIVE_ENDPOINTS = {"serve_upload", "download_output", "handbook", "api_config"}
+
+
+def _log_access(status_code: int) -> None:
+    """Persist one structured access-log entry for a sensitive endpoint."""
+    view_args = request.view_args or {}
+    phone = view_args.get("phone", "")
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    ip = forwarded.split(",")[0].strip() if forwarded else (request.remote_addr or "")
+    entry = {
+        "ts": datetime.utcnow().isoformat(),
+        "ip": ip,
+        "ua": request.headers.get("User-Agent", ""),
+        "phone": phone,
+        "endpoint": request.endpoint or "",
+        "path": request.path,
+        "method": request.method,
+        "status": status_code,
+    }
+    access_log_table.insert(entry)
+
+
+@app.after_request
+def _after_request_logger(response: Response) -> Response:
+    if request.endpoint in SENSITIVE_ENDPOINTS:
+        _log_access(response.status_code)
+    return response
 
 
 # ──────────────────────────────────────────
@@ -802,6 +836,41 @@ def admin_credentials(phone: str):
         error=None,
         admin_key=provided_key,
         saved=saved,
+    )
+
+
+# ──────────────────────────────────────────
+# Routes: Admin — Access Logs
+# ──────────────────────────────────────────
+
+@app.get("/admin/access-logs")
+def admin_access_logs():
+    gate = _require_admin()
+    if gate:
+        return gate
+
+    filter_phone = request.args.get("phone", "").strip()
+    try:
+        limit = min(int(request.args.get("limit", 200)), 1000)
+    except (ValueError, TypeError):
+        limit = 200
+
+    all_entries = access_log_table.all()
+    if filter_phone:
+        norm = filter_phone if filter_phone.startswith("+") else normalize_phone(filter_phone)
+        all_entries = [e for e in all_entries if e.get("phone", "") == norm]
+
+    all_entries.sort(key=lambda e: e.get("ts", ""), reverse=True)
+    entries = all_entries[:limit]
+
+    all_phones = sorted({e.get("phone", "") for e in access_log_table.all() if e.get("phone")})
+    return render_template(
+        "access_logs.html",
+        entries=entries,
+        total=len(all_entries),
+        limit=limit,
+        filter_phone=filter_phone,
+        all_phones=all_phones,
     )
 
 
