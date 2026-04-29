@@ -11790,6 +11790,7 @@ Rules:
                   await registerRetellWebhook(effectiveAgentId);
                 } catch (whErr: any) {
                   console.warn(`[Retell] Failed to register webhook for agent ${effectiveAgentId}: ${whErr.message}`);
+                  notify(tenantId, "system_warning", "Call Tracking Setup Incomplete", `Voice plan activated but the call-event webhook could not be registered (agent: ${effectiveAgentId}). Call tracking may not work until this is resolved. Please contact support or check Settings. Error: ${whErr.message}`, `/settings`);
                 }
               }
 
