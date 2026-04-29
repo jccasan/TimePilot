@@ -2495,7 +2495,7 @@ Return ONLY valid JSON, no markdown.`,
           } catch (_) {}
 
           // Force email send even if suppressed (this is the batch welcome send)
-          await provisionPortalAccess(contact.id, companyId, baseUrl, {
+          const provision = await provisionPortalAccess(contact.id, companyId, baseUrl, {
             sendEmail: true,
             serviceDetails: {
               dayOfWeek: serviceDayOfWeek,
@@ -2505,7 +2505,7 @@ Return ONLY valid JSON, no markdown.`,
             },
           });
 
-          results.push({ contactId: contact.id, name: `${contact.firstName} ${contact.lastName}`.trim(), email: contact.email!, status: "sent" });
+          results.push({ contactId: contact.id, name: `${contact.firstName} ${contact.lastName}`.trim(), email: contact.email!, status: provision.emailSent ? "sent" : "skipped" });
         } catch (err) {
           console.error(`[onboarding-welcome] Failed to send for contact ${contact.id}:`, err);
           results.push({ contactId: contact.id, name: `${contact.firstName} ${contact.lastName}`.trim(), email: contact.email!, status: "skipped" });
@@ -7903,6 +7903,7 @@ Return ONLY valid JSON, no markdown.`,
 
               const sendResult = await sendEmail({
                 companyId,
+                contactId: contact.id,
                 to: contact.email,
                 from: fromAddress,
                 subject,
@@ -13241,6 +13242,7 @@ Rules:
         try {
           await sendEmail({
             companyId: companyId,
+            contactId: quote.contactId || undefined,
             to: quote.contactEmail,
             subject: `${company.name} — Service ${quote.type === "commercial" ? "Proposal" : "Quote"} #${quote.quoteNumber}`,
             text: `Please see your ${quote.type === "commercial" ? "proposal" : "quote"} #${quote.quoteNumber} from ${company.name}.`,
@@ -13532,6 +13534,7 @@ Rules:
       const resetEmailTo = normalizedEmail;
       sendEmail({
         companyId: company?.id || foundContact.companyId,
+        contactId: foundContact.id,
         to: resetEmailTo,
         subject: `Reset your ${companyName} portal password`,
         senderName: company?.name || undefined,
@@ -14024,6 +14027,7 @@ Rules:
         const { sendEmail } = await import("./services/email");
         sendEmail({
           companyId: companyId,
+          contactId: contactId,
           to: pendingEmailChange,
           subject: `Verify your new email address - ${companyName}`,
           senderName: company?.name || undefined,
@@ -14739,6 +14743,7 @@ Rules:
         const portalUrl = `${getBaseUrl(req)}/portal/client`;
         sendEmail({
           companyId: companyId,
+          contactId: contactId,
           to: contact.email,
           subject: `New Estimate from ${company?.name || "Your Service Provider"}`,
           senderName: company?.name || undefined,
@@ -14856,9 +14861,9 @@ Rules:
     companyId: string,
     portalBaseUrl: string,
     opts?: { sendEmail?: boolean; serviceDetails?: { dayOfWeek?: string; frequency?: string; pricePerVisit?: string; nextVisitDate?: string } }
-  ): Promise<{ tempPassword: string }> {
+  ): Promise<{ tempPassword: string; emailSent: boolean }> {
     const contact = await storage.getContact(contactId, companyId);
-    if (!contact || !contact.email) return { tempPassword: "" };
+    if (!contact || !contact.email) return { tempPassword: "", emailSent: false };
 
     const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
     const salt = crypto.randomBytes(16).toString("hex");
@@ -14889,7 +14894,7 @@ Rules:
         : !(company?.clientNotificationsSuppressed);
     if (!shouldSend) {
       console.log(`[provisionPortalAccess] Email suppressed (clientNotificationsSuppressed=true) for contact ${contactId}`);
-      return { tempPassword };
+      return { tempPassword, emailSent: false };
     }
 
     const portalUrl = `${portalBaseUrl}/portal/login`;
@@ -14911,8 +14916,10 @@ Rules:
       serviceDetails.nextVisitDate ? `Next Visit: ${serviceDetails.nextVisitDate}` : "",
     ].filter(Boolean).join("\n") : "";
 
-    sendEmail({
+    const sendResult = await sendEmail({
       companyId: companyId,
+      contactId: contactId,
+      bypassClientSuppression: opts?.sendEmail === true,
       to: contact.email,
       subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
       senderName: company?.name || undefined,
@@ -14938,9 +14945,12 @@ Rules:
           </div>
         </div>
       `,
-    }).catch((err) => console.error("Failed to send portal access email:", err));
+    }).catch((err) => {
+      console.error("Failed to send portal access email:", err);
+      return { success: false as const, error: String(err), suppressed: false as const };
+    });
 
-    return { tempPassword };
+    return { tempPassword, emailSent: sendResult.success && !sendResult.suppressed };
   }
 
   // Admin route: generate portal invite link
@@ -15026,6 +15036,7 @@ Rules:
       const portalUrl = `${getBaseUrl(req)}/portal/login`;
       sendEmail({
         companyId: companyId,
+        contactId: p(req.params.id),
         to: contact.email,
         subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
         senderName: company?.name || undefined,
@@ -15374,6 +15385,7 @@ Rules:
 
           sendEmail({
             companyId: companyId,
+            contactId: contactId,
             to: contact.email,
             subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
             senderName: company?.name || undefined,
@@ -15830,6 +15842,7 @@ Rules:
             const subject = `Service Day Change - ${companyName}`;
             const emailResult = await sendEmail({
               companyId: companyId,
+              contactId: contact.id,
               to: contact.email,
               subject,
               text: personalizedMsg,
@@ -19317,7 +19330,7 @@ Respond with exactly one category from the list above and nothing else.`;
                     ${safeCompanyName}
                   </div>
                 </div>`;
-              const emailResult = await sendEmail({ to: email, subject, text, html, companyId: company.id, senderName: companyName, replyTo: company.email || undefined });
+              const emailResult = await sendEmail({ to: email, subject, text, html, companyId: company.id, contactId: contact.id, senderName: companyName, replyTo: company.email || undefined });
               if (emailResult.success) {
                 await logEmailSent(company.id, email, subject, "quote_follow_up", emailResult.messageId, contact.id);
               } else {

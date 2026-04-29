@@ -1,6 +1,7 @@
 import sgMail from "@sendgrid/mail";
 import { db } from "../db";
-import { emailsSent } from "@shared/schema";
+import { emailsSent, companies } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import crypto from "crypto";
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
@@ -15,6 +16,8 @@ interface SendEmailOptions {
   from?: string;
   senderName?: string;
   companyId?: string;
+  contactId?: string;
+  bypassClientSuppression?: boolean;
   subject: string;
   text: string;
   html?: string;
@@ -26,6 +29,7 @@ interface SendEmailResult {
   success: boolean;
   messageId?: string;
   error?: string;
+  suppressed?: boolean;
 }
 
 const VERIFIED_SENDER = "jeremy@scoopilot.com";
@@ -102,6 +106,17 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
   if (process.env.DISABLE_EMAIL_SENDING === "true") {
     console.log(`Email suppressed (DISABLE_EMAIL_SENDING=true): to=${options.to} subject="${options.subject}"`);
     return { success: true, messageId: "suppressed" };
+  }
+
+  if (options.contactId && options.companyId && !options.bypassClientSuppression) {
+    const [co] = await db.select({ clientNotificationsSuppressed: companies.clientNotificationsSuppressed })
+      .from(companies)
+      .where(eq(companies.id, options.companyId))
+      .limit(1);
+    if (co?.clientNotificationsSuppressed) {
+      console.log(`[sendEmail] Client notifications suppressed for company ${options.companyId} — skipping email to contact`);
+      return { success: true, suppressed: true };
+    }
   }
 
   if (!SENDGRID_API_KEY) {
