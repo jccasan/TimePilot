@@ -4242,6 +4242,42 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/contacts/bulk-update-service-plans", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { ids, dayOfWeek, frequency } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array is required" });
+
+      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "tbd"];
+      const validFrequencies = ["weekly", "biweekly", "monthly", "onetime"];
+      if (dayOfWeek && !validDays.includes(dayOfWeek)) return res.status(400).json({ error: "Invalid dayOfWeek" });
+      if (frequency && !validFrequencies.includes(frequency)) return res.status(400).json({ error: "Invalid frequency" });
+      if (!dayOfWeek && !frequency) return res.status(400).json({ error: "At least one of dayOfWeek or frequency is required" });
+
+      let plansUpdated = 0;
+      for (const contactId of ids) {
+        const contact = await storage.getContact(contactId, companyId);
+        if (!contact) continue;
+        const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+        for (const plan of plans) {
+          const updates: Record<string, any> = {};
+          if (frequency) updates.frequency = frequency;
+          if (dayOfWeek) {
+            updates.dayOfWeek = dayOfWeek;
+            if (!req.body.keepRoute) {
+              const dayRoutes = await storage.getRoutes(companyId, dayOfWeek);
+              const matchingRoute = dayRoutes.find(r => !r.date);
+              if (matchingRoute) updates.routeId = matchingRoute.id;
+            }
+          }
+          await storage.updateServicePlan(plan.id, companyId, updates as any);
+          plansUpdated++;
+        }
+      }
+      res.json({ success: true, plansUpdated });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/contacts/bulk-delete", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);

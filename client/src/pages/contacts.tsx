@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Trash2, Tags, RefreshCw, Send } from "lucide-react";
+import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Trash2, Tags, RefreshCw, Send, SlidersHorizontal } from "lucide-react";
 import { DialogFooter } from "@/components/ui/dialog";
 import { AddContactDialog } from "@/components/add-contact-dialog";
 import { LearnHowButton } from "@/components/interactive-tutorial";
@@ -76,6 +76,7 @@ const CONTACT_FIELDS = [
 export default function Contacts() {
   const { toast } = useToast();
   const { startTutorial, isTutorialCompleted } = useTutorialContext();
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -89,6 +90,14 @@ export default function Contacts() {
   const [isImporting, setIsImporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkEditDayOfWeek, setBulkEditDayOfWeek] = useState("");
+  const [bulkEditFrequency, setBulkEditFrequency] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const queryParams = new URLSearchParams();
   if (statusFilter !== "all") queryParams.set("status", statusFilter);
@@ -157,6 +166,41 @@ export default function Contacts() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const bulkUpdateServicePlansMutation = useMutation({
+    mutationFn: async (data: { ids: string[]; dayOfWeek?: string; frequency?: string }) => {
+      const res = await apiRequest("POST", "/api/contacts/bulk-update-service-plans", data);
+      return res.json();
+    },
+    onSuccess: (data: { plansUpdated: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      setSelectedIds(new Set());
+      setBulkEditOpen(false);
+      setBulkEditDayOfWeek("");
+      setBulkEditFrequency("");
+      toast({
+        title: "Service plans updated",
+        description: `${data.plansUpdated} service plan${data.plansUpdated !== 1 ? "s" : ""} updated.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleBulkEditApply = () => {
+    if (!bulkEditDayOfWeek && !bulkEditFrequency) {
+      toast({ title: "Nothing selected", description: "Choose at least one field to update.", variant: "destructive" });
+      return;
+    }
+    bulkUpdateServicePlansMutation.mutate({
+      ids: Array.from(selectedIds),
+      ...(bulkEditDayOfWeek ? { dayOfWeek: bulkEditDayOfWeek } : {}),
+      ...(bulkEditFrequency ? { frequency: bulkEditFrequency } : {}),
+    });
+  };
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -236,9 +280,9 @@ export default function Contacts() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Search contacts..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name, email, or address..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           className="pl-9"
           data-testid="input-search-contacts"
         />
@@ -425,6 +469,16 @@ export default function Contacts() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => setBulkEditOpen(true)}
+                data-testid="button-bulk-edit-service-plans"
+              >
+                <SlidersHorizontal className="mr-1 h-4 w-4" />
+                Update Service Plans
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => sendPortalLinkMutation.mutate(Array.from(selectedIds))}
                 disabled={sendPortalLinkMutation.isPending}
                 data-testid="button-bulk-send-portal"
@@ -476,6 +530,67 @@ export default function Contacts() {
               data-testid="button-confirm-bulk-delete"
             >
               {bulkDeleteMutation.isPending ? "Deleting..." : `Delete ${selectedIds.size} Contact(s)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkEditOpen} onOpenChange={(open) => { setBulkEditOpen(open); if (!open) { setBulkEditDayOfWeek(""); setBulkEditFrequency(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle data-testid="text-bulk-edit-title">Update Service Plans</DialogTitle>
+            <DialogDescription>
+              Update active service plans for {selectedIds.size} selected client{selectedIds.size !== 1 ? "s" : ""}. Leave a field blank to keep it unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Service Day</label>
+              <Select value={bulkEditDayOfWeek || "__none__"} onValueChange={(v) => setBulkEditDayOfWeek(v === "__none__" ? "" : v)}>
+                <SelectTrigger data-testid="select-bulk-day-of-week">
+                  <SelectValue placeholder="Don't change" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Don't change</SelectItem>
+                  <SelectItem value="monday">Monday</SelectItem>
+                  <SelectItem value="tuesday">Tuesday</SelectItem>
+                  <SelectItem value="wednesday">Wednesday</SelectItem>
+                  <SelectItem value="thursday">Thursday</SelectItem>
+                  <SelectItem value="friday">Friday</SelectItem>
+                  <SelectItem value="saturday">Saturday</SelectItem>
+                  <SelectItem value="sunday">Sunday</SelectItem>
+                </SelectContent>
+              </Select>
+              {bulkEditDayOfWeek && (
+                <p className="text-xs text-muted-foreground">Plans will be auto-assigned to the matching route for this day if one exists.</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Service Frequency</label>
+              <Select value={bulkEditFrequency || "__none__"} onValueChange={(v) => setBulkEditFrequency(v === "__none__" ? "" : v)}>
+                <SelectTrigger data-testid="select-bulk-frequency">
+                  <SelectValue placeholder="Don't change" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Don't change</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Bi-Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="onetime">One-Time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setBulkEditOpen(false)} data-testid="button-bulk-edit-cancel">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkEditApply}
+              disabled={bulkUpdateServicePlansMutation.isPending || (!bulkEditDayOfWeek && !bulkEditFrequency)}
+              data-testid="button-bulk-edit-apply"
+            >
+              {bulkUpdateServicePlansMutation.isPending ? "Updating..." : "Apply to All Selected"}
             </Button>
           </DialogFooter>
         </DialogContent>
