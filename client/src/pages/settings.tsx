@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical, Rocket, Zap, PlayCircle, DollarSign, Star } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical, Rocket, Zap, PlayCircle, DollarSign, Star, PhoneCall } from "lucide-react";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -93,6 +93,9 @@ type Company = {
   reviewRequestCustomMessage?: string | null;
   clientNotificationsSuppressed?: boolean;
   onboardingCompleteSentAt?: string | null;
+  voicePlanStatus?: string | null;
+  voicePlanTier?: string | null;
+  retellAgentId?: string | null;
 };
 
 type SettingsLayoutItem = {
@@ -130,6 +133,7 @@ const SETTINGS_BLOCK_DEFS: { id: string; label: string; defaultW: number; defaul
   { id: "billing_defaults", label: "Billing Defaults", defaultW: 6, defaultH: 5, minW: 4, minH: 4 },
   { id: "call_tracking", label: "Call Tracking", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "client_notifications", label: "Client Notifications", defaultW: 6, defaultH: 5, minW: 4, minH: 4 },
+  { id: "voice_agent", label: "Voice Agent", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -145,7 +149,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "lead_sources", "developer_tools",
   "audit_log", "demo_mode",
   "billing_defaults", "call_tracking",
-  "client_notifications",
+  "client_notifications", "voice_agent",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -1300,6 +1304,144 @@ function CallTrackingSection() {
             <p className="text-xs text-muted-foreground italic" data-testid="text-no-repairs">No repair events recorded yet. This log will fill in the next time the webhook is re-registered.</p>
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type VoiceWebhookStatus = {
+  configured: boolean;
+  reason?: string;
+  agentId?: string;
+  registered?: boolean;
+  currentUrl?: string | null;
+  expectedUrl?: string | null;
+};
+
+function VoiceAgentSection({ company }: { company: Company | null }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const hasActiveVoicePlan = company?.voicePlanStatus === "active";
+
+  const statusQuery = useQuery<VoiceWebhookStatus>({
+    queryKey: ["/api/voice/webhook-status"],
+    enabled: hasActiveVoicePlan,
+  });
+
+  const reregisterMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/voice/register-webhook"),
+    onSuccess: () => {
+      toast({ title: "Webhook registered", description: "The voice agent webhook has been successfully re-registered." });
+      qc.invalidateQueries({ queryKey: ["/api/voice/webhook-status"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Registration failed", description: err?.message || "Could not re-register the webhook.", variant: "destructive" });
+    },
+  });
+
+  if (!hasActiveVoicePlan) return null;
+
+  const status = statusQuery.data;
+
+  return (
+    <Card className="h-full overflow-auto" data-testid="card-voice-agent">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <PhoneCall className="h-5 w-5" />
+          Voice Agent
+        </CardTitle>
+        <CardDescription>
+          Webhook registration status for the Retell AI voice agent. Keep this registered so call events are recorded correctly.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {statusQuery.isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-6 w-3/4" />
+          </div>
+        ) : status ? (
+          <>
+            <div className="flex items-start gap-3 rounded-lg border p-4">
+              {!status.configured ? (
+                <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+              ) : status.registered ? (
+                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-500 mt-0.5 shrink-0" />
+              ) : (
+                <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+              )}
+              <div className="space-y-1 flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Webhook Status</span>
+                  <Badge
+                    variant={!status.configured ? "secondary" : status.registered ? "default" : "destructive"}
+                    className={status.registered ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                    data-testid="badge-voice-webhook-status"
+                  >
+                    {!status.configured ? "Unknown" : status.registered ? "Registered" : "Not Registered"}
+                  </Badge>
+                </div>
+                {status.reason && (
+                  <p className="text-xs text-muted-foreground" data-testid="text-voice-webhook-reason">{status.reason}</p>
+                )}
+                {status.configured && status.expectedUrl && (
+                  <div className="space-y-1 pt-1">
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium">Expected URL: </span>
+                      <code className="bg-muted px-1 py-0.5 rounded break-all" data-testid="text-voice-expected-url">{status.expectedUrl}</code>
+                    </p>
+                    {status.currentUrl ? (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Registered URL: </span>
+                        <code
+                          className={`px-1 py-0.5 rounded break-all ${status.registered ? "bg-muted" : "bg-destructive/10 text-destructive"}`}
+                          data-testid="text-voice-current-url"
+                        >
+                          {status.currentUrl}
+                        </code>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground" data-testid="text-voice-no-webhook">No webhook URL is currently set on the agent.</p>
+                    )}
+                  </div>
+                )}
+                {status.agentId && (
+                  <p className="text-xs text-muted-foreground pt-1">
+                    Agent ID: <code className="bg-muted px-1 py-0.5 rounded" data-testid="text-voice-agent-id">{status.agentId}</code>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {status.configured && (
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Re-register Webhook</p>
+                  <p className="text-xs text-muted-foreground">
+                    {status.registered
+                      ? "Webhook is active. Click to force re-registration if calls aren't being recorded."
+                      : "The webhook is missing or mismatched. Click to register it now."}
+                  </p>
+                </div>
+                <Button
+                  variant={status.registered ? "outline" : "default"}
+                  size="sm"
+                  onClick={() => reregisterMutation.mutate()}
+                  disabled={reregisterMutation.isPending}
+                  data-testid="button-voice-reregister-webhook"
+                >
+                  {reregisterMutation.isPending ? (
+                    <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Registering…</>
+                  ) : (
+                    <><RefreshCw className="h-4 w-4 mr-1" /> Re-register Webhook</>
+                  )}
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">Unable to load webhook status.</p>
+        )}
       </CardContent>
     </Card>
   );
@@ -4106,6 +4248,8 @@ export default function Settings() {
         return <div className="h-full overflow-auto"><VoiceApiDocsSection /></div>;
       case "call_tracking":
         return <div className="h-full overflow-auto"><CallTrackingSection /></div>;
+      case "voice_agent":
+        return <VoiceAgentSection company={company ?? null} />;
       case "signup_widget":
         return <div className="h-full overflow-auto"><SignupWidgetSection company={company ? { slug: company.slug, name: company.name, quoteFormLayout: company.quoteFormLayout || "stepper" } : null} /></div>;
       case "webhook_lead":

@@ -8859,6 +8859,92 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Voice Agent Webhook Status (voice-plan-gated) ================
+
+  app.get("/api/voice/webhook-status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+
+      const company = await storage.getCompany(companyId);
+      if (!company?.voicePlanStatus || company.voicePlanStatus !== "active") {
+        return res.status(403).json({ error: "Voice plan not active" });
+      }
+
+      const retellApiKey = process.env.RETELL_API_KEY;
+      if (!retellApiKey) {
+        return res.json({ configured: false, reason: "RETELL_API_KEY not set" });
+      }
+
+      const agentId = company.retellAgentId || process.env.RETELL_AGENT_ID || null;
+      if (!agentId) {
+        return res.json({ configured: false, reason: "No Retell agent ID configured for this account" });
+      }
+
+      const expectedUrl = getAppBaseUrl() ? `${getAppBaseUrl()}/api/webhooks/retell` : null;
+
+      const agentRes = await fetch(`https://api.retellai.com/get-agent/${agentId}`, {
+        headers: {
+          Authorization: `Bearer ${retellApiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!agentRes.ok) {
+        const body = await agentRes.text();
+        return res.json({ configured: true, agentId, registered: false, reason: `Retell API error (${agentRes.status}): ${body}`, expectedUrl, currentUrl: null });
+      }
+
+      const agentData = await agentRes.json() as { webhook_url?: string };
+      const currentUrl: string | null = agentData.webhook_url || null;
+      const registered = !!currentUrl && !!expectedUrl && currentUrl === expectedUrl;
+
+      res.json({ configured: true, agentId, registered, currentUrl, expectedUrl });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/voice/register-webhook", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role, userId } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+
+      const company = await storage.getCompany(companyId);
+      if (!company?.voicePlanStatus || company.voicePlanStatus !== "active") {
+        return res.status(403).json({ error: "Voice plan not active" });
+      }
+
+      const retellApiKey = process.env.RETELL_API_KEY;
+      if (!retellApiKey) {
+        return res.status(400).json({ error: "RETELL_API_KEY not configured" });
+      }
+
+      const agentId = company.retellAgentId || process.env.RETELL_AGENT_ID || null;
+      if (!agentId) {
+        return res.status(400).json({ error: "No Retell agent ID configured for this account" });
+      }
+
+      const baseUrl = getAppBaseUrl();
+      if (!baseUrl) {
+        return res.status(400).json({ error: "APP_BASE_URL is not configured — cannot determine the correct webhook URL" });
+      }
+
+      let oldUrl: string | null = null;
+      try {
+        oldUrl = await getRetellAgentWebhookUrl(agentId);
+      } catch (fetchErr) {
+        console.warn(`[voice-register-webhook] Could not fetch current webhook URL for agent ${agentId}:`, fetchErr instanceof Error ? fetchErr.message : fetchErr);
+      }
+
+      await registerRetellWebhook(agentId);
+      const newUrl = `${baseUrl}/api/webhooks/retell`;
+
+      await storage.createRetellWebhookRepair({ companyId, agentId, oldUrl: oldUrl ?? undefined, newUrl, triggeredBy: "manual" });
+      auditLog(companyId, userId, "settings", companyId, "update", { new: { retellWebhook: newUrl } }, req.ip || undefined);
+
+      res.json({ success: true, webhookUrl: newUrl });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Webhook Routes ================
 
   app.get("/api/webhooks", isAuthenticated, async (req: Request, res: Response) => {
