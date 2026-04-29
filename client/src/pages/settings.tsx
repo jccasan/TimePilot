@@ -3601,6 +3601,20 @@ export default function Settings() {
     queryKey: ["/api/lead-sources"],
   });
 
+  const { data: demoStatusData } = useQuery<{ isDemo: boolean }>({
+    queryKey: ["/api/demo/status"],
+  });
+  const isDemo = !!demoStatusData?.isDemo;
+
+  const availableSettingsBlockDefs = useMemo(
+    () => SETTINGS_BLOCK_DEFS.filter(b => isDemo || b.id !== "demo_mode"),
+    [isDemo]
+  );
+  const availableSettingsBlockIds = useMemo(
+    () => DEFAULT_SETTINGS_BLOCK_IDS.filter(id => isDemo || id !== "demo_mode"),
+    [isDemo]
+  );
+
   const addLeadSourceMutation = useMutation({
     mutationFn: async (name: string) => {
       const res = await apiRequest("POST", "/api/lead-sources", { name });
@@ -3788,11 +3802,11 @@ export default function Settings() {
     const raw = company.settingsLayout;
     if (raw === null || raw === undefined) return null;
     if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "object" && "i" in raw[0]) {
-      const existing = raw as SettingsLayoutItem[];
+      const existing = (raw as SettingsLayoutItem[]).filter(item => isDemo || item.i !== "demo_mode");
       const existingIds = new Set(existing.map((item) => item.i));
       const missing: SettingsLayoutItem[] = [];
       let maxY = existing.reduce((m, item) => Math.max(m, item.y + item.h), 0);
-      for (const id of DEFAULT_SETTINGS_BLOCK_IDS) {
+      for (const id of availableSettingsBlockIds) {
         if (!existingIds.has(id)) {
           const def = SETTINGS_BLOCK_DEFS.find((b) => b.id === id);
           if (def) {
@@ -3804,7 +3818,7 @@ export default function Settings() {
       return missing.length > 0 ? [...existing, ...missing] : existing;
     }
     return null;
-  }, [company]);
+  }, [company, availableSettingsBlockIds]);
 
   useEffect(() => {
     if (savedSettingsLayout && !settingsInitializedRef.current) {
@@ -3874,12 +3888,12 @@ export default function Settings() {
   }, []);
 
   const handleResetSettingsLayout = useCallback(() => {
-    const defaultLayout = generateDefaultSettingsLayout();
+    const defaultLayout = generateDefaultSettingsLayout().filter(item => availableSettingsBlockIds.includes(item.i));
     setLocalSettingsLayout(defaultLayout);
     settingsUserInteractedRef.current = true;
     saveSettingsLayoutMutation.mutate(defaultLayout);
     toast({ title: "Settings reset to default layout" });
-  }, [saveSettingsLayoutMutation]);
+  }, [saveSettingsLayoutMutation, availableSettingsBlockIds]);
 
   const { uploadFile, isUploading } = useUpload({
     onSuccess: async (response) => {
@@ -4613,6 +4627,7 @@ export default function Settings() {
           ? <div className="h-full overflow-auto"><AuditLogSection /></div>
           : null;
       case "demo_mode":
+        if (!isDemo) return null;
         return (
           <Card className="h-full overflow-auto">
             <CardHeader className="pb-3">
@@ -4735,7 +4750,7 @@ export default function Settings() {
 
       {isMobile ? (
         <div className="space-y-4">
-          {DEFAULT_SETTINGS_BLOCK_IDS
+          {availableSettingsBlockIds
             .filter(id => id !== "audit_log" || currentUser?.role === "owner")
             .map(id => {
               const content = renderSettingsBlock(id);
@@ -4762,6 +4777,7 @@ export default function Settings() {
             >
               {currentSettingsLayout
                 .filter(item => item.i !== "audit_log" || currentUser?.role === "owner")
+                .filter(item => isDemo || item.i !== "demo_mode")
                 .map(item => {
                   const content = renderSettingsBlock(item.i);
                   if (!content) return null;
