@@ -87,6 +87,9 @@ import {
   type GeocodeCache,
   autocompleteCacheTable,
   type AutocompleteCache,
+  retellWebhookRepairs,
+  type RetellWebhookRepair,
+  type InsertRetellWebhookRepair,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -332,6 +335,10 @@ export interface IStorage {
   createNotification(data: InsertNotification): Promise<Notification>;
   markNotificationRead(id: string, companyId: string): Promise<Notification>;
   markAllNotificationsRead(companyId: string): Promise<void>;
+
+  // Retell Webhook Repairs
+  createRetellWebhookRepair(data: InsertRetellWebhookRepair): Promise<RetellWebhookRepair>;
+  listRetellWebhookRepairs(companyId: string, limit?: number): Promise<RetellWebhookRepair[]>;
 
   // Time Entries
   createTimeEntry(data: InsertTimeEntry): Promise<TimeEntry>;
@@ -3052,6 +3059,20 @@ export class DatabaseStorage implements IStorage {
   async pruneAutocompleteCache(olderThanDays: number): Promise<void> {
     const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
     await db.delete(autocompleteCacheTable).where(lt(autocompleteCacheTable.cachedAt, cutoff));
+  }
+
+  async createRetellWebhookRepair(data: InsertRetellWebhookRepair): Promise<RetellWebhookRepair> {
+    const [repair] = await db.insert(retellWebhookRepairs).values(data).returning();
+    return repair;
+  }
+
+  async listRetellWebhookRepairs(companyId: string, limit = 50): Promise<RetellWebhookRepair[]> {
+    return db
+      .select()
+      .from(retellWebhookRepairs)
+      .where(eq(retellWebhookRepairs.companyId, companyId))
+      .orderBy(desc(retellWebhookRepairs.repairedAt))
+      .limit(limit);
   }
 }
 

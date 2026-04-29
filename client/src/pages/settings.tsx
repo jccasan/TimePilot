@@ -898,6 +898,7 @@ function useRetellWebhook() {
     onSuccess: () => {
       toast({ title: "Webhook registered", description: "The Retell webhook has been successfully re-registered." });
       qc.invalidateQueries({ queryKey: ["/api/settings/retell-webhook-status"] });
+      qc.invalidateQueries({ queryKey: ["/api/settings/retell-webhook-repairs"] });
     },
     onError: (err: any) => {
       toast({ title: "Registration failed", description: err?.message || "Could not re-register the webhook.", variant: "destructive" });
@@ -1136,8 +1137,21 @@ function VoiceApiDocsSection() {
   );
 }
 
+type RetellWebhookRepair = {
+  id: string;
+  companyId: string | null;
+  agentId: string;
+  oldUrl: string | null;
+  newUrl: string;
+  triggeredBy: "auto" | "manual";
+  repairedAt: string;
+};
+
 function CallTrackingSection() {
   const { statusQuery, reregisterMutation, status } = useRetellWebhook();
+  const repairsQuery = useQuery<RetellWebhookRepair[]>({
+    queryKey: ["/api/settings/retell-webhook-repairs"],
+  });
 
   return (
     <Card data-testid="card-call-tracking">
@@ -1234,6 +1248,54 @@ function CallTrackingSection() {
         ) : (
           <p className="text-sm text-muted-foreground">Unable to load webhook status.</p>
         )}
+
+        <Separator />
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Repair History</p>
+          <p className="text-xs text-muted-foreground">A log of every time the webhook URL was fixed, either automatically by the daily check or manually by staff.</p>
+          {repairsQuery.isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+          ) : repairsQuery.data && repairsQuery.data.length > 0 ? (
+            <div className="rounded-md border overflow-hidden" data-testid="table-repair-history">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">When</TableHead>
+                    <TableHead className="text-xs">Trigger</TableHead>
+                    <TableHead className="text-xs hidden sm:table-cell">Previous URL</TableHead>
+                    <TableHead className="text-xs hidden sm:table-cell">New URL</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {repairsQuery.data.map((repair) => (
+                    <TableRow key={repair.id} data-testid={`row-repair-${repair.id}`}>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {new Date(repair.repairedAt).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        <Badge variant={repair.triggeredBy === "auto" ? "secondary" : "outline"} className="text-xs">
+                          {repair.triggeredBy === "auto" ? "Auto" : "Manual"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs hidden sm:table-cell max-w-[200px]">
+                        <code className="bg-muted px-1 py-0.5 rounded text-xs break-all">{repair.oldUrl ?? "—"}</code>
+                      </TableCell>
+                      <TableCell className="text-xs hidden sm:table-cell max-w-[200px]">
+                        <code className="bg-muted px-1 py-0.5 rounded text-xs break-all">{repair.newUrl}</code>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic" data-testid="text-no-repairs">No repair events recorded yet. This log will fill in the next time the webhook is re-registered.</p>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

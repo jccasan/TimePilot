@@ -1981,3 +1981,19 @@ export const autocompleteCacheTable = pgTable("autocomplete_cache", {
 ]);
 
 export type AutocompleteCache = typeof autocompleteCacheTable.$inferSelect;
+
+export const retellWebhookRepairs = pgTable("retell_webhook_repairs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  agentId: varchar("agent_id", { length: 255 }).notNull(),
+  oldUrl: text("old_url"),
+  newUrl: text("new_url").notNull(),
+  triggeredBy: varchar("triggered_by", { length: 10 }).notNull().default("auto"),
+  repairedAt: timestamp("repaired_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_retell_webhook_repairs_company").on(table.companyId),
+  index("idx_retell_webhook_repairs_repaired_at").on(table.repairedAt),
+]);
+
+export type RetellWebhookRepair = typeof retellWebhookRepairs.$inferSelect;
+export type InsertRetellWebhookRepair = typeof retellWebhookRepairs.$inferInsert;

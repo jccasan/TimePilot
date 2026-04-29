@@ -5,6 +5,20 @@ import { storage } from "../storage";
 import { sendEmail } from "../services/email";
 import { getRetellAgentWebhookUrl, registerRetellWebhook, getAppBaseUrl } from "../services/retell";
 
+async function recordRepair(companyId: string | null, agentId: string, oldUrl: string | null, newUrl: string, triggeredBy: "auto" | "manual"): Promise<void> {
+  try {
+    await storage.createRetellWebhookRepair({
+      companyId: companyId ?? undefined,
+      agentId,
+      oldUrl: oldUrl ?? undefined,
+      newUrl,
+      triggeredBy,
+    });
+  } catch (err) {
+    console.error("[retell-webhook-check] Failed to record repair event:", err);
+  }
+}
+
 const DEDUP_WINDOW_MS = 23 * 60 * 60 * 1000;
 const NOTIFICATION_TITLE_BROKEN = "Retell Webhook Not Registered";
 const NOTIFICATION_TITLE_FIXED = "Retell Webhook Auto-Repaired";
@@ -183,6 +197,7 @@ export async function runRetellWebhookCheck(): Promise<void> {
           await registerRetellWebhook(agentId);
           autoFixed = true;
           console.log(`[retell-webhook-check] Auto-registered webhook for company "${company.name}" (agent ${agentId})`);
+          await recordRepair(company.id, agentId, currentUrl, expectedUrl, "auto");
         } catch (fixErr: unknown) {
           const fixMsg = fixErr instanceof Error ? fixErr.message : String(fixErr);
           console.error(`[retell-webhook-check] Auto-registration failed for company "${company.name}" (agent ${agentId}): ${fixMsg}`);

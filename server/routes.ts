@@ -8545,12 +8545,31 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "No Retell agent ID configured for this account" });
       }
 
+      let oldUrl: string | null = null;
+      try {
+        oldUrl = await getRetellAgentWebhookUrl(agentId);
+      } catch (fetchErr) {
+        console.warn(`[retell-register-webhook] Could not fetch current webhook URL for agent ${agentId}:`, fetchErr instanceof Error ? fetchErr.message : fetchErr);
+      }
+
       await registerRetellWebhook(agentId);
       const { userId } = await getCompanyContext(req);
       const baseUrl = getAppBaseUrl();
-      auditLog(companyId, userId, "settings", companyId, "update", { new: { retellWebhook: `${baseUrl}/api/webhooks/retell` } }, req.ip || undefined);
+      const newUrl = `${baseUrl}/api/webhooks/retell`;
 
-      res.json({ success: true, webhookUrl: `${baseUrl}/api/webhooks/retell` });
+      await storage.createRetellWebhookRepair({ companyId, agentId, oldUrl: oldUrl ?? undefined, newUrl, triggeredBy: "manual" });
+      auditLog(companyId, userId, "settings", companyId, "update", { new: { retellWebhook: newUrl } }, req.ip || undefined);
+
+      res.json({ success: true, webhookUrl: newUrl });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/settings/retell-webhook-repairs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const repairs = await storage.listRetellWebhookRepairs(companyId, 50);
+      res.json(repairs);
     } catch (err) { handleError(res, err); }
   });
 
