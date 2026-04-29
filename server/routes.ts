@@ -4634,7 +4634,12 @@ Return ONLY valid JSON, no markdown.`,
       const { companyId } = await getCompanyContext(req);
       const company = await storage.getCompany(companyId);
       const demoUnlimited = !!(company as any).demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
-      res.json({ credits: demoUnlimited ? 999999 : (company?.routeCredits ?? 0) });
+      const tier = (company?.subscriptionTier ?? "tier_1") as keyof typeof TIER_CONFIG;
+      const weeklyBaseline = TIER_CONFIG[tier]?.weeklyOptimizerCredits ?? 5;
+      res.json({
+        credits: demoUnlimited ? 999999 : (company?.routeCredits ?? 0),
+        weeklyBaseline: demoUnlimited ? 999999 : weeklyBaseline,
+      });
     } catch (err) { handleError(res, err); }
   });
 
@@ -5318,6 +5323,10 @@ Return ONLY valid JSON, no markdown.`,
       const demoUnlimitedCredits = !!(company as any).demoUnlimitedCredits;
       const isDemoCompanyForCredits = demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
 
+      // Tier-based weekly baseline: applying the full weekly optimizer costs the baseline amount
+      const tier = (company.subscriptionTier ?? "tier_1") as keyof typeof TIER_CONFIG;
+      const weeklyBaseline = TIER_CONFIG[tier]?.weeklyOptimizerCredits ?? 5;
+
       const daysToApply: DayPlan[] = acceptedDays && Array.isArray(acceptedDays)
         ? typedDays.filter(d => acceptedDays.includes(d.day))
         : typedDays;
@@ -5346,12 +5355,18 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "No valid stops to apply" });
       }
 
+      // Weekly optimizer costs the full tier baseline, regardless of the number of routes produced.
+      // If the user has already spent some credits this week and their balance is below the baseline,
+      // they need to top up to reach the baseline before applying.
+      const creditsToCharge = weeklyBaseline;
       const currentCredits = company.routeCredits ?? 0;
-      if (!isDemoCompanyForCredits && currentCredits < totalRoutes) {
+      if (!isDemoCompanyForCredits && currentCredits < creditsToCharge) {
         return res.status(402).json({
           error: "Insufficient route credits",
-          creditsRequired: totalRoutes,
+          creditsRequired: creditsToCharge,
           creditsAvailable: currentCredits,
+          weeklyBaseline,
+          topUpNeeded: creditsToCharge - currentCredits,
         });
       }
 
@@ -5429,7 +5444,7 @@ Return ONLY valid JSON, no markdown.`,
       }
 
       if (!isDemoCompanyForCredits) {
-        await storage.updateCompany(companyId, { routeCredits: currentCredits - totalRoutes });
+        await storage.updateCompany(companyId, { routeCredits: currentCredits - creditsToCharge });
       }
 
       // Respond immediately — visit regeneration runs in the background so the
@@ -5439,8 +5454,9 @@ Return ONLY valid JSON, no markdown.`,
         routesCreated,
         routesRemoved,
         stopsUpdated,
-        creditsUsed: isDemoCompanyForCredits ? 0 : totalRoutes,
-        creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - totalRoutes,
+        creditsUsed: isDemoCompanyForCredits ? 0 : creditsToCharge,
+        creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - creditsToCharge,
+        weeklyBaseline,
       });
 
       // Background: delete stale visits and regenerate for the next 6 months.

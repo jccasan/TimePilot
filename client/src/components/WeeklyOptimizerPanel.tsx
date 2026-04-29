@@ -137,10 +137,11 @@ function formatMinutes(mins: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-export function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredits, weekStart }: {
+export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseline = 5, onNeedCredits, weekStart }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   credits: number;
+  weeklyBaseline?: number;
   onNeedCredits: () => void;
   weekStart?: string;
 }) {
@@ -160,11 +161,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredit
     ? new Set(result.movedStops.map(m => m.contactName)).size
     : 0;
 
-  const acceptedCredits = result
-    ? result.proposed.days
-        .filter(d => acceptedDays.has(d.day))
-        .reduce((sum, d) => sum + d.routes.length, 0)
-    : 0;
+  const acceptedCredits = result && acceptedDays.size > 0 ? weeklyBaseline : 0;
 
   useEffect(() => {
     if (result && result.movedStops.length > 0) {
@@ -550,12 +547,23 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, onNeedCredit
           <>
             <Separator className="mt-2" />
             <div className="flex items-center justify-between gap-3 pt-2" data-testid="dialog-confirm-apply-weekly">
-              <div className="text-sm text-muted-foreground">
-                {credits !== Infinity && (
-                  <span>
-                    <span className="font-semibold text-foreground" data-testid="text-credits-required">{acceptedCredits}</span>
-                    {" "}credits · {credits} available
-                  </span>
+              <div className="text-sm text-muted-foreground flex flex-col gap-0.5">
+                {credits !== Infinity && acceptedDays.size > 0 && (
+                  <>
+                    <span>
+                      <span className="font-semibold text-foreground" data-testid="text-credits-required">{weeklyBaseline}</span>
+                      {" "}credits · {credits} available
+                    </span>
+                    {credits < weeklyBaseline && (
+                      <button
+                        className="text-xs text-primary underline underline-offset-2 text-left"
+                        onClick={onNeedCredits}
+                        data-testid="button-topup-inline"
+                      >
+                        Need {weeklyBaseline - credits} more — top up
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
               <div className="flex items-center gap-2">

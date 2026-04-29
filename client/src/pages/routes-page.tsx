@@ -883,11 +883,21 @@ function SavingsSummaryDialog({ open, onOpenChange, result }: {
   );
 }
 
-function PurchaseCreditsDialog({ open, onOpenChange, onPurchase, isPurchasing }: {
+function PurchaseCreditsDialog({ open, onOpenChange, onPurchase, isPurchasing, topUpNeeded = 0, weeklyBaseline = 0 }: {
   open: boolean; onOpenChange: (open: boolean) => void;
   onPurchase: (amount: number) => void; isPurchasing: boolean;
+  topUpNeeded?: number; weeklyBaseline?: number;
 }) {
   const [amount, setAmount] = useState(10);
+
+  useEffect(() => {
+    if (open && topUpNeeded > 0) {
+      const packs = [5, 10, 25, 50];
+      const suggested = packs.find(p => p >= topUpNeeded) ?? topUpNeeded;
+      setAmount(suggested);
+    }
+  }, [open, topUpNeeded]);
+
   const packs = [
     { credits: 5, label: "5 Credits" },
     { credits: 10, label: "10 Credits" },
@@ -904,9 +914,17 @@ function PurchaseCreditsDialog({ open, onOpenChange, onPurchase, isPurchasing }:
             Purchase Route Credits
           </DialogTitle>
           <DialogDescription>
-            Each credit optimizes one route of up to 30 stops. Routes with 31-60 stops require 2 credits.
+            {topUpNeeded > 0 && weeklyBaseline > 0
+              ? `Running the Weekly Optimizer uses ${weeklyBaseline} credits. You need ${topUpNeeded} more credit${topUpNeeded !== 1 ? "s" : ""} to proceed.`
+              : "Each credit optimizes one route of up to 30 stops. Routes with 31-60 stops require 2 credits."
+            }
           </DialogDescription>
         </DialogHeader>
+        {topUpNeeded > 0 && (
+          <div className="rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-3 py-2 text-sm text-amber-800 dark:text-amber-200" data-testid="text-topup-notice">
+            Top up at least <span className="font-semibold">{topUpNeeded} credit{topUpNeeded !== 1 ? "s" : ""}</span> to unlock the Weekly Optimizer.
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2">
           {packs.map(p => (
             <Button key={p.credits} variant={amount === p.credits ? "default" : "outline"}
@@ -914,7 +932,7 @@ function PurchaseCreditsDialog({ open, onOpenChange, onPurchase, isPurchasing }:
               data-testid={`button-pack-${p.credits}`}
             >
               <span className="text-lg font-bold">{p.credits}</span>
-              <span className="text-xs">credits</span>
+              <span className="text-xs">{topUpNeeded > 0 && p.credits < topUpNeeded ? "not enough" : "credits"}</span>
             </Button>
           ))}
         </div>
@@ -987,8 +1005,9 @@ export default function RoutesPage() {
   const { data: contacts = [] } = useQuery<Contact[]>({ queryKey: ["/api/contacts"] });
   const { data: properties = [] } = useQuery<Property[]>({ queryKey: ["/api/properties"] });
   const { data: team = [] } = useQuery<TeamMember[]>({ queryKey: ["/api/company/team"] });
-  const { data: creditData } = useQuery<{ credits: number }>({ queryKey: ["/api/route-credits"] });
+  const { data: creditData } = useQuery<{ credits: number; weeklyBaseline: number }>({ queryKey: ["/api/route-credits"] });
   const credits = creditData?.credits ?? 0;
+  const weeklyBaseline = creditData?.weeklyBaseline ?? 5;
   const { data: company } = useQuery<{ name: string; maxStopsPerRoute?: number | null }>({ queryKey: ["/api/company"] });
   const [maxStopsInput, setMaxStopsInput] = useState<string>("");
   const [isApplyingSplit, setIsApplyingSplit] = useState(false);
@@ -2015,7 +2034,9 @@ export default function RoutesPage() {
       <SavingsSummaryDialog open={showSavings} onOpenChange={setShowSavings} result={savingsResult} />
       <PurchaseCreditsDialog open={showPurchase} onOpenChange={setShowPurchase}
         onPurchase={(amount) => purchaseCreditsMutation.mutate(amount)}
-        isPurchasing={purchaseCreditsMutation.isPending} />
+        isPurchasing={purchaseCreditsMutation.isPending}
+        topUpNeeded={weeklyBaseline > credits ? weeklyBaseline - credits : 0}
+        weeklyBaseline={weeklyBaseline} />
 
       <RouteVisitDetailSheet
         visit={detailVisit}
@@ -2043,6 +2064,7 @@ export default function RoutesPage() {
           open={showWeeklyOptimizer}
           onOpenChange={setShowWeeklyOptimizer}
           credits={credits}
+          weeklyBaseline={weeklyBaseline}
           onNeedCredits={() => setShowPurchase(true)}
           weekStart={weekStartStr}
         />
