@@ -19685,6 +19685,11 @@ Respond with exactly one category from the list above and nothing else.`;
     setInterval(() => runTrialExpirationCheck().catch(console.error), 60 * 60 * 1000);
   });
 
+  import("./jobs/retell-webhook-check").then(({ runRetellWebhookCheck }) => {
+    setTimeout(() => runRetellWebhookCheck().catch(console.error), 60000);
+    setInterval(() => runRetellWebhookCheck().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
   async function syncSeatUsageToStripe(): Promise<void> {
     try {
       const allCompanies = await storage.listCompanies();
