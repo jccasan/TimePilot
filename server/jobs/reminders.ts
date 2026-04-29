@@ -101,9 +101,10 @@ export async function runReminders() {
 
   for (const company of allCompanies) {
     if (!company.remindersEnabled) continue;
-    if (company.clientNotificationsSuppressed) {
-      console.log(`[reminders] Skipping company ${company.id} — client notifications suppressed (Import Mode on)`);
-      continue;
+
+    const suppressEmail = !!(company as any).clientNotificationsSuppressed;
+    if (suppressEmail) {
+      console.log(`[reminders] Email suppressed for company ${company.id} (Import Mode on) — SMS reminders still active`);
     }
 
     try {
@@ -113,7 +114,7 @@ export async function runReminders() {
       const coveredTimings = new Set(activeRules.map(r => r.timing));
 
       for (const rule of activeRules) {
-        const count = await sendServiceRemindersForRule(company.id, company.name, company.email, tz, rule, false);
+        const count = await sendServiceRemindersForRule(company.id, company.name, company.email, tz, rule, false, suppressEmail);
         totalServiceReminders += count;
       }
 
@@ -129,12 +130,12 @@ export async function runReminders() {
         if (timing === "custom") {
           fallbackRule.customHours = 4;
         }
-        const count = await sendServiceRemindersForRule(company.id, company.name, company.email, tz, fallbackRule, true);
+        const count = await sendServiceRemindersForRule(company.id, company.name, company.email, tz, fallbackRule, true, suppressEmail);
         totalServiceReminders += count;
       }
 
       const invoiceSettings: InvoiceReminderSettings = company.invoiceReminderSettings || DEFAULT_INVOICE_SETTINGS;
-      const invoiceCount = await sendInvoiceReminders(company.id, company.name, company.email, tz, invoiceSettings);
+      const invoiceCount = await sendInvoiceReminders(company.id, company.name, company.email, tz, invoiceSettings, suppressEmail);
       totalInvoiceReminders += invoiceCount;
     } catch (err) {
       errors++;
@@ -234,7 +235,8 @@ async function sendServiceRemindersForRule(
   companyEmail: string | null | undefined,
   timezone: string,
   rule: ReminderRule,
-  contactOverrideOnly: boolean = false
+  contactOverrideOnly: boolean = false,
+  suppressEmail: boolean = false
 ): Promise<number> {
   const isMorningOf = rule.timing === "morning_of";
   const todayStr = getCompanyToday(timezone);
@@ -330,7 +332,7 @@ async function sendServiceRemindersForRule(
       const emailAlreadySent = wantsEmail && await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "email");
       const smsAlreadySent = wantsSms && await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "sms");
 
-      const needEmail = wantsEmail && !emailAlreadySent;
+      const needEmail = wantsEmail && !emailAlreadySent && !suppressEmail;
       const needSms = wantsSms && !smsAlreadySent && !smsQuiet;
 
       if (!needEmail && !needSms) continue;
@@ -473,7 +475,8 @@ async function sendInvoiceReminders(
   companyName: string,
   companyEmail: string | null | undefined,
   timezone: string,
-  settings: InvoiceReminderSettings
+  settings: InvoiceReminderSettings,
+  suppressEmail: boolean = false
 ): Promise<number> {
   const todayStr = getCompanyToday(timezone);
 
@@ -555,7 +558,7 @@ async function sendInvoiceReminders(
       )
     ).limit(1)).length > 0;
 
-    const needEmail = canEmail && !emailAlreadyLogged;
+    const needEmail = canEmail && !emailAlreadyLogged && !suppressEmail;
     const needSms = canSms && !smsAlreadyLogged && !smsQuiet;
 
     if (!needEmail && !needSms) continue;

@@ -11649,9 +11649,9 @@ Rules:
       const baseUrl = getBaseUrl(req);
       const portalUrl = `${baseUrl}/portal`;
 
-      if (company?.clientNotificationsSuppressed) {
-        console.log(`[send-payment-reminder] Suppressed for contact ${p(req.params.id)} — Import Mode on`);
-        return res.json({ success: true, smsSent: false, emailSent: false, totalOwed, suppressed: true });
+      const emailSuppressed = !!(company?.clientNotificationsSuppressed);
+      if (emailSuppressed) {
+        console.log(`[send-payment-reminder] Email suppressed for contact ${p(req.params.id)} — Import Mode on; SMS still active`);
       }
 
       let smsSent = false;
@@ -11663,7 +11663,7 @@ Rules:
         smsSent = true;
       }
 
-      if (contact.email && !smsSent) {
+      if (contact.email && !smsSent && !emailSuppressed) {
         const subject = `Payment Reminder from ${companyName}`;
         const text = `Hi ${contactName},\n\nThis is a reminder that you have an outstanding balance of $${totalOwed.toFixed(2)} with ${companyName}.\n\nPay online at: ${portalUrl}\n\nThank you!`;
         const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><h3>Payment Reminder</h3><p>Hi ${contactName},</p><p>This is a friendly reminder that you have an outstanding balance of <strong>$${totalOwed.toFixed(2)}</strong> with ${companyName}.</p><p><a href="${portalUrl}" style="background:#2d8a5e;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Pay Online</a></p><p>Thank you!</p></div>`;
@@ -11671,11 +11671,11 @@ Rules:
         emailSent = true;
       }
 
-      if (!smsSent && !emailSent) {
+      if (!smsSent && !emailSent && !emailSuppressed) {
         return res.status(400).json({ error: "Contact has no phone or email to send a reminder to" });
       }
 
-      res.json({ success: true, smsSent, emailSent, totalOwed });
+      res.json({ success: true, smsSent, emailSent, suppressed: emailSuppressed && !smsSent, totalOwed });
     } catch (err) { handleError(res, err); }
   });
 
