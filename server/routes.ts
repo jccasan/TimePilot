@@ -73,6 +73,8 @@ import {
   type InsertQuote,
   type InsertJob,
   type InsertAgreement,
+  reviewTokens,
+  reviewResponses,
 } from "@shared/schema";
 
 const CHANGE_PASSWORD_EXEMPT_PATHS = ["/api/auth/change-password", "/api/auth/user", "/api/auth/logout"];
@@ -460,6 +462,7 @@ export async function registerRoutes(
     "/api/password/",
     "/api/create-tenant",
     "/api/public/",
+    "/api/review/",
   ];
   const GATE_READ_EXEMPT_PREFIXES = [
     "/api/company/stats",
@@ -2452,7 +2455,25 @@ Return ONLY valid JSON, no markdown.`,
         .select({ count: sql<number>`count(*)::int` })
         .from(contacts)
         .where(and(eq(contacts.companyId, companyId), eq(contacts.googleReviewLeft, true)));
-      res.json({ totalSent: totalResult?.count ?? 0, sentThisMonth: monthResult?.count ?? 0, totalReviewsLeft: reviewsLeftResult?.count ?? 0 });
+      const positiveResult = await db.execute(sql`
+        SELECT COUNT(*)::int AS count FROM review_responses rr
+        JOIN review_tokens rt ON rt.id = rr.token_id
+        WHERE rt.company_id = ${companyId} AND rr.branch = 'positive'
+          AND rr.submitted_at >= ${monthStart}
+      `);
+      const negativeResult = await db.execute(sql`
+        SELECT COUNT(*)::int AS count FROM review_responses rr
+        JOIN review_tokens rt ON rt.id = rr.token_id
+        WHERE rt.company_id = ${companyId} AND rr.branch = 'negative'
+          AND rr.submitted_at >= ${monthStart}
+      `);
+      res.json({
+        totalSent: totalResult?.count ?? 0,
+        sentThisMonth: monthResult?.count ?? 0,
+        totalReviewsLeft: reviewsLeftResult?.count ?? 0,
+        positiveCount: Number((positiveResult?.rows?.[0] as Record<string, unknown>)?.count ?? 0),
+        negativeCount: Number((negativeResult?.rows?.[0] as Record<string, unknown>)?.count ?? 0),
+      });
     } catch (err) { handleError(res, err); }
   });
 
@@ -2569,6 +2590,7 @@ Return ONLY valid JSON, no markdown.`,
         "country", "currency", "taxRatePercent",
         "billingCadence", "billingTrigger", "defaultPaymentBehavior",
         "reviewRequestEnabled", "googleReviewUrl", "reviewRequestAfterVisits", "reviewRequestCustomMessage",
+        "reviewRouterEnabled",
         "clientNotificationsSuppressed", "onboardingCompleteSentAt"];
       const updates: any = {};
       for (const key of allowed) {
@@ -6836,6 +6858,184 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  // ─── Public Review Router endpoints (no auth required) ───────────────────
+
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#x27;");
+  }
+
+  app.get("/api/review/token/:token", async (req: Request, res: Response) => {
+    try {
+      const token = String(req.params.token);
+      const [row] = await db.select().from(reviewTokens).where(eq(reviewTokens.token, token)).limit(1);
+      if (!row) return res.status(404).json({ error: "Invalid review link" });
+      if (row.expiresAt < new Date()) return res.status(410).json({ error: "This review link has expired" });
+      if (row.usedAt) return res.status(410).json({ error: "This review link has already been used" });
+      const company = await storage.getCompany(row.companyId);
+      const contact = await storage.getContact(row.contactId, row.companyId);
+      res.json({
+        valid: true,
+        used: false,
+        companyName: company?.name || "Your service provider",
+        companyLogoUrl: company?.logoUrl || null,
+        contactFirstName: contact?.firstName || "there",
+        googleReviewUrl: row.googleReviewUrl || company?.googleReviewUrl || null,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/review/rate", async (req: Request, res: Response) => {
+    try {
+      const { token, rating } = req.body;
+      if (!token || !rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ error: "token and rating (1-5) are required" });
+      }
+      const [row] = await db.select().from(reviewTokens).where(eq(reviewTokens.token, token)).limit(1);
+      if (!row) return res.status(404).json({ error: "Invalid review link" });
+      if (row.expiresAt < new Date()) return res.status(410).json({ error: "This review link has expired" });
+      const [consumed] = await db.update(reviewTokens)
+        .set({ usedAt: new Date() })
+        .where(and(eq(reviewTokens.token, token), sql`used_at IS NULL`))
+        .returning({ id: reviewTokens.id });
+      if (!consumed) return res.status(410).json({ error: "This review link has already been used" });
+      const branch = rating >= 4 ? "positive" : "negative";
+      await db.insert(reviewResponses).values({
+        tokenId: consumed.id,
+        rating,
+        feedbackText: null,
+        branch,
+        alertSent: false,
+      });
+      const company = await storage.getCompany(row.companyId);
+      res.json({
+        tokenId: consumed.id,
+        branch,
+        googleReviewUrl: row.googleReviewUrl || company?.googleReviewUrl || null,
+      });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/review/submit", async (req: Request, res: Response) => {
+    try {
+      const { token, feedbackText } = req.body;
+      if (!token) {
+        return res.status(400).json({ error: "token is required" });
+      }
+      if (!feedbackText || feedbackText.trim().length < 10) {
+        return res.status(400).json({ error: "Please provide at least 10 characters of feedback" });
+      }
+      const [row] = await db.select().from(reviewTokens).where(eq(reviewTokens.token, token)).limit(1);
+      if (!row) return res.status(404).json({ error: "Invalid review link" });
+      if (row.expiresAt < new Date()) return res.status(410).json({ error: "This review link has expired" });
+      if (!row.usedAt) return res.status(400).json({ error: "Rating not yet recorded" });
+      const [existingResponse] = await db.select().from(reviewResponses).where(eq(reviewResponses.tokenId, row.id)).limit(1);
+      if (!existingResponse) return res.status(404).json({ error: "Rating not yet recorded" });
+      if (existingResponse.branch !== "negative") return res.status(400).json({ error: "Only negative responses require text feedback" });
+      if (existingResponse.alertSent || (existingResponse.feedbackText && existingResponse.feedbackText.trim().length > 0)) {
+        return res.status(409).json({ error: "Feedback already submitted" });
+      }
+      const updated = await db.update(reviewResponses)
+        .set({ feedbackText: feedbackText.trim(), submittedAt: new Date() })
+        .where(and(eq(reviewResponses.id, existingResponse.id), sql`feedback_text IS NULL`))
+        .returning();
+      if (updated.length === 0) {
+        return res.status(409).json({ error: "Feedback already submitted" });
+      }
+      try {
+        const company = await storage.getCompany(row.companyId);
+        const contact = await storage.getContact(row.contactId, row.companyId);
+        if (company && contact) {
+          const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+          const appBaseUrl = getAppBaseUrl();
+          const contactLink = `${appBaseUrl}/contacts/${contact.id}`;
+          const ownerEmails = await db.execute(sql`
+            SELECT u.email FROM users u
+            JOIN company_users cu ON cu.user_id = u.id
+            WHERE cu.company_id = ${row.companyId} AND cu.role = 'owner' AND cu.is_active = true AND u.email IS NOT NULL
+            LIMIT 3
+          `);
+          const safeContactName = escapeHtml(contactName);
+          const safeFeedback = escapeHtml(feedbackText.trim());
+          const emailSubject = `⚠️ Urgent: Customer Needs Attention — ${contactName}`;
+          const emailText = `A customer left a low rating and needs your attention.\n\nCustomer: ${contactName}\nRating: ${existingResponse.rating}/5 stars\nFeedback: ${feedbackText.trim()}\n\nView contact: ${contactLink}`;
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #dc2626; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 20px;">⚠️ Customer Needs Attention</h1>
+              </div>
+              <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+                <p style="margin: 0 0 16px; color: #111827; font-size: 15px;">A customer left a low rating and needs your personal follow-up.</p>
+                <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                  <p style="margin: 4px 0; font-size: 14px;"><strong>Customer:</strong> ${safeContactName}</p>
+                  <p style="margin: 4px 0; font-size: 14px;"><strong>Rating:</strong> ${"⭐".repeat(existingResponse.rating)} (${existingResponse.rating}/5)</p>
+                  <p style="margin: 4px 0; font-size: 14px;"><strong>Feedback:</strong> ${safeFeedback}</p>
+                </div>
+                <div style="text-align: center;">
+                  <a href="${contactLink}" style="display: inline-block; background-color: #dc2626; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px;">View Customer in CRM</a>
+                </div>
+              </div>
+            </div>
+          `;
+          for (const emailRow of ownerEmails.rows) {
+            const ownerEmail = String((emailRow as Record<string, unknown>).email ?? "");
+            if (ownerEmail) {
+              await sendEmail({ to: ownerEmail, subject: emailSubject, text: emailText, html: emailHtml, companyId: row.companyId });
+            }
+          }
+          const smsConfigured = await isSmsConfiguredForCompany(row.companyId);
+          if (smsConfigured) {
+            const ownerPhones = await db.execute(sql`
+              SELECT u.phone FROM users u
+              JOIN company_users cu ON cu.user_id = u.id
+              WHERE cu.company_id = ${row.companyId} AND cu.role = 'owner' AND cu.is_active = true AND u.phone IS NOT NULL
+              LIMIT 3
+            `);
+            const smsBody = `Action needed: ${contactName} left a ${existingResponse.rating}-star rating that needs your attention. Check your email or log in to ScooPilot.`;
+            for (const phoneRow of ownerPhones.rows) {
+              const ownerPhone = String((phoneRow as Record<string, unknown>).phone ?? "");
+              if (ownerPhone) {
+                await sendSmsForCompany({ to: ownerPhone, body: smsBody, companyId: row.companyId }).catch((e) => console.error("[ReviewAlert] SMS failed:", e));
+              }
+            }
+          }
+          await db.update(reviewResponses).set({ alertSent: true }).where(eq(reviewResponses.id, existingResponse.id));
+        }
+      } catch (alertErr) {
+        console.error("[ReviewAlert] Failed to send owner alert:", alertErr);
+      }
+      res.json({ success: true, branch: existingResponse.branch });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/review/responses", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const rows = await db.execute(sql`
+        SELECT rr.id, rr.rating, rr.feedback_text, rr.branch, rr.submitted_at, rr.alert_sent,
+               rt.contact_id, rt.token,
+               c.first_name, c.last_name
+        FROM review_responses rr
+        JOIN review_tokens rt ON rt.id = rr.token_id
+        JOIN contacts c ON c.id = rt.contact_id
+        WHERE rt.company_id = ${companyId}
+          AND rr.branch = 'negative'
+          AND rr.feedback_text IS NOT NULL
+          AND length(trim(coalesce(rr.feedback_text, ''))) > 0
+        ORDER BY rr.submitted_at DESC
+        LIMIT 50
+      `);
+      res.json(rows.rows);
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ─── End public Review Router endpoints ─────────────────────────────────
+
   async function maybeFireReviewRequest(companyId: string, contactId: string, visitId: string) {
     try {
       const company = await storage.getCompany(companyId);
@@ -6850,13 +7050,28 @@ Return ONLY valid JSON, no markdown.`,
       const currentCount = contact.visitsSinceLastReviewRequest ?? 0;
       const newCount = currentCount + 1;
       if (newCount >= threshold) {
+        const useRouter = company.reviewRouterEnabled !== false;
+        let reviewLink = company.googleReviewUrl;
+        if (useRouter) {
+          const token = crypto.randomUUID();
+          const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+          await db.insert(reviewTokens).values({
+            companyId,
+            contactId,
+            token,
+            expiresAt,
+            googleReviewUrl: company.googleReviewUrl,
+          });
+          const appBase = getAppBaseUrl();
+          reviewLink = `${appBase}/review/${token}`;
+        }
         const customMsg = company.reviewRequestCustomMessage;
         const message = customMsg
           ? customMsg
               .replace(/\{firstName\}/g, contact.firstName)
               .replace(/\{companyName\}/g, company.name)
-              .replace(/\{reviewLink\}/g, company.googleReviewUrl)
-          : `Hi ${contact.firstName}! We'd love to hear about your experience with ${company.name}. Would you mind leaving us a quick Google review? It really helps! ${company.googleReviewUrl}`;
+              .replace(/\{reviewLink\}/g, reviewLink)
+          : `Hi ${contact.firstName}! We'd love to hear about your experience with ${company.name}. Would you mind leaving us a quick Google review? It really helps! ${reviewLink}`;
         if (contact.phone) {
           try {
             await sendSmsForCompany({ to: contact.phone, body: message, companyId, contactId: contact.id });

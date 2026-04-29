@@ -246,6 +246,7 @@ export const companies = pgTable("companies", {
   demoAutoPayInvoices: boolean("demo_auto_pay_invoices").notNull().default(false),
   demoLivePlaybackEnabled: boolean("demo_live_playback_enabled").notNull().default(false),
   reviewRequestEnabled: boolean("review_request_enabled").notNull().default(false),
+  reviewRouterEnabled: boolean("review_router_enabled").notNull().default(true),
   googleReviewUrl: text("google_review_url"),
   reviewRequestAfterVisits: integer("review_request_after_visits").notNull().default(3),
   reviewRequestCustomMessage: text("review_request_custom_message"),
@@ -1963,6 +1964,43 @@ export const apiUsageDaily = pgTable("api_usage_daily", {
   index("idx_api_usage_daily_provider").on(table.provider),
   uniqueIndex("idx_api_usage_daily_uniq").on(table.date, table.provider, table.metric),
 ]);
+
+export const reviewTokens = pgTable("review_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 36 }).notNull().unique(),
+  googleReviewUrl: text("google_review_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+}, (table) => [
+  index("idx_rt_token").on(table.token),
+  index("idx_rt_company").on(table.companyId),
+  index("idx_rt_contact").on(table.contactId),
+]);
+
+export const insertReviewTokenSchema = createInsertSchema(reviewTokens).omit({ id: true, createdAt: true });
+export type ReviewToken = typeof reviewTokens.$inferSelect;
+export type InsertReviewToken = z.infer<typeof insertReviewTokenSchema>;
+
+export const reviewBranchEnum = pgEnum("review_branch", ["positive", "negative"]);
+
+export const reviewResponses = pgTable("review_responses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tokenId: varchar("token_id").notNull().references(() => reviewTokens.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(),
+  feedbackText: text("feedback_text"),
+  branch: reviewBranchEnum("branch").notNull(),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  alertSent: boolean("alert_sent").notNull().default(false),
+}, (table) => [
+  index("idx_rr_token").on(table.tokenId),
+]);
+
+export const insertReviewResponseSchema = createInsertSchema(reviewResponses).omit({ id: true, submittedAt: true });
+export type ReviewResponse = typeof reviewResponses.$inferSelect;
+export type InsertReviewResponse = z.infer<typeof insertReviewResponseSchema>;
 
 export const geocodeCacheTable = pgTable("geocode_cache", {
   addressKey: varchar("address_key", { length: 512 }).primaryKey(),

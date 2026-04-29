@@ -73,6 +73,7 @@ const Pipeline = lazy(() => import("@/pages/pipeline"));
 const BusinessOverview = lazy(() => import("@/pages/business-overview"));
 const OnboardingForm = lazy(() => import("@/pages/onboarding-form"));
 const PendingApproval = lazy(() => import("@/pages/pending-approval"));
+const ReviewRouter = lazy(() => import("@/pages/review-router"));
 
 function PageLoader() {
   return (
@@ -587,6 +588,13 @@ function AppContent() {
 
   const isSmsTermsPath = typeof window !== "undefined" &&
     window.location.pathname === "/sms-terms";
+
+  const isReviewPath = typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/review/");
+
+  if (isReviewPath) {
+    return <Suspense fallback={<PageLoader />}><ReviewRouter /></Suspense>;
+  }
 
   if (isPrivacyPolicyPath) {
     return <Suspense fallback={<PageLoader />}><PrivacyPolicy /></Suspense>;

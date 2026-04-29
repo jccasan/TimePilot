@@ -88,6 +88,7 @@ type Company = {
   defaultPaymentBehavior: string;
   settingsLayout?: any;
   reviewRequestEnabled?: boolean;
+  reviewRouterEnabled?: boolean;
   googleReviewUrl?: string | null;
   reviewRequestAfterVisits?: number;
   reviewRequestCustomMessage?: string | null;
@@ -2408,12 +2409,29 @@ function QuoteAutoFollowUpSection({ company }: { company: Company | null }) {
   );
 }
 
+type ReviewResponseRow = {
+  id: string;
+  rating: number;
+  feedback_text: string | null;
+  branch: string;
+  submitted_at: string;
+  alert_sent: boolean;
+  contact_id: string;
+  token: string;
+  first_name: string;
+  last_name: string;
+};
+
 function GoogleReviewsSection({ company }: { company: Company | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data: stats } = useQuery<{ totalSent: number; sentThisMonth: number; totalReviewsLeft: number }>({
+  const { data: stats } = useQuery<{ totalSent: number; sentThisMonth: number; totalReviewsLeft: number; positiveCount?: number; negativeCount?: number }>({
     queryKey: ["/api/company/review-request-stats"],
+  });
+
+  const { data: reviewResponses } = useQuery<ReviewResponseRow[]>({
+    queryKey: ["/api/review/responses"],
   });
 
   const [reviewUrl, setReviewUrl] = useState(company?.googleReviewUrl || "");
@@ -2432,6 +2450,12 @@ function GoogleReviewsSection({ company }: { company: Company | null }) {
     onError: () => toast({ title: "Error", description: "Could not update setting", variant: "destructive" }),
   });
 
+  const routerToggleMutation = useMutation({
+    mutationFn: (checked: boolean) => apiRequest("PATCH", "/api/company", { reviewRouterEnabled: checked }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/company"] }); },
+    onError: () => toast({ title: "Error", description: "Could not update setting", variant: "destructive" }),
+  });
+
   const saveMutation = useMutation({
     mutationFn: (data: { googleReviewUrl?: string; reviewRequestAfterVisits?: number; reviewRequestCustomMessage?: string }) =>
       apiRequest("PATCH", "/api/company", data),
@@ -2443,6 +2467,7 @@ function GoogleReviewsSection({ company }: { company: Company | null }) {
   });
 
   const isEnabled = company?.reviewRequestEnabled ?? false;
+  const isRouterEnabled = company?.reviewRouterEnabled !== false;
   const defaultMsg = `Hi {firstName}! We'd love to hear about your experience with {companyName}. Would you mind leaving us a quick Google review? It really helps! {reviewLink}`;
   const previewMsg = (customMsg || defaultMsg)
     .replace(/\{firstName\}/g, "Alex")
@@ -2495,6 +2520,37 @@ function GoogleReviewsSection({ company }: { company: Company | null }) {
             </div>
           )}
 
+          {stats && (stats.positiveCount !== undefined || stats.negativeCount !== undefined) && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-green-50 dark:bg-green-950 rounded-lg p-3 text-center border border-green-200 dark:border-green-800">
+                <p className="text-2xl font-bold text-green-700 dark:text-green-300" data-testid="stat-review-positive">{stats.positiveCount ?? 0}</p>
+                <p className="text-xs text-green-600 dark:text-green-400">Positive this month</p>
+              </div>
+              <div className="bg-red-50 dark:bg-red-950 rounded-lg p-3 text-center border border-red-200 dark:border-red-800">
+                <p className="text-2xl font-bold text-red-700 dark:text-red-300" data-testid="stat-review-negative">{stats.negativeCount ?? 0}</p>
+                <p className="text-xs text-red-600 dark:text-red-400">Needs attention this month</p>
+              </div>
+            </div>
+          )}
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="font-medium">Use Review Router</Label>
+              <p className="text-xs text-muted-foreground">
+                Recommended — captures sentiment first, then routes happy customers to Google and unhappy customers to a private recovery form.
+              </p>
+            </div>
+            <Switch
+              checked={isRouterEnabled}
+              onCheckedChange={(checked) => routerToggleMutation.mutate(checked)}
+              data-testid="switch-review-router-enabled"
+            />
+          </div>
+
+          <Separator />
+
           <div className="space-y-2">
             <Label htmlFor="google-review-url">Google Review Link</Label>
             <Input
@@ -2536,7 +2592,7 @@ function GoogleReviewsSection({ company }: { company: Company | null }) {
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
               <Label className="font-medium">SMS Message Template</Label>
             </div>
-            <p className="text-xs text-muted-foreground">Leave blank to use the default message</p>
+            <p className="text-xs text-muted-foreground">Leave blank to use the default message. Use <code className="bg-muted px-1 rounded text-xs">{"{reviewLink}"}</code> — it resolves to the router link when Review Router is on.</p>
             <Textarea
               placeholder={defaultMsg}
               value={customMsg}
@@ -2575,6 +2631,59 @@ function GoogleReviewsSection({ company }: { company: Company | null }) {
             {saveMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
             Save Settings
           </Button>
+
+          {reviewResponses && reviewResponses.length > 0 && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                  <Label className="font-medium">Recent Negative Feedback</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">Customers who left 1–3 stars via the Review Router this cycle.</p>
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <Table data-testid="table-review-responses">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Rating</TableHead>
+                        <TableHead>Feedback</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {reviewResponses.map((row) => (
+                        <TableRow key={row.id} data-testid={`row-review-response-${row.id}`}>
+                          <TableCell className="font-medium whitespace-nowrap">
+                            {row.first_name} {row.last_name}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-yellow-500">{"⭐".repeat(row.rating)}</span>
+                          </TableCell>
+                          <TableCell className="max-w-xs">
+                            <span className="text-sm text-muted-foreground line-clamp-2">
+                              {row.feedback_text || "—"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-muted-foreground text-sm">
+                            {new Date(row.submitted_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <Link href={`/contacts/${row.contact_id}`}>
+                              <Button variant="ghost" size="sm" data-testid={`button-view-contact-${row.id}`}>
+                                View
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       )}
     </Card>

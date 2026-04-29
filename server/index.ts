@@ -1864,6 +1864,32 @@ async function ensureRetellWebhookRepairsTable() {
   }
 }
 
+async function ensureReviewTokenGoogleUrl() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`ALTER TABLE review_tokens ADD COLUMN IF NOT EXISTS google_review_url TEXT`);
+    console.log("[Migration] review_tokens google_review_url column verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure review_tokens google_review_url column:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
+async function ensureUserColumns() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_email_sent_at TIMESTAMP`);
+    console.log("[Migration] users onboarding_email_sent_at column verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure users onboarding_email_sent_at column:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function seedHistoricalDemoData() {
   try {
     const { Pool } = await import("pg");
@@ -2098,6 +2124,8 @@ async function auditRetellWebhooks() {
   await ensureErrorReportsTable();
   await ensureCompanyNotificationColumns();
   await ensureRetellWebhookRepairsTable();
+  await ensureReviewTokenGoogleUrl();
+  await ensureUserColumns();
   await ensureVisitEnRouteAtColumn();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
