@@ -1,10 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, Contact2, CalendarCheck, DollarSign, ChevronRight, BarChart3, ArrowRight, AlertTriangle, Bug } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Building2, Users, Contact2, CalendarCheck, DollarSign, ChevronRight, BarChart3, ArrowRight, AlertTriangle, Bug, Webhook, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
-import { adminFetchFn } from "@/lib/adminApi";
+import { adminFetchFn, adminRequest } from "@/lib/adminApi";
+import { useToast } from "@/hooks/use-toast";
 
 const tierColors: Record<string, string> = {
   tier_starter: "bg-teal-100 text-teal-800 dark:bg-teal-800 dark:text-teal-200",
@@ -16,6 +18,9 @@ const tierColors: Record<string, string> = {
 };
 
 export default function AdminDashboard() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
   const { data: stats, isLoading: statsLoading } = useQuery<{
     totalCompanies: number;
     totalUsers: number;
@@ -41,6 +46,38 @@ export default function AdminDashboard() {
     queryKey: ["/api/admin/error-reports/stats"],
     queryFn: adminFetchFn("/api/admin/error-reports/stats"),
     refetchInterval: 60000,
+  });
+
+  const { data: webhookStatus } = useQuery<{
+    configured: boolean;
+    agentId?: string;
+    registeredUrl?: string | null;
+    expectedUrl?: string | null;
+    inSync?: boolean;
+    fetchError?: string | null;
+    reason?: string;
+  }>({
+    queryKey: ["/api/admin/retell/webhook-status"],
+    queryFn: adminFetchFn("/api/admin/retell/webhook-status"),
+    refetchInterval: 120000,
+  });
+
+  const syncWebhookMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminRequest("POST", "/api/admin/retell/sync-webhook");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Webhook synced", description: "The Retell webhook URL has been updated successfully." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/retell/webhook-status"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const recentTenants = (companies || [])
@@ -114,6 +151,73 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </Link>
+
+      {webhookStatus && (
+        <Card
+          className={`${webhookStatus.configured && webhookStatus.inSync === false ? "border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/10" : ""}`}
+          data-testid="card-retell-webhook-status"
+        >
+          <CardContent className="pt-5 pb-4 px-5">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-lg ${!webhookStatus.configured ? "bg-muted" : webhookStatus.inSync ? "bg-green-100 dark:bg-green-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
+                  <Webhook className={`h-5 w-5 ${!webhookStatus.configured ? "text-muted-foreground" : webhookStatus.inSync ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm">Retell Webhook</p>
+                    {webhookStatus.configured && webhookStatus.inSync !== undefined && (
+                      webhookStatus.inSync
+                        ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" data-testid="icon-webhook-in-sync" />
+                        : <XCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" data-testid="icon-webhook-out-of-sync" />
+                    )}
+                  </div>
+                  {!webhookStatus.configured ? (
+                    <p className="text-sm text-muted-foreground mt-0.5">{webhookStatus.reason || "Not configured"}</p>
+                  ) : (
+                    <div className="mt-1 space-y-0.5">
+                      {webhookStatus.fetchError ? (
+                        <p className="text-xs text-amber-700 dark:text-amber-400" data-testid="text-webhook-fetch-error">
+                          Could not reach Retell API: {webhookStatus.fetchError}
+                        </p>
+                      ) : (
+                        <>
+                          <p className="text-xs text-muted-foreground">
+                            <span className="font-medium">Registered:</span>{" "}
+                            <span data-testid="text-registered-url">{webhookStatus.registeredUrl || "—"}</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            <span className="font-medium">Expected:</span>{" "}
+                            <span data-testid="text-expected-url">{webhookStatus.expectedUrl || "—"}</span>
+                          </p>
+                          {webhookStatus.inSync === false && (
+                            <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mt-1" data-testid="text-webhook-mismatch">
+                              URL mismatch — re-sync to update the Retell agent
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {webhookStatus.configured && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => syncWebhookMutation.mutate()}
+                  disabled={syncWebhookMutation.isPending}
+                  data-testid="button-sync-retell-webhook"
+                  className="shrink-0"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncWebhookMutation.isPending ? "animate-spin" : ""}`} />
+                  {syncWebhookMutation.isPending ? "Syncing…" : "Sync Webhook"}
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid md:grid-cols-2 gap-4">
         <Link href="/admin/tenants">

@@ -43,7 +43,7 @@ import {
   isCustomerOnPlatform,
   ensureConnectedCustomer,
 } from "./services/stripe";
-import { seedRetellKnowledgeBase, provisionRetellNumber, registerRetellWebhook } from "./services/retell";
+import { seedRetellKnowledgeBase, provisionRetellNumber, registerRetellWebhook, checkRetellWebhookSync, getRetellAgentWebhookUrl, getAppBaseUrl } from "./services/retell";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress, getAutocompleteCached, setAutocompleteCache } from "./services/geocode";
 import { trackApiCall, getApiUsageStats } from "./services/api-usage";
@@ -16683,6 +16683,45 @@ Rules:
     } catch (err) { handleError(res, err); }
   });
 
+  app.get("/api/admin/retell/webhook-status", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const agentId = process.env.RETELL_AGENT_ID;
+      if (!agentId) {
+        return res.json({ configured: false, reason: "RETELL_AGENT_ID is not set" });
+      }
+      if (!process.env.RETELL_API_KEY) {
+        return res.json({ configured: false, reason: "RETELL_API_KEY is not set" });
+      }
+      const baseUrl = getAppBaseUrl();
+      const expectedUrl = baseUrl ? `${baseUrl}/api/webhooks/retell` : null;
+      let registeredUrl: string | null = null;
+      let fetchError: string | null = null;
+      try {
+        registeredUrl = await getRetellAgentWebhookUrl(agentId);
+      } catch (err: unknown) {
+        fetchError = err instanceof Error ? err.message : String(err);
+      }
+      const inSync = !fetchError && !!(expectedUrl && registeredUrl && registeredUrl === expectedUrl);
+      res.json({ configured: true, agentId, registeredUrl, expectedUrl, inSync, fetchError });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/admin/retell/sync-webhook", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const agentId = (req.body?.agentId as string | undefined) || process.env.RETELL_AGENT_ID;
+      if (!agentId) {
+        return res.status(400).json({ error: "No Retell agent ID provided and RETELL_AGENT_ID is not set" });
+      }
+      const baseUrl = getAppBaseUrl();
+      if (!baseUrl) {
+        return res.status(400).json({ error: "APP_BASE_URL is not configured — cannot determine the correct webhook URL" });
+      }
+      await registerRetellWebhook(agentId);
+      const webhookUrl = `${baseUrl}/api/webhooks/retell`;
+      res.json({ ok: true, agentId, webhookUrl });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.post("/api/admin/debug/run-reminders", isAdmin, async (_req: Request, res: Response) => {
     try {
       const { runReminders } = await import("./jobs/reminders");
@@ -19479,6 +19518,16 @@ Respond with exactly one category from the list above and nothing else.`;
     setTimeout(() => runNightlyRollup().catch(console.error), 30000);
     setInterval(() => runNightlyRollup().catch(console.error), 24 * 60 * 60 * 1000);
   });
+
+  setTimeout(() => {
+    const retellAgentId = process.env.RETELL_AGENT_ID;
+    const retellApiKey = process.env.RETELL_API_KEY;
+    if (retellAgentId && retellApiKey) {
+      checkRetellWebhookSync(retellAgentId).catch((err) =>
+        console.warn("[Retell] Startup webhook sync check failed:", err.message)
+      );
+    }
+  }, 15000);
 
   import("./jobs/message-cleanup").then(({ runMessageCleanup }) => {
     setTimeout(() => runMessageCleanup().catch(console.error), 120000);

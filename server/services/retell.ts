@@ -79,6 +79,16 @@ export async function provisionRetellNumber(params: {
   return provisionedNumber;
 }
 
+export async function getRetellAgentWebhookUrl(agentId: string): Promise<string | null> {
+  const res = await retellFetch(`/get-agent/${agentId}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Retell get-agent failed (${res.status}): ${body}`);
+  }
+  const data = await res.json() as { webhook_url?: string };
+  return data.webhook_url ?? null;
+}
+
 export async function registerRetellWebhook(agentId: string): Promise<void> {
   const baseUrl = getAppBaseUrl();
   if (!baseUrl) {
@@ -98,6 +108,34 @@ export async function registerRetellWebhook(agentId: string): Promise<void> {
   }
 
   console.log(`[Retell] Registered webhook URL "${webhookUrl}" on agent ${agentId}`);
+}
+
+export async function checkRetellWebhookSync(agentId: string): Promise<void> {
+  const baseUrl = getAppBaseUrl();
+  if (!baseUrl) {
+    console.warn("[Retell] Cannot check webhook sync: APP_BASE_URL is not configured");
+    return;
+  }
+
+  const expectedUrl = `${baseUrl}/api/webhooks/retell`;
+
+  try {
+    const registeredUrl = await getRetellAgentWebhookUrl(agentId);
+    if (!registeredUrl) {
+      console.warn(`[Retell] Webhook URL for agent ${agentId} is not set. Expected: ${expectedUrl}`);
+      await registerRetellWebhook(agentId);
+      console.log(`[Retell] Auto-corrected: registered missing webhook URL on agent ${agentId}`);
+    } else if (registeredUrl !== expectedUrl) {
+      console.warn(`[Retell] Webhook URL mismatch for agent ${agentId}. Registered: ${registeredUrl} | Expected: ${expectedUrl}`);
+      await registerRetellWebhook(agentId);
+      console.log(`[Retell] Auto-corrected: updated webhook URL on agent ${agentId} from "${registeredUrl}" to "${expectedUrl}"`);
+    } else {
+      console.log(`[Retell] Webhook URL for agent ${agentId} is current: ${registeredUrl}`);
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[Retell] Could not verify webhook sync for agent ${agentId}: ${message}`);
+  }
 }
 
 export async function seedRetellKnowledgeBase(params: {
