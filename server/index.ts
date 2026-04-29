@@ -1778,24 +1778,36 @@ async function ensureCompanyNotificationColumns() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    // New tenants default to suppressed (true) — they should enable import mode by default.
-    // Existing tenants who already have contacts get the column added as false (already live)
-    // because they were active before this feature existed.
+    // Check if the column already exists before adding it.
+    // The backfill UPDATE must only run ONCE (on first deployment) so that it never
+    // overrides a user-controlled Import Mode toggle on subsequent restarts.
+    const colCheck = await pool.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'companies' AND column_name = 'client_notifications_suppressed'
+      LIMIT 1;
+    `);
+    const isFirstMigration = (colCheck.rowCount ?? 0) === 0;
+
     await pool.query(`
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS client_notifications_suppressed BOOLEAN NOT NULL DEFAULT true;
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS onboarding_complete_sent_at TIMESTAMP;
     `);
-    // For existing tenants who already have contacts, default them to NOT suppressed
-    // so their existing email flows aren't suddenly broken after this migration.
-    await pool.query(`
-      UPDATE companies c
-      SET client_notifications_suppressed = false
-      WHERE EXISTS (
-        SELECT 1 FROM contacts ct WHERE ct.company_id = c.id LIMIT 1
-      )
-      AND client_notifications_suppressed = true
-      AND onboarding_complete_sent_at IS NULL;
-    `);
+
+    if (isFirstMigration) {
+      // One-time backfill: existing tenants who already have contacts default to NOT suppressed
+      // so their existing email flows aren't suddenly broken after this migration.
+      await pool.query(`
+        UPDATE companies c
+        SET client_notifications_suppressed = false
+        WHERE EXISTS (
+          SELECT 1 FROM contacts ct WHERE ct.company_id = c.id LIMIT 1
+        )
+        AND client_notifications_suppressed = true
+        AND onboarding_complete_sent_at IS NULL;
+      `);
+      console.log("[Migration] client_notifications_suppressed backfill applied (one-time)");
+    }
+
     console.log("[Migration] client_notifications_suppressed + onboarding_complete_sent_at columns verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure company notification columns:", err);
