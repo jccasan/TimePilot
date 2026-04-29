@@ -4255,6 +4255,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/contacts", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const suppressNotifications = req.body.suppressNotifications === true;
 
       const _company = await storage.getCompany(companyId);
       const _tier = (_company?.subscriptionTier || "tier_1") as keyof typeof TIER_CONFIG;
@@ -4266,7 +4267,8 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      const parsed = insertContactSchema.parse({ ...req.body, companyId });
+      const { suppressNotifications: _sn, ...bodyWithoutFlag } = req.body;
+      const parsed = insertContactSchema.parse({ ...bodyWithoutFlag, companyId });
       const contact = await storage.createContact(parsed);
 
       let propertyCreated = false;
@@ -4304,7 +4306,7 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
-      if (contact.status === "lead") {
+      if (!suppressNotifications && contact.status === "lead") {
         notify(companyId, "new_lead", "New Lead", `${contact.firstName} ${contact.lastName} was added as a new lead.`, `/contacts/${contact.id}`);
         try {
           const { fireAutomationTrigger } = await import("./services/automation-runner");
@@ -4312,7 +4314,7 @@ Return ONLY valid JSON, no markdown.`,
         } catch (autoErr) { console.error("[automation] lead_created trigger error:", autoErr); }
       }
 
-      if (contact.email && contact.status !== "lead") {
+      if (!suppressNotifications && contact.email && contact.status !== "lead") {
         provisionPortalAccess(contact.id, companyId, getBaseUrl(req)).catch((err) =>
           console.error("[auto-portal] Failed to provision portal access for new contact:", err)
         );
@@ -6404,7 +6406,9 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/jobs", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const suppressNotifications = req.body.suppressNotifications === true;
       const body = { ...req.body, companyId };
+      delete body.suppressNotifications;
       if (!body.routeId || body.routeId === "") body.routeId = null;
       if (!body.jobType) body.jobType = body.frequency === "onetime" ? "one_off" : "recurring";
       if (!body.jobStatus) body.jobStatus = "active";
@@ -6484,7 +6488,7 @@ Return ONLY valid JSON, no markdown.`,
       const contact = await storage.getContact(body.contactId, companyId);
       if (contact && (contact.status === "lead" || contact.status === "estimate")) {
         await storage.updateContact(body.contactId, companyId, { status: "active" });
-        if (contact.email && !contact.hasPortalAccess) {
+        if (!suppressNotifications && contact.email && !contact.hasPortalAccess) {
           provisionPortalAccess(body.contactId, companyId, getBaseUrl(req)).catch((err) =>
             console.error("[auto-portal] Failed to provision portal access on job creation:", err)
           );
@@ -7512,7 +7516,8 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/invoices", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { lineItems, taxRate, discountType, discountValue, ...invoiceData } = req.body;
+      const suppressNotifications = req.body.suppressNotifications === true;
+      const { lineItems, taxRate, discountType, discountValue, suppressNotifications: _sn2, ...invoiceData } = req.body;
 
       if (!invoiceData.contactId || !invoiceData.dueDate) {
         return res.status(400).json({ error: "contactId and dueDate are required" });
@@ -7591,10 +7596,12 @@ Return ONLY valid JSON, no markdown.`,
       qboAutoSync(companyId, invoice.id, "invoice");
       const { userId: auditUserId } = await getCompanyContext(req);
       auditLog(companyId, auditUserId, "invoice", invoice.id, "create", { new: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, contactId: invoice.contactId } }, req.ip || undefined);
-      try {
-        const { fireAutomationTrigger } = await import("./services/automation-runner");
-        await fireAutomationTrigger("invoice_created", companyId, { invoiceId: invoice.id, contactId: invoice.contactId, total: invoice.total });
-      } catch (autoErr) { console.error("[automation] invoice_created trigger error:", autoErr); }
+      if (!suppressNotifications) {
+        try {
+          const { fireAutomationTrigger } = await import("./services/automation-runner");
+          await fireAutomationTrigger("invoice_created", companyId, { invoiceId: invoice.id, contactId: invoice.contactId, total: invoice.total });
+        } catch (autoErr) { console.error("[automation] invoice_created trigger error:", autoErr); }
+      }
       res.status(201).json({ ...invoice, lineItems: createdLineItems });
     } catch (err) { handleError(res, err); }
   });
@@ -7788,6 +7795,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/invoices/from-visits", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const suppressNotifications = req.body.suppressNotifications === true; // reserved: no notification side effects currently in this route
       const { contactId, visitIds, dueDate } = req.body;
       if (!contactId || !visitIds || !Array.isArray(visitIds) || visitIds.length === 0) {
         return res.status(400).json({ error: "contactId and visitIds array required" });
@@ -7851,6 +7859,7 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/invoices/generate-all-from-uninvoiced", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId: auditUserId } = await getCompanyContext(req);
+      const suppressNotifications = req.body.suppressNotifications === true;
       const { contactIds, sendAfterGenerate, startDate, endDate } = req.body;
 
       const summary = await storage.getUninvoicedSummary(companyId);
@@ -7921,7 +7930,7 @@ Return ONLY valid JSON, no markdown.`,
           auditLog(companyId, auditUserId, "invoice", invoice.id, "create", { new: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, contactId: contactEntry.contactId, autoGenerated: true, bulk: true } }, req.ip || undefined);
           createdInvoices.push(invoice);
 
-          if (sendAfterGenerate) {
+          if (sendAfterGenerate && !suppressNotifications) {
             try {
               const contact = await storage.getContact(contactEntry.contactId, companyId);
               if (!contact?.email) { failedCount++; continue; }
@@ -13176,8 +13185,11 @@ Rules:
   app.post("/api/quotes", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const suppressNotifications = req.body.suppressNotifications === true;
+      const bodyWithoutFlag = { ...req.body };
+      delete bodyWithoutFlag.suppressNotifications;
 
-      const parsed = createQuoteBodySchema.safeParse(req.body);
+      const parsed = createQuoteBodySchema.safeParse(bodyWithoutFlag);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid quote data", details: parsed.error.flatten() });
       }
@@ -13229,10 +13241,12 @@ Rules:
       };
 
       const quote = await storage.createQuote(quoteData);
-      try {
-        const { fireAutomationTrigger } = await import("./services/automation-runner");
-        await fireAutomationTrigger("quote_created", companyId, { quoteId: quote.id, contactId: quote.contactId });
-      } catch (autoErr) { console.error("[automation] quote_created trigger error:", autoErr); }
+      if (!suppressNotifications) {
+        try {
+          const { fireAutomationTrigger } = await import("./services/automation-runner");
+          await fireAutomationTrigger("quote_created", companyId, { quoteId: quote.id, contactId: quote.contactId });
+        } catch (autoErr) { console.error("[automation] quote_created trigger error:", autoErr); }
+      }
       res.status(201).json(quote);
     } catch (err: any) {
       console.error("Error creating quote:", err);

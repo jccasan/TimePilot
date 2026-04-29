@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/form";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { ArrowLeft, ArrowRight, FileText, CalendarDays, Send, CheckCircle2, Minus, Plus, Sparkles } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 function formatPhone(raw: string): string {
@@ -84,6 +86,7 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
   const [addressCoords, setAddressCoords] = useState<{ lat: string; lng: string } | null>(null);
   const [suggestedDay, setSuggestedDay] = useState<string | null>(null);
   const [isFetchingSuggestion, setIsFetchingSuggestion] = useState(false);
+  const [suppressNotifications, setSuppressNotifications] = useState(false);
   const scheduleNowRef = useRef(false);
   const servicePrefRef = useRef<{ frequency: string; serviceDay: string }>({ frequency: "", serviceDay: "" });
 
@@ -108,7 +111,7 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: ContactFormValues) => {
+    mutationFn: async (data: ContactFormValues & { suppressNotifications?: boolean }) => {
       const res = await apiRequest("POST", "/api/contacts", data);
       return res.json();
     },
@@ -140,6 +143,7 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
     setSendingPortalInvite(false);
     setAddressCoords(null);
     setSuggestedDay(null);
+    setSuppressNotifications(false);
     onOpenChange(false);
   };
 
@@ -196,7 +200,7 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
       frequency: values.serviceFrequency || "",
       serviceDay: values.serviceDay || "",
     };
-    createMutation.mutate(values);
+    createMutation.mutate({ ...values, suppressNotifications });
   };
 
   const frequency = form.watch("serviceFrequency") || "";
@@ -265,6 +269,8 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
                 <Step1
                   form={form}
                   isPending={createMutation.isPending}
+                  suppressNotifications={suppressNotifications}
+                  onSuppressChange={setSuppressNotifications}
                   onContinue={goToStep2}
                   onSaveAndFinish={() => submit(false)}
                   onAddressSelect={(lat, lng) => {
@@ -281,6 +287,8 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
                   isPending={createMutation.isPending}
                   suggestedDay={suggestedDay}
                   isFetchingSuggestion={isFetchingSuggestion}
+                  suppressNotifications={suppressNotifications}
+                  onSuppressChange={setSuppressNotifications}
                   onBack={() => setStep(1)}
                   onCreateAndSchedule={() => submit(true)}
                   onCreateOnly={() => submit(false)}
@@ -317,9 +325,11 @@ function StepIndicator({ current }: { current: 1 | 2 }) {
   );
 }
 
-function Step1({ form, isPending, onContinue, onSaveAndFinish, onAddressSelect }: {
+function Step1({ form, isPending, suppressNotifications, onSuppressChange, onContinue, onSaveAndFinish, onAddressSelect }: {
   form: ReturnType<typeof useForm<ContactFormValues>>;
   isPending: boolean;
+  suppressNotifications: boolean;
+  onSuppressChange: (val: boolean) => void;
   onContinue: () => void;
   onSaveAndFinish: () => void;
   onAddressSelect: (lat: string, lng: string) => void;
@@ -444,7 +454,19 @@ function Step1({ form, isPending, onContinue, onSaveAndFinish, onAddressSelect }
         )}
       />
 
-      <div className="flex flex-col gap-2 pt-1">
+      <div className="flex items-center gap-2 py-1 border-t pt-3 mt-1">
+        <Switch
+          id="suppress-notifications-step1"
+          checked={suppressNotifications}
+          onCheckedChange={onSuppressChange}
+          data-testid="switch-suppress-notifications"
+        />
+        <Label htmlFor="suppress-notifications-step1" className="text-sm text-muted-foreground cursor-pointer">
+          Suppress notifications
+        </Label>
+      </div>
+
+      <div className="flex flex-col gap-2">
         <Button
           type="button"
           className="w-full h-11"
@@ -468,7 +490,7 @@ function Step1({ form, isPending, onContinue, onSaveAndFinish, onAddressSelect }
   );
 }
 
-function Step2({ form, frequency, serviceDay, dogs, isPending, suggestedDay, isFetchingSuggestion, onBack, onCreateAndSchedule, onCreateOnly }: {
+function Step2({ form, frequency, serviceDay, dogs, isPending, suggestedDay, isFetchingSuggestion, suppressNotifications, onSuppressChange, onBack, onCreateAndSchedule, onCreateOnly }: {
   form: ReturnType<typeof useForm<ContactFormValues>>;
   frequency: string;
   serviceDay: string;
@@ -476,6 +498,8 @@ function Step2({ form, frequency, serviceDay, dogs, isPending, suggestedDay, isF
   isPending: boolean;
   suggestedDay: string | null;
   isFetchingSuggestion: boolean;
+  suppressNotifications: boolean;
+  onSuppressChange: (val: boolean) => void;
   onBack: () => void;
   onCreateAndSchedule: () => void;
   onCreateOnly: () => void;
@@ -599,7 +623,19 @@ function Step2({ form, frequency, serviceDay, dogs, isPending, suggestedDay, isF
         )}
       />
 
-      <div className="flex flex-col gap-2 pt-1">
+      <div className="flex items-center gap-2 py-1 border-t pt-3 mt-1">
+        <Switch
+          id="suppress-notifications-step2"
+          checked={suppressNotifications}
+          onCheckedChange={onSuppressChange}
+          data-testid="switch-suppress-notifications"
+        />
+        <Label htmlFor="suppress-notifications-step2" className="text-sm text-muted-foreground cursor-pointer">
+          Suppress notifications
+        </Label>
+      </div>
+
+      <div className="flex flex-col gap-2">
         <Button
           type="button"
           className="w-full h-11"

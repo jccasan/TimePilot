@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -79,6 +80,11 @@ export function GenerateInvoiceDialog({
     d.setDate(d.getDate() + 30);
     return toLocalDateString(d, tz);
   });
+  const [suppressNotifications, setSuppressNotifications] = useState(false);
+
+  useEffect(() => {
+    if (!open) setSuppressNotifications(false);
+  }, [open]);
 
   const activeContactId = initialContactId || selectedContactId;
 
@@ -170,6 +176,7 @@ export function GenerateInvoiceDialog({
         contactId: activeContactId,
         visitIds: Array.from(selectedVisitIds),
         dueDate,
+        suppressNotifications,
       });
       return res.json();
     },
@@ -390,6 +397,18 @@ export function GenerateInvoiceDialog({
                 </div>
               </div>
 
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="invoice-suppress-notifications"
+                  checked={suppressNotifications}
+                  onCheckedChange={setSuppressNotifications}
+                  data-testid="switch-suppress-notifications"
+                />
+                <Label htmlFor="invoice-suppress-notifications" className="text-sm text-muted-foreground cursor-pointer">
+                  Suppress notifications
+                </Label>
+              </div>
+
               <Button
                 onClick={() => createMutation.mutate()}
                 disabled={selectedVisitIds.size === 0 || createMutation.isPending}
@@ -421,6 +440,7 @@ export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDate
   const [dateFilter, setDateFilter] = useState<string>("0");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+  const [suppressNotifications, setSuppressNotifications] = useState(false);
 
   const resolvedRange = useMemo(() => {
     if (dateFilter === "custom") {
@@ -433,7 +453,7 @@ export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDate
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      const body: Record<string, unknown> = {};
+      const body: Record<string, unknown> = { suppressNotifications };
       if (resolvedRange.start) body.startDate = resolvedRange.start;
       if (resolvedRange.end) body.endDate = resolvedRange.end;
       const res = await apiRequest("POST", "/api/invoices/generate-all-from-uninvoiced", body);
@@ -463,6 +483,7 @@ export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDate
       setDateFilter("0");
       setCustomStart("");
       setCustomEnd("");
+      setSuppressNotifications(false);
     }
     onOpenChange(isOpen);
   };
@@ -553,6 +574,18 @@ export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDate
           <p className="text-sm text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
             One invoice will be created per customer for all their completed, uninvoiced visits that fall within this period.
           </p>
+
+          <div className="flex items-center gap-2 border-t pt-3">
+            <Switch
+              id="dr-suppress-notifications"
+              checked={suppressNotifications}
+              onCheckedChange={setSuppressNotifications}
+              data-testid="switch-suppress-notifications"
+            />
+            <Label htmlFor="dr-suppress-notifications" className="text-sm text-muted-foreground cursor-pointer">
+              Suppress notifications
+            </Label>
+          </div>
 
           <Button
             className="w-full"

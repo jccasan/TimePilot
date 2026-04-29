@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
@@ -98,6 +99,7 @@ interface JobFormPayload {
   endsAfterCount?: number | null;
   endsAfterUnit?: string | null;
   endDate?: string | null;
+  suppressNotifications?: boolean;
 }
 
 function JobForm({
@@ -149,6 +151,7 @@ function JobForm({
   const [endDate, setEndDate] = useState(initial?.endDate || "");
   const [visitInstructions, setVisitInstructions] = useState(initial?.visitInstructions || "");
   const [assignedUserId, setAssignedUserId] = useState(initial?.assignedUserId || "");
+  const [suppressNotifications, setSuppressNotifications] = useState(false);
 
   const activeServices = useMemo(() => services.filter(s => s.isActive), [services]);
 
@@ -206,6 +209,7 @@ function JobForm({
       payload.endDate = null;
     }
 
+    payload.suppressNotifications = suppressNotifications;
     onSubmit(payload);
   };
 
@@ -547,6 +551,20 @@ function JobForm({
           data-testid="input-job-instructions"
         />
       </div>
+
+      {!initial && (
+        <div className="flex items-center gap-2 border-t pt-3">
+          <Switch
+            id="job-suppress-notifications"
+            checked={suppressNotifications}
+            onCheckedChange={setSuppressNotifications}
+            data-testid="switch-suppress-notifications"
+          />
+          <Label htmlFor="job-suppress-notifications" className="text-sm text-muted-foreground cursor-pointer">
+            Suppress notifications
+          </Label>
+        </div>
+      )}
 
       <DialogFooter>
         <Button type="submit" disabled={isPending || !contactId || !propertyId || (activeServices.length > 0 && selectedServices.length === 0)} data-testid="button-submit-job">

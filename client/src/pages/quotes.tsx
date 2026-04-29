@@ -585,7 +585,12 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts, prefilledC
   const [customPremiumFeatures, setCustomPremiumFeatures] = useState<string[]>([]);
   const [customDeluxeFeatures, setCustomDeluxeFeatures] = useState<string[]>([]);
   const [featuresCustomized, setFeaturesCustomized] = useState(false);
+  const [suppressNotifications, setSuppressNotifications] = useState(false);
   const [editingFeatures, setEditingFeatures] = useState(false);
+
+  useEffect(() => {
+    if (!open) setSuppressNotifications(false);
+  }, [open]);
   const [quoteImages, setQuoteImages] = useState<{ url: string; caption: string; sqft?: number | null }[]>(
     (quote?.images as { url: string; caption: string; sqft?: number | null }[]) || []
   );
@@ -876,6 +881,7 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts, prefilledC
       data.siteSqft = Number(siteSqft) || 0;
     }
 
+    if (!isEdit) data.suppressNotifications = suppressNotifications;
     createMutation.mutate(data);
   };
 
@@ -1443,6 +1449,20 @@ function CreateEditQuoteDialog({ open, onOpenChange, quote, contacts, prefilledC
               <Textarea data-testid="input-internal-notes" value={internalNotes} onChange={e => setInternalNotes(e.target.value)} placeholder="Internal notes (not visible to client)..." rows={3} />
             </div>
           </div>
+
+          {!isEdit && (
+            <div className="flex items-center gap-2 border-t pt-3">
+              <Switch
+                id="quote-suppress-notifications"
+                checked={suppressNotifications}
+                onCheckedChange={setSuppressNotifications}
+                data-testid="switch-suppress-notifications"
+              />
+              <Label htmlFor="quote-suppress-notifications" className="text-sm text-muted-foreground cursor-pointer">
+                Suppress notifications
+              </Label>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">Cancel</Button>

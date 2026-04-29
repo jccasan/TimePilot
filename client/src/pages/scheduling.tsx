@@ -136,6 +136,7 @@ interface JobFormPayload {
   endsAfterCount?: number | null;
   endsAfterUnit?: string | null;
   endDate?: string | null;
+  suppressNotifications?: boolean;
 }
 
 const dayOfWeekLabels: Record<string, string> = {
@@ -206,6 +207,7 @@ function ScheduleJobForm({
   const [endDate, setEndDate] = useState("");
   const [visitInstructions, setVisitInstructions] = useState("");
   const [assignedUserId, setAssignedUserId] = useState("none");
+  const [suppressNotifications, setSuppressNotifications] = useState(false);
 
   const activeServices = useMemo(() => services.filter(s => s.isActive), [services]);
 
@@ -289,6 +291,7 @@ function ScheduleJobForm({
       payload.endsAfterUnit = null;
       payload.endDate = null;
     }
+    payload.suppressNotifications = suppressNotifications;
     onSubmit(payload);
   };
 
@@ -555,7 +558,18 @@ function ScheduleJobForm({
       </div>
 
       {/* Sticky footer */}
-      <div className="border-t px-6 py-4 bg-background shrink-0">
+      <div className="border-t px-6 py-4 bg-background shrink-0 space-y-3">
+        <div className="flex items-center gap-2">
+          <Switch
+            id="sched-suppress-notifications"
+            checked={suppressNotifications}
+            onCheckedChange={setSuppressNotifications}
+            data-testid="switch-suppress-notifications"
+          />
+          <Label htmlFor="sched-suppress-notifications" className="text-sm text-muted-foreground cursor-pointer">
+            Suppress notifications
+          </Label>
+        </div>
         <Button type="submit" className="w-full" size="lg" disabled={isPending || !contactId || !propertyId} data-testid="button-submit-job">
           {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating Job...</> : "Create Job"}
         </Button>
