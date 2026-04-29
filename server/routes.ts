@@ -317,6 +317,29 @@ function qboAutoSync(companyId: string, entityId: string, type: "invoice" | "pay
   }).catch(console.error);
 }
 
+async function resolveCoordinatesForAddress(
+  companyId: string,
+  streetAddress: string,
+  city?: string | null,
+  state?: string | null,
+  zipCode?: string | null,
+  existingProperties?: { streetAddress?: string | null; city?: string | null; state?: string | null; zipCode?: string | null; latitude?: string | null; longitude?: string | null }[]
+): Promise<{ latitude: string; longitude: string } | null> {
+  const properties = existingProperties ?? await storage.getProperties(companyId);
+  const normalizedStreet = streetAddress.trim().toLowerCase();
+  const match = properties.find(p =>
+    p.streetAddress?.trim().toLowerCase() === normalizedStreet &&
+    (p.city?.trim().toLowerCase() ?? "") === (city?.trim().toLowerCase() ?? "") &&
+    (p.state?.trim().toLowerCase() ?? "") === (state?.trim().toLowerCase() ?? "") &&
+    (p.zipCode?.trim() ?? "") === (zipCode?.trim() ?? "") &&
+    p.latitude && p.longitude
+  );
+  if (match) {
+    return { latitude: match.latitude!, longitude: match.longitude! };
+  }
+  return geocodeAddress(streetAddress, city, state, zipCode);
+}
+
 async function createPropertyWithGeocode(data: {
   companyId: string; contactId: string; streetAddress: string;
   city?: string | null; state?: string | null; zipCode?: string | null;
@@ -325,24 +348,10 @@ async function createPropertyWithGeocode(data: {
   gateCode?: string | null; specialInstructions?: string | null;
 }) {
   if (!data.latitude && !data.longitude && data.streetAddress) {
-    const existingProperties = await storage.getProperties(data.companyId);
-    const normalizedStreet = data.streetAddress.trim().toLowerCase();
-    const match = existingProperties.find(p =>
-      p.streetAddress?.trim().toLowerCase() === normalizedStreet &&
-      p.city?.trim().toLowerCase() === (data.city?.trim().toLowerCase() ?? "") &&
-      (p.state?.trim().toLowerCase() ?? "") === (data.state?.trim().toLowerCase() ?? "") &&
-      (p.zipCode?.trim() ?? "") === (data.zipCode?.trim() ?? "") &&
-      p.latitude && p.longitude
-    );
-    if (match) {
-      data.latitude = match.latitude;
-      data.longitude = match.longitude;
-    } else {
-      const coords = await geocodeAddress(data.streetAddress, data.city, data.state, data.zipCode);
-      if (coords) {
-        data.latitude = coords.latitude;
-        data.longitude = coords.longitude;
-      }
+    const coords = await resolveCoordinatesForAddress(data.companyId, data.streetAddress, data.city, data.state, data.zipCode);
+    if (coords) {
+      data.latitude = coords.latitude;
+      data.longitude = coords.longitude;
     }
   }
   return storage.createProperty(data as any);
@@ -4511,9 +4520,11 @@ Return ONLY valid JSON, no markdown.`,
       const needsGeocode = allProperties.filter(p => p.streetAddress && (!p.latitude || !p.longitude));
       let geocoded = 0;
       for (const prop of needsGeocode) {
-        const coords = await geocodeAddress(prop.streetAddress!, prop.city, prop.state, prop.zipCode);
+        const coords = await resolveCoordinatesForAddress(companyId, prop.streetAddress!, prop.city, prop.state, prop.zipCode, allProperties);
         if (coords) {
           await storage.updateProperty(prop.id, companyId, { latitude: coords.latitude, longitude: coords.longitude });
+          prop.latitude = coords.latitude;
+          prop.longitude = coords.longitude;
           geocoded++;
         }
       }
