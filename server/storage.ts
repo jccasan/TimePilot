@@ -83,6 +83,8 @@ import {
   errorReports, errorFixTasks,
   type ErrorReport, type InsertErrorReport,
   type ErrorFixTask, type InsertErrorFixTask,
+  geocodeCacheTable,
+  type GeocodeCache,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -482,6 +484,11 @@ export interface IStorage {
   updateErrorFixTask(id: string, data: Partial<Pick<ErrorFixTask, "status">>): Promise<ErrorFixTask>;
   getOpenErrorCount(): Promise<number>;
   getLatestErrorTimestamp(): Promise<Date | null>;
+
+  // Geocode Cache
+  getGeocodeCache(addressKey: string): Promise<GeocodeCache | undefined>;
+  setGeocodeCache(addressKey: string, latitude: string | null, longitude: string | null): Promise<void>;
+  pruneGeocodeCache(olderThanDays: number): Promise<void>;
 }
 
 export type GroupedErrorReport = {
@@ -2998,6 +3005,26 @@ export class DatabaseStorage implements IStorage {
   async getLatestErrorTimestamp(): Promise<Date | null> {
     const [result] = await db.select({ ts: sql<Date>`max(${errorReports.createdAt})` }).from(errorReports);
     return result?.ts ?? null;
+  }
+
+  async getGeocodeCache(addressKey: string): Promise<GeocodeCache | undefined> {
+    const [row] = await db.select().from(geocodeCacheTable).where(eq(geocodeCacheTable.addressKey, addressKey));
+    return row;
+  }
+
+  async setGeocodeCache(addressKey: string, latitude: string | null, longitude: string | null): Promise<void> {
+    await db
+      .insert(geocodeCacheTable)
+      .values({ addressKey, latitude, longitude, cachedAt: new Date() })
+      .onConflictDoUpdate({
+        target: geocodeCacheTable.addressKey,
+        set: { latitude, longitude, cachedAt: new Date() },
+      });
+  }
+
+  async pruneGeocodeCache(olderThanDays: number): Promise<void> {
+    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+    await db.delete(geocodeCacheTable).where(lt(geocodeCacheTable.cachedAt, cutoff));
   }
 }
 

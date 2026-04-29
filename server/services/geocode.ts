@@ -1,6 +1,9 @@
 import { trackApiCall } from "./api-usage";
+import { storage } from "../storage";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
+const DB_TTL_DAYS = 30;
+const DB_TTL_MS = DB_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 interface CacheEntry<T> {
   value: T;
@@ -46,6 +49,19 @@ setInterval(() => {
   }
 }, EVICTION_INTERVAL_MS).unref();
 
+async function runPrune() {
+  try {
+    await storage.pruneGeocodeCache(DB_TTL_DAYS);
+  } catch (err) {
+    console.warn("[GeocodeCache] Prune failed:", err instanceof Error ? err.message : err);
+  }
+}
+
+runPrune();
+
+const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+setInterval(runPrune, PRUNE_INTERVAL_MS).unref();
+
 export async function geocodeAddress(
   streetAddress: string,
   city?: string | null,
@@ -64,9 +80,26 @@ export async function geocodeAddress(
 
   const countryFilter = country === "ca" ? "ca" : "us";
   const cacheKey = `${countryFilter}:${normalizeAddress(parts)}`;
+
+  // L1: in-memory cache
   const cached = geocodeCache.get(cacheKey);
   if (cached && isFresh(cached)) return cached.value;
 
+  // L2: database cache (only serve if within the 30-day DB TTL)
+  try {
+    const dbEntry = await storage.getGeocodeCache(cacheKey);
+    if (dbEntry && Date.now() - dbEntry.cachedAt.getTime() < DB_TTL_MS) {
+      const result = dbEntry.latitude && dbEntry.longitude
+        ? { latitude: dbEntry.latitude, longitude: dbEntry.longitude }
+        : null;
+      geocodeCache.set(cacheKey, { value: result, storedAt: Date.now() });
+      return result;
+    }
+  } catch (err) {
+    console.warn("[GeocodeCache] DB read failed:", err instanceof Error ? err.message : err);
+  }
+
+  // L3: Mapbox API
   for (const token of tokens) {
     try {
       const params = new URLSearchParams({
@@ -83,11 +116,17 @@ export async function geocodeAddress(
       const feature = data.features?.[0];
       if (!feature) {
         geocodeCache.set(cacheKey, { value: null, storedAt: Date.now() });
+        storage.setGeocodeCache(cacheKey, null, null).catch((err) => {
+          console.warn("[GeocodeCache] DB write failed:", err instanceof Error ? err.message : err);
+        });
         return null;
       }
       const coords = feature.geometry?.coordinates;
       if (!coords || coords.length < 2) {
         geocodeCache.set(cacheKey, { value: null, storedAt: Date.now() });
+        storage.setGeocodeCache(cacheKey, null, null).catch((err) => {
+          console.warn("[GeocodeCache] DB write failed:", err instanceof Error ? err.message : err);
+        });
         return null;
       }
       const result = {
@@ -95,6 +134,9 @@ export async function geocodeAddress(
         longitude: String(coords[0]),
       };
       geocodeCache.set(cacheKey, { value: result, storedAt: Date.now() });
+      storage.setGeocodeCache(cacheKey, result.latitude, result.longitude).catch((err) => {
+        console.warn("[GeocodeCache] DB write failed:", err instanceof Error ? err.message : err);
+      });
       trackApiCall("mapbox", "geocode");
       return result;
     } catch {

@@ -1959,3 +1959,14 @@ export const apiUsageDaily = pgTable("api_usage_daily", {
   index("idx_api_usage_daily_provider").on(table.provider),
   uniqueIndex("idx_api_usage_daily_uniq").on(table.date, table.provider, table.metric),
 ]);
+
+export const geocodeCacheTable = pgTable("geocode_cache", {
+  addressKey: varchar("address_key", { length: 512 }).primaryKey(),
+  latitude: varchar("latitude", { length: 32 }),
+  longitude: varchar("longitude", { length: 32 }),
+  cachedAt: timestamp("cached_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_geocode_cache_cached_at").on(table.cachedAt),
+]);
+
+export type GeocodeCache = typeof geocodeCacheTable.$inferSelect;
