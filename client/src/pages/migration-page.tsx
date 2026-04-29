@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { ImportWizard } from "@/components/import-wizard";
+import { ImportJobProgress, type ImportJobStatus } from "@/components/import-job-progress";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -142,6 +143,7 @@ interface ImportRun {
   completedAt: string | null;
 }
 
+
 function formatDollars(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
@@ -232,12 +234,13 @@ function TransferResultView({ importResult, onReset }: { importResult: Competito
 function TransferTab() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<"select" | "upload" | "preview" | "result">("select");
+  const [step, setStep] = useState<"select" | "upload" | "preview" | "running" | "result">("select");
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [csvText, setCsvText] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [detectResult, setDetectResult] = useState<CompetitorDetectResult | null>(null);
   const [importResult, setImportResult] = useState<CompetitorImportResult | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [duplicateHandling, setDuplicateHandling] = useState<string>("skip");
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -265,14 +268,13 @@ function TransferTab() {
         platform: detectResult?.platform,
         duplicateHandling,
       });
-      return res.json() as Promise<CompetitorImportResult>;
+      return res.json() as Promise<{ jobId: string; totalRows: number }>;
     },
     onSuccess: (data) => {
-      setImportResult(data);
-      setStep("result");
+      setActiveJobId(data.jobId);
+      setStep("running");
       queryClient.invalidateQueries({ queryKey: ["/api/imports"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-      toast({ title: "Transfer complete", description: `${data.imported} contacts imported from ${data.platformLabel}.` });
+      toast({ title: "Import started", description: `Processing ${data.totalRows} rows in the background.` });
     },
     onError: (error: Error) => {
       toast({ title: "Transfer failed", description: error.message, variant: "destructive" });
@@ -322,6 +324,7 @@ function TransferTab() {
     setFileName("");
     setDetectResult(null);
     setImportResult(null);
+    setActiveJobId(null);
     setDuplicateHandling("skip");
   };
 
@@ -701,6 +704,39 @@ function TransferTab() {
     );
   }
 
+  if (step === "running" && activeJobId) {
+    return (
+      <div className="space-y-6">
+        <div className="text-sm font-medium text-muted-foreground">
+          Transferring contacts from {detectResult?.platformLabel ?? "your file"}
+        </div>
+        <ImportJobProgress
+          jobId={activeJobId}
+          label="Importing contacts"
+          onComplete={(job) => {
+            queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+            if (job.status === "completed") {
+              toast({ title: "Transfer complete", description: `${job.importedRows} contacts imported.` });
+              // Store result for the next step
+              setImportResult({
+                importRunId: job.id,
+                platform: detectResult?.platform || "unknown",
+                platformLabel: detectResult?.platformLabel || "Unknown",
+                imported: job.importedRows,
+                updated: 0,
+                skipped: job.skippedRows,
+                total: job.totalRows,
+                errors: job.errors || [],
+              });
+            }
+            setStep("result");
+          }}
+          onReset={resetAll}
+        />
+      </div>
+    );
+  }
+
   if (step === "result" && importResult) {
     return (
       <TransferResultView
@@ -720,6 +756,7 @@ function InvoicesTab() {
   const [fileName, setFileName] = useState<string>("");
   const [preview, setPreview] = useState<ParsedInvoicePreview | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [allowDuplicates, setAllowDuplicates] = useState(false);
   const [includeInReminders, setIncludeInReminders] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -745,12 +782,12 @@ function InvoicesTab() {
         allowDuplicates,
         includeInReminders,
       });
-      return res.json() as Promise<ImportResult>;
+      return res.json() as Promise<{ jobId: string; totalRows: number }>;
     },
     onSuccess: (data) => {
-      setImportResult(data);
+      setActiveJobId(data.jobId);
       queryClient.invalidateQueries({ queryKey: ["/api/imports"] });
-      toast({ title: "Import complete", description: `${data.imported} invoices imported.` });
+      toast({ title: "Import started", description: `Processing ${data.totalRows} rows in the background.` });
     },
     onError: (error: Error) => {
       toast({ title: "Import failed", description: error.message, variant: "destructive" });
@@ -798,7 +835,27 @@ function InvoicesTab() {
     setFileName("");
     setPreview(null);
     setImportResult(null);
+    setActiveJobId(null);
   };
+
+  if (activeJobId) {
+    return (
+      <div className="space-y-6">
+        <div className="text-sm font-medium text-muted-foreground">Importing invoices from Sweep & Go</div>
+        <ImportJobProgress
+          jobId={activeJobId}
+          label="Importing invoices"
+          onComplete={(job) => {
+            queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+            if (job.status === "completed") {
+              toast({ title: "Import complete", description: `${job.importedRows} invoices imported.` });
+            }
+          }}
+          onReset={resetState}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

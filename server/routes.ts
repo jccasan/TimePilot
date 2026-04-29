@@ -17970,6 +17970,7 @@ Rules:
   const { aiMapColumns, getDeterministicMapping, hashFileContent, CONTACT_FIELDS, INVOICE_FIELDS, ROUTE_FIELDS } = await import("./services/ai-mapper");
   const { applyTransformations, parseCSV: parseCSVUtil } = await import("./services/import-transforms");
   const { parseCompetitorCSV } = await import("./services/competitor-import");
+  const { enqueueCompetitorImport, enqueueCsvContactsImport, enqueueSweepAndGoInvoicesImport, enqueueCsvRoutesImport } = await import("./services/import-runner");
 
   const VALID_PLATFORMS = ["sweepandgo", "jobber"] as const;
 
@@ -18008,148 +18009,23 @@ Rules:
         skippedRows: 0,
       });
 
-      const allContacts = result.preview;
-      const existingContacts = await storage.getContacts(companyId, {});
-      const emailSet = new Set(existingContacts.map(c => c.email?.toLowerCase()).filter(Boolean));
-      const addressSet = new Set(
-        existingContacts.map(c => {
-          if (c.streetAddress && c.city && c.state) {
-            return `${c.streetAddress}|${c.city}|${c.state}|${c.zipCode}`.toLowerCase();
-          }
-          return null;
-        }).filter(Boolean)
-      );
-
-      let imported = 0;
-      let skipped = 0;
-      let updated = 0;
-      const importErrors: Array<{ row: number; message: string }> = [];
-
       const leadSourceName = result.platformLabel;
-      let leadSourceRecord = (await storage.getLeadSources(companyId)).find(
-        ls => ls.name.toLowerCase() === leadSourceName.toLowerCase()
-      ) || null;
-      if (!leadSourceRecord) {
-        leadSourceRecord = await storage.createLeadSource({ companyId, name: leadSourceName });
+      const leadSources = await storage.getLeadSources(companyId);
+      if (!leadSources.find(ls => ls.name.toLowerCase() === leadSourceName.toLowerCase())) {
+        await storage.createLeadSource({ companyId, name: leadSourceName });
       }
 
-      for (let i = 0; i < allContacts.length; i++) {
-        try {
-          const pc = allContacts[i];
-          const email = pc.email;
-          const addressKey = pc.streetAddress && pc.city && pc.state
-            ? `${pc.streetAddress}|${pc.city}|${pc.state}|${pc.zipCode}`.toLowerCase()
-            : null;
-
-          const isDuplicateEmail = email && emailSet.has(email);
-          const isDuplicateAddress = addressKey && addressSet.has(addressKey);
-
-          if (isDuplicateEmail || isDuplicateAddress) {
-            if (duplicateHandling === "skip") {
-              skipped++;
-              continue;
-            }
-            if (duplicateHandling === "update") {
-              let existing = isDuplicateEmail
-                ? existingContacts.find(c => c.email?.toLowerCase() === email)
-                : null;
-              if (!existing && isDuplicateAddress) {
-                existing = existingContacts.find(c => {
-                  if (!c.streetAddress || !c.city || !c.state) return false;
-                  return `${c.streetAddress}|${c.city}|${c.state}|${c.zipCode}`.toLowerCase() === addressKey;
-                });
-              }
-              if (existing) {
-                const updates: any = {};
-                if (pc.phone && !existing.phone) updates.phone = pc.phone;
-                if (pc.email && !existing.email) updates.email = pc.email;
-                if (pc.streetAddress && !existing.streetAddress) updates.streetAddress = pc.streetAddress;
-                if (pc.city && !existing.city) updates.city = pc.city;
-                if (pc.state && !existing.state) updates.state = pc.state;
-                if (pc.zipCode && !existing.zipCode) updates.zipCode = pc.zipCode;
-                if (pc.numberOfDogs && !existing.numberOfDogs) updates.numberOfDogs = pc.numberOfDogs;
-                if (pc.notes && !existing.notes) updates.notes = pc.notes;
-                if (pc.serviceFrequency && !existing.serviceFrequency) updates.serviceFrequency = pc.serviceFrequency;
-                if (pc.serviceDay && !existing.serviceDay) updates.serviceDay = pc.serviceDay;
-                if (Object.keys(updates).length > 0) {
-                  await storage.updateContact(existing.id, companyId, updates);
-                }
-                updated++;
-                continue;
-              }
-            }
-            skipped++;
-            continue;
-          }
-
-          const contactLeadSource = pc.leadSource || leadSourceName;
-
-          const contact = await storage.createContact({
-            companyId,
-            firstName: pc.firstName,
-            lastName: pc.lastName || "",
-            email: pc.email || undefined,
-            phone: pc.phone || undefined,
-            streetAddress: pc.streetAddress || undefined,
-            address2: pc.address2 || undefined,
-            city: pc.city || undefined,
-            state: pc.state || undefined,
-            zipCode: pc.zipCode || undefined,
-            numberOfDogs: pc.numberOfDogs,
-            yardSize: pc.yardSize || undefined,
-            serviceFrequency: pc.serviceFrequency || undefined,
-            serviceDay: (pc.serviceDay as any) || undefined,
-            notes: pc.notes || undefined,
-            leadSource: contactLeadSource || undefined,
-            status: (pc.status as any) || "lead",
-          });
-
-          if (email) emailSet.add(email);
-          if (addressKey) addressSet.add(addressKey);
-
-          if (pc.streetAddress && pc.city && pc.state && pc.zipCode) {
-            try {
-              await createPropertyWithGeocode({
-                companyId,
-                contactId: contact.id,
-                streetAddress: pc.streetAddress,
-                city: pc.city,
-                state: pc.state,
-                zipCode: pc.zipCode,
-                numberOfDogs: pc.numberOfDogs ?? 1,
-                yardSize: pc.yardSize || null,
-                gateCode: pc.gateCode || null,
-              });
-            } catch (propErr: any) {
-              importErrors.push({ row: i + 2, message: `Contact created but property failed: ${propErr.message}` });
-            }
-          }
-
-          imported++;
-        } catch (rowErr: any) {
-          skipped++;
-          importErrors.push({ row: i + 2, message: rowErr.message });
-        }
-      }
-
-      await storage.updateImportRun(importRun.id, {
-        status: "completed",
-        importedRows: imported,
-        skippedRows: skipped,
-        errors: importErrors.length > 0 ? importErrors : undefined,
-        completedAt: new Date(),
-      });
-
-      res.json({
-        importRunId: importRun.id,
+      await enqueueCompetitorImport({
+        companyId,
+        jobId: importRun.id,
+        contacts: result.preview,
         platform: result.platform,
         platformLabel: result.platformLabel,
-        imported,
-        updated,
-        skipped,
-        total: allContacts.length,
-        errors: importErrors,
+        duplicateHandling: (duplicateHandling || "skip") as "skip" | "update",
+        leadSourceName,
       });
+
+      res.json({ jobId: importRun.id, totalRows: result.totalRows });
     } catch (err) { handleError(res, err); }
   });
 
@@ -18185,6 +18061,14 @@ Rules:
       const { csvText, allowDuplicates, includeInReminders } = req.body;
       if (!csvText) return res.status(400).json({ error: "csvText is required" });
 
+      const parseResult = parseSweepAndGoInvoices(csvText);
+      if (parseResult.errors.length > 0 && !req.body.forceImport) {
+        return res.status(400).json({
+          errors: parseResult.errors,
+          message: "Validation errors found. Send forceImport: true to skip invalid rows.",
+        });
+      }
+
       const fileHash = hashFileContent(csvText);
       const importRun = await storage.createImportRun({
         companyId,
@@ -18192,143 +18076,20 @@ Rules:
         status: "processing",
         fileName: "sweepandgo-invoices.csv",
         fileHash,
-        totalRows: 0,
+        totalRows: parseResult.invoices.length,
         importedRows: 0,
         skippedRows: 0,
       });
 
-      const parseResult = parseSweepAndGoInvoices(csvText);
-
-      if (parseResult.errors.length > 0 && !req.body.forceImport) {
-        await storage.updateImportRun(importRun.id, {
-          status: "failed",
-          errors: parseResult.errors,
-          totalRows: parseResult.invoices.length,
-          completedAt: new Date(),
-        });
-        return res.status(400).json({
-          importRunId: importRun.id,
-          errors: parseResult.errors,
-          message: "Validation errors found. Send forceImport: true to skip invalid rows.",
-        });
-      }
-
-      let imported = 0;
-      let skipped = 0;
-      const importErrors: any[] = [];
-
-      const allContacts = await storage.getContacts(companyId);
-
-      for (const inv of parseResult.invoices) {
-        try {
-          const existing = await storage.getInvoiceByExternalId(companyId, "sweepandgo", inv.externalId);
-          if (existing) {
-            if (!allowDuplicates) {
-              skipped++;
-              continue;
-            }
-          }
-
-          let contactId: string | null = null;
-          if (inv.contactEmail) {
-            const match = allContacts.find(c => c.email?.toLowerCase() === inv.contactEmail?.toLowerCase());
-            if (match) contactId = match.id;
-          }
-          if (!contactId && inv.contactName) {
-            const nameParts = inv.contactName.split(/\s+/);
-            if (nameParts.length >= 2) {
-              const match = allContacts.find(c =>
-                c.firstName.toLowerCase() === nameParts[0].toLowerCase() &&
-                c.lastName.toLowerCase() === nameParts.slice(1).join(" ").toLowerCase()
-              );
-              if (match) contactId = match.id;
-            }
-          }
-
-          if (!contactId) {
-            importErrors.push({ invoiceNumber: inv.invoiceNumber, message: "Could not match to existing contact" });
-            skipped++;
-            continue;
-          }
-
-          let invoiceNum = inv.invoiceNumber;
-          if (existing && allowDuplicates) {
-            invoiceNum = `${inv.invoiceNumber}-imp-${Date.now()}`;
-          }
-
-          const invoice = await storage.createInvoice({
-            companyId,
-            contactId,
-            invoiceNumber: invoiceNum,
-            dueDate: inv.dueDate,
-            subtotal: String(inv.subtotal),
-            taxRate: String(inv.taxRate),
-            tax: String(inv.tax),
-            discountAmount: String(inv.discountAmount),
-            total: String(inv.total),
-            status: inv.status as any,
-            source: "imported",
-            externalSource: "sweepandgo",
-            externalId: inv.externalId,
-            importRunId: importRun.id,
-            issuedDate: inv.issuedDate || null,
-            notes: inv.notes || null,
-            excludeFromReminders: !includeInReminders,
-            paidAt: inv.status === "paid" && inv.payments.length > 0 ? new Date(inv.payments[0].paidAt) : null,
-          });
-
-          for (const li of inv.lineItems) {
-            await storage.createInvoiceLineItem({
-              invoiceId: invoice.id,
-              description: li.description,
-              quantity: li.quantity,
-              unitPrice: String(li.unitPrice),
-              total: String(li.total),
-            });
-          }
-
-          for (let pIdx = 0; pIdx < inv.payments.length; pIdx++) {
-            const payment = inv.payments[pIdx];
-            const paymentExtId = `sweepandgo-payment-${inv.externalId}-${pIdx}`;
-            const existing = await storage.getInvoicePaymentByExternalId(companyId, paymentExtId);
-            if (existing) continue;
-            await storage.createInvoicePayment({
-              companyId,
-              invoiceId: invoice.id,
-              amountCents: payment.amountCents,
-              paidAt: new Date(payment.paidAt),
-              method: "imported" as any,
-              reference: payment.reference || null,
-              source: "imported" as any,
-              externalId: paymentExtId,
-              importRunId: importRun.id,
-            });
-          }
-
-          imported++;
-        } catch (invErr: any) {
-          importErrors.push({ invoiceNumber: inv.invoiceNumber, message: invErr.message });
-          skipped++;
-        }
-      }
-
-      await storage.updateImportRun(importRun.id, {
-        status: "completed",
-        totalRows: parseResult.invoices.length,
-        importedRows: imported,
-        skippedRows: skipped,
-        errors: importErrors.length > 0 ? importErrors : null,
-        completedAt: new Date(),
+      await enqueueSweepAndGoInvoicesImport({
+        companyId,
+        jobId: importRun.id,
+        csvText,
+        allowDuplicates: !!allowDuplicates,
+        includeInReminders: !!includeInReminders,
       });
 
-      res.json({
-        importRunId: importRun.id,
-        imported,
-        skipped,
-        total: parseResult.invoices.length,
-        errors: importErrors,
-        summary: parseResult.summary,
-      });
+      res.json({ jobId: importRun.id, totalRows: parseResult.invoices.length });
     } catch (err) { handleError(res, err); }
   });
 
@@ -18570,72 +18331,35 @@ Respond with exactly one category from the list above and nothing else.`;
         userOverrides: req.body.userOverrides || null,
       });
 
-      const skipSet = new Set(req.body.skipRowIndices || req.body.skippedRows || []);
-      const editedCells = req.body.editedCells || {};
-      for (const [key, value] of Object.entries(editedCells)) {
-        const [rowIdx, colIdx] = key.split("-").map(Number);
-        if (rows[rowIdx] && colIdx < (rows[rowIdx]?.length ?? 0)) {
-          rows[rowIdx][colIdx] = String(value);
-        }
-      }
-      const requiredFields = targetSchema === "invoices" ? ["invoiceNumber"]
-        : targetSchema === "routes" ? ["routeName"]
-        : ["firstName"];
-
-      const transformed = applyTransformations(rows, headers, mappings, transformations, requiredFields);
-
-      let imported = 0;
-      let skipped = 0;
-      const importErrors: any[] = [];
-
-      for (const row of transformed) {
-        if (skipSet.has(row.rowIndex)) { skipped++; continue; }
-        if (!row.isValid) { skipped++; importErrors.push(...row.errors); continue; }
-
-        try {
-          if (targetSchema === "contacts" || !targetSchema) {
-            const contactData: any = {
-              companyId,
-              firstName: row.transformed.firstName || "Unknown",
-              lastName: row.transformed.lastName || "",
-              email: row.transformed.email || null,
-              phone: row.transformed.phone || null,
-              streetAddress: row.transformed.streetAddress || null,
-              address2: row.transformed.address2 || null,
-              city: row.transformed.city || null,
-              state: row.transformed.state || null,
-              zipCode: row.transformed.zipCode || null,
-              numberOfDogs: row.transformed.numberOfDogs ? parseInt(row.transformed.numberOfDogs) : null,
-              yardSize: row.transformed.yardSize || null,
-              serviceFrequency: row.transformed.serviceFrequency || null,
-              leadSource: row.transformed.leadSource || null,
-              status: row.transformed.status || "lead",
-              notes: row.transformed.notes || null,
-            };
-            await storage.createContact(contactData);
-            imported++;
-          }
-        } catch (err: any) {
-          importErrors.push({ row: row.rowIndex, message: err.message });
-          skipped++;
-        }
+      if (targetSchema === "contacts" || !targetSchema) {
+        await enqueueCsvContactsImport({
+          companyId,
+          jobId: importRun.id,
+          headers,
+          rows,
+          mappings,
+          transformations,
+          skippedRows: req.body.skipRowIndices || req.body.skippedRows || [],
+          editedCells: req.body.editedCells || {},
+        });
+        return res.json({ jobId: importRun.id, totalRows: rows.length });
       }
 
-      await storage.updateImportRun(importRun.id, {
-        status: "completed",
-        importedRows: imported,
-        skippedRows: skipped,
-        errors: importErrors.length > 0 ? importErrors : null,
-        completedAt: new Date(),
-      });
+      if (targetSchema === "routes") {
+        await enqueueCsvRoutesImport({
+          companyId,
+          jobId: importRun.id,
+          headers,
+          rows,
+          mappings,
+          transformations,
+          skippedRows: req.body.skipRowIndices || req.body.skippedRows || [],
+          editedCells: req.body.editedCells || {},
+        });
+        return res.json({ jobId: importRun.id, totalRows: rows.length });
+      }
 
-      res.json({
-        importRunId: importRun.id,
-        imported,
-        skipped,
-        total: rows.length,
-        errors: importErrors,
-      });
+      res.json({ jobId: importRun.id, totalRows: rows.length });
     } catch (err) { handleError(res, err); }
   });
 
@@ -18651,6 +18375,15 @@ Respond with exactly one category from the list above and nothing else.`;
     try {
       const { companyId } = await getCompanyContext(req);
       const run = await storage.getImportRun(p(req.params.id), companyId);
+      if (!run) return res.status(404).json({ error: "Import run not found" });
+      res.json(run);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/imports/:jobId/status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const run = await storage.getImportRun(p(req.params.jobId), companyId);
       if (!run) return res.status(404).json({ error: "Import run not found" });
       res.json(run);
     } catch (err) { handleError(res, err); }

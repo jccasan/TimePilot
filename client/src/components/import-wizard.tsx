@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { ImportJobProgress } from "@/components/import-job-progress";
+import type { ImportJobStatus } from "@/components/import-job-progress";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -231,6 +233,7 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
   const [editedCells, setEditedCells] = useState<Record<string, string>>({});
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -283,10 +286,10 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
       editedCells: Record<string, string>;
     }) => {
       const res = await apiRequest("POST", "/api/imports/apply", data);
-      return res.json() as Promise<ImportResult>;
+      return res.json() as Promise<{ jobId: string; totalRows: number }>;
     },
     onSuccess: (result) => {
-      setImportResult(result);
+      setActiveJobId(result.jobId);
     },
   });
 
@@ -814,19 +817,23 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
             <CardTitle className="flex items-center gap-2">
               {importResult ? (
                 <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
+              ) : activeJobId ? (
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
               ) : (
                 <FileText className="w-5 h-5" />
               )}
-              {importResult ? "Import Complete" : "Confirm & Import"}
+              {importResult ? "Import Complete" : activeJobId ? "Importing…" : "Confirm & Import"}
             </CardTitle>
             <CardDescription>
               {importResult
                 ? "Your data has been imported successfully."
-                : "Review the summary below and start the import."}
+                : activeJobId
+                  ? "Processing in the background — you can leave this page."
+                  : "Review the summary below and start the import."}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!importResult && (
+            {!activeJobId && !importResult && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="p-4 rounded-md bg-muted">
@@ -874,13 +881,6 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                   </div>
                 )}
 
-                {applyMutation.isPending && (
-                  <div className="space-y-2">
-                    <Progress value={undefined} className="w-full" data-testid="progress-import" />
-                    <p className="text-sm text-center text-muted-foreground">Importing data...</p>
-                  </div>
-                )}
-
                 {applyMutation.isError && (
                   <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2" data-testid="text-import-error">
                     <XCircle className="w-4 h-4 flex-shrink-0" />
@@ -890,42 +890,21 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
               </div>
             )}
 
-            {importResult && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-md bg-green-50 dark:bg-green-950/30">
-                    <p className="text-2xl font-bold text-green-700 dark:text-green-300" data-testid="text-result-imported">
-                      {importResult.importedRows}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Imported</p>
-                  </div>
-                  <div className="p-4 rounded-md bg-muted">
-                    <p className="text-2xl font-bold text-muted-foreground" data-testid="text-result-skipped">
-                      {importResult.skippedRows}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Skipped</p>
-                  </div>
-                  <div className="p-4 rounded-md bg-red-50 dark:bg-red-950/30">
-                    <p className="text-2xl font-bold text-red-700 dark:text-red-300" data-testid="text-result-errors">
-                      {importResult.errors.length}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Errors</p>
-                  </div>
-                </div>
-
-                {importResult.errors.length > 0 && (
-                  <div className="p-4 rounded-md border border-red-200 dark:border-red-800">
-                    <p className="text-sm font-medium text-red-700 dark:text-red-300 mb-2">Errors</p>
-                    <div className="max-h-40 overflow-y-auto space-y-1">
-                      {importResult.errors.map((err, i) => (
-                        <p key={i} className="text-xs text-red-600 dark:text-red-400">
-                          Row {err.row + 1}: {err.message}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+            {activeJobId && (
+              <ImportJobProgress
+                jobId={activeJobId}
+                label="Importing"
+                onComplete={(job: ImportJobStatus) => {
+                  const result: ImportResult = {
+                    importRunId: job.id,
+                    totalRows: job.totalRows,
+                    importedRows: job.importedRows,
+                    skippedRows: job.skippedRows,
+                    errors: job.errors ?? [],
+                  };
+                  setImportResult(result);
+                }}
+              />
             )}
           </CardContent>
         </Card>
@@ -957,7 +936,7 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           )}
-          {step === 4 && !importResult && (
+          {step === 4 && !activeJobId && !importResult && (
             <Button onClick={handleImport} disabled={applyMutation.isPending || validCount === 0} data-testid="button-import">
               {applyMutation.isPending ? (
                 <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
