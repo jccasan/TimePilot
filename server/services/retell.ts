@@ -6,6 +6,20 @@ function getRetellApiKey(): string {
   return key;
 }
 
+export function getAppBaseUrl(): string {
+  const url = process.env.APP_BASE_URL;
+  if (!url) {
+    console.warn("[Retell] APP_BASE_URL is not set — webhook URL may be incorrect. Set APP_BASE_URL to your production domain (e.g. https://yourapp.replit.app).");
+    const replSlug = process.env.REPL_SLUG;
+    const replOwner = process.env.REPL_OWNER;
+    if (replSlug && replOwner) {
+      return `https://${replSlug}.${replOwner}.repl.co`;
+    }
+    return "";
+  }
+  return url.replace(/\/$/, "");
+}
+
 async function retellFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const apiKey = getRetellApiKey();
   return fetch(`${RETELL_BASE_URL}${path}`, {
@@ -65,6 +79,27 @@ export async function provisionRetellNumber(params: {
   return provisionedNumber;
 }
 
+export async function registerRetellWebhook(agentId: string): Promise<void> {
+  const baseUrl = getAppBaseUrl();
+  if (!baseUrl) {
+    console.warn(`[Retell] Skipping webhook registration for agent ${agentId}: APP_BASE_URL is not configured`);
+    return;
+  }
+  const webhookUrl = `${baseUrl}/api/webhooks/retell`;
+
+  const patchRes = await retellFetch(`/update-agent/${agentId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ webhook_url: webhookUrl }),
+  });
+
+  if (!patchRes.ok) {
+    const body = await patchRes.text();
+    throw new Error(`Retell update-agent (webhook) failed (${patchRes.status}): ${body}`);
+  }
+
+  console.log(`[Retell] Registered webhook URL "${webhookUrl}" on agent ${agentId}`);
+}
+
 export async function seedRetellKnowledgeBase(params: {
   tenantId: string;
   agentId: string;
@@ -89,16 +124,28 @@ export async function seedRetellKnowledgeBase(params: {
   const kbData = await createRes.json() as { knowledge_base_id: string };
   const knowledgeBaseId = kbData.knowledge_base_id;
 
+  const baseUrl = getAppBaseUrl();
+  const webhookUrl = baseUrl ? `${baseUrl}/api/webhooks/retell` : undefined;
+
+  const patchBody: Record<string, unknown> = {
+    knowledge_base_ids: [knowledgeBaseId],
+  };
+  if (webhookUrl) {
+    patchBody.webhook_url = webhookUrl;
+  }
+
   const patchRes = await retellFetch(`/update-agent/${params.agentId}`, {
     method: "PATCH",
-    body: JSON.stringify({
-      knowledge_base_ids: [knowledgeBaseId],
-    }),
+    body: JSON.stringify(patchBody),
   });
 
   if (!patchRes.ok) {
     const body = await patchRes.text();
     throw new Error(`Retell update-agent failed (${patchRes.status}): ${body}`);
+  }
+
+  if (webhookUrl) {
+    console.log(`[Retell] Registered webhook URL "${webhookUrl}" on agent ${params.agentId} (combined with KB patch)`);
   }
 
   return knowledgeBaseId;

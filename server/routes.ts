@@ -43,7 +43,7 @@ import {
   isCustomerOnPlatform,
   ensureConnectedCustomer,
 } from "./services/stripe";
-import { seedRetellKnowledgeBase, provisionRetellNumber } from "./services/retell";
+import { seedRetellKnowledgeBase, provisionRetellNumber, registerRetellWebhook } from "./services/retell";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress, getAutocompleteCached, setAutocompleteCache } from "./services/geocode";
 import { trackApiCall, getApiUsageStats } from "./services/api-usage";
@@ -11763,6 +11763,7 @@ Rules:
               const businessWebsite = websiteField?.text?.value?.trim() || "";
 
               let kbId: string | null = null;
+              const effectiveAgentId = company.retellAgentId || process.env.RETELL_AGENT_ID || null;
               if (businessWebsite && company.retellAgentId) {
                 try {
                   kbId = await seedRetellKnowledgeBase({
@@ -11782,6 +11783,14 @@ Rules:
 
               if (kbId) {
                 (companyUpdates as Record<string, unknown>).retellKnowledgeBaseId = kbId;
+              }
+
+              if (!kbId && effectiveAgentId) {
+                try {
+                  await registerRetellWebhook(effectiveAgentId);
+                } catch (whErr: any) {
+                  console.warn(`[Retell] Failed to register webhook for agent ${effectiveAgentId}: ${whErr.message}`);
+                }
               }
 
               await db.transaction(async (tx) => {
