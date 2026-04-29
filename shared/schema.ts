@@ -150,8 +150,9 @@ export const TIER_CONFIG = {
 } as const;
 
 export const VOICE_PLAN_CONFIG = {
-  voice_starter: { name: "Voice Starter", price: 59, subscriberPrice: 49, includedMinutes: 60, overageRate: 0.50 },
-  voice_pro: { name: "Voice Pro", price: 119, subscriberPrice: 99, includedMinutes: 200, overageRate: 0.50 },
+  voice_bootstrap: { name: "Voice Bootstrap", price: 0, subscriberPrice: 0, includedMinutes: 10, overageRate: 1.00 },
+  voice_starter: { name: "Voice Starter", price: 59, subscriberPrice: 49, includedMinutes: 60, overageRate: 0.66 },
+  voice_pro: { name: "Voice Pro", price: 119, subscriberPrice: 99, includedMinutes: 150, overageRate: 0.50 },
 } as const;
 
 export const companies = pgTable("companies", {

@@ -43,6 +43,7 @@ import {
   isCustomerOnPlatform,
   ensureConnectedCustomer,
   createCustomerSession,
+  reportRetellMinutes,
 } from "./services/stripe";
 import { seedRetellKnowledgeBase, provisionRetellNumber, registerRetellWebhook, checkRetellWebhookSync, getRetellAgentWebhookUrl, getAppBaseUrl } from "./services/retell";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
@@ -937,11 +938,13 @@ export async function registerRoutes(
   });
 
   const VOICE_PRICE_MAP: Record<string, string | undefined> = {
+    voice_bootstrap: process.env.STRIPE_PRICE_VOICE_BOOTSTRAP,
     voice_starter: process.env.STRIPE_PRICE_VOICE_STARTER,
     voice_pro: process.env.STRIPE_PRICE_VOICE_PRO,
   };
 
   const VOICE_COUPON_MAP: Record<string, string | undefined> = {
+    voice_bootstrap: process.env.STRIPE_COUPON_VOICE_BOOTSTRAP_SUBSCRIBER,
     voice_starter: process.env.STRIPE_COUPON_VOICE_STARTER_SUBSCRIBER,
     voice_pro: process.env.STRIPE_COUPON_VOICE_PRO_SUBSCRIBER,
   };
@@ -971,7 +974,7 @@ export async function registerRoutes(
       const baseUrl = getBaseUrl(req);
       const result = await createVoicePlanCheckout({
         tenantId: companyId,
-        voicePlan: plan as "voice_starter" | "voice_pro",
+        voicePlan: plan as "voice_bootstrap" | "voice_starter" | "voice_pro",
         priceId,
         customerEmail: company.email || "",
         successUrl: `${baseUrl}/billing?voice_success=1`,
@@ -1014,7 +1017,7 @@ export async function registerRoutes(
       const baseUrl = getBaseUrl(req);
       const result = await createVoicePlanCheckout({
         tenantId: company.id,
-        voicePlan: plan as "voice_starter" | "voice_pro",
+        voicePlan: plan as "voice_bootstrap" | "voice_starter" | "voice_pro",
         priceId,
         customerEmail: email,
         successUrl: `${baseUrl}/voice-signup/${slug}?success=1`,
@@ -11393,9 +11396,8 @@ Rules:
           metadata: { retellCallId, durationSeconds, callerPhone: callData.from_number },
         });
 
-        const voiceSubId = matchedCompany.stripeVoiceSubscriptionId || matchedCompany.stripeSubscriptionId;
-        if (voiceSubId) {
-          reportMeteredUsage(voiceSubId, "voice_minute", durationMinutes).catch(err =>
+        if (matchedCompany.stripeCustomerId) {
+          reportRetellMinutes(matchedCompany.stripeCustomerId, durationMinutes).catch(err =>
             console.error(`[Retell Webhook] Failed to report metered usage:`, err.message)
           );
         }
@@ -11830,7 +11832,7 @@ Rules:
         const tenantId = meta.tenant_id;
 
         if (meta.checkout_type === "voice_addon" && tenantId) {
-          const voicePlan = meta.voice_plan as "voice_starter" | "voice_pro";
+          const voicePlan = meta.voice_plan as "voice_bootstrap" | "voice_starter" | "voice_pro";
           if (voicePlan && VOICE_PLAN_CONFIG[voicePlan]) {
             const company = await storage.getCompany(tenantId);
             if (company) {
@@ -12080,7 +12082,7 @@ Rules:
 
         if (meta.checkout_type === "voice_addon") {
           const tenantId = meta.tenant_id;
-          const voicePlan = meta.voice_plan as "voice_starter" | "voice_pro";
+          const voicePlan = meta.voice_plan as "voice_bootstrap" | "voice_starter" | "voice_pro";
           if (tenantId && voicePlan) {
             const company = await storage.getCompany(tenantId);
             if (company) {
@@ -12256,6 +12258,7 @@ Rules:
               const voiceUpdates: Record<string, unknown> = { voicePlanStatus: newVoiceStatus };
 
               const voicePriceEnvMap: Record<string, string> = {};
+              if (process.env.STRIPE_PRICE_VOICE_BOOTSTRAP) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_BOOTSTRAP] = "voice_bootstrap";
               if (process.env.STRIPE_PRICE_VOICE_STARTER) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_STARTER] = "voice_starter";
               if (process.env.STRIPE_PRICE_VOICE_PRO) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_PRO] = "voice_pro";
 

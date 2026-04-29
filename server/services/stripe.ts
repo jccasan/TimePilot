@@ -602,6 +602,7 @@ export function validateStripeConfig(): void {
   }
 
   const voicePriceVars = [
+    "STRIPE_PRICE_VOICE_BOOTSTRAP",
     "STRIPE_PRICE_VOICE_STARTER",
     "STRIPE_PRICE_VOICE_PRO",
   ];
@@ -699,9 +700,20 @@ export function getCachedStripePrices(): Record<string, number> | null {
   return cachedStripePrices;
 }
 
+export async function reportRetellMinutes(stripeCustomerId: string, minutes: number): Promise<void> {
+  if (!isStripeConfigured() || !stripeCustomerId) return;
+  try {
+    await createUsageRecord(stripeCustomerId, "voice_minutes_used", minutes);
+    console.log(`[Stripe Usage] Reported ${minutes} voice_minutes_used for customer ${stripeCustomerId}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[Stripe Usage] Failed to report voice_minutes_used for ${stripeCustomerId}: ${message}`);
+  }
+}
+
 export async function createVoicePlanCheckout(params: {
   tenantId: string;
-  voicePlan: "voice_starter" | "voice_pro";
+  voicePlan: "voice_bootstrap" | "voice_starter" | "voice_pro";
   priceId: string;
   customerEmail: string;
   successUrl: string;
