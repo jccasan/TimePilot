@@ -3449,7 +3449,7 @@ export default function Settings() {
 
   // Client Notifications (Import Mode + Onboarding Complete)
   const [showOnboardingDialog, setShowOnboardingDialog] = useState(false);
-  const [onboardingResults, setOnboardingResults] = useState<{ sent: number; total: number; results: { name: string; email: string; status: string }[] } | null>(null);
+  const [onboardingResults, setOnboardingResults] = useState<{ sent: number; skipped: number; total: number; results: { name: string; email: string; status: string }[] } | null>(null);
 
   const toggleImportModeMutation = useMutation({
     mutationFn: async (suppressed: boolean) => {
@@ -3482,6 +3482,7 @@ export default function Settings() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
       setOnboardingResults(data);
+      toast({ title: `Welcome emails sent to ${data.sent} client${data.sent !== 1 ? "s" : ""}`, description: data.skipped > 0 ? `${data.skipped} skipped due to errors.` : "Import Mode has been turned off." });
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message || "Failed to send onboarding emails.", variant: "destructive" });
@@ -4493,7 +4494,7 @@ export default function Settings() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-md px-3 py-2">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
-                Sent to {onboardingResults.sent} of {onboardingResults.total} clients. Import Mode is now off.
+                Sent to {onboardingResults.sent} of {onboardingResults.total} clients.{onboardingResults.skipped > 0 ? ` ${onboardingResults.skipped} skipped.` : ""} Import Mode is now off.
               </div>
               {onboardingResults.results.length > 0 && (
                 <div className="max-h-56 overflow-y-auto border rounded-md divide-y text-sm">

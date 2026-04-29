@@ -2512,13 +2512,16 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
+      const sentCount = results.filter(r => r.status === "sent").length;
+      const skippedCount = results.filter(r => r.status === "skipped").length;
+
       // Mark as sent and disable suppression
       await storage.updateCompany(companyId, {
         clientNotificationsSuppressed: false,
         onboardingCompleteSentAt: new Date(),
-      } as any);
+      });
 
-      res.json({ success: true, sent: results.filter(r => r.status === "sent").length, total: eligible.length, results });
+      res.json({ success: true, sent: sentCount, skipped: skippedCount, total: eligible.length, results });
     } catch (err) { handleError(res, err); }
   });
 
@@ -11647,7 +11650,8 @@ Rules:
       const portalUrl = `${baseUrl}/portal`;
 
       if (company?.clientNotificationsSuppressed) {
-        return res.status(400).json({ error: "Client notifications are currently suppressed (Import Mode is on). Disable Import Mode in Settings to send reminders." });
+        console.log(`[send-payment-reminder] Suppressed for contact ${p(req.params.id)} — Import Mode on`);
+        return res.json({ success: true, smsSent: false, emailSent: false, totalOwed, suppressed: true });
       }
 
       let smsSent = false;
@@ -15084,32 +15088,36 @@ Rules:
 
       if (contact.email) {
         const company = await storage.getCompany(companyId);
-        const emailResult = await sendEmail({
-          companyId,
-          to: contact.email,
-          subject: `${company?.name || "Your Service Provider"} — Please Complete Your Onboarding Form`,
-          senderName: company?.name || undefined,
-          replyTo: company?.email || undefined,
-          text: `Hi ${contact.firstName},\n\nWelcome! To prepare for your first service visit, please take a few minutes to fill out our onboarding form.\n\nOnboarding Form: ${onboardingUrl}\n\nThis helps our technicians know about your dogs, gate access, and how to best serve you.\n\nThank you!`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-                <h1 style="color: white; margin: 0;">${escapeHtml(company?.name || "Your Service Provider")}</h1>
+        if (company?.clientNotificationsSuppressed) {
+          console.log(`[send-onboarding] Email suppressed for contact ${p(req.params.id)} — Import Mode on`);
+        } else {
+          const emailResult = await sendEmail({
+            companyId,
+            to: contact.email,
+            subject: `${company?.name || "Your Service Provider"} — Please Complete Your Onboarding Form`,
+            senderName: company?.name || undefined,
+            replyTo: company?.email || undefined,
+            text: `Hi ${contact.firstName},\n\nWelcome! To prepare for your first service visit, please take a few minutes to fill out our onboarding form.\n\nOnboarding Form: ${onboardingUrl}\n\nThis helps our technicians know about your dogs, gate access, and how to best serve you.\n\nThank you!`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">${escapeHtml(company?.name || "Your Service Provider")}</h1>
+                </div>
+                <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                  <p>Hi ${escapeHtml(contact.firstName)},</p>
+                  <p>Welcome! To prepare for your first service visit, please take a few minutes to fill out our onboarding form.</p>
+                  <p>This helps our technicians know about your dogs, gate access, and how to best serve you.</p>
+                  <a href="${escapeHtml(onboardingUrl)}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Complete Onboarding Form</a>
+                  <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${escapeHtml(onboardingUrl)}</p>
+                </div>
               </div>
-              <div style="padding: 20px; border: 1px solid #e5e7eb;">
-                <p>Hi ${escapeHtml(contact.firstName)},</p>
-                <p>Welcome! To prepare for your first service visit, please take a few minutes to fill out our onboarding form.</p>
-                <p>This helps our technicians know about your dogs, gate access, and how to best serve you.</p>
-                <a href="${escapeHtml(onboardingUrl)}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Complete Onboarding Form</a>
-                <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${escapeHtml(onboardingUrl)}</p>
-              </div>
-            </div>
-          `,
-        }).catch((err) => {
-          console.error("Failed to send onboarding email:", err);
-          return { success: false, error: String(err) };
-        });
-        emailed = emailResult.success === true;
+            `,
+          }).catch((err) => {
+            console.error("Failed to send onboarding email:", err);
+            return { success: false, error: String(err) };
+          });
+          emailed = emailResult.success === true;
+        }
       }
 
       storage.createActivityLog({
@@ -15158,27 +15166,31 @@ Rules:
 
       if (contact.email) {
         const company = await storage.getCompany(companyId);
-        sendEmail({
-          companyId,
-          to: contact.email,
-          subject: `${company?.name || "Your Service Provider"} — New Onboarding Link`,
-          senderName: company?.name || undefined,
-          replyTo: company?.email || undefined,
-          text: `Hi ${contact.firstName},\n\nA new onboarding link has been generated for your account. Please use the link below (your previous link is no longer valid).\n\nOnboarding Form: ${onboardingUrl}\n\nThank you!`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-                <h1 style="color: white; margin: 0;">${escapeHtml(company?.name || "Your Service Provider")}</h1>
+        if (company?.clientNotificationsSuppressed) {
+          console.log(`[regenerate-onboarding] Email suppressed for contact ${p(req.params.id)} — Import Mode on`);
+        } else {
+          sendEmail({
+            companyId,
+            to: contact.email,
+            subject: `${company?.name || "Your Service Provider"} — New Onboarding Link`,
+            senderName: company?.name || undefined,
+            replyTo: company?.email || undefined,
+            text: `Hi ${contact.firstName},\n\nA new onboarding link has been generated for your account. Please use the link below (your previous link is no longer valid).\n\nOnboarding Form: ${onboardingUrl}\n\nThank you!`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">${escapeHtml(company?.name || "Your Service Provider")}</h1>
+                </div>
+                <div style="padding: 20px; border: 1px solid #e5e7eb;">
+                  <p>Hi ${escapeHtml(contact.firstName)},</p>
+                  <p>A new onboarding link has been generated for your account. Please use the link below — your previous link is no longer valid.</p>
+                  <a href="${escapeHtml(onboardingUrl)}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Complete Onboarding Form</a>
+                  <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${escapeHtml(onboardingUrl)}</p>
+                </div>
               </div>
-              <div style="padding: 20px; border: 1px solid #e5e7eb;">
-                <p>Hi ${escapeHtml(contact.firstName)},</p>
-                <p>A new onboarding link has been generated for your account. Please use the link below — your previous link is no longer valid.</p>
-                <a href="${escapeHtml(onboardingUrl)}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Complete Onboarding Form</a>
-                <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${escapeHtml(onboardingUrl)}</p>
-              </div>
-            </div>
-          `,
-        }).catch((err) => console.error("Failed to send regenerated onboarding email:", err));
+            `,
+          }).catch((err) => console.error("Failed to send regenerated onboarding email:", err));
+        }
       }
 
       res.json({ success: true, url: onboardingUrl, emailed: !!contact.email });

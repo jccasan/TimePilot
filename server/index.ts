@@ -1778,9 +1778,23 @@ async function ensureCompanyNotificationColumns() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
+    // New tenants default to suppressed (true) — they should enable import mode by default.
+    // Existing tenants who already have contacts get the column added as false (already live)
+    // because they were active before this feature existed.
     await pool.query(`
-      ALTER TABLE companies ADD COLUMN IF NOT EXISTS client_notifications_suppressed BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS client_notifications_suppressed BOOLEAN NOT NULL DEFAULT true;
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS onboarding_complete_sent_at TIMESTAMP;
+    `);
+    // For existing tenants who already have contacts, default them to NOT suppressed
+    // so their existing email flows aren't suddenly broken after this migration.
+    await pool.query(`
+      UPDATE companies c
+      SET client_notifications_suppressed = false
+      WHERE EXISTS (
+        SELECT 1 FROM contacts ct WHERE ct.company_id = c.id LIMIT 1
+      )
+      AND client_notifications_suppressed = true
+      AND onboarding_complete_sent_at IS NULL;
     `);
     console.log("[Migration] client_notifications_suppressed + onboarding_complete_sent_at columns verified");
   } catch (err) {

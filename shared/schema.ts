@@ -249,7 +249,7 @@ export const companies = pgTable("companies", {
   googleReviewUrl: text("google_review_url"),
   reviewRequestAfterVisits: integer("review_request_after_visits").notNull().default(3),
   reviewRequestCustomMessage: text("review_request_custom_message"),
-  clientNotificationsSuppressed: boolean("client_notifications_suppressed").notNull().default(false),
+  clientNotificationsSuppressed: boolean("client_notifications_suppressed").notNull().default(true),
   onboardingCompleteSentAt: timestamp("onboarding_complete_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

@@ -101,6 +101,10 @@ export async function runReminders() {
 
   for (const company of allCompanies) {
     if (!company.remindersEnabled) continue;
+    if (company.clientNotificationsSuppressed) {
+      console.log(`[reminders] Skipping company ${company.id} — client notifications suppressed (Import Mode on)`);
+      continue;
+    }
 
     try {
       const tz = company.timezone || "America/New_York";
