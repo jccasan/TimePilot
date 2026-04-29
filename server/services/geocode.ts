@@ -1,3 +1,5 @@
+import { trackApiCall } from "./api-usage";
+
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 interface CacheEntry<T> {
@@ -93,6 +95,7 @@ export async function geocodeAddress(
         longitude: String(coords[0]),
       };
       geocodeCache.set(cacheKey, { value: result, storedAt: Date.now() });
+      trackApiCall("mapbox", "geocode");
       return result;
     } catch {
       continue;

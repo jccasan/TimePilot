@@ -6,12 +6,15 @@ import {
   companies, companyUsers, contacts, servicePlans, invoices,
   visits, smsMessages, emailsSent, saasCostsMonthly,
   TIER_CONFIG, messages, messageAttachments, messageExceptions,
-  voiceCalls, quoteFormEvents,
+  voiceCalls, quoteFormEvents, apiUsageDaily,
 } from "@shared/schema";
 
 const SMS_COST_PER_SEGMENT_CENTS = 75;
 const EMAIL_COST_PER_UNIT_CENTS = 10;
 const VOICE_COST_PER_MINUTE_CENTS = 50;
+const MAPBOX_GEOCODE_COST_CENTS = 0.075;
+const MAPBOX_DIRECTIONS_COST_CENTS = 0.075;
+const OPENAI_CALL_COST_CENTS = 0.3;
 const STRIPE_PCT = 2.9;
 const STRIPE_FIXED_CENTS = 30;
 
@@ -1100,6 +1103,181 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
     } catch (err) {
       console.error("Quote funnel analytics error:", err);
       res.status(500).json({ error: "Failed to load funnel data" });
+    }
+  });
+
+  app.get("/api/admin/api-usage", async (req: Request, res: Response) => {
+    try {
+      const days = Number(req.query.days) || 30;
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+      const sinceStr = since.toISOString().slice(0, 10);
+
+      const apiRows = await db
+        .select({
+          date: apiUsageDaily.date,
+          provider: apiUsageDaily.provider,
+          metric: apiUsageDaily.metric,
+          calls: apiUsageDaily.calls,
+        })
+        .from(apiUsageDaily)
+        .where(gte(apiUsageDaily.date, sinceStr))
+        .orderBy(apiUsageDaily.date);
+
+      const smsTotals = await db
+        .select({ calls: sql<number>`COALESCE(SUM(segment_count), 0)` })
+        .from(smsMessages)
+        .where(gte(smsMessages.createdAt, since));
+
+      const emailTotals = await db
+        .select({ calls: sql<number>`COUNT(*)` })
+        .from(emailsSent)
+        .where(gte(emailsSent.createdAt, since));
+
+      const voiceTotals = await db
+        .select({ minutes: sql<number>`COALESCE(SUM(duration_seconds) / 60.0, 0)` })
+        .from(voiceCalls)
+        .where(gte(voiceCalls.createdAt, since));
+
+      const stripeTotals = await db
+        .select({
+          calls: sql<number>`COUNT(*)`,
+          totalCents: sql<number>`COALESCE(SUM(amount_cents), 0)`,
+        })
+        .from(invoices)
+        .where(and(
+          gte(invoices.createdAt, since),
+          eq(invoices.status, "paid"),
+        ));
+
+      const smsDaily = await db
+        .select({
+          date: sql<string>`DATE(${smsMessages.createdAt})`,
+          calls: sql<number>`COALESCE(SUM(segment_count), 0)`,
+        })
+        .from(smsMessages)
+        .where(gte(smsMessages.createdAt, since))
+        .groupBy(sql`DATE(${smsMessages.createdAt})`)
+        .orderBy(sql`DATE(${smsMessages.createdAt})`);
+
+      const emailDaily = await db
+        .select({
+          date: sql<string>`DATE(${emailsSent.createdAt})`,
+          calls: sql<number>`COUNT(*)`,
+        })
+        .from(emailsSent)
+        .where(gte(emailsSent.createdAt, since))
+        .groupBy(sql`DATE(${emailsSent.createdAt})`)
+        .orderBy(sql`DATE(${emailsSent.createdAt})`);
+
+      const voiceDaily = await db
+        .select({
+          date: sql<string>`DATE(${voiceCalls.createdAt})`,
+          minutes: sql<number>`COALESCE(SUM(duration_seconds) / 60.0, 0)`,
+        })
+        .from(voiceCalls)
+        .where(gte(voiceCalls.createdAt, since))
+        .groupBy(sql`DATE(${voiceCalls.createdAt})`)
+        .orderBy(sql`DATE(${voiceCalls.createdAt})`);
+
+      const aggregated: Record<string, { calls: number; costCents: number; daily: Record<string, number> }> = {};
+
+      for (const row of apiRows) {
+        const key = `${row.provider}:${row.metric}`;
+        if (!aggregated[key]) aggregated[key] = { calls: 0, costCents: 0, daily: {} };
+        const calls = Number(row.calls);
+        aggregated[key].calls += calls;
+        const date = String(row.date);
+        aggregated[key].daily[date] = (aggregated[key].daily[date] || 0) + calls;
+
+        if (row.provider === "mapbox" && row.metric === "geocode") {
+          aggregated[key].costCents += calls * MAPBOX_GEOCODE_COST_CENTS;
+        } else if (row.provider === "mapbox" && row.metric === "directions") {
+          aggregated[key].costCents += calls * MAPBOX_DIRECTIONS_COST_CENTS;
+        } else if (row.provider === "openai") {
+          aggregated[key].costCents += calls * OPENAI_CALL_COST_CENTS;
+        }
+      }
+
+      const smsCalls = Number(smsTotals[0]?.calls || 0);
+      const emailCalls = Number(emailTotals[0]?.calls || 0);
+      const voiceMinutes = Number(voiceTotals[0]?.minutes || 0);
+      const stripeTransactions = Number(stripeTotals[0]?.calls || 0);
+      const stripeTotalCents = Number(stripeTotals[0]?.totalCents || 0);
+
+      const providers = [
+        {
+          provider: "mapbox",
+          metric: "geocode",
+          label: "Mapbox Geocoding",
+          calls: aggregated["mapbox:geocode"]?.calls || 0,
+          costCents: aggregated["mapbox:geocode"]?.costCents || 0,
+          daily: aggregated["mapbox:geocode"]?.daily || {},
+          unit: "geocodes",
+        },
+        {
+          provider: "mapbox",
+          metric: "directions",
+          label: "Mapbox Directions",
+          calls: aggregated["mapbox:directions"]?.calls || 0,
+          costCents: aggregated["mapbox:directions"]?.costCents || 0,
+          daily: aggregated["mapbox:directions"]?.daily || {},
+          unit: "route requests",
+        },
+        {
+          provider: "openai",
+          metric: "rover_chat",
+          label: "OpenAI (Rover AI)",
+          calls: aggregated["openai:rover_chat"]?.calls || 0,
+          costCents: aggregated["openai:rover_chat"]?.costCents || 0,
+          daily: aggregated["openai:rover_chat"]?.daily || {},
+          unit: "completions",
+        },
+        {
+          provider: "telnyx",
+          metric: "sms",
+          label: "Telnyx SMS",
+          calls: smsCalls,
+          costCents: smsCalls * SMS_COST_PER_SEGMENT_CENTS,
+          daily: Object.fromEntries(smsDaily.map(r => [r.date, Number(r.calls)])),
+          unit: "segments",
+        },
+        {
+          provider: "sendgrid",
+          metric: "email",
+          label: "SendGrid Email",
+          calls: emailCalls,
+          costCents: emailCalls * EMAIL_COST_PER_UNIT_CENTS,
+          daily: Object.fromEntries(emailDaily.map(r => [r.date, Number(r.calls)])),
+          unit: "emails",
+        },
+        {
+          provider: "retell",
+          metric: "voice",
+          label: "Retell Voice AI",
+          calls: Math.round(voiceMinutes),
+          costCents: voiceMinutes * VOICE_COST_PER_MINUTE_CENTS,
+          daily: Object.fromEntries(voiceDaily.map(r => [r.date, Math.round(Number(r.minutes))])),
+          unit: "minutes",
+        },
+        {
+          provider: "stripe",
+          metric: "payments",
+          label: "Stripe Payments",
+          calls: stripeTransactions,
+          costCents: (stripeTotalCents * STRIPE_PCT / 100) + (stripeTransactions * STRIPE_FIXED_CENTS),
+          daily: {},
+          unit: "transactions",
+        },
+      ];
+
+      const totalCalls = providers.reduce((a, p) => a + p.calls, 0);
+      const totalCostCents = providers.reduce((a, p) => a + p.costCents, 0);
+
+      res.json({ providers, totalCalls, totalCostCents, days });
+    } catch (err) {
+      console.error("API usage analytics error:", err);
+      res.status(500).json({ error: "Failed to load API usage data" });
     }
   });
 }

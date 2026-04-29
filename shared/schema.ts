@@ -1946,3 +1946,15 @@ export const errorFixTasks = pgTable("error_fix_tasks", {
 export const insertErrorFixTaskSchema = createInsertSchema(errorFixTasks).omit({ id: true, createdAt: true });
 export type ErrorFixTask = typeof errorFixTasks.$inferSelect;
 export type InsertErrorFixTask = z.infer<typeof insertErrorFixTaskSchema>;
+
+export const apiUsageDaily = pgTable("api_usage_daily", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: date("date").notNull(),
+  provider: varchar("provider", { length: 50 }).notNull(),
+  metric: varchar("metric", { length: 50 }).notNull(),
+  calls: integer("calls").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_api_usage_daily_date").on(table.date),
+  index("idx_api_usage_daily_provider").on(table.provider),
+]);

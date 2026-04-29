@@ -1,3 +1,5 @@
+import { trackApiCall } from "./api-usage";
+
 interface Stop {
   id: string;
   latitude: number;
@@ -203,6 +205,7 @@ export async function fetchMapboxDirections(coordinates: { longitude: number; la
       const data = await res.json();
       const route = data.routes?.[0];
       if (!route) return null;
+      trackApiCall("mapbox", "directions");
       return { distance: route.distance / 1609.34, duration: route.duration / 60 };
     } catch (err) {
       console.log("[route-optimizer] Mapbox Directions API error, falling back to haversine");
@@ -227,6 +230,7 @@ export async function fetchMapboxDirections(coordinates: { longitude: number; la
       const data = await res.json();
       const route = data.routes?.[0];
       if (!route) return null;
+      trackApiCall("mapbox", "directions");
       totalDistance += route.distance;
       totalDuration += route.duration;
     } catch {
@@ -270,6 +274,7 @@ export async function fetchMapboxDirectionsWithLegs(
     const route = data.routes?.[0];
     if (!route) return null;
 
+    trackApiCall("mapbox", "directions");
     const legs: RouteLeg[] = [];
     if (route.legs && Array.isArray(route.legs)) {
       for (let i = 0; i < route.legs.length; i++) {

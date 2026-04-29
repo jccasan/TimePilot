@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { db } from "../db";
+import { trackApiCall } from "./api-usage";
 import { contacts, invoices, visits, routes, servicePlans, companyUsers, users, companies, notifications, properties } from "@shared/schema";
 import type { InsertContact, InsertProperty } from "@shared/schema";
 import { desc } from "drizzle-orm";
@@ -1061,6 +1062,7 @@ export async function streamRoverChat(
         setTimeout(() => reject(new Error("OPENAI_TIMEOUT")), OPENAI_TIMEOUT_MS)
       ),
     ]);
+    trackApiCall("openai", "rover_chat");
 
     let fullResponse = "";
     let toolCalls: { id: string; name: string; arguments: string }[] = [];
@@ -1136,6 +1138,7 @@ export async function streamRoverChat(
         stream: true,
         max_completion_tokens: 8192,
       });
+      trackApiCall("openai", "rover_chat");
 
       fullResponse = "";
       for await (const chunk of followUp) {

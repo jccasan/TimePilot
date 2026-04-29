@@ -18,7 +18,7 @@ import {
   CreditCard, Repeat, Target, MessageSquare, Calculator, Search,
   ChevronRight, ArrowUpRight, ArrowDownRight, Activity,
   Mail, Phone, BarChart3, Wallet, ArrowUpDown, Plus, Pencil,
-  Filter,
+  Filter, Cpu,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState, useMemo } from "react";
@@ -1052,7 +1052,189 @@ const TABS = [
   { key: "messaging", label: "Messaging", icon: MessageSquare },
   { key: "economics", label: "Unit Economics", icon: Calculator },
   { key: "funnel", label: "Quote Funnel", icon: Filter },
+  { key: "api-usage", label: "API Usage", icon: Cpu },
 ] as const;
+
+const PROVIDER_COLORS: Record<string, string> = {
+  mapbox: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  openai: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  telnyx: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  sendgrid: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  retell: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  stripe: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+};
+
+interface ApiProvider {
+  provider: string;
+  metric: string;
+  label: string;
+  calls: number;
+  costCents: number;
+  daily: Record<string, number>;
+  unit: string;
+}
+
+interface ApiUsageData {
+  providers: ApiProvider[];
+  totalCalls: number;
+  totalCostCents: number;
+  days: number;
+}
+
+function MiniSparkline({ daily, days }: { daily: Record<string, number>; days: number }) {
+  const bars: number[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    bars.push(daily[key] || 0);
+  }
+  const max = Math.max(...bars, 1);
+  return (
+    <div className="flex items-end gap-px h-8" data-testid="sparkline">
+      {bars.map((v, i) => (
+        <div
+          key={i}
+          className="flex-1 bg-primary/40 rounded-sm min-w-px"
+          style={{ height: `${Math.max((v / max) * 100, v > 0 ? 8 : 2)}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ApiUsageTab() {
+  const [days, setDays] = useState(30);
+  const { data, isLoading } = useQuery<ApiUsageData>({
+    queryKey: ["/api/admin/api-usage", days],
+    queryFn: adminFetchFn(`/api/admin/api-usage?days=${days}`),
+  });
+
+  const totalCalls = data?.totalCalls ?? 0;
+  const totalCost = (data?.totalCostCents ?? 0) / 100;
+
+  return (
+    <div className="space-y-6" data-testid="api-usage-tab">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">API Usage</h2>
+          <p className="text-sm text-muted-foreground">Third-party API calls and estimated costs across all services</p>
+        </div>
+        <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
+          <SelectTrigger className="w-32" data-testid="select-api-days">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7">Last 7 days</SelectItem>
+            <SelectItem value="30">Last 30 days</SelectItem>
+            <SelectItem value="60">Last 60 days</SelectItem>
+            <SelectItem value="90">Last 90 days</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Total API Calls</p>
+            {isLoading ? <Skeleton className="h-7 w-24 mt-1" /> : (
+              <p className="text-2xl font-bold mt-1" data-testid="text-total-api-calls">{totalCalls.toLocaleString()}</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Est. Total Cost</p>
+            {isLoading ? <Skeleton className="h-7 w-24 mt-1" /> : (
+              <p className="text-2xl font-bold mt-1" data-testid="text-total-api-cost">{fmt(totalCost)}</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Mapbox Calls</p>
+            {isLoading ? <Skeleton className="h-7 w-24 mt-1" /> : (
+              <p className="text-2xl font-bold mt-1" data-testid="text-mapbox-calls">
+                {(data?.providers.filter(p => p.provider === "mapbox").reduce((a, p) => a + p.calls, 0) ?? 0).toLocaleString()}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">OpenAI Calls</p>
+            {isLoading ? <Skeleton className="h-7 w-24 mt-1" /> : (
+              <p className="text-2xl font-bold mt-1" data-testid="text-openai-calls">
+                {(data?.providers.find(p => p.provider === "openai")?.calls ?? 0).toLocaleString()}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Provider Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Provider / Service</TableHead>
+                <TableHead className="text-right">Calls</TableHead>
+                <TableHead className="text-right">Unit</TableHead>
+                <TableHead className="text-right">Est. Cost</TableHead>
+                <TableHead className="w-32">Trend</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell><Skeleton className="h-4 w-36" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-8 w-32" /></TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                data?.providers.map((p) => (
+                  <TableRow key={`${p.provider}-${p.metric}`} data-testid={`row-api-${p.provider}-${p.metric}`}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Badge className={`text-xs ${PROVIDER_COLORS[p.provider] || "bg-muted"}`}>
+                          {p.provider}
+                        </Badge>
+                        <span className="text-sm">{p.label}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">{p.calls.toLocaleString()}</TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">{p.unit}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{fmt(p.costCents / 100)}</TableCell>
+                    <TableCell>
+                      <MiniSparkline daily={p.daily} days={Math.min(days, 30)} />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-muted/30">
+        <CardContent className="pt-4 pb-3">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium">Cost estimates</span> are approximations based on standard public pricing:
+            Mapbox $0.00075/call, OpenAI ~$0.003/call (gpt-5-mini), Telnyx $0.0075/segment, SendGrid $0.001/email, Retell $0.005/min, Stripe 2.9%+$0.30.
+            Mapbox and OpenAI calls are tracked from when this feature was deployed; historical data starts accumulating now.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function InactiveUsersAlert() {
   const { data: inactiveUsers } = useQuery<Record<string, any[]>>({
@@ -1155,6 +1337,7 @@ export default function AdminAnalytics() {
         {activeTab === "messaging" && <MessagingTab />}
         {activeTab === "economics" && <UnitEconomicsTab />}
         {activeTab === "funnel" && <FunnelTab />}
+        {activeTab === "api-usage" && <ApiUsageTab />}
       </div>
     </div>
   );
