@@ -463,7 +463,7 @@ export async function createSubscriptionCheckout(params: {
 
 export async function createCustomerSession(customerId: string): Promise<string | null> {
   const stripe = getStripe();
-  const session = await stripe.customers.createSession({
+  const session = await stripe.customerSessions.create({
     customer: customerId,
     components: { pricing_table: { enabled: true } },
   });
