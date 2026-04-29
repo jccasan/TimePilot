@@ -146,6 +146,7 @@ export interface IStorage {
   createRoute(data: InsertRoute): Promise<Route>;
   updateRoute(id: string, companyId: string, data: Partial<InsertRoute>): Promise<Route>;
   deleteRoute(id: string, companyId: string): Promise<void>;
+  moveRouteToDate(routeId: string, companyId: string, targetDate: string): Promise<{ movedCount: number; targetRouteId: string }>;
 
   // Agreements
   getAgreement(id: string, companyId: string): Promise<Agreement | undefined>;
@@ -765,6 +766,65 @@ export class DatabaseStorage implements IStorage {
 
   async deleteRoute(id: string, companyId: string): Promise<void> {
     await db.delete(routes).where(and(eq(routes.id, id), eq(routes.companyId, companyId)));
+  }
+
+  async moveRouteToDate(routeId: string, companyId: string, targetDate: string): Promise<{ movedCount: number; targetRouteId: string }> {
+    const sourceRoute = await this.getRoute(routeId, companyId);
+    if (!sourceRoute) throw new Error("Route not found");
+    if (sourceRoute.date === targetDate) throw new Error("Target date is the same as the current route date");
+
+    const existingTargetRoute = await this.getRouteByDate(companyId, targetDate);
+    let targetRouteId: string;
+
+    if (existingTargetRoute) {
+      // Target date route already exists — use it; source route keeps its own date
+      targetRouteId = existingTargetRoute.id;
+    } else {
+      // No route exists for targetDate.
+      // Check if source route has any non-scheduled visits that would remain after the move.
+      const nonScheduled = await db.select({ id: visits.id }).from(visits)
+        .where(and(
+          eq(visits.routeId, routeId),
+          eq(visits.companyId, companyId),
+          inArray(visits.status, ["in_progress", "completed", "skipped", "cancelled"]),
+        ))
+        .limit(1);
+
+      if (nonScheduled.length === 0) {
+        // Source route will be empty after the move — reuse it as the target route by updating its date
+        const d = new Date(targetDate + "T00:00:00Z");
+        const dayNameMap: Record<number, "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"> = {
+          0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
+          4: "thursday", 5: "friday", 6: "saturday",
+        };
+        const displayNames: Record<number, string> = {
+          0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday",
+          4: "Thursday", 5: "Friday", 6: "Saturday",
+        };
+        const dayOfWeek = dayNameMap[d.getUTCDay()];
+        const formatted = `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
+        const name = `${displayNames[d.getUTCDay()]} ${formatted}`;
+        await db.update(routes)
+          .set({ date: targetDate, dayOfWeek, name, updatedAt: new Date() })
+          .where(and(eq(routes.id, routeId), eq(routes.companyId, companyId)));
+        targetRouteId = routeId;
+      } else {
+        // Non-scheduled visits remain — create a fresh route for targetDate so source keeps its date
+        const newRoute = await this.getOrCreateDailyRoute(companyId, targetDate);
+        targetRouteId = newRoute.id;
+      }
+    }
+
+    const moved = await db.update(visits)
+      .set({ routeId: targetRouteId, scheduledDate: targetDate, updatedAt: new Date() })
+      .where(and(
+        eq(visits.routeId, routeId),
+        eq(visits.companyId, companyId),
+        eq(visits.status, "scheduled"),
+      ))
+      .returning({ id: visits.id });
+
+    return { movedCount: moved.length, targetRouteId };
   }
 
   // ================ Agreements ================

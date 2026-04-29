@@ -324,7 +324,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 }
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
-  onEdit, onDelete, onOptimize, onReverse, onDispatch, onUnassignAll, onLock, isOptimizing, isReversing, isDispatching, isUnassigning, isLocking,
+  onEdit, onDelete, onOptimize, onReverse, onDispatch, onUnassignAll, onLock, onMoveToDay, isOptimizing, isReversing, isDispatching, isUnassigning, isLocking,
   visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick, onOnMyWay, onMyWaySendingId, onSelectStop, selectedStopId }: {
   route: RouteWithOptStatus; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
@@ -334,6 +334,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   onDispatch: (routeId: string) => void;
   onUnassignAll: (routeId: string) => void;
   onLock: (routeId: string) => void;
+  onMoveToDay: (routeId: string) => void;
   isOptimizing: boolean; isReversing: boolean; isDispatching: boolean; isUnassigning: boolean; isLocking: boolean;
   visitsByPlan?: Record<string, Visit>;
   onVisitStatusChange?: (visitId: string, status: string) => void;
@@ -393,6 +394,19 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
             <Button variant="ghost" size="icon" onClick={() => onDelete(route)} disabled={stops.length > 0} data-testid={`button-delete-route-${route.id}`}>
               <Trash2 className="h-4 w-4" />
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" data-testid={`button-route-more-${route.id}`}>
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onMoveToDay(route.id)} data-testid={`menu-move-to-day-${route.id}`}>
+                  <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />
+                  Move to another day
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -1013,6 +1027,8 @@ export default function RoutesPage() {
   const [showPurchase, setShowPurchase] = useState(false);
   const [unassigningRouteId, setUnassigningRouteId] = useState<string | null>(null);
   const [confirmUnassignAll, setConfirmUnassignAll] = useState<string | null>(null);
+  const [moveToDayRouteId, setMoveToDayRouteId] = useState<string | null>(null);
+  const [moveToDayDate, setMoveToDayDate] = useState<string>("");
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [showZones, setShowZones] = useState(false);
@@ -1665,6 +1681,23 @@ export default function RoutesPage() {
     },
   });
 
+  const moveToDayMutation = useMutation({
+    mutationFn: async ({ routeId, targetDate }: { routeId: string; targetDate: string }) => {
+      const res = await apiRequest("POST", `/api/routes/${routeId}/move-day`, { targetDate });
+      return res.json() as Promise<{ movedCount: number; targetRouteId: string }>;
+    },
+    onSuccess: (data) => {
+      setMoveToDayRouteId(null);
+      setMoveToDayDate("");
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/range"] });
+      toast({ title: "Route moved", description: `${data.movedCount} visit${data.movedCount === 1 ? "" : "s"} moved to the selected day.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Move failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const resolveDropTarget = useCallback((overId: string): string | null => {
     if (overId === UNASSIGNED_DROP) return UNASSIGNED_DROP;
     if (overId.startsWith("route-")) return overId;
@@ -1935,6 +1968,7 @@ export default function RoutesPage() {
                           onDispatch={(id) => dispatchMutation.mutate(id)}
                           onUnassignAll={(id) => setConfirmUnassignAll(id)}
                           onLock={(id) => lockRouteMutation.mutate(id)}
+                          onMoveToDay={(id) => { setMoveToDayRouteId(id); setMoveToDayDate(""); }}
                           isOptimizing={optimizingRouteId === route.id}
                           isReversing={reversingRouteId === route.id}
                           isDispatching={dispatchingRouteId === route.id}
@@ -2060,6 +2094,55 @@ export default function RoutesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!moveToDayRouteId} onOpenChange={(open) => { if (!open) { setMoveToDayRouteId(null); setMoveToDayDate(""); } }}>
+        <DialogContent data-testid="dialog-move-to-day">
+          <DialogHeader>
+            <DialogTitle>Move Route to Another Day</DialogTitle>
+            <DialogDescription>
+              All scheduled visits in this route will be moved to the selected date. Visits that are already in progress, completed, skipped, or cancelled will remain unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="move-to-day-date">Target Date</Label>
+              <Input
+                id="move-to-day-date"
+                type="date"
+                value={moveToDayDate}
+                onChange={(e) => setMoveToDayDate(e.target.value)}
+                data-testid="input-move-to-day-date"
+              />
+              {moveToDayDate && moveToDayRouteId && allRoutes.find(r => r.id === moveToDayRouteId)?.date === moveToDayDate && (
+                <p className="text-xs text-destructive" data-testid="text-same-date-error">
+                  Target date must be different from the route's current date.
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setMoveToDayRouteId(null); setMoveToDayDate(""); }} data-testid="button-cancel-move-to-day">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (moveToDayRouteId && moveToDayDate) {
+                  moveToDayMutation.mutate({ routeId: moveToDayRouteId, targetDate: moveToDayDate });
+                }
+              }}
+              disabled={
+                !moveToDayDate ||
+                moveToDayMutation.isPending ||
+                (moveToDayRouteId ? allRoutes.find(r => r.id === moveToDayRouteId)?.date === moveToDayDate : false)
+              }
+              data-testid="button-confirm-move-to-day"
+            >
+              {moveToDayMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirm Move
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <SavingsSummaryDialog open={showSavings} onOpenChange={setShowSavings} result={savingsResult} />
       <StripePricingTableDialog open={showPurchase} onOpenChange={setShowPurchase}

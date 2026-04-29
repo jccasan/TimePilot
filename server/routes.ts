@@ -4790,6 +4790,18 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/routes/:id/move-day", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { targetDate } = z.object({ targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "targetDate must be YYYY-MM-DD") }).parse(req.body);
+      const route = await storage.getRoute(p(req.params.id), companyId);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+      if (route.date === targetDate) return res.status(400).json({ error: "Target date must be different from the route's current date" });
+      const result = await storage.moveRouteToDate(p(req.params.id), companyId, targetDate);
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/route-credits", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
