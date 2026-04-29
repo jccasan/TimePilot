@@ -77,8 +77,9 @@ export function registerObjectStorageRoutes(app: Express, authMiddleware?: Reque
    *
    * GET /objects/:objectPath(*)
    *
-   * This serves files from object storage. For public files, no auth needed.
-   * For protected files, add authentication middleware and ACL checks.
+   * NOTE: Access control is enforced by the route registered in server/routes.ts
+   * which takes precedence over this handler (registered first). This handler
+   * acts as a fallback and should not be reached in normal operation.
    */
   app.get("/objects/{*objectPath}", async (req, res) => {
     try {

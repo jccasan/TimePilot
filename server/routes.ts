@@ -11,7 +11,7 @@ import { sql, eq, and, lt, gte, isNotNull, or, inArray, desc } from "drizzle-orm
 import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable, stripeEvents, automationRules, automationEventLogs, quoteFormEvents } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, parseLotSizeStringToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
 import { z } from "zod";
-import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { registerObjectStorageRoutes, ObjectStorageService, ObjectNotFoundError } from "./replit_integrations/object_storage";
 import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword } from "./services/app-auth";
 import type { RequestHandler } from "express";
 import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, logEmailSent, buildWelcomeEmailContent } from "./services/email";
@@ -354,6 +354,66 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Object file download route — registered before registerObjectStorageRoutes so this
+  // handler takes precedence and enforces ACL access control on private objects.
+  const _objStorage = new ObjectStorageService();
+  app.get("/objects/{*objectPath}", async (req: Request, res: Response) => {
+    try {
+      const objectFile = await _objStorage.getObjectEntityFile(req.path);
+
+      // Resolve the caller's stable identity from all supported auth mechanisms.
+      // For staff sessions the identity is the userId; for portal sessions it is
+      // the contactId (set in session cookie at login so img-tag requests work).
+      const sess = req.session as any;
+      let callerUserId: string | undefined = sess?.userId || sess?.portalContactId;
+
+      if (!callerUserId) {
+        const authHeader = req.headers.authorization;
+        if (authHeader?.startsWith("Bearer ")) {
+          const token = authHeader.slice(7);
+          // Try staff Bearer session (mirrors isAuthenticated middleware logic)
+          const sessionRow = await db.execute(
+            sql`SELECT sess FROM sessions WHERE sid = ${token} AND expire > NOW()`
+          );
+          if (sessionRow.rows.length > 0) {
+            const sessionData = sessionRow.rows[0].sess as Record<string, unknown>;
+            if (typeof sessionData?.userId === "string") {
+              callerUserId = sessionData.userId;
+            }
+          }
+          if (!callerUserId) {
+            // Try portal Bearer session — use contactId as the ACL identity
+            const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+            const portalSession = await storage.getPortalSessionByToken(tokenHash);
+            if (portalSession) {
+              callerUserId = portalSession.contactId;
+            }
+          }
+        }
+      }
+
+      // Enforce ACL with the resolved identity.
+      // Public objects (visibility="public") are always accessible.
+      // Private objects require the caller to be the ACL owner.
+      // Objects with no ACL metadata fail closed (denied).
+      const canAccess = await _objStorage.canAccessObjectEntity({
+        userId: callerUserId,
+        objectFile,
+      });
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      await _objStorage.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error serving object:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      return res.status(500).json({ error: "Failed to serve object" });
+    }
+  });
+
   registerObjectStorageRoutes(app, isAuthenticated);
 
   validateStripeConfig();
@@ -6762,6 +6822,17 @@ Return ONLY valid JSON, no markdown.`,
         technicianNotes: technicianNotes || existing.technicianNotes,
       });
 
+      // Mark visit photos as public so they can be served via /objects/ without auth.
+      // Photos are intentionally shared with customers (portal + SMS), so public
+      // visibility is the appropriate ACL policy for this object type.
+      const photoPaths: string[] = [];
+      if (gateClosedPhoto && typeof gateClosedPhoto === "string") photoPaths.push(gateClosedPhoto);
+      if (Array.isArray(extraPhotos)) photoPaths.push(...extraPhotos.filter((p: unknown) => typeof p === "string"));
+      if (photoPaths.length > 0) {
+        const publicAcl = { owner: userId, visibility: "public" as const };
+        await Promise.allSettled(photoPaths.map(path => _objStorage.trySetObjectEntityAclPolicy(path, publicAcl)));
+      }
+
       const plan = await storage.getServicePlan(visit.servicePlanId, companyId);
       if (!plan) return res.json({ visit, completionSms: null, etaSms: null });
 
@@ -10417,6 +10488,35 @@ Rules:
   // Twilio incoming SMS webhook
   app.post("/api/webhooks/twilio/sms", async (req: Request, res: Response) => {
     try {
+      const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+      if (twilioAuthToken) {
+        const signature = req.headers["x-twilio-signature"] as string | undefined;
+        if (!signature) {
+          console.warn("[Twilio SMS Webhook] Missing x-twilio-signature header");
+          return res.type("text/xml").send("<Response></Response>");
+        }
+        const cryptoMod = await import("crypto");
+        const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+        const params = req.body as Record<string, string>;
+        const sortedKeys = Object.keys(params).sort();
+        const paramStr = sortedKeys.map(k => `${k}${params[k]}`).join("");
+        const expected = cryptoMod.createHmac("sha1", twilioAuthToken)
+          .update(url + paramStr)
+          .digest("base64");
+        const sigBuf = Buffer.from(signature);
+        const expectedBuf = Buffer.from(expected);
+        if (sigBuf.length !== expectedBuf.length || !cryptoMod.timingSafeEqual(sigBuf, expectedBuf)) {
+          console.warn("[Twilio SMS Webhook] Signature mismatch");
+          return res.type("text/xml").send("<Response></Response>");
+        }
+      } else {
+        if (process.env.NODE_ENV === "production") {
+          console.error("[Twilio SMS Webhook] TWILIO_AUTH_TOKEN not set in production — rejecting request");
+          return res.type("text/xml").send("<Response></Response>");
+        }
+        console.warn("[Twilio SMS Webhook] TWILIO_AUTH_TOKEN not set — skipping signature verification (dev only)");
+      }
+
       const { From, Body, MessageSid } = req.body;
       if (!From || !Body) {
         return res.status(400).send("<Response></Response>");
@@ -10458,6 +10558,44 @@ Rules:
 
   app.post("/api/webhooks/telnyx/sms", async (req: Request, res: Response) => {
     try {
+      const telnyxPublicKey = process.env.TELNYX_PUBLIC_KEY;
+      if (telnyxPublicKey) {
+        const signature = req.headers["telnyx-signature-ed25519"] as string | undefined;
+        const timestamp = req.headers["telnyx-timestamp"] as string | undefined;
+        if (!signature || !timestamp) {
+          console.warn("[Telnyx SMS] Missing telnyx-signature-ed25519 or telnyx-timestamp header");
+          return res.status(401).json({ error: "Missing webhook signature headers" });
+        }
+        const cryptoMod = await import("crypto");
+        const rawBodyStr = req.rawBody instanceof Buffer
+          ? req.rawBody.toString("utf8")
+          : String(req.rawBody ?? JSON.stringify(req.body));
+        const signingPayload = Buffer.from(`${timestamp}|${rawBodyStr}`);
+        const sigBuf = Buffer.from(signature, "base64");
+        // Telnyx provides a raw 32-byte Ed25519 public key (base64-encoded).
+        // Wrap it in the standard SPKI DER envelope so Node's crypto can consume it.
+        const rawKeyBuf = Buffer.from(telnyxPublicKey, "base64");
+        const spkiPrefix = Buffer.from("302a300506032b6570032100", "hex");
+        const spkiDer = Buffer.concat([spkiPrefix, rawKeyBuf]);
+        let valid = false;
+        try {
+          const keyObj = cryptoMod.createPublicKey({ key: spkiDer, format: "der", type: "spki" });
+          valid = cryptoMod.verify(null, signingPayload, keyObj, sigBuf);
+        } catch {
+          console.warn("[Telnyx SMS] Ed25519 key parse or verify error");
+        }
+        if (!valid) {
+          console.warn("[Telnyx SMS] Signature mismatch");
+          return res.status(401).json({ error: "Invalid webhook signature" });
+        }
+      } else {
+        if (process.env.NODE_ENV === "production") {
+          console.error("[Telnyx SMS] TELNYX_PUBLIC_KEY not set in production — rejecting request");
+          return res.status(401).json({ error: "Webhook verification not configured" });
+        }
+        console.warn("[Telnyx SMS] TELNYX_PUBLIC_KEY not set — skipping signature verification (dev only)");
+      }
+
       const eventType = req.body?.data?.event_type;
       console.log(`[Telnyx SMS] Webhook received, event_type: ${eventType}`);
 
@@ -12964,6 +13102,13 @@ Rules:
 
       await storage.deleteExpiredPortalSessions();
 
+      // Store contactId in session cookie so browser img tag requests (which cannot
+      // send Authorization headers) are still authenticated for /objects/ downloads.
+      (req.session as any).portalContactId = foundContact.id;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save(err => (err ? reject(err) : resolve()))
+      );
+
       res.json({ token, contactId: foundContact.id });
     } catch (err) { handleError(res, err); }
   });
@@ -13434,6 +13579,11 @@ Rules:
     try {
       const { sessionId } = await getPortalContext(req);
       await storage.deletePortalSession(sessionId);
+      // Clear portal identity from session cookie to revoke object download access.
+      delete (req.session as any).portalContactId;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save(err => (err ? reject(err) : resolve()))
+      );
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
