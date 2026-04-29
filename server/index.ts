@@ -7,6 +7,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
+import { runStartupMigrations } from "./migrate";
 
 const app = express();
 const httpServer = createServer(app);
@@ -2129,6 +2130,7 @@ async function auditRetellWebhooks() {
   await ensureVisitEnRouteAtColumn();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
+  await runStartupMigrations();
   setupSession(app);
   await registerRoutes(httpServer, app);
 
