@@ -11876,7 +11876,7 @@ Rules:
                   console.warn(`[Retell KB] Failed to seed knowledge base for company "${company.name}" (${company.id}): ${kbErr.message}`);
                   notify(tenantId, "system_warning", "Knowledge Base Setup Failed", `Voice plan activated but knowledge base creation from "${businessWebsite}" failed. Please set it up manually. Error: ${kbErr.message}`, `/settings`);
                 }
-              } else if (businessWebsite && !company.retellAgentId) {
+              } else if (businessWebsite && !effectiveAgentId) {
                 console.warn(`[Retell KB] Business website provided but no Retell agent ID found for company "${company.name}" (${company.id}). Skipping KB creation.`);
                 notify(tenantId, "system_warning", "Knowledge Base Setup Skipped", `A business website was provided during checkout but no Retell agent is linked to your account. Please contact support to set up the knowledge base.`, `/settings`);
               }
