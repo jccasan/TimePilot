@@ -1,11 +1,13 @@
 import OpenAI from "openai";
 import { db } from "../db";
 import { contacts, invoices, visits, routes, servicePlans, companyUsers, users, companies, notifications, properties } from "@shared/schema";
+import type { InsertContact, InsertProperty } from "@shared/schema";
 import { desc } from "drizzle-orm";
 import { eq, and, sql, gte, lte, count, inArray } from "drizzle-orm";
 import { storage } from "../storage";
 import { sendEmail } from "./email";
 import * as crypto from "crypto";
+import { geocodeAddress } from "./geocode";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -209,7 +211,8 @@ GUIDELINES:
 - Format numbers nicely (e.g., "$1,234.56" for currency).
 - For lists, use bullet points. Keep responses under 200 words unless the topic requires more detail.
 - When a generate_invoice tool result includes a "contactName" field, always name the client in your reply (e.g., "Generated a draft invoice for Jane Doe totalling $120.00."). Never invoice silently.
-- When a generate_invoice tool result has error "AMBIGUOUS_CONTACT", do not proceed. Instead, relay the clarification question from the message field verbatim so the user can pick the right client.`;
+- When a generate_invoice tool result has error "AMBIGUOUS_CONTACT", do not proceed. Instead, relay the clarification question from the message field verbatim so the user can pick the right client.
+- ADDRESS CONFIRMATION GATE: When you are helping a user add a new property or collect an address for a client, you must display the full address back to the user and wait for their explicit confirmation (e.g., "yes", "confirm", "correct", "that's right") before any property creation or geocoding is triggered. Never create a property or request geocoding while the address is still being collected, edited, or clarified. Only proceed after the user has clearly confirmed the address is correct.`;
 }
 
 export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -356,14 +359,63 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "create_contact_with_property",
+      description: "Create a new client contact and their service property address. IMPORTANT: You must collect the full address first, display it back to the user, and only call this tool AFTER the user has explicitly confirmed the address is correct (e.g., 'yes', 'confirm', 'that's right'). Never call this tool while the address is still being collected or clarified. The 'confirmed' field must be true — set it to false if the user has not yet confirmed.",
+      parameters: {
+        type: "object",
+        properties: {
+          firstName: { type: "string", description: "Client's first name." },
+          lastName: { type: "string", description: "Client's last name." },
+          email: { type: "string", description: "Client's email address (optional)." },
+          phone: { type: "string", description: "Client's phone number (optional)." },
+          streetAddress: { type: "string", description: "Service property street address." },
+          city: { type: "string", description: "City." },
+          state: { type: "string", description: "State or province abbreviation." },
+          zipCode: { type: "string", description: "ZIP or postal code." },
+          numberOfDogs: { type: "number", description: "Number of dogs at the property (optional)." },
+          yardSize: { type: "string", description: "Yard size descriptor, e.g. 'small', 'medium', 'large' (optional)." },
+          confirmed: {
+            type: "boolean",
+            description: "REQUIRED: Set to true only after the user has explicitly confirmed the address. Set to false if confirmation has not been received — the system will reject the call.",
+          },
+        },
+        required: ["firstName", "streetAddress", "confirmed"],
+      },
+    },
+  },
 ];
+
+const USER_CONFIRMATION_RE = /\b(yes|yep|yup|confirm(ed)?|correct|right|that'?s?\s+(right|correct)|go\s+ahead|proceed|please\s+do|sure|absolutely|ok(ay)?|sounds\s+good|do\s+it)\b/i;
+
+function hasUserConfirmedInHistory(messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): boolean {
+  const userMessages = messages.filter(m => m.role === "user");
+  if (userMessages.length === 0) return false;
+  const lastUserMsg = userMessages[userMessages.length - 1];
+  const text =
+    typeof lastUserMsg.content === "string"
+      ? lastUserMsg.content
+      : Array.isArray(lastUserMsg.content)
+      ? lastUserMsg.content
+          .map((c) => {
+            if (typeof c === "string") return c;
+            if (c.type === "text") return c.text;
+            return "";
+          })
+          .join(" ")
+      : "";
+  return USER_CONFIRMATION_RE.test(text.trim());
+}
 
 export async function executeToolCall(
   toolName: string,
   args: Record<string, any>,
   companyId: string,
   userId?: string,
-  role?: string
+  role?: string,
+  messages?: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
 ): Promise<string> {
   try {
     switch (toolName) {
@@ -488,6 +540,73 @@ export async function executeToolCall(
           return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
         }
         return await sendPortalInvite(companyId, resolvedId.id);
+      }
+      case "create_contact_with_property": {
+        if (args.confirmed !== true || !hasUserConfirmedInHistory(messages ?? [])) {
+          return JSON.stringify({
+            success: false,
+            error: "ADDRESS_NOT_CONFIRMED",
+            message: "The address has not been confirmed by the user. Please display the full address to the user and wait for their explicit confirmation (e.g. 'yes', 'correct', 'confirm') before creating the contact.",
+          });
+        }
+        const firstName: string = String(args.firstName ?? "").trim();
+        const streetAddress: string = String(args.streetAddress ?? "").trim();
+        if (!firstName || !streetAddress) {
+          return JSON.stringify({ success: false, error: "MISSING_REQUIRED_FIELDS", message: "First name and street address are required." });
+        }
+        const contactPayload: InsertContact = {
+          companyId,
+          firstName,
+          lastName: String(args.lastName ?? "").trim(),
+          email: args.email ? String(args.email).trim() : undefined,
+          phone: args.phone ? String(args.phone).trim() : undefined,
+          status: "lead",
+        };
+        const contact = await storage.createContact(contactPayload);
+        const cityArg = args.city ? String(args.city).trim() : "";
+        const stateArg = args.state ? String(args.state).trim() : "";
+        const zipArg = args.zipCode ? String(args.zipCode).trim() : "";
+        const existingProperties = await storage.getProperties(companyId);
+        const normalizedStreet = streetAddress.trim().toLowerCase();
+        const matchingProp = existingProperties.find(p =>
+          p.streetAddress?.trim().toLowerCase() === normalizedStreet &&
+          p.city?.trim().toLowerCase() === cityArg.toLowerCase() &&
+          (p.state?.trim().toLowerCase() ?? "") === stateArg.toLowerCase() &&
+          (p.zipCode?.trim() ?? "") === zipArg &&
+          p.latitude && p.longitude
+        );
+        let latitude: string | null = null;
+        let longitude: string | null = null;
+        if (matchingProp) {
+          latitude = matchingProp.latitude ?? null;
+          longitude = matchingProp.longitude ?? null;
+        } else {
+          const coords = await geocodeAddress(streetAddress, cityArg || null, stateArg || null, zipArg || null);
+          if (coords) {
+            latitude = coords.latitude;
+            longitude = coords.longitude;
+          }
+        }
+        const propertyPayload: InsertProperty = {
+          companyId,
+          contactId: contact.id,
+          streetAddress,
+          city: cityArg,
+          state: stateArg,
+          zipCode: zipArg,
+          numberOfDogs: args.numberOfDogs ? Number(args.numberOfDogs) : undefined,
+          yardSize: args.yardSize ? String(args.yardSize).trim() : undefined,
+          latitude: latitude ?? undefined,
+          longitude: longitude ?? undefined,
+        };
+        const property = await storage.createProperty(propertyPayload);
+        return JSON.stringify({
+          success: true,
+          message: `Created contact ${firstName} ${args.lastName ?? ""} and property at ${streetAddress}${cityArg ? `, ${cityArg}` : ""}. They are now in the system as a lead.`,
+          contactId: contact.id,
+          propertyId: property.id,
+          geocoded: !!(latitude && longitude),
+        });
       }
       default:
         return JSON.stringify({ error: "Unknown tool" });
@@ -1001,7 +1120,7 @@ export async function streamRoverChat(
         } catch {
           args = {};
         }
-        const result = await executeToolCall(tc.name, args, companyId, userId, userCtx.userRole);
+        const result = await executeToolCall(tc.name, args, companyId, userId, userCtx.userRole, fullMessages);
         toolResults.push({
           role: "tool",
           tool_call_id: tc.id,

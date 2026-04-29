@@ -45,7 +45,7 @@ import {
 } from "./services/stripe";
 import { seedRetellKnowledgeBase, provisionRetellNumber } from "./services/retell";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
-import { geocodeAddress } from "./services/geocode";
+import { geocodeAddress, getAutocompleteCached, setAutocompleteCache } from "./services/geocode";
 import { computeInvoice } from "./invoice-engine/invoice.compute";
 import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "./invoice-engine/invoice.render";
 import { calculateQuotePricing, renderResidentialProposalHtml, renderCommercialProposalHtml, renderQuoteSmsText, type ResidentialQuoteInput, type CommercialQuoteInput } from "./services/quote-pricing";
@@ -324,10 +324,24 @@ async function createPropertyWithGeocode(data: {
   gateCode?: string | null; specialInstructions?: string | null;
 }) {
   if (!data.latitude && !data.longitude && data.streetAddress) {
-    const coords = await geocodeAddress(data.streetAddress, data.city, data.state, data.zipCode);
-    if (coords) {
-      data.latitude = coords.latitude;
-      data.longitude = coords.longitude;
+    const existingProperties = await storage.getProperties(data.companyId);
+    const normalizedStreet = data.streetAddress.trim().toLowerCase();
+    const match = existingProperties.find(p =>
+      p.streetAddress?.trim().toLowerCase() === normalizedStreet &&
+      p.city?.trim().toLowerCase() === (data.city?.trim().toLowerCase() ?? "") &&
+      (p.state?.trim().toLowerCase() ?? "") === (data.state?.trim().toLowerCase() ?? "") &&
+      (p.zipCode?.trim() ?? "") === (data.zipCode?.trim() ?? "") &&
+      p.latitude && p.longitude
+    );
+    if (match) {
+      data.latitude = match.latitude;
+      data.longitude = match.longitude;
+    } else {
+      const coords = await geocodeAddress(data.streetAddress, data.city, data.state, data.zipCode);
+      if (coords) {
+        data.latitude = coords.latitude;
+        data.longitude = coords.longitude;
+      }
     }
   }
   return storage.createProperty(data as any);
@@ -1045,6 +1059,9 @@ export async function registerRoutes(
         if (co?.country === "ca") countryFilter = "ca";
       } catch {}
 
+      const cached = getAutocompleteCached(q, countryFilter);
+      if (cached) return res.json(cached);
+
       const params = new URLSearchParams({
         q,
         access_token: token,
@@ -1088,6 +1105,7 @@ export async function registerRoutes(
           zipCode,
         };
       });
+      setAutocompleteCache(q, countryFilter, features);
       res.json(features);
     } catch {
       res.json([]);
