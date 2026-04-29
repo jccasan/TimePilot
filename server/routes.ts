@@ -2482,7 +2482,9 @@ Return ONLY valid JSON, no markdown.`,
               serviceFrequency = activePlan.frequency ?? undefined;
               servicePricePerVisit = activePlan.pricePerVisit ?? undefined;
             }
-          } catch (_) {}
+          } catch (planErr) {
+            console.warn(`[onboarding-welcome] Could not fetch service plan for contact ${contact.id}:`, planErr instanceof Error ? planErr.message : String(planErr));
+          }
 
           try {
             const { visits } = await storage.getVisitsForContact(companyId, contact.id, 50, 0);
@@ -2492,7 +2494,9 @@ Return ONLY valid JSON, no markdown.`,
             if (upcomingVisit?.scheduledDate) {
               serviceNextVisitDate = new Date(upcomingVisit.scheduledDate).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
             }
-          } catch (_) {}
+          } catch (visitErr) {
+            console.warn(`[onboarding-welcome] Could not fetch visits for contact ${contact.id}:`, visitErr instanceof Error ? visitErr.message : String(visitErr));
+          }
 
           // Force email send even if suppressed (this is the batch welcome send)
           const provision = await provisionPortalAccess(contact.id, companyId, baseUrl, {
