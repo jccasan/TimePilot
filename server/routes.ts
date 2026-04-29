@@ -2539,7 +2539,7 @@ Return ONLY valid JSON, no markdown.`,
         "country", "currency", "taxRatePercent",
         "billingCadence", "billingTrigger", "defaultPaymentBehavior",
         "reviewRequestEnabled", "googleReviewUrl", "reviewRequestAfterVisits", "reviewRequestCustomMessage",
-        "clientNotificationsSuppressed"];
+        "clientNotificationsSuppressed", "onboardingCompleteSentAt"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];

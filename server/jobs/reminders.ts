@@ -102,7 +102,7 @@ export async function runReminders() {
   for (const company of allCompanies) {
     if (!company.remindersEnabled) continue;
 
-    const suppressEmail = !!(company as any).clientNotificationsSuppressed;
+    const suppressEmail = !!company.clientNotificationsSuppressed;
     if (suppressEmail) {
       console.log(`[reminders] Email suppressed for company ${company.id} (Import Mode on) — SMS reminders still active`);
     }
