@@ -454,6 +454,19 @@ async function ensureMmsSchema() {
   }
 }
 
+async function ensureAttachmentsSchema() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`ALTER TABLE attachments ADD COLUMN IF NOT EXISTS document_category VARCHAR(100);`);
+    console.log("[Migration] attachments document_category column verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure attachments schema:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function ensureMaxStopsSchema() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -1980,6 +1993,7 @@ async function auditRetellWebhooks() {
   await ensureCompanyColumns();
   await dropConnectedAccountsTable();
   await ensureMmsSchema();
+  await ensureAttachmentsSchema();
   await ensureMaxStopsSchema();
   await ensureCanadaMarketColumns();
   await migrateServicePlansToAgreementsAndJobs();
