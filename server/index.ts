@@ -288,6 +288,12 @@ async function ensureCompanyColumns() {
       EXCEPTION WHEN duplicate_object THEN NULL;
       END $$;
     `);
+    await pool.query(`
+      DO $$ BEGIN
+        ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'system_warning';
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+    `);
     await pool.query(`UPDATE companies SET sms_provider = 'telnyx' WHERE sms_provider = 'twilio'`);
     await pool.query(`ALTER TABLE companies ALTER COLUMN sms_provider SET DEFAULT 'telnyx'`);
     console.log("[Migration] SMS provider migrated to telnyx-only");
@@ -1910,6 +1916,65 @@ async function seedHistoricalDemoData() {
   }
 }
 
+async function auditRetellWebhooks() {
+  try {
+    const { storage } = await import("./storage");
+    const { getAppBaseUrl, getRetellAgentWebhookUrl, registerRetellWebhook } = await import("./services/retell");
+
+    const allCompanies = await storage.getAllCompanies();
+    const voiceTenants = allCompanies.filter(
+      (c) => c.voicePlanStatus === "active" && c.retellAgentId,
+    );
+
+    if (voiceTenants.length === 0) {
+      console.log("[RetellAudit] No active voice-plan tenants to check");
+      return;
+    }
+
+    const expectedBase = getAppBaseUrl();
+    const expectedWebhook = expectedBase ? `${expectedBase}/api/webhooks/retell` : null;
+
+    for (const company of voiceTenants) {
+      const agentId = company.retellAgentId!;
+      try {
+        const currentUrl = await getRetellAgentWebhookUrl(agentId);
+        const isRegistered = expectedWebhook
+          ? currentUrl === expectedWebhook
+          : !!currentUrl;
+
+        if (isRegistered) {
+          console.log(`[RetellAudit] Webhook OK for company ${company.id} (agent ${agentId}): ${currentUrl}`);
+          continue;
+        }
+
+        console.warn(`[RetellAudit] Webhook missing/mismatched for company ${company.id} (agent ${agentId}). Current: "${currentUrl}", expected: "${expectedWebhook}". Attempting re-registration…`);
+
+        try {
+          if (!expectedWebhook) {
+            throw new Error("APP_BASE_URL is not configured — cannot form a valid webhook URL to register");
+          }
+          await registerRetellWebhook(agentId);
+          console.log(`[RetellAudit] Webhook re-registered successfully for company ${company.id}`);
+        } catch (reregErr: any) {
+          console.error(`[RetellAudit] Webhook re-registration failed for company ${company.id}:`, reregErr);
+          await storage.createNotification({
+            companyId: company.id,
+            type: "system_warning",
+            title: "Call Tracking Webhook Not Configured",
+            message: `The Retell voice agent webhook is not registered for your account (agent: ${agentId}). Call tracking may not be working. Automatic re-registration failed: ${reregErr.message}. Please contact support or check Settings.`,
+            linkUrl: "/settings",
+            isRead: false,
+          });
+        }
+      } catch (checkErr: any) {
+        console.error(`[RetellAudit] Failed to check webhook for company ${company.id} (agent ${agentId}):`, checkErr);
+      }
+    }
+  } catch (err) {
+    console.error("[RetellAudit] Audit failed:", err);
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
@@ -1969,6 +2034,10 @@ async function seedHistoricalDemoData() {
 
       backfillPropertyCoordinates().catch(err =>
         console.error("[Geocode Backfill] Unexpected error:", err)
+      );
+
+      auditRetellWebhooks().catch(err =>
+        console.error("[RetellAudit] Unexpected error:", err)
       );
     },
   );

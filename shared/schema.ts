@@ -1243,7 +1243,7 @@ export type SubscriptionTier = typeof subscriptionTiers.$inferSelect;
 export const notificationTypeEnum = pgEnum("notification_type", [
   "invoice_paid", "invoice_overdue", "visit_completed", "new_lead",
   "payment_failed", "service_paused", "service_resumed", "portal_login",
-  "team_joined", "general", "portal_message", "new_message",
+  "team_joined", "general", "portal_message", "new_message", "system_warning",
 ]);
 
 export const notifications = pgTable("notifications", {
