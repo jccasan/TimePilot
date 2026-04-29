@@ -458,8 +458,11 @@ async function ensureAttachmentsSchema() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    await pool.query(`ALTER TABLE attachments ADD COLUMN IF NOT EXISTS document_category VARCHAR(100);`);
-    console.log("[Migration] attachments document_category column verified");
+    await pool.query(`
+      ALTER TABLE attachments ADD COLUMN IF NOT EXISTS document_category VARCHAR(100);
+      ALTER TABLE attachments ADD COLUMN IF NOT EXISTS notes TEXT;
+    `);
+    console.log("[Migration] attachments document_category + notes columns verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure attachments schema:", err);
   } finally {
@@ -1771,6 +1774,31 @@ async function ensureErrorReportsTable() {
   }
 }
 
+async function ensureRetellWebhookRepairsTable() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS retell_webhook_repairs (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR REFERENCES companies(id) ON DELETE CASCADE,
+        agent_id VARCHAR(255) NOT NULL,
+        old_url TEXT,
+        new_url TEXT NOT NULL,
+        triggered_by VARCHAR(10) NOT NULL DEFAULT 'auto',
+        repaired_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_retell_webhook_repairs_company ON retell_webhook_repairs (company_id);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_retell_webhook_repairs_repaired_at ON retell_webhook_repairs (repaired_at);`);
+    console.log("[Migration] retell_webhook_repairs table ensured");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure retell_webhook_repairs table:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function seedHistoricalDemoData() {
   try {
     const { Pool } = await import("pg");
@@ -2003,6 +2031,7 @@ async function auditRetellWebhooks() {
   await seedDemoCompany();
   await applyDemoAutopayMigration();
   await ensureErrorReportsTable();
+  await ensureRetellWebhookRepairsTable();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
   setupSession(app);
