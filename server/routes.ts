@@ -6623,6 +6623,69 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  // ================ Upcoming Visit Count for a Service Plan ================
+
+  app.get("/api/service-plans/:id/upcoming-visits-count", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const planId = p(req.params.id);
+      const existing = await storage.getServicePlan(planId, companyId);
+      if (!existing) return res.status(404).json({ error: "Job not found" });
+      const today = new Date().toISOString().split("T")[0];
+      const count = await db.select({ count: sql<number>`count(*)::int` })
+        .from(visits)
+        .where(and(
+          eq(visits.companyId, companyId),
+          eq(visits.servicePlanId, planId),
+          gte(visits.scheduledDate, today),
+          eq(visits.status, "scheduled")
+        ));
+      return res.json({ count: count[0]?.count ?? 0 });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ================ Cancel All Visits for a Recurring Job ================
+
+  app.post("/api/service-plans/:id/cancel-all", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId } = await getCompanyContext(req);
+      const planId = p(req.params.id);
+      const existing = await storage.getServicePlan(planId, companyId);
+      if (!existing) return res.status(404).json({ error: "Job not found" });
+      if (existing.jobType !== "recurring") return res.status(400).json({ error: "Cancel All is only available for recurring jobs" });
+      if (existing.jobStatus === "cancelled") return res.status(400).json({ error: "This job is already cancelled" });
+
+      const today = new Date().toISOString().split("T")[0];
+
+      // Cancel all future scheduled visits
+      const cancelledCount = await storage.cancelFutureVisitsForPlans([planId], today);
+
+      // Mark the service plan as cancelled and inactive
+      await storage.updateServicePlan(planId, companyId, {
+        jobStatus: "cancelled",
+        isActive: false,
+      });
+
+      // Propagate to linked job and agreement
+      const linkedJob = await storage.getJobByServicePlanId(planId);
+      if (linkedJob) {
+        await storage.updateJob(linkedJob.id, companyId, { jobStatus: "cancelled" });
+        if (linkedJob.agreementId) {
+          await storage.updateAgreement(linkedJob.agreementId, companyId, { isActive: false });
+        }
+      }
+
+      // Clear route optimization state if the plan was on a route
+      if (existing.routeId) {
+        clearRouteOptimizationState(existing.routeId, companyId).catch(console.error);
+      }
+
+      auditLog(companyId, userId, "service_plan", planId, "update", { action: "cancel_all", cancelledVisits: cancelledCount }, req.ip || undefined);
+
+      return res.json({ success: true, cancelledCount });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ================ Vacation Hold Routes ================
 
   app.get("/api/service-plans/:id/vacation-holds", isAuthenticated, async (req: Request, res: Response) => {

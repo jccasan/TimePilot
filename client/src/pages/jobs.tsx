@@ -31,7 +31,7 @@ import {
 import {
   Briefcase, Plus, Search, CheckCircle, Loader2,
   Edit2, Trash2, Eye, ChevronDown, ChevronUp, Filter,
-  User, Calendar,
+  User, Calendar, XCircle,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -557,11 +557,75 @@ function JobForm({
   );
 }
 
+function CancelAllDialog({
+  cancelAllId,
+  onOpenChange,
+  onConfirm,
+  isPending,
+}: {
+  cancelAllId: string | null;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  const { data: countData, isLoading: countLoading } = useQuery<{ count: number }>({
+    queryKey: ["/api/service-plans", cancelAllId, "upcoming-visits-count"],
+    enabled: !!cancelAllId,
+    staleTime: 0,
+  });
+
+  const count = countData?.count ?? null;
+
+  let descriptionText: string;
+  if (countLoading || count === null) {
+    descriptionText = "This will cancel all upcoming scheduled visits for this recurring job and stop any future scheduling. Already-completed or invoiced visits will not be affected. This action cannot be undone.";
+  } else if (count === 0) {
+    descriptionText = "There are no upcoming scheduled visits for this job. Confirming will stop any future scheduling and mark this job as cancelled.";
+  } else {
+    descriptionText = `This will cancel ${count} upcoming visit${count !== 1 ? "s" : ""} and stop any future scheduling for this recurring job. Already-completed or invoiced visits will not be affected. This action cannot be undone.`;
+  }
+
+  return (
+    <AlertDialog open={!!cancelAllId} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle data-testid="text-cancel-all-title">
+            {countLoading || count === null
+              ? "Cancel Recurring Job"
+              : count === 0
+                ? "Cancel Recurring Job"
+                : `Cancel Recurring Job and ${count} Upcoming Visit${count !== 1 ? "s" : ""}?`}
+          </AlertDialogTitle>
+          <AlertDialogDescription data-testid="text-cancel-all-description">
+            {countLoading ? <span className="flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking upcoming visits...</span> : descriptionText}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="button-cancel-all-dismiss">Keep Job</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={onConfirm}
+            disabled={isPending || countLoading}
+            data-testid="button-confirm-cancel-all-job"
+          >
+            {isPending ? (
+              <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Cancelling...</>
+            ) : (
+              "Cancel All Visits"
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export default function Jobs() {
   const { toast } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [editJob, setEditJob] = useState<ServicePlan | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [cancelAllId, setCancelAllId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -656,6 +720,29 @@ export default function Jobs() {
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
       queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
       toast({ title: "Job approved and activated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const cancelAllMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/service-plans/${id}/cancel-all`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
+      setCancelAllId(null);
+      toast({
+        title: "Job cancelled",
+        description: `${data.cancelledCount} upcoming visit${data.cancelledCount !== 1 ? "s" : ""} cancelled.`,
+      });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -929,6 +1016,18 @@ export default function Jobs() {
                             <Eye className="h-3.5 w-3.5 mr-1" /> View Customer
                           </Button>
                         </Link>
+                        {job.jobType === "recurring" && job.jobStatus !== "cancelled" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive"
+                            onClick={(e) => { e.stopPropagation(); setCancelAllId(job.id); }}
+                            disabled={cancelAllMutation.isPending}
+                            data-testid={`button-cancel-all-job-${job.id}`}
+                          >
+                            <XCircle className="h-3.5 w-3.5 mr-1" /> Cancel All
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
@@ -1014,6 +1113,13 @@ export default function Jobs() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CancelAllDialog
+        cancelAllId={cancelAllId}
+        onOpenChange={open => { if (!open) setCancelAllId(null); }}
+        onConfirm={() => cancelAllId && cancelAllMutation.mutate(cancelAllId)}
+        isPending={cancelAllMutation.isPending}
+      />
     </div>
   );
 }
