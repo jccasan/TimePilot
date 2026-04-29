@@ -46,6 +46,7 @@ import {
   reportRetellMinutes,
 } from "./services/stripe";
 import { seedRetellKnowledgeBase, provisionRetellNumber, registerRetellWebhook, checkRetellWebhookSync, getRetellAgentWebhookUrl, getAppBaseUrl } from "./services/retell";
+import { checkIpRisk, getClientIp, getCountryCode } from "./services/ip-risk";
 import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "./services/route-optimizer";
 import { geocodeAddress, getAutocompleteCached, setAutocompleteCache } from "./services/geocode";
 import { trackApiCall, getApiUsageStats } from "./services/api-usage";
@@ -1501,6 +1502,26 @@ export async function registerRoutes(
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
       const { email, password, firstName, lastName, companyName } = req.body;
+
+      const clientIp = getClientIp(req as any);
+      const cfCountry = (req.headers["cf-ipcountry"] as string | undefined)?.trim().toUpperCase();
+      const [ipRisk, countryCode] = await Promise.all([
+        checkIpRisk(clientIp),
+        getCountryCode(clientIp, cfCountry),
+      ]);
+
+      if (ipRisk.isVpn || ipRisk.isProxy) {
+        console.warn(`[Signup] Blocked VPN/proxy signup from ${clientIp} (type: ${ipRisk.isVpn ? "VPN" : "proxy"}, country: ${countryCode ?? "unknown"}, email: ${email})`);
+        return res.status(403).json({ error: "Signups from VPN or proxy connections are not allowed. Please disable your VPN and try again." });
+      }
+
+      const detectedCountry = countryCode ?? ipRisk.countryCode;
+      const blockedCountries = (process.env.BLOCKED_SIGNUP_COUNTRIES || "").split(",").map(c => c.trim().toUpperCase()).filter(Boolean);
+      if (detectedCountry && blockedCountries.includes(detectedCountry)) {
+        console.warn(`[Signup] Blocked signup from country ${detectedCountry}, IP ${clientIp}, email: ${email}`);
+        return res.status(403).json({ error: "Signups are not available in your region." });
+      }
+
       const result = await registerUser(email, password, firstName || "", lastName || "");
       if ("error" in result) {
         return res.status(400).json({ error: result.error });
@@ -17886,6 +17907,25 @@ Respond with exactly one category from the list above and nothing else.`;
         return res.status(400).json({ error: "Company name must be at least 2 characters" });
       }
 
+      const clientIp = getClientIp(req as any);
+      const cfCountry = (req.headers["cf-ipcountry"] as string | undefined)?.trim().toUpperCase();
+      const [ipRisk, countryCode] = await Promise.all([
+        checkIpRisk(clientIp),
+        getCountryCode(clientIp, cfCountry),
+      ]);
+
+      if (ipRisk.isVpn || ipRisk.isProxy) {
+        console.warn(`[Signup] Blocked VPN/proxy signup from ${clientIp} (type: ${ipRisk.isVpn ? "VPN" : "proxy"}, country: ${countryCode ?? "unknown"}, email: ${email})`);
+        return res.status(403).json({ error: "Signups from VPN or proxy connections are not allowed. Please disable your VPN and try again." });
+      }
+
+      const detectedCountry = countryCode ?? ipRisk.countryCode;
+      const blockedCountries = (process.env.BLOCKED_SIGNUP_COUNTRIES || "").split(",").map(c => c.trim().toUpperCase()).filter(Boolean);
+      if (detectedCountry && blockedCountries.includes(detectedCountry)) {
+        console.warn(`[Signup] Blocked signup from country ${detectedCountry}, IP ${clientIp}, email: ${email}`);
+        return res.status(403).json({ error: "Signups are not available in your region." });
+      }
+
       const existingUser = await getUserByEmail(email.toLowerCase());
       if (existingUser) {
         return res.status(409).json({ error: "An account with this email already exists" });
@@ -17985,30 +18025,27 @@ Respond with exactly one category from the list above and nothing else.`;
 
       const tempPassword = crypto.randomBytes(6).toString("base64url");
 
-      // --- GeoIP detection ---
-      let signupCountry: string = "US";
-      try {
-        const cfCountry = (req.headers["cf-ipcountry"] as string | undefined)?.trim().toUpperCase();
-        if (cfCountry && cfCountry.length === 2 && cfCountry !== "XX") {
-          signupCountry = cfCountry;
-        } else {
-          const forwardedFor = req.headers["x-forwarded-for"] as string | undefined;
-          const clientIp = forwardedFor ? forwardedFor.split(",")[0].trim() : req.ip || "";
-          const isPrivate = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|::1$|localhost)/.test(clientIp);
-          if (!isPrivate && clientIp) {
-            const geoRes = await fetch(`http://ip-api.com/json/${clientIp}?fields=countryCode`, { signal: AbortSignal.timeout(3000) });
-            if (geoRes.ok) {
-              const geoData = await geoRes.json() as { countryCode?: string };
-              if (geoData.countryCode && geoData.countryCode.length === 2) {
-                signupCountry = geoData.countryCode.toUpperCase();
-              }
-            }
-          }
-        }
-      } catch (geoErr) {
-        console.warn("[Signup] GeoIP detection failed, defaulting to US:", geoErr);
+      // --- GeoIP + VPN detection ---
+      const verifyClientIp = getClientIp(req as any);
+      const verifyCfCountry = (req.headers["cf-ipcountry"] as string | undefined)?.trim().toUpperCase();
+      const [verifyIpRisk, verifyCountryCode] = await Promise.all([
+        checkIpRisk(verifyClientIp),
+        getCountryCode(verifyClientIp, verifyCfCountry),
+      ]).catch(() => [{ isVpn: false, isProxy: false, skipped: true } as import("./services/ip-risk").IpRiskResult, null as string | null]);
+
+      if (verifyIpRisk.isVpn || verifyIpRisk.isProxy) {
+        console.warn(`[Signup] Blocked VPN/proxy email verify from ${verifyClientIp} (country: ${verifyCountryCode ?? "unknown"}, email: ${record.email})`);
+        return res.redirect(`/signup?error=vpn`);
       }
 
+      const blockedCountriesVerify = (process.env.BLOCKED_SIGNUP_COUNTRIES || "").split(",").map(c => c.trim().toUpperCase()).filter(Boolean);
+      const detectedCountryVerify = verifyCountryCode ?? verifyIpRisk.countryCode;
+      if (detectedCountryVerify && blockedCountriesVerify.includes(detectedCountryVerify)) {
+        console.warn(`[Signup] Blocked email verify from country ${detectedCountryVerify}, IP ${verifyClientIp}, email: ${record.email}`);
+        return res.redirect(`/signup?error=region`);
+      }
+
+      const signupCountry = detectedCountryVerify ?? "US";
       const isDomestic = signupCountry === "US" || signupCountry === "CA";
       const newStatus = isDomestic ? "trialing" : "pending_approval";
 
