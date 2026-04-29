@@ -1774,6 +1774,22 @@ async function ensureErrorReportsTable() {
   }
 }
 
+async function ensureCompanyNotificationColumns() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS client_notifications_suppressed BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS onboarding_complete_sent_at TIMESTAMP;
+    `);
+    console.log("[Migration] client_notifications_suppressed + onboarding_complete_sent_at columns verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure company notification columns:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function ensureRetellWebhookRepairsTable() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -2031,6 +2047,7 @@ async function auditRetellWebhooks() {
   await seedDemoCompany();
   await applyDemoAutopayMigration();
   await ensureErrorReportsTable();
+  await ensureCompanyNotificationColumns();
   await ensureRetellWebhookRepairsTable();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();

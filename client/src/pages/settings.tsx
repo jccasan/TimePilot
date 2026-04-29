@@ -91,6 +91,8 @@ type Company = {
   googleReviewUrl?: string | null;
   reviewRequestAfterVisits?: number;
   reviewRequestCustomMessage?: string | null;
+  clientNotificationsSuppressed?: boolean;
+  onboardingCompleteSentAt?: string | null;
 };
 
 type SettingsLayoutItem = {
@@ -127,6 +129,7 @@ const SETTINGS_BLOCK_DEFS: { id: string; label: string; defaultW: number; defaul
   { id: "demo_mode", label: "Demo Mode", defaultW: 6, defaultH: 7, minW: 4, minH: 5 },
   { id: "billing_defaults", label: "Billing Defaults", defaultW: 6, defaultH: 5, minW: 4, minH: 4 },
   { id: "call_tracking", label: "Call Tracking", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "client_notifications", label: "Client Notifications", defaultW: 6, defaultH: 5, minW: 4, minH: 4 },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -142,6 +145,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "lead_sources", "developer_tools",
   "audit_log", "demo_mode",
   "billing_defaults", "call_tracking",
+  "client_notifications",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -3443,6 +3447,47 @@ export default function Settings() {
     },
   });
 
+  // Client Notifications (Import Mode + Onboarding Complete)
+  const [showOnboardingDialog, setShowOnboardingDialog] = useState(false);
+  const [onboardingResults, setOnboardingResults] = useState<{ sent: number; total: number; results: { name: string; email: string; status: string }[] } | null>(null);
+
+  const toggleImportModeMutation = useMutation({
+    mutationFn: async (suppressed: boolean) => {
+      const res = await apiRequest("PATCH", "/api/company", { clientNotificationsSuppressed: suppressed });
+      return res.json();
+    },
+    onSuccess: (_, suppressed) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: suppressed ? "Import Mode enabled — client emails suppressed" : "Import Mode disabled — client emails active" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update import mode.", variant: "destructive" });
+    },
+  });
+
+  const onboardingPreviewQuery = useQuery<{ contacts: { id: string; name: string; email: string }[]; count: number }>({
+    queryKey: ["/api/company/onboarding-welcome-preview"],
+    enabled: showOnboardingDialog,
+  });
+
+  const sendOnboardingWelcomeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/company/send-onboarding-welcome", {});
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to send onboarding emails");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      setOnboardingResults(data);
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to send onboarding emails.", variant: "destructive" });
+    },
+  });
+
   const savedSettingsLayout = useMemo<SettingsLayoutItem[] | null>(() => {
     if (!company) return null;
     const raw = company.settingsLayout;
@@ -4300,6 +4345,70 @@ export default function Settings() {
             </CardContent>
           </Card>
         );
+      case "client_notifications":
+        return (
+          <Card className="h-full overflow-auto">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5" />
+                Client Notifications
+              </CardTitle>
+              <CardDescription>Control when emails are sent to your clients.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Import Mode toggle */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Import Mode</p>
+                    <p className="text-xs text-muted-foreground">
+                      Suppress all client emails (portal invites, invoices, reminders) while you're entering your existing clients. Turn this off when you're ready to go live.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={company?.clientNotificationsSuppressed ?? false}
+                    onCheckedChange={(checked) => toggleImportModeMutation.mutate(checked)}
+                    disabled={toggleImportModeMutation.isPending}
+                    data-testid="switch-import-mode"
+                  />
+                </div>
+                {company?.clientNotificationsSuppressed && (
+                  <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Import Mode is ON — no emails are being sent to clients
+                  </div>
+                )}
+              </div>
+
+              {/* Onboarding Complete */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold">Onboarding Complete</p>
+                  <p className="text-xs text-muted-foreground">
+                    When you're done importing clients, send each active client a consolidated welcome email with their portal credentials, service day, frequency, price per visit, and next scheduled visit. This can only be sent once and will also disable Import Mode.
+                  </p>
+                </div>
+                {company?.onboardingCompleteSentAt ? (
+                  <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-md px-3 py-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                    Welcome emails sent on {new Date(company.onboardingCompleteSentAt).toLocaleDateString()}
+                  </div>
+                ) : (
+                  <Button
+                    onClick={() => { setOnboardingResults(null); setShowOnboardingDialog(true); }}
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    data-testid="button-onboarding-complete"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Welcome Emails to All Active Clients
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        );
       default:
         return null;
     }
@@ -4373,6 +4482,77 @@ export default function Settings() {
         </div>
       )}
 
+
+      {/* Onboarding Welcome Email Preview / Results Dialog */}
+      <Dialog open={showOnboardingDialog} onOpenChange={(open) => { if (!open) { setShowOnboardingDialog(false); setOnboardingResults(null); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{onboardingResults ? "Welcome Emails Sent" : "Send Welcome Emails"}</DialogTitle>
+          </DialogHeader>
+          {onboardingResults ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-md px-3 py-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                Sent to {onboardingResults.sent} of {onboardingResults.total} clients. Import Mode is now off.
+              </div>
+              {onboardingResults.results.length > 0 && (
+                <div className="max-h-56 overflow-y-auto border rounded-md divide-y text-sm">
+                  {onboardingResults.results.map((r, i) => (
+                    <div key={i} className="flex items-center justify-between px-3 py-2 gap-2">
+                      <div>
+                        <p className="font-medium">{r.name}</p>
+                        <p className="text-xs text-muted-foreground">{r.email}</p>
+                      </div>
+                      <span className={r.status === "sent" ? "text-xs text-green-600" : "text-xs text-muted-foreground"}>{r.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <DialogFooter>
+                <Button onClick={() => { setShowOnboardingDialog(false); setOnboardingResults(null); }} data-testid="button-onboarding-done">Done</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                This will send a one-time welcome email to every active client with an email address, including their portal login, service day, frequency, price per visit, and next scheduled visit. Import Mode will be turned off after sending.
+              </p>
+              {onboardingPreviewQuery.isLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ) : onboardingPreviewQuery.data ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">{onboardingPreviewQuery.data.count} client{onboardingPreviewQuery.data.count !== 1 ? "s" : ""} will receive an email:</p>
+                  {onboardingPreviewQuery.data.count === 0 ? (
+                    <p className="text-xs text-muted-foreground">No active clients with email addresses found.</p>
+                  ) : (
+                    <div className="max-h-48 overflow-y-auto border rounded-md divide-y text-sm">
+                      {onboardingPreviewQuery.data.contacts.map(c => (
+                        <div key={c.id} className="flex items-center justify-between px-3 py-2 gap-2">
+                          <span className="font-medium">{c.name}</span>
+                          <span className="text-xs text-muted-foreground truncate">{c.email}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+              <DialogFooter className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowOnboardingDialog(false)} data-testid="button-onboarding-cancel">Cancel</Button>
+                <Button
+                  onClick={() => sendOnboardingWelcomeMutation.mutate()}
+                  disabled={sendOnboardingWelcomeMutation.isPending || onboardingPreviewQuery.data?.count === 0}
+                  data-testid="button-onboarding-confirm"
+                >
+                  {sendOnboardingWelcomeMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Sending...</> : <><Send className="h-4 w-4 mr-2" />Send Welcome Emails</>}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={importStep !== "idle"} onOpenChange={(open) => { if (!open) { setImportStep("idle"); setImportRows([]); setRawCsvRows([]); setSettingsColumnMapping([]); setSettingsNewLeadSources([]); } }}>
         <DialogContent className="max-w-[95vw] w-[900px] max-h-[90vh] flex flex-col">

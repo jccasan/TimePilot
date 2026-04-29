@@ -35,6 +35,12 @@ export async function sendInvoiceEmail(
   if (!contact?.email) return { success: false, error: "Contact has no email address" };
 
   const company = await storage.getCompany(companyId);
+
+  if (company?.clientNotificationsSuppressed) {
+    console.log(`[invoice-email] Suppressed (clientNotificationsSuppressed=true) for invoice ${invoiceId}`);
+    return { success: true, messageId: "suppressed-quiet-mode" };
+  }
+
   const lineItems = await storage.getInvoiceLineItems(invoice.id);
 
   const baseUrl = options?.baseUrl ? ensureHttps(options.baseUrl) : getAppBaseUrl();

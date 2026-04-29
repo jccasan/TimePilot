@@ -2430,6 +2430,98 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  // Preview: which clients will receive the onboarding welcome email
+  app.get("/api/company/onboarding-welcome-preview", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const allContacts = await storage.getContacts(companyId);
+      const eligible = allContacts
+        .filter(c => c.status === "active" && c.email)
+        .map(c => ({ id: c.id, name: `${c.firstName} ${c.lastName}`.trim(), email: c.email }));
+      res.json({ contacts: eligible, count: eligible.length });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // Batch-send onboarding welcome emails, then disable suppression flag
+  app.post("/api/company/send-onboarding-welcome", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      // Idempotency guard
+      if (company.onboardingCompleteSentAt) {
+        return res.status(409).json({ error: "Onboarding welcome emails were already sent on " + new Date(company.onboardingCompleteSentAt).toLocaleDateString() });
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const allContacts = await storage.getContacts(companyId);
+      const eligible = allContacts.filter(c => c.status === "active" && c.email);
+
+      const results: { contactId: string; name: string; email: string; status: "sent" | "skipped" }[] = [];
+
+      for (const contact of eligible) {
+        try {
+          // Gather service details for this contact
+          let serviceDayOfWeek: string | undefined;
+          let serviceFrequency: string | undefined;
+          let servicePricePerVisit: string | undefined;
+          let serviceNextVisitDate: string | undefined;
+
+          try {
+            const plans = await storage.getServicePlans(companyId, { contactId: contact.id });
+            const activePlan = plans.find(p => p.isActive) || plans[0];
+            if (activePlan) {
+              if (activePlan.dayOfWeek) {
+                // dayOfWeek is a string like "monday" — capitalize for display
+                serviceDayOfWeek = activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1);
+              }
+              serviceFrequency = activePlan.frequency ?? undefined;
+              servicePricePerVisit = activePlan.pricePerVisit ?? undefined;
+            }
+          } catch (_) {}
+
+          try {
+            const { visits } = await storage.getVisitsForContact(companyId, contact.id, 50, 0);
+            const upcomingVisit = visits
+              .filter(v => v.status === "scheduled" && v.scheduledDate)
+              .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())[0];
+            if (upcomingVisit?.scheduledDate) {
+              serviceNextVisitDate = new Date(upcomingVisit.scheduledDate).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+            }
+          } catch (_) {}
+
+          // Force email send even if suppressed (this is the batch welcome send)
+          await provisionPortalAccess(contact.id, companyId, baseUrl, {
+            sendEmail: true,
+            serviceDetails: {
+              dayOfWeek: serviceDayOfWeek,
+              frequency: serviceFrequency,
+              pricePerVisit: servicePricePerVisit,
+              nextVisitDate: serviceNextVisitDate,
+            },
+          });
+
+          results.push({ contactId: contact.id, name: `${contact.firstName} ${contact.lastName}`.trim(), email: contact.email!, status: "sent" });
+        } catch (err) {
+          console.error(`[onboarding-welcome] Failed to send for contact ${contact.id}:`, err);
+          results.push({ contactId: contact.id, name: `${contact.firstName} ${contact.lastName}`.trim(), email: contact.email!, status: "skipped" });
+        }
+      }
+
+      // Mark as sent and disable suppression
+      await storage.updateCompany(companyId, {
+        clientNotificationsSuppressed: false,
+        onboardingCompleteSentAt: new Date(),
+      } as any);
+
+      res.json({ success: true, sent: results.filter(r => r.status === "sent").length, total: eligible.length, results });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.patch("/api/company", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role, userId } = await getCompanyContext(req);
@@ -2443,7 +2535,8 @@ Return ONLY valid JSON, no markdown.`,
         "telnyxApiKey", "telnyxPhoneNumber", "telnyxMessagingProfileId", "venmoHandle", "maxStopsPerRoute",
         "country", "currency", "taxRatePercent",
         "billingCadence", "billingTrigger", "defaultPaymentBehavior",
-        "reviewRequestEnabled", "googleReviewUrl", "reviewRequestAfterVisits", "reviewRequestCustomMessage"];
+        "reviewRequestEnabled", "googleReviewUrl", "reviewRequestAfterVisits", "reviewRequestCustomMessage",
+        "clientNotificationsSuppressed"];
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -11553,6 +11646,10 @@ Rules:
       const baseUrl = getBaseUrl(req);
       const portalUrl = `${baseUrl}/portal`;
 
+      if (company?.clientNotificationsSuppressed) {
+        return res.status(400).json({ error: "Client notifications are currently suppressed (Import Mode is on). Disable Import Mode in Settings to send reminders." });
+      }
+
       let smsSent = false;
       let emailSent = false;
 
@@ -14750,9 +14847,14 @@ Rules:
     } catch (err) { handleError(res, err); }
   });
 
-  async function provisionPortalAccess(contactId: string, companyId: string, portalBaseUrl: string): Promise<void> {
+  async function provisionPortalAccess(
+    contactId: string,
+    companyId: string,
+    portalBaseUrl: string,
+    opts?: { sendEmail?: boolean; serviceDetails?: { dayOfWeek?: string; frequency?: string; pricePerVisit?: string; nextVisitDate?: string } }
+  ): Promise<{ tempPassword: string }> {
     const contact = await storage.getContact(contactId, companyId);
-    if (!contact || !contact.email) return;
+    if (!contact || !contact.email) return { tempPassword: "" };
 
     const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
     const salt = crypto.randomBytes(16).toString("hex");
@@ -14771,14 +14873,47 @@ Rules:
     }
 
     const company = await storage.getCompany(companyId);
+
+    // Check suppression flag — skip email if company has client notifications suppressed.
+    // sendEmail: true → force send (bypasses suppression, used by batch onboarding send)
+    // sendEmail: false → never send
+    // sendEmail: undefined → respect suppression flag
+    const shouldSend = opts?.sendEmail === true
+      ? true
+      : opts?.sendEmail === false
+        ? false
+        : !(company?.clientNotificationsSuppressed);
+    if (!shouldSend) {
+      console.log(`[provisionPortalAccess] Email suppressed (clientNotificationsSuppressed=true) for contact ${contactId}`);
+      return { tempPassword };
+    }
+
     const portalUrl = `${portalBaseUrl}/portal/login`;
+    const serviceDetails = opts?.serviceDetails;
+
+    const serviceSection = serviceDetails ? `
+          <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; margin: 16px 0;">
+            <p style="margin: 0 0 10px 0; font-weight: bold; color: #166534;">Your Service Details:</p>
+            ${serviceDetails.dayOfWeek ? `<p style="margin: 4px 0;">📅 <strong>Service Day:</strong> ${serviceDetails.dayOfWeek}</p>` : ""}
+            ${serviceDetails.frequency ? `<p style="margin: 4px 0;">🔄 <strong>Frequency:</strong> ${serviceDetails.frequency}</p>` : ""}
+            ${serviceDetails.pricePerVisit ? `<p style="margin: 4px 0;">💵 <strong>Price per Visit:</strong> $${serviceDetails.pricePerVisit}</p>` : ""}
+            ${serviceDetails.nextVisitDate ? `<p style="margin: 4px 0;">📆 <strong>Next Visit:</strong> ${serviceDetails.nextVisitDate}</p>` : ""}
+          </div>` : "";
+
+    const serviceText = serviceDetails ? [
+      serviceDetails.dayOfWeek ? `Service Day: ${serviceDetails.dayOfWeek}` : "",
+      serviceDetails.frequency ? `Frequency: ${serviceDetails.frequency}` : "",
+      serviceDetails.pricePerVisit ? `Price per Visit: $${serviceDetails.pricePerVisit}` : "",
+      serviceDetails.nextVisitDate ? `Next Visit: ${serviceDetails.nextVisitDate}` : "",
+    ].filter(Boolean).join("\n") : "";
+
     sendEmail({
       companyId: companyId,
       to: contact.email,
       subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
       senderName: company?.name || undefined,
       replyTo: company?.email || undefined,
-      text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password.\n\nThank you!`,
+      text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\n${serviceText ? "Your Service Details:\n" + serviceText + "\n\n" : ""}Please log in and change your password.\n\nThank you!`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
@@ -14792,6 +14927,7 @@ Rules:
               <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>
               <p style="margin: 0;">Temporary Password: <strong>${tempPassword}</strong></p>
             </div>
+            ${serviceSection}
             <a href="${portalUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Log In to Portal</a>
             <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${portalUrl}</p>
             <p style="color: #6b7280; font-size: 14px;">View your service schedule, invoices, and manage your account.</p>
@@ -14799,6 +14935,8 @@ Rules:
         </div>
       `,
     }).catch((err) => console.error("Failed to send portal access email:", err));
+
+    return { tempPassword };
   }
 
   // Admin route: generate portal invite link
