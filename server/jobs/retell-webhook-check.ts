@@ -3,10 +3,11 @@ import { eq, and, gte, isNotNull } from "drizzle-orm";
 import { companies, companyUsers, users, notifications } from "@shared/schema";
 import { storage } from "../storage";
 import { sendEmail } from "../services/email";
-import { getRetellAgentWebhookUrl, getAppBaseUrl } from "../services/retell";
+import { getRetellAgentWebhookUrl, registerRetellWebhook, getAppBaseUrl } from "../services/retell";
 
 const DEDUP_WINDOW_MS = 23 * 60 * 60 * 1000;
-const NOTIFICATION_TITLE = "Retell Webhook Not Registered";
+const NOTIFICATION_TITLE_BROKEN = "Retell Webhook Not Registered";
+const NOTIFICATION_TITLE_FIXED = "Retell Webhook Auto-Repaired";
 
 async function isWebhookRegistered(agentId: string, expectedUrl: string): Promise<{ registered: boolean; currentUrl: string | null; error?: string }> {
   try {
@@ -23,15 +24,18 @@ async function alertCompany(
   currentUrl: string | null,
   expectedUrl: string,
   baseUrl: string,
+  fixed: boolean,
 ): Promise<void> {
+  const notificationTitle = fixed ? NOTIFICATION_TITLE_FIXED : NOTIFICATION_TITLE_BROKEN;
   const dedupCutoff = new Date(Date.now() - DEDUP_WINDOW_MS);
+
   const recentAlerts = await db
     .select({ id: notifications.id })
     .from(notifications)
     .where(
       and(
         eq(notifications.companyId, company.id),
-        eq(notifications.title, NOTIFICATION_TITLE),
+        eq(notifications.title, notificationTitle),
         gte(notifications.createdAt, dedupCutoff)
       )
     )
@@ -42,11 +46,15 @@ async function alertCompany(
     return;
   }
 
+  const notificationMessage = fixed
+    ? `The Retell AI voice webhook was automatically re-registered. No action is needed — calls will be processed normally.`
+    : `The Retell AI voice webhook is not correctly registered. Calls may not be processed. Visit Settings > Retell to re-register the webhook.`;
+
   await storage.createNotification({
     companyId: company.id,
     type: "general",
-    title: NOTIFICATION_TITLE,
-    message: `The Retell AI voice webhook is not correctly registered. Calls may not be processed. Visit Settings > Retell to re-register the webhook.`,
+    title: notificationTitle,
+    message: notificationMessage,
     isRead: false,
     linkUrl: "/settings",
   });
@@ -69,12 +77,36 @@ async function alertCompany(
   for (const recipient of staffToAlert) {
     if (!recipient.email) continue;
     const firstName = recipient.firstName || "there";
-    const emailResult = await sendEmail({
-      companyId: company.id,
-      to: recipient.email,
-      subject: "Action Required: Retell Voice Webhook is Not Registered",
-      text: `Hi ${firstName},\n\nWe detected that the Retell AI voice webhook for your account ("${company.name}") is not correctly registered. This means incoming call data may not be processed.\n\nExpected webhook URL: ${expectedUrl}\nCurrent webhook URL: ${currentUrl ?? "(none)"}\n\nTo fix this, go to Settings > Retell in your dashboard and click "Register Webhook".\n\n— ScooPilot`,
-      html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+
+    const emailResult = fixed
+      ? await sendEmail({
+          companyId: company.id,
+          to: recipient.email,
+          subject: "Retell Voice Webhook Was Automatically Re-Registered",
+          text: `Hi ${firstName},\n\nWe detected that the Retell AI voice webhook for your account ("${company.name}") was not correctly registered, but we automatically re-registered it. No action is needed — calls will be processed normally.\n\nWebhook URL: ${expectedUrl}\n\n— ScooPilot`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+        <div style="background-color:#2d8a5e;padding:20px;text-align:center"><h1 style="color:white;margin:0">ScooPilot</h1></div>
+        <div style="padding:30px 20px">
+          <h2 style="color:#2d8a5e">Retell Voice Webhook Auto-Repaired</h2>
+          <p>Hi ${firstName},</p>
+          <p>We detected that the Retell AI voice webhook for your account <strong>${company.name}</strong> was not correctly registered. We automatically re-registered it — no action is needed on your part.</p>
+          <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
+            <tr><td style="padding:8px 12px;background:#f3f4f6;font-weight:600;border:1px solid #e5e7eb">Webhook URL</td><td style="padding:8px 12px;border:1px solid #e5e7eb;word-break:break-all">${expectedUrl}</td></tr>
+          </table>
+          <p>Calls will be processed normally. You can verify this in your settings at any time.</p>
+          <div style="text-align:center;margin:30px 0">
+            <a href="${baseUrl}/settings" style="background-color:#2d8a5e;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold">Go to Settings</a>
+          </div>
+        </div>
+        <div style="background-color:#f5f5f5;padding:15px;text-align:center;font-size:12px;color:#666">ScooPilot - Pet Waste Removal Software</div>
+      </div>`,
+        })
+      : await sendEmail({
+          companyId: company.id,
+          to: recipient.email,
+          subject: "Action Required: Retell Voice Webhook is Not Registered",
+          text: `Hi ${firstName},\n\nWe detected that the Retell AI voice webhook for your account ("${company.name}") is not correctly registered. This means incoming call data may not be processed.\n\nExpected webhook URL: ${expectedUrl}\nCurrent webhook URL: ${currentUrl ?? "(none)"}\n\nTo fix this, go to Settings > Retell in your dashboard and click "Register Webhook".\n\n— ScooPilot`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
         <div style="background-color:#2d8a5e;padding:20px;text-align:center"><h1 style="color:white;margin:0">ScooPilot</h1></div>
         <div style="padding:30px 20px">
           <h2 style="color:#b91c1c">Retell Voice Webhook Not Registered</h2>
@@ -91,12 +123,12 @@ async function alertCompany(
         </div>
         <div style="background-color:#f5f5f5;padding:15px;text-align:center;font-size:12px;color:#666">ScooPilot - Pet Waste Removal Software</div>
       </div>`,
-    });
+        });
 
     if (!emailResult.success) {
       console.error(`[retell-webhook-check] Email delivery failed for ${company.id} (${recipient.email}): ${emailResult.error}`);
     } else {
-      console.log(`[retell-webhook-check] Alert email sent to ${recipient.email} for company "${company.name}"`);
+      console.log(`[retell-webhook-check] Alert email sent to ${recipient.email} for company "${company.name}" (fixed=${fixed})`);
     }
   }
 
@@ -145,7 +177,18 @@ export async function runRetellWebhookCheck(): Promise<void> {
           continue;
         }
         console.warn(`[retell-webhook-check] Webhook missing/mismatched for company "${company.name}" (agent ${agentId}). Current: ${currentUrl ?? "none"}, Expected: ${expectedUrl}`);
-        await alertCompany(company, currentUrl, expectedUrl, baseUrl);
+
+        let autoFixed = false;
+        try {
+          await registerRetellWebhook(agentId);
+          autoFixed = true;
+          console.log(`[retell-webhook-check] Auto-registered webhook for company "${company.name}" (agent ${agentId})`);
+        } catch (fixErr: unknown) {
+          const fixMsg = fixErr instanceof Error ? fixErr.message : String(fixErr);
+          console.error(`[retell-webhook-check] Auto-registration failed for company "${company.name}" (agent ${agentId}): ${fixMsg}`);
+        }
+
+        await alertCompany(company, currentUrl, expectedUrl, baseUrl, autoFixed);
         alertSent++;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
