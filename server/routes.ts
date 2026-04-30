@@ -5736,8 +5736,10 @@ Return ONLY valid JSON, no markdown.`,
       };
 
       // Build analysis for each of the next 4 weeks.
-      const weekResults = await Promise.all(
-        [0, 1, 2, 3].map(async (weekOffset) => {
+      // Processed sequentially so the shared mutable propertyMap is never
+      // raced by concurrent geocode writes across weeks.
+      const weekResults = [];
+      for (const weekOffset of [0, 1, 2, 3]) {
           const weekStartObj = new Date(nextMondayObj);
           weekStartObj.setUTCDate(nextMondayObj.getUTCDate() + weekOffset * 7);
           const weekEndObj = new Date(weekStartObj);
@@ -5802,7 +5804,7 @@ Return ONLY valid JSON, no markdown.`,
             .filter((s): s is NonNullable<typeof s> => s !== null);
 
           if (weeklyStops.length < 3) {
-            return {
+            weekResults.push({
               weekStart,
               weekEnd,
               weekLabel,
@@ -5813,7 +5815,8 @@ Return ONLY valid JSON, no markdown.`,
                 ? "No visits scheduled this week"
                 : `Only ${weeklyStops.length} geocoded stop${weeklyStops.length === 1 ? "" : "s"} — need at least 3 to optimize`,
               excludedWeekendCount: excludedCount,
-            };
+            });
+            continue;
           }
 
           const result = await analyzeWeeklySchedule(weeklyStops, startPoint, {
@@ -5824,7 +5827,7 @@ Return ONLY valid JSON, no markdown.`,
             numTechs,
           });
 
-          return {
+          weekResults.push({
             weekStart,
             weekEnd,
             weekLabel,
@@ -5833,9 +5836,8 @@ Return ONLY valid JSON, no markdown.`,
             empty: false as const,
             excludedWeekendCount: excludedCount,
             ...result,
-          };
-        })
-      );
+          });
+      }
 
       res.json({ weeks: weekResults });
     } catch (err) { handleError(res, err); }
