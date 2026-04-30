@@ -1109,7 +1109,7 @@ export default function RoutesPage() {
   const { data: creditData } = useQuery<{ credits: number; monthlyAllowance: number }>({ queryKey: ["/api/route-credits"] });
   const credits = creditData?.credits ?? 0;
   const monthlyAllowance = creditData?.monthlyAllowance ?? 20;
-  const { data: company } = useQuery<{ name: string; maxStopsPerRoute?: number | null }>({ queryKey: ["/api/company"] });
+  const { data: company } = useQuery<{ name: string; maxStopsPerRoute?: number | null; startLatitude?: string | null; startLongitude?: string | null }>({ queryKey: ["/api/company"] });
   const [maxStopsInput, setMaxStopsInput] = useState<string>("");
   const [isApplyingSplit, setIsApplyingSplit] = useState(false);
 
@@ -2106,6 +2106,15 @@ export default function RoutesPage() {
               You currently have {credits} credits available. Continue?
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {(!company?.startLatitude || !company?.startLongitude) && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300" data-testid="warning-no-start-address">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                No start address is configured. Optimization quality will be reduced because the first stop cannot be anchored by drive time.{" "}
+                <Link href="/settings" className="underline font-medium">Add one in Settings</Link> for better results.
+              </span>
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-optimize">Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmOptimize} data-testid="button-confirm-optimize">

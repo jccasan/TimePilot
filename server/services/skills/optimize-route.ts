@@ -4,7 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { db } from "../../db";
 import { storage } from "../../storage";
 import { routes } from "@shared/schema";
-import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics } from "../route-optimizer";
+import { optimizeRouteAsync, calculateTotalDistance, getMapboxRouteMetrics } from "../route-optimizer";
 import { geocodeAddress } from "../geocode";
 import { getCompanyToday } from "../../utils/company-date";
 import { getDemoCompanyId } from "../../utils/demo";
@@ -114,7 +114,7 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
     const originalDistance = originalMapbox?.distance ?? calculateTotalDistance(stops, startPoint);
     const originalMinutes = originalMapbox?.duration ?? (originalDistance / 25) * 60;
 
-    const result = optimizeRoute(stops, startPoint);
+    const result = await optimizeRouteAsync(stops, startPoint);
 
     const stopsById = new Map(stops.map(s => [s.id, s]));
     const optimizedStops = result.orderedIds.map(id => stopsById.get(id)!);

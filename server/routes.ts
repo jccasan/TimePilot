@@ -5558,7 +5558,7 @@ Return ONLY valid JSON, no markdown.`,
         ? company.maxStopsPerRoute
         : undefined;
 
-      const result = analyzeWeeklySchedule(weeklyStops, startPoint, {
+      const result = await analyzeWeeklySchedule(weeklyStops, startPoint, {
         respectZones,
         zones,
         includeSaturday,

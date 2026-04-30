@@ -11,6 +11,9 @@ interface StartPoint {
   longitude: number;
 }
 
+// Keyed by stop ID; "__start__" is the reserved key for the start point.
+type TimeDistMap = Map<string, Map<string, number>>;
+
 export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 3958.8;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -23,32 +26,102 @@ export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2
   return R * c;
 }
 
-function pathDistance(stops: Stop[], startPoint?: StartPoint): number {
+/**
+ * Fetch the Mapbox Matrix API (driving profile) for up to 25 coordinates.
+ * Returns an N×N table of travel times in minutes, or null on failure.
+ * Capped at 25 coords per call; callers should not pass more.
+ */
+export async function fetchDriveTimeMatrix(
+  coords: { latitude: number; longitude: number }[]
+): Promise<number[][] | null> {
+  const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
+  if (!token || coords.length < 2 || coords.length > 25) return null;
+
+  const coordStr = coords.map(c => `${c.longitude},${c.latitude}`).join(";");
+  const url = `https://api.mapbox.com/directions-matrix/v1/mapbox/driving/${coordStr}?access_token=${token}&annotations=duration`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.log(`[route-optimizer] Mapbox Matrix API returned ${res.status}, falling back to haversine`);
+      return null;
+    }
+    const data = await res.json();
+    if (!data.durations) return null;
+    trackApiCall("mapbox", "matrix");
+    // Convert seconds to minutes
+    return (data.durations as number[][]).map(row => row.map(v => v / 60));
+  } catch {
+    console.log("[route-optimizer] Mapbox Matrix API error, falling back to haversine");
+    return null;
+  }
+}
+
+/**
+ * Build a TimeDistMap from a raw N×N duration matrix (in minutes).
+ * `ids` must have the same length as the matrix dimension.
+ */
+function buildTimeDistMap(ids: string[], matrix: number[][]): TimeDistMap {
+  const map: TimeDistMap = new Map();
+  for (let i = 0; i < ids.length; i++) {
+    const inner = new Map<string, number>();
+    for (let j = 0; j < ids.length; j++) {
+      if (i !== j) inner.set(ids[j], matrix[i][j]);
+    }
+    map.set(ids[i], inner);
+  }
+  return map;
+}
+
+/** Look up drive-time distance between two stops; falls back to haversine. */
+function getDist(
+  fromId: string, fromLat: number, fromLon: number,
+  toId: string, toLat: number, toLon: number,
+  distMap?: TimeDistMap
+): number {
+  if (distMap) {
+    const t = distMap.get(fromId)?.get(toId);
+    if (t !== undefined) return t;
+  }
+  return haversineDistance(fromLat, fromLon, toLat, toLon);
+}
+
+const START_ID = "__start__";
+
+function pathDistance(stops: Stop[], startPoint?: StartPoint, distMap?: TimeDistMap): number {
   let total = 0;
   if (startPoint && stops.length > 0) {
-    total += haversineDistance(startPoint.latitude, startPoint.longitude, stops[0].latitude, stops[0].longitude);
+    total += getDist(START_ID, startPoint.latitude, startPoint.longitude,
+      stops[0].id, stops[0].latitude, stops[0].longitude, distMap);
   }
   for (let i = 0; i < stops.length - 1; i++) {
-    total += haversineDistance(stops[i].latitude, stops[i].longitude, stops[i + 1].latitude, stops[i + 1].longitude);
+    total += getDist(
+      stops[i].id, stops[i].latitude, stops[i].longitude,
+      stops[i + 1].id, stops[i + 1].latitude, stops[i + 1].longitude,
+      distMap
+    );
   }
   return total;
 }
 
-function nearestNeighbor(stops: Stop[], startPoint?: StartPoint): Stop[] {
+function nearestNeighbor(stops: Stop[], startPoint?: StartPoint, distMap?: TimeDistMap): Stop[] {
   if (stops.length <= 1) return stops;
 
   const remaining = [...stops];
   const result: Stop[] = [];
 
+  let currentId: string;
   let currentLat: number;
   let currentLon: number;
 
   if (startPoint) {
+    currentId = START_ID;
     currentLat = startPoint.latitude;
     currentLon = startPoint.longitude;
   } else {
     const first = remaining.shift()!;
     result.push(first);
+    currentId = first.id;
     currentLat = first.latitude;
     currentLon = first.longitude;
   }
@@ -58,7 +131,8 @@ function nearestNeighbor(stops: Stop[], startPoint?: StartPoint): Stop[] {
     let nearestDist = Infinity;
 
     for (let i = 0; i < remaining.length; i++) {
-      const dist = haversineDistance(currentLat, currentLon, remaining[i].latitude, remaining[i].longitude);
+      const dist = getDist(currentId, currentLat, currentLon,
+        remaining[i].id, remaining[i].latitude, remaining[i].longitude, distMap);
       if (dist < nearestDist) {
         nearestDist = dist;
         nearestIdx = i;
@@ -67,6 +141,7 @@ function nearestNeighbor(stops: Stop[], startPoint?: StartPoint): Stop[] {
 
     const nearest = remaining.splice(nearestIdx, 1)[0];
     result.push(nearest);
+    currentId = nearest.id;
     currentLat = nearest.latitude;
     currentLon = nearest.longitude;
   }
@@ -74,11 +149,11 @@ function nearestNeighbor(stops: Stop[], startPoint?: StartPoint): Stop[] {
   return result;
 }
 
-function twoOptImprove(stops: Stop[], startPoint?: StartPoint): Stop[] {
+function twoOptImprove(stops: Stop[], startPoint?: StartPoint, distMap?: TimeDistMap): Stop[] {
   if (stops.length <= 3) return stops;
 
   const order = [...stops];
-  let bestDist = pathDistance(order, startPoint);
+  let bestDist = pathDistance(order, startPoint, distMap);
   let improved = true;
 
   while (improved) {
@@ -87,7 +162,7 @@ function twoOptImprove(stops: Stop[], startPoint?: StartPoint): Stop[] {
       for (let j = i + 1; j < order.length; j++) {
         const reversed = order.slice(i, j + 1).reverse();
         const candidate = [...order.slice(0, i), ...reversed, ...order.slice(j + 1)];
-        const candidateDist = pathDistance(candidate, startPoint);
+        const candidateDist = pathDistance(candidate, startPoint, distMap);
 
         if (candidateDist < bestDist) {
           order.splice(0, order.length, ...candidate);
@@ -105,9 +180,10 @@ export function calculateTotalDistance(stops: Stop[], startPoint?: StartPoint): 
   return Math.round(pathDistance(stops, startPoint) * 100) / 100;
 }
 
-function nearestNeighborFromFirst(stops: Stop[], forcedFirst: Stop, startPoint?: StartPoint): Stop[] {
+function nearestNeighborFromFirst(stops: Stop[], forcedFirst: Stop, distMap?: TimeDistMap): Stop[] {
   const result: Stop[] = [forcedFirst];
   const remaining = stops.filter(s => s.id !== forcedFirst.id);
+  let currentId = forcedFirst.id;
   let currentLat = forcedFirst.latitude;
   let currentLon = forcedFirst.longitude;
 
@@ -115,7 +191,8 @@ function nearestNeighborFromFirst(stops: Stop[], forcedFirst: Stop, startPoint?:
     let nearestIdx = 0;
     let nearestDist = Infinity;
     for (let i = 0; i < remaining.length; i++) {
-      const dist = haversineDistance(currentLat, currentLon, remaining[i].latitude, remaining[i].longitude);
+      const dist = getDist(currentId, currentLat, currentLon,
+        remaining[i].id, remaining[i].latitude, remaining[i].longitude, distMap);
       if (dist < nearestDist) {
         nearestDist = dist;
         nearestIdx = i;
@@ -123,6 +200,7 @@ function nearestNeighborFromFirst(stops: Stop[], forcedFirst: Stop, startPoint?:
     }
     const nearest = remaining.splice(nearestIdx, 1)[0];
     result.push(nearest);
+    currentId = nearest.id;
     currentLat = nearest.latitude;
     currentLon = nearest.longitude;
   }
@@ -130,7 +208,11 @@ function nearestNeighborFromFirst(stops: Stop[], forcedFirst: Stop, startPoint?:
   return result;
 }
 
-export function optimizeRoute(stops: Stop[], startPoint?: StartPoint): { orderedIds: string[]; totalDistance: number } {
+export function optimizeRoute(
+  stops: Stop[],
+  startPoint?: StartPoint,
+  distMap?: TimeDistMap
+): { orderedIds: string[]; totalDistance: number } {
   if (stops.length <= 1) {
     return {
       orderedIds: stops.map(s => s.id),
@@ -140,49 +222,95 @@ export function optimizeRoute(stops: Stop[], startPoint?: StartPoint): { ordered
     };
   }
 
-  const MAX_STARTS = Math.min(stops.length, 12);
   let bestOrder: Stop[] = [];
   let bestDist = Infinity;
 
-  const stepSize = Math.max(1, Math.floor(stops.length / MAX_STARTS));
-  const seenIdxMap: Record<number, boolean> = {};
-  const candidateIndices: number[] = [];
-  for (let i = 0; i < MAX_STARTS; i++) {
-    const idx = (i * stepSize) % stops.length;
-    if (!seenIdxMap[idx]) {
-      seenIdxMap[idx] = true;
-      candidateIndices.push(idx);
+  if (startPoint) {
+    // Anchor: pick the stop with the shortest drive time from start as the forced first.
+    let bestFirstIdx = 0;
+    let bestFirstDist = Infinity;
+    for (let i = 0; i < stops.length; i++) {
+      const d = getDist(START_ID, startPoint.latitude, startPoint.longitude,
+        stops[i].id, stops[i].latitude, stops[i].longitude, distMap);
+      if (d < bestFirstDist) {
+        bestFirstDist = d;
+        bestFirstIdx = i;
+      }
     }
-  }
+    const forcedFirst = stops[bestFirstIdx];
+    const nnOrder = nearestNeighborFromFirst(stops, forcedFirst, distMap);
+    bestOrder = twoOptImprove(nnOrder, startPoint, distMap);
+    bestDist = pathDistance(bestOrder, startPoint, distMap);
+  } else {
+    // No start point: try multiple starting indices and pick the best result.
+    const MAX_STARTS = Math.min(stops.length, 12);
+    const stepSize = Math.max(1, Math.floor(stops.length / MAX_STARTS));
+    const seenIdxMap: Record<number, boolean> = {};
+    const candidateIndices: number[] = [];
+    for (let i = 0; i < MAX_STARTS; i++) {
+      const idx = (i * stepSize) % stops.length;
+      if (!seenIdxMap[idx]) {
+        seenIdxMap[idx] = true;
+        candidateIndices.push(idx);
+      }
+    }
 
-  for (const startIdx of candidateIndices) {
-    let nnOrder: Stop[];
-    if (startPoint) {
-      nnOrder = nearestNeighborFromFirst(stops, stops[startIdx], startPoint);
-    } else {
+    for (const startIdx of candidateIndices) {
       const rotated = [...stops.slice(startIdx), ...stops.slice(0, startIdx)];
-      nnOrder = nearestNeighbor(rotated);
+      const nnOrder = nearestNeighbor(rotated, undefined, distMap);
+      const improved = twoOptImprove(nnOrder, undefined, distMap);
+      const dist = pathDistance(improved, undefined, distMap);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestOrder = improved;
+      }
     }
-    const improved = twoOptImprove(nnOrder, startPoint);
-    const dist = pathDistance(improved, startPoint);
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestOrder = improved;
-    }
-  }
 
-  const nnDefault = nearestNeighbor(stops, startPoint);
-  const improvedDefault = twoOptImprove(nnDefault, startPoint);
-  const distDefault = pathDistance(improvedDefault, startPoint);
-  if (distDefault < bestDist) {
-    bestDist = distDefault;
-    bestOrder = improvedDefault;
+    const nnDefault = nearestNeighbor(stops, undefined, distMap);
+    const improvedDefault = twoOptImprove(nnDefault, undefined, distMap);
+    const distDefault = pathDistance(improvedDefault, undefined, distMap);
+    if (distDefault < bestDist) {
+      bestDist = distDefault;
+      bestOrder = improvedDefault;
+    }
   }
 
   return {
     orderedIds: bestOrder.map(s => s.id),
     totalDistance: Math.round(bestDist * 100) / 100,
   };
+}
+
+/**
+ * Async version: fetches the Mapbox Matrix API for real drive times (when ≤25 stops),
+ * then runs the optimizer using those times. Falls back to haversine silently.
+ */
+export async function optimizeRouteAsync(
+  stops: Stop[],
+  startPoint?: StartPoint
+): Promise<{ orderedIds: string[]; totalDistance: number }> {
+  let distMap: TimeDistMap | undefined;
+
+  const MATRIX_LIMIT = 25;
+  // Build coords list: start point first (if any), then stops
+  const totalCoords = stops.length + (startPoint ? 1 : 0);
+
+  if (totalCoords <= MATRIX_LIMIT) {
+    const coords: { latitude: number; longitude: number }[] = [];
+    if (startPoint) coords.push(startPoint);
+    for (const s of stops) coords.push({ latitude: s.latitude, longitude: s.longitude });
+
+    const matrix = await fetchDriveTimeMatrix(coords);
+    if (matrix) {
+      const ids: string[] = [];
+      if (startPoint) ids.push(START_ID);
+      for (const s of stops) ids.push(s.id);
+      distMap = buildTimeDistMap(ids, matrix);
+    }
+  }
+  // If no matrix (too many stops or API failure), distMap stays undefined → haversine fallback
+
+  return optimizeRoute(stops, startPoint, distMap);
 }
 
 export async function fetchMapboxDirections(coordinates: { longitude: number; latitude: number }[]): Promise<{ distance: number; duration: number } | null> {
