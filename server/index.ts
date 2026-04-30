@@ -128,6 +128,34 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+const SENSITIVE_LOG_FIELDS = new Set([
+  "token",
+  "sessiontoken",
+  "accesstoken",
+  "refreshtoken",
+  "password",
+  "secret",
+  "apikey",
+]);
+
+function redactSensitiveFields(value: any): any {
+  if (Array.isArray(value)) {
+    return value.map(redactSensitiveFields);
+  }
+  if (value && typeof value === "object") {
+    const redacted: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (SENSITIVE_LOG_FIELDS.has(k.toLowerCase())) {
+        redacted[k] = "[REDACTED]";
+      } else {
+        redacted[k] = redactSensitiveFields(v);
+      }
+    }
+    return redacted;
+  }
+  return value;
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -144,7 +172,8 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse).substring(0, 200)}`;
+        const safeResponse = redactSensitiveFields(capturedJsonResponse);
+        logLine += ` :: ${JSON.stringify(safeResponse).substring(0, 200)}`;
       }
 
       log(logLine);
