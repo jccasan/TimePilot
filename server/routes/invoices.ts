@@ -336,7 +336,6 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
   app.post("/api/invoices/from-visits", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const suppressNotifications = req.body.suppressNotifications === true; // reserved: no notification side effects currently in this route
       const { contactId, visitIds, dueDate } = req.body;
       if (!contactId || !visitIds || !Array.isArray(visitIds) || visitIds.length === 0) {
         return res.status(400).json({ error: "contactId and visitIds array required" });

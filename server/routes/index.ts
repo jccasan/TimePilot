@@ -43,9 +43,6 @@ export async function registerRoutes(
   // Object file download route — registered before registerObjectStorageRoutes so this
   // handler takes precedence and enforces ACL access control on private objects.
   const _objStorage = new ObjectStorageService();
-  // Tracks logo paths whose public ACL has already been backfilled this server
-  // session so the GET /api/company handler doesn't write metadata on every request.
-  const _backfilledLogoAcls = new Set<string>();
   app.get("/objects/{*objectPath}", async (req: Request, res: Response) => {
     try {
       const objectFile = await _objStorage.getObjectEntityFile(req.path);
