@@ -2115,6 +2115,38 @@ async function seedHistoricalDemoData() {
   }
 }
 
+async function cloneLakeErieScoopersDemo() {
+  const SOURCE_COMPANY_ID = "8089c512-bec6-47e1-9678-ec3e3eda4e95";
+  const TARGET_COMPANY_NAME = "Lake Erie Scoopers (Demo)";
+  const NEW_USER_EMAIL = "jeremy@scoopilot.com";
+  const NEW_USER_PASSWORD = "ZAfukr2121@!";
+  try {
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const existingCheck = await pool.query(
+      `SELECT id FROM companies WHERE name = $1 LIMIT 1`, [TARGET_COMPANY_NAME]
+    );
+    if (existingCheck.rows.length > 0) {
+      console.log("[Migration] Lake Erie Scoopers (Demo) already exists — skipping");
+      await pool.end();
+      return;
+    }
+    const srcCheck = await pool.query(`SELECT id FROM companies WHERE id = $1`, [SOURCE_COMPANY_ID]);
+    if (!srcCheck.rows.length) {
+      console.log("[Migration] Lake Erie Scoopers source not found — skipping demo clone");
+      await pool.end();
+      return;
+    }
+    const { cloneCompany } = await import("./services/clone-company");
+    const result = await cloneCompany(SOURCE_COMPANY_ID, TARGET_COMPANY_NAME, NEW_USER_EMAIL, NEW_USER_PASSWORD, pool);
+    console.log(`[Migration] Lake Erie Scoopers (Demo) cloned successfully (company: ${result.newCompanyId})`);
+    console.log("[Migration] Clone counts:", JSON.stringify(result.counts));
+    await pool.end();
+  } catch (err) {
+    console.error("[Migration] Failed to clone Lake Erie Scoopers demo:", err);
+  }
+}
+
 async function auditRetellWebhooks() {
   try {
     const { storage } = await import("./storage");
@@ -2197,6 +2229,7 @@ async function auditRetellWebhooks() {
   await ensureVisitEnRouteAtColumn();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
+  await cloneLakeErieScoopersDemo();
   await runStartupMigrations();
   setupSession(app);
   await registerRoutes(httpServer, app);
