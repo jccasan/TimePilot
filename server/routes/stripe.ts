@@ -22,7 +22,7 @@ import {
   createConnectLoginLink,
   ensureConnectedCustomer,
 } from "../services/stripe";
-import { seedRetellKnowledgeBase, provisionRetellNumber, registerRetellWebhook } from "../services/retell";
+import { seedRetellKnowledgeBase, provisionRetellNumber, registerRetellWebhook, cloneRetellAgent, getAppBaseUrl } from "../services/retell";
 import {
   VOICE_PLAN_CONFIG,
 } from "@shared/schema";
@@ -455,26 +455,73 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 voicePlanOverageRate: String(planConfig.overageRate),
               };
 
-              const customFields = (session.custom_fields ?? []) as Array<{ key: string; text?: { value?: string } }>;
+              const customFields = (session.custom_fields ?? []) as Array<{
+                key: string;
+                text?: { value?: string };
+                dropdown?: { value?: string };
+              }>;
 
-              if (!company.dedicatedPhoneNumber) {
-                const areaCodeField = customFields.find((f) => f.key === "preferred_area_code");
-                const areaCode = areaCodeField?.text?.value?.trim() || "703";
+              // ── Step 1: Clone a per-tenant Retell agent from the template ──
+              let effectiveAgentId = company.retellAgentId || null;
+              if (!effectiveAgentId) {
                 try {
-                  const dedicatedPhoneNumber = await provisionRetellNumber({ areaCode });
-                  companyUpdates.dedicatedPhoneNumber = dedicatedPhoneNumber;
-                  console.log(`[Retell] Provisioned number ${maskPhone(dedicatedPhoneNumber)} for company "${company.name}" (${company.id})`);
-                } catch (phoneErr: any) {
-                  console.warn(`[Retell] Failed to provision phone number for company "${company.name}" (${company.id}): ${phoneErr.message}`);
-                  notify(tenantId, "system_warning", "Phone Number Setup Failed", `Your voice plan is active but we could not automatically provision a phone number (${phoneErr.message}). Please contact support to complete setup.`, `/settings`);
+                  const webhookUrl = getAppBaseUrl() ? `${getAppBaseUrl()}/api/webhooks/retell` : undefined;
+                  effectiveAgentId = await cloneRetellAgent({
+                    companyName: company.name,
+                    webhookUrl,
+                  });
+                  (companyUpdates as Record<string, unknown>).retellAgentId = effectiveAgentId;
+                  console.log(`[Retell] Cloned agent "${effectiveAgentId}" for company "${company.name}" (${company.id})`);
+                } catch (agentErr: any) {
+                  console.warn(`[Retell] Failed to clone agent for company "${company.name}" (${company.id}): ${agentErr.message}`);
+                  effectiveAgentId = process.env.RETELL_AGENT_ID || null;
+                  notify(tenantId, "system_warning", "Voice Agent Setup Incomplete",
+                    `Your voice plan is active but a dedicated AI agent could not be created (${agentErr.message}). Your account is using the shared agent in the meantime. Please contact support to resolve this.`,
+                    `/settings`);
                 }
               }
 
+              // ── Step 2: Phone number — new provisioning or port request ──
+              const numberSetupField = customFields.find((f) => f.key === "number_setup");
+              const numberSetup = numberSetupField?.dropdown?.value ?? "new";
+              const phoneOrAreaCodeField = customFields.find((f) => f.key === "phone_or_area_code");
+              const phoneOrAreaCodeValue = phoneOrAreaCodeField?.text?.value?.trim() || "";
+
+              if (!company.dedicatedPhoneNumber) {
+                if (numberSetup === "port") {
+                  // Store the porting request; actual porting requires carrier paperwork
+                  const numberToPort = phoneOrAreaCodeValue || "(not provided)";
+                  (companyUpdates as Record<string, unknown>).portingPhoneNumber = numberToPort;
+                  console.log(`[Retell] Port request received for company "${company.name}" (${company.id}): ${maskPhone(numberToPort)}`);
+                  notify(tenantId, "system_warning", "Number Porting Request Received",
+                    `We received your request to port ${numberToPort} to ScooPilot. Number porting typically takes 2–4 weeks and requires a Letter of Authorization from your current carrier. Our team will contact you within one business day to begin the process.`,
+                    `/settings`);
+                  // Admin notification (logged; team monitors server logs for port requests)
+                  console.warn(`[Retell PORT REQUEST] Company "${company.name}" (${company.id}) wants to port ${numberToPort}. Manual porting process required.`);
+                } else {
+                  // Provision a new number
+                  const areaCode = phoneOrAreaCodeValue.replace(/\D/g, "").slice(0, 3) || "703";
+                  try {
+                    const dedicatedPhoneNumber = await provisionRetellNumber({
+                      areaCode,
+                      agentId: effectiveAgentId ?? undefined,
+                    });
+                    companyUpdates.dedicatedPhoneNumber = dedicatedPhoneNumber;
+                    console.log(`[Retell] Provisioned number ${maskPhone(dedicatedPhoneNumber)} for company "${company.name}" (${company.id})`);
+                  } catch (phoneErr: any) {
+                    console.warn(`[Retell] Failed to provision phone number for company "${company.name}" (${company.id}): ${phoneErr.message}`);
+                    notify(tenantId, "system_warning", "Phone Number Setup Failed",
+                      `Your voice plan is active but we could not automatically provision a phone number (${phoneErr.message}). Please contact support to complete setup.`,
+                      `/settings`);
+                  }
+                }
+              }
+
+              // ── Step 3: Knowledge base ──
               const websiteField = customFields.find((f) => f.key === "business_website");
               const businessWebsite = websiteField?.text?.value?.trim() || "";
 
               let kbId: string | null = null;
-              const effectiveAgentId = company.retellAgentId || process.env.RETELL_AGENT_ID || null;
               if (businessWebsite && effectiveAgentId) {
                 try {
                   kbId = await seedRetellKnowledgeBase({
@@ -485,23 +532,25 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   console.log(`[Retell KB] Created knowledge base "${kbId}" for company "${company.name}" (${company.id}) from ${businessWebsite}`);
                 } catch (kbErr: any) {
                   console.warn(`[Retell KB] Failed to seed knowledge base for company "${company.name}" (${company.id}): ${kbErr.message}`);
-                  notify(tenantId, "system_warning", "Knowledge Base Setup Failed", `Voice plan activated but knowledge base creation from "${businessWebsite}" failed. Please set it up manually. Error: ${kbErr.message}`, `/settings`);
+                  notify(tenantId, "system_warning", "Knowledge Base Setup Failed",
+                    `Voice plan activated but knowledge base creation from "${businessWebsite}" failed. Please set it up manually. Error: ${kbErr.message}`,
+                    `/settings`);
                 }
-              } else if (businessWebsite && !effectiveAgentId) {
-                console.warn(`[Retell KB] Business website provided but no Retell agent ID found for company "${company.name}" (${company.id}). Skipping KB creation.`);
-                notify(tenantId, "system_warning", "Knowledge Base Setup Skipped", `A business website was provided during checkout but no Retell agent is linked to your account. Please contact support to set up the knowledge base.`, `/settings`);
               }
 
               if (kbId) {
                 (companyUpdates as Record<string, unknown>).retellKnowledgeBaseId = kbId;
               }
 
+              // ── Step 4: Register webhook if KB didn't already do it ──
               if (!kbId && effectiveAgentId) {
                 try {
                   await registerRetellWebhook(effectiveAgentId);
                 } catch (whErr: any) {
                   console.warn(`[Retell] Failed to register webhook for agent ${effectiveAgentId}: ${whErr.message}`);
-                  notify(tenantId, "system_warning", "Call Tracking Setup Incomplete", `Voice plan activated but the call-event webhook could not be registered (agent: ${effectiveAgentId}). Call tracking may not work until this is resolved. Please contact support or check Settings. Error: ${whErr.message}`, `/settings`);
+                  notify(tenantId, "system_warning", "Call Tracking Setup Incomplete",
+                    `Voice plan activated but the call-event webhook could not be registered (agent: ${effectiveAgentId}). Call tracking may not work until this is resolved. Please contact support or check Settings. Error: ${whErr.message}`,
+                    `/settings`);
                 }
               }
 

@@ -729,11 +729,21 @@ export async function createVoicePlanCheckout(params: {
     cancel_url: params.cancelUrl,
     custom_fields: [
       {
-        key: "preferred_area_code",
-        label: { type: "custom", custom: "Preferred Area Code" },
+        key: "number_setup",
+        label: { type: "custom", custom: "Phone Number Setup" },
+        type: "dropdown",
+        dropdown: {
+          options: [
+            { label: "Get a new number from ScooPilot", value: "new" },
+            { label: "Port my existing number to ScooPilot", value: "port" },
+          ],
+        },
+      },
+      {
+        key: "phone_or_area_code",
+        label: { type: "custom", custom: "Area code for new number  —OR—  Existing number to port (e.g. +15551234567)" },
         type: "text",
         optional: true,
-        text: { maximum_length: 3, minimum_length: 3 },
       },
       {
         key: "business_website",

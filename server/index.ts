@@ -1989,6 +1989,19 @@ async function ensureUserColumns() {
   }
 }
 
+async function ensureVoicePortingColumn() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS porting_phone_number VARCHAR(20)`);
+    console.log("[Migration] companies porting_phone_number column verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure companies porting_phone_number column:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function seedHistoricalDemoData() {
   try {
     const { Pool } = await import("pg");
@@ -2312,6 +2325,7 @@ async function seedLakeErieScoopersAccount() {
   await ensureReviewTokenGoogleUrl();
   await ensureUserColumns();
   await ensureVisitEnRouteAtColumn();
+  await ensureVoicePortingColumn();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
   await runStartupMigrations();

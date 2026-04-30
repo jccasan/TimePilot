@@ -32,11 +32,54 @@ async function retellFetch(path: string, options: RequestInit = {}): Promise<Res
   });
 }
 
+export async function cloneRetellAgent(params: {
+  companyName: string;
+  webhookUrl?: string;
+}): Promise<string> {
+  const templateId = process.env.RETELL_AGENT_ID;
+  if (!templateId) throw new Error("RETELL_AGENT_ID is not configured — cannot clone agent");
+
+  const getRes = await retellFetch(`/get-agent/${templateId}`);
+  if (!getRes.ok) {
+    const body = await getRes.text();
+    throw new Error(`Retell get-agent (template) failed (${getRes.status}): ${body}`);
+  }
+  const template = await getRes.json() as Record<string, unknown>;
+
+  const fieldsToOmit = new Set([
+    "agent_id", "last_modification_timestamp", "inbound_phone_numbers",
+    "outbound_phone_numbers", "knowledge_base_ids",
+  ]);
+  const agentBody: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(template)) {
+    if (!fieldsToOmit.has(k) && v !== null && v !== undefined) {
+      agentBody[k] = v;
+    }
+  }
+
+  agentBody.agent_name = `${params.companyName} — ScooPilot`;
+  if (params.webhookUrl) {
+    agentBody.webhook_url = params.webhookUrl;
+  }
+
+  const createRes = await retellFetch("/create-agent", {
+    method: "POST",
+    body: JSON.stringify(agentBody),
+  });
+  if (!createRes.ok) {
+    const body = await createRes.text();
+    throw new Error(`Retell create-agent (clone) failed (${createRes.status}): ${body}`);
+  }
+  const created = await createRes.json() as { agent_id: string };
+  return created.agent_id;
+}
+
 export async function provisionRetellNumber(params: {
   areaCode?: string;
+  agentId?: string;
 }): Promise<string> {
   const preferredAreaCode = params.areaCode?.replace(/\D/g, "").slice(0, 3) || "703";
-  const agentId = process.env.RETELL_AGENT_ID;
+  const agentId = params.agentId || process.env.RETELL_AGENT_ID;
 
   const tryAreaCode = async (areaCode: string): Promise<string[]> => {
     const res = await retellFetch(`/v2/get-available-numbers?area_code=${areaCode}&type=local`);
