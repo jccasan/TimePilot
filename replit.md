@@ -100,6 +100,7 @@ A `lint` validation step is registered and runs `npx eslint .` against all `.ts`
 - **Registered as**: validation command `lint`
 
 The following rules are enforced as **errors** (will block merges):
+
 - `@typescript-eslint/no-unused-vars` — unused variables/args must be prefixed with `_`; catch-clause variables follow `caughtErrorsIgnorePattern: "^_"`.
 - `@typescript-eslint/no-namespace` — use ES module syntax, not `namespace` blocks (suppress with inline comment only for `declare module` augmentations).
 - `@typescript-eslint/no-unsafe-function-type` — use specific function signatures (`NextFunction`, `RequestHandler`, etc.) instead of `Function`.

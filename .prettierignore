@@ -8,3 +8,4 @@ attached_assets
 public
 .local
 .config
+.pythonlibs

@@ -43,7 +43,12 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
 
   function sanitizeCompany(company: any) {
     if (!company) return company;
-    const { telnyxApiKey, qboAccessToken: _qboAccessToken, qboRefreshToken: _qboRefreshToken, ...safe } = company;
+    const {
+      telnyxApiKey,
+      qboAccessToken: _qboAccessToken,
+      qboRefreshToken: _qboRefreshToken,
+      ...safe
+    } = company;
     return { ...safe, telnyxApiKey: telnyxApiKey ? "••••••••" : null };
   }
 

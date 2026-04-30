@@ -1518,10 +1518,7 @@ export default function ContactDetail() {
 
       {contact.phone && (
         <div ref={smsComposeRef}>
-          <InlineSmsCompose
-            contactId={id!}
-            phone={contact.phone}
-          />
+          <InlineSmsCompose contactId={id!} phone={contact.phone} />
         </div>
       )}
 
