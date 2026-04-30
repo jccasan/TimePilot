@@ -148,6 +148,7 @@ export interface IStorage {
   deleteRoute(id: string, companyId: string): Promise<void>;
   moveRouteToDate(routeId: string, companyId: string, targetDate: string): Promise<{ movedCount: number; targetRouteId: string }>;
   renumberRouteStops(routeId: string, companyId: string): Promise<void>;
+  reorderRouteStops(routeId: string, companyId: string, orderedIds: string[]): Promise<void>;
 
   // Agreements
   getAgreement(id: string, companyId: string): Promise<Agreement | undefined>;
@@ -856,6 +857,31 @@ export class DatabaseStorage implements IStorage {
           AND sp.is_active = true
       `);
     }
+  }
+
+  async reorderRouteStops(routeId: string, companyId: string, orderedIds: string[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx.update(servicePlans)
+          .set({ stopOrder: i + 1, updatedAt: new Date() })
+          .where(and(
+            eq(servicePlans.id, orderedIds[i]),
+            eq(servicePlans.routeId, routeId),
+            eq(servicePlans.companyId, companyId),
+          ));
+      }
+      if (orderedIds.length > 0) {
+        await tx.execute(sql`
+          UPDATE jobs
+          SET stop_order = sp.stop_order, updated_at = NOW()
+          FROM service_plans sp
+          WHERE jobs.service_plan_id = sp.id
+            AND sp.route_id = ${routeId}
+            AND sp.company_id = ${companyId}
+            AND sp.is_active = true
+        `);
+      }
+    });
   }
 
   // ================ Agreements ================

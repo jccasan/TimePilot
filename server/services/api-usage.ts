@@ -6,6 +6,7 @@ export type ApiMetric =
   | "geocode"
   | "autocomplete"
   | "directions"
+  | "matrix"
   | "rover_chat";
 
 const DAILY_THRESHOLD = parseInt(process.env.GEOCODE_DAILY_THRESHOLD || "1000", 10);

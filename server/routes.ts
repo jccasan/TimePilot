@@ -5891,6 +5891,34 @@ Return ONLY valid JSON, no markdown.`,
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/routes/:id/reorder-stops", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const routeId = p(req.params.id);
+      const route = await storage.getRoute(routeId, companyId);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+      if (route.isLocked) return res.status(409).json({ error: "Route is locked. Unlock it before reordering." });
+      const { orderedIds } = req.body;
+      if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+        return res.status(400).json({ error: "orderedIds must be a non-empty array" });
+      }
+      const uniqueIds = [...new Set(orderedIds as string[])];
+      if (uniqueIds.length !== orderedIds.length) {
+        return res.status(400).json({ error: "orderedIds must not contain duplicates" });
+      }
+      const currentStops = await storage.getServicePlans(companyId, { routeId, isActive: true });
+      const currentIds = new Set(currentStops.map(s => s.id));
+      const requestedIds = new Set(uniqueIds);
+      const missingIds = [...currentIds].filter(id => !requestedIds.has(id));
+      const extraIds = [...requestedIds].filter(id => !currentIds.has(id));
+      if (missingIds.length > 0 || extraIds.length > 0) {
+        return res.status(400).json({ error: "orderedIds must contain exactly the route's current active stop IDs" });
+      }
+      await storage.reorderRouteStops(routeId, companyId, uniqueIds);
+      res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/routes/:id/metrics", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);

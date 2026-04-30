@@ -1622,6 +1622,18 @@ export default function RoutesPage() {
     onError: (err: Error) => toast({ title: "Error moving stop", description: err.message, variant: "destructive" }),
   });
 
+  const reorderStopsMutation = useMutation({
+    mutationFn: async ({ routeId, orderedIds }: { routeId: string; orderedIds: string[] }) => {
+      await apiRequest("POST", `/api/routes/${routeId}/reorder-stops`, { orderedIds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/visits/range"] });
+      setRouteMetrics({});
+    },
+    onError: (err: Error) => toast({ title: "Error reordering stops", description: err.message, variant: "destructive" }),
+  });
+
   const optimizeRouteMutation = useMutation({
     mutationFn: async (routeId: string) => {
       setOptimizingRouteId(routeId);
@@ -1764,7 +1776,24 @@ export default function RoutesPage() {
     const plan = servicePlans.find(sp => sp.id === stopId);
     if (!plan) return;
     const currentContainer = plan.routeId ? `route-${plan.routeId}` : UNASSIGNED_DROP;
-    if (currentContainer === target) return;
+
+    if (currentContainer === target) {
+      if (target === UNASSIGNED_DROP) return;
+      const routeId = target.replace("route-", "");
+      const routeStops = servicePlans
+        .filter(sp => sp.routeId === routeId)
+        .sort((a, b) => a.stopOrder - b.stopOrder);
+      const draggedIndex = routeStops.findIndex(sp => sp.id === stopId);
+      const overId = over.id as string;
+      const overIndex = routeStops.findIndex(sp => sp.id === overId);
+      if (draggedIndex === -1 || overIndex === -1 || draggedIndex === overIndex) return;
+      const reordered = [...routeStops];
+      const [removed] = reordered.splice(draggedIndex, 1);
+      reordered.splice(overIndex, 0, removed);
+      reorderStopsMutation.mutate({ routeId, orderedIds: reordered.map(sp => sp.id) });
+      return;
+    }
+
     const newRouteId = target === UNASSIGNED_DROP ? null : target.replace("route-", "");
     const targetRoute = newRouteId ? allRoutes.find(r => r.id === newRouteId) : null;
     const dayOfWeek = targetRoute ? targetRoute.dayOfWeek : undefined;
