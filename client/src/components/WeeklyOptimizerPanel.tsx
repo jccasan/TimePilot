@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
@@ -6,13 +6,15 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Sparkles, ArrowRight, Check, Loader2, RotateCcw, Car, Calendar,
-  ChevronDown, ChevronUp, CheckCircle2, Bell, Shield, X, AlertTriangle, MapPin,
+  Sparkles, Check, Loader2, RotateCcw, Car, Calendar,
+  CheckCircle2, Shield, X, AlertTriangle, MapPin, User,
 } from "lucide-react";
 
 const ROUTE_COLORS = [
@@ -61,92 +63,65 @@ type GeocodeFailureError = Error & {
   failedStops?: UngeocodedStop[];
 };
 
+type WeekMeta = {
+  weekStart: string;
+  weekEnd: string;
+  weekLabel: string;
+  weekNum: number;
+  techCount: number;
+  excludedWeekendCount?: number;
+};
+
+type EmptyWeekEntry = WeekMeta & { empty: true; reason: string };
+type NonEmptyWeekEntry = WeekMeta & { empty: false } & WeeklyOptResult;
+type MultiWeekEntry = EmptyWeekEntry | NonEmptyWeekEntry;
+
+type MultiWeekResult = { weeks: MultiWeekEntry[] };
+
+type TeamMember = { id: string; companyUserId: string; role: string; firstName: string; lastName: string; email: string };
+
 function StopMiniMap({ routes }: { routes: WeeklyProposedRoute[] }) {
-  const allStops = routes.flatMap((r, rIdx) =>
-    r.stops.map(s => ({ ...s, routeIdx: rIdx }))
-  );
+  const allStops = routes.flatMap((r, rIdx) => r.stops.map(s => ({ ...s, routeIdx: rIdx })));
   if (allStops.length === 0) return null;
 
   const lats = allStops.map(s => s.latitude);
   const lngs = allStops.map(s => s.longitude);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-
-  const padding = 16;
-  const svgW = 240;
-  const svgH = 140;
-  const innerW = svgW - padding * 2;
-  const innerH = svgH - padding * 2;
-  const rangeX = maxLng - minLng || 0.01;
-  const rangeY = maxLat - minLat || 0.01;
-
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const padding = 16, svgW = 240, svgH = 140;
+  const innerW = svgW - padding * 2, innerH = svgH - padding * 2;
+  const rangeX = maxLng - minLng || 0.01, rangeY = maxLat - minLat || 0.01;
   const toX = (lng: number) => padding + ((lng - minLng) / rangeX) * innerW;
   const toY = (lat: number) => padding + ((maxLat - lat) / rangeY) * innerH;
 
   return (
-    <svg
-      viewBox={`0 0 ${svgW} ${svgH}`}
-      className="w-full h-[120px] rounded border bg-muted/30"
-      data-testid="stop-mini-map"
-    >
+    <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-[120px] rounded border bg-muted/30" data-testid="stop-mini-map">
       {routes.map((route, rIdx) => {
         if (route.stops.length < 2) return null;
         const pts = route.stops.map(s => `${toX(s.longitude)},${toY(s.latitude)}`).join(" ");
-        return (
-          <polyline
-            key={`line-${rIdx}`}
-            points={pts}
-            fill="none"
-            stroke={ROUTE_COLORS[rIdx % ROUTE_COLORS.length]}
-            strokeWidth="2"
-            strokeOpacity="0.5"
-            strokeLinejoin="round"
-          />
-        );
+        return <polyline key={`line-${rIdx}`} points={pts} fill="none" stroke={ROUTE_COLORS[rIdx % ROUTE_COLORS.length]} strokeWidth="2" strokeOpacity="0.5" strokeLinejoin="round" />;
       })}
       {allStops.map((stop, idx) => (
         <g key={idx}>
-          <circle
-            cx={toX(stop.longitude)}
-            cy={toY(stop.latitude)}
-            r="5"
-            fill={ROUTE_COLORS[stop.routeIdx % ROUTE_COLORS.length]}
-            stroke="white"
-            strokeWidth="1.5"
-          />
-          <text
-            x={toX(stop.longitude)}
-            y={toY(stop.latitude) + 1}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize="6"
-            fill="white"
-            fontWeight="bold"
-          >
-            {idx + 1}
-          </text>
+          <circle cx={toX(stop.longitude)} cy={toY(stop.latitude)} r="5" fill={ROUTE_COLORS[stop.routeIdx % ROUTE_COLORS.length]} stroke="white" strokeWidth="1.5" />
+          <text x={toX(stop.longitude)} y={toY(stop.latitude) + 1} textAnchor="middle" dominantBaseline="central" fontSize="6" fill="white" fontWeight="bold">{idx + 1}</text>
         </g>
       ))}
     </svg>
   );
 }
 
-function getReasonChip(move: { stopId: string; fromDay: string; toDay: string; contactName: string }, allMoves: WeeklyOptResult["movedStops"]) {
-  const sameDayMoves = allMoves.filter(m => m.toDay === move.toDay && m.fromDay !== m.toDay);
-  if (sameDayMoves.length >= 2) return "grouped by proximity";
-  return "schedule balancing";
-}
-
 function formatMinutes(mins: number): string {
   if (mins < 60) return `${mins}m`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
+  const h = Math.floor(mins / 60), m = mins % 60;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllowance = 20, onNeedCredits, weekStart }: {
+function weekTabLabel(weekNum: number): string {
+  return weekNum === 1 ? "Next Week" : `Week ${weekNum}`;
+}
+
+export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllowance = 20, onNeedCredits }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   credits: number;
@@ -158,14 +133,15 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
   const [, navigate] = useLocation();
   const [respectZones, setRespectZones] = useState(false);
   const [includeSaturday, setIncludeSaturday] = useState(false);
-  const [result, setResult] = useState<WeeklyOptResult | null>(null);
-  const [acceptedDays, setAcceptedDays] = useState<Set<string>>(new Set());
+  const [multiWeekResult, setMultiWeekResult] = useState<MultiWeekResult | null>(null);
+  const [activeWeekStart, setActiveWeekStart] = useState<string | null>(null);
+  const [acceptedWeeks, setAcceptedWeeks] = useState<Set<string>>(new Set());
+  const [techAssignments, setTechAssignments] = useState<Record<string, string>>({});
   const [notifyCustomers, setNotifyCustomers] = useState(true);
-  const [dayByDayOpen, setDayByDayOpen] = useState(false);
   const [applyConfirmPending, setApplyConfirmPending] = useState(false);
+  const [applyProgress, setApplyProgress] = useState<{ current: number; total: number } | null>(null);
   const [successData, setSuccessData] = useState<{
-    milesSaved: number;
-    minutesSaved: number;
+    weeksApplied: number;
     routesCreated: number;
     stopsUpdated: number;
     creditsUsed: number;
@@ -183,42 +159,67 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
   });
   const liveCredits = applyConfirmPending && freshCreditData != null ? freshCreditData.credits : credits;
 
-  const dollarSavings = result ? Math.round(result.milesSaved * 0.67) : 0;
+  const { data: teamMembers = [] } = useQuery<TeamMember[]>({
+    queryKey: ["/api/company/team"],
+    staleTime: 5 * 60 * 1000,
+    enabled: !!multiWeekResult,
+  });
 
-  const uniqueContactsCount = result
-    ? new Set(result.movedStops.map(m => m.contactName)).size
+  const totalAcceptedCredits = multiWeekResult
+    ? multiWeekResult.weeks
+        .filter((w): w is NonEmptyWeekEntry => !w.empty && acceptedWeeks.has(w.weekStart))
+        .reduce((acc, w) => acc + w.creditsRequired, 0)
     : 0;
 
-  const acceptedRouteCount = result
-    ? result.proposed.days
-        .filter(d => acceptedDays.has(d.day) && d.totalStops > 0)
-        .reduce((acc, d) => acc + d.routes.length, 0)
-    : 0;
+  const activeWeek = multiWeekResult?.weeks.find(w => w.weekStart === activeWeekStart) ?? null;
 
-  const acceptedCredits = acceptedRouteCount;
+  const anyAcceptedHasMoves = multiWeekResult
+    ? multiWeekResult.weeks
+        .filter((w): w is NonEmptyWeekEntry => !w.empty && acceptedWeeks.has(w.weekStart))
+        .some(w => w.movedStops.length > 0)
+    : false;
 
-  useEffect(() => {
-    if (result && result.movedStops.length > 0) {
-      setNotifyCustomers(true);
-    }
-  }, [result]);
+  function toggleWeek(weekStart: string) {
+    setAcceptedWeeks(prev => {
+      const next = new Set(prev);
+      if (next.has(weekStart)) next.delete(weekStart);
+      else next.add(weekStart);
+      return next;
+    });
+  }
 
+  function setTechForRoute(weekStart: string, day: string, routeLabel: string, userId: string) {
+    const key = `${weekStart}|${day}|${routeLabel}`;
+    setTechAssignments(prev => ({ ...prev, [key]: userId }));
+  }
+
+  function getTechForRoute(weekStart: string, day: string, routeLabel: string): string {
+    return techAssignments[`${weekStart}|${day}|${routeLabel}`] ?? "";
+  }
+
+  function resetAll() {
+    setMultiWeekResult(null);
+    setActiveWeekStart(null);
+    setAcceptedWeeks(new Set());
+    setTechAssignments({});
+    setApplyConfirmPending(false);
+    setApplyProgress(null);
+    setSuccessData(null);
+    setGeocodeError(null);
+  }
 
   const analyzeMutation = useMutation({
     onMutate: () => {
-      setResult(null);
+      setMultiWeekResult(null);
       setApplyConfirmPending(false);
+      setGeocodeError(null);
     },
     mutationFn: async () => {
-      const res = await fetch("/api/routes/optimize-weekly", {
+      const res = await fetch("/api/routes/multi-week-optimize", {
         method: "POST",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          respectZones,
-          includeSaturday,
-          ...(weekStart ? { weekStart } : {}),
-        }),
+        body: JSON.stringify({ respectZones, includeSaturday }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -231,52 +232,74 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
         );
         throw err;
       }
-      return data as WeeklyOptResult;
+      return data as MultiWeekResult;
     },
     onSuccess: (data) => {
       setGeocodeError(null);
-      setResult(data);
-      setAcceptedDays(new Set(data.proposed.days.filter(d => d.totalStops > 0).map(d => d.day)));
+      setMultiWeekResult(data);
+      const firstWeekStart = data.weeks[0]?.weekStart ?? null;
+      setActiveWeekStart(firstWeekStart);
+      const initialAccepted = new Set(
+        data.weeks.filter(w => !w.empty).map(w => w.weekStart)
+      );
+      setAcceptedWeeks(initialAccepted);
       setApplyConfirmPending(false);
-      setDayByDayOpen(false);
     },
     onError: (err: Error) => {
       const gErr = err as GeocodeFailureError;
       if (gErr.geocodeFailure) {
         setGeocodeError({ message: err.message, failedStops: gErr.failedStops ?? [] });
       } else {
-        toast({ title: "Optimization failed", description: err.message, variant: "destructive" });
+        toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
       }
     },
   });
 
   const applyMutation = useMutation({
     mutationFn: async () => {
-      if (!result) throw new Error("No result to apply");
-      const daysToApply = result.proposed.days.filter(d => acceptedDays.has(d.day));
-      const res = await apiRequest("POST", "/api/routes/apply-weekly-plan", {
-        acceptedDays: Array.from(acceptedDays),
-        proposedDays: daysToApply,
-        notifyCustomers,
-      });
-      return res.json();
+      if (!multiWeekResult) throw new Error("No result to apply");
+      const weeksToApply = multiWeekResult.weeks.filter(
+        (w): w is NonEmptyWeekEntry => !w.empty && acceptedWeeks.has(w.weekStart)
+      );
+      let totalRoutesCreated = 0, totalStopsUpdated = 0, totalCreditsUsed = 0, totalCreditsRemaining = 0;
+
+      for (let i = 0; i < weeksToApply.length; i++) {
+        setApplyProgress({ current: i + 1, total: weeksToApply.length });
+        const week = weeksToApply[i];
+        const daysWithStops = week.proposed.days.filter(d => d.totalStops > 0);
+        const res = await apiRequest("POST", "/api/routes/apply-weekly-plan", {
+          acceptedDays: daysWithStops.map(d => d.day),
+          proposedDays: daysWithStops,
+          notifyCustomers,
+        });
+        const data = await res.json();
+        totalRoutesCreated += data.routesCreated ?? 0;
+        totalStopsUpdated += data.stopsUpdated ?? 0;
+        totalCreditsUsed += data.creditsUsed ?? 0;
+        totalCreditsRemaining = data.creditsRemaining ?? 0;
+      }
+
+      return { weeksApplied: weeksToApply.length, totalRoutesCreated, totalStopsUpdated, totalCreditsUsed, totalCreditsRemaining };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
+      setApplyProgress(null);
+      setApplyConfirmPending(false);
       setSuccessData({
-        milesSaved: result!.milesSaved,
-        minutesSaved: result!.minutesSaved,
-        routesCreated: data.routesCreated ?? 0,
-        stopsUpdated: data.stopsUpdated ?? 0,
-        creditsUsed: data.creditsUsed ?? acceptedCredits,
-        creditsRemaining: data.creditsRemaining ?? 0,
+        weeksApplied: data.weeksApplied,
+        routesCreated: data.totalRoutesCreated,
+        stopsUpdated: data.totalStopsUpdated,
+        creditsUsed: data.totalCreditsUsed,
+        creditsRemaining: data.totalCreditsRemaining,
       });
     },
     onError: (err: Error) => {
+      setApplyProgress(null);
+      setApplyConfirmPending(false);
       if (err.message.includes("Insufficient")) {
-        onNeedCredits(Math.max(0, acceptedCredits - credits));
+        onNeedCredits(Math.max(0, totalAcceptedCredits - credits));
       } else {
         toast({ title: "Failed to apply plan", description: err.message, variant: "destructive" });
       }
@@ -289,69 +312,55 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
       return;
     }
     applyMutation.mutate();
-    setApplyConfirmPending(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={(v) => {
-      if (!v) {
-        setResult(null);
-        setApplyConfirmPending(false);
-        setSuccessData(null);
-        setGeocodeError(null);
-      }
+      if (!v) resetAll();
       onOpenChange(v);
     }}>
       <DialogContent className="w-screen h-screen max-w-none max-h-none m-0 p-6 rounded-none overflow-hidden flex flex-col" data-testid="dialog-weekly-optimizer">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Weekly Schedule Optimizer
+            Route Planner
           </DialogTitle>
           <DialogDescription>
-            Analyze all active recurring stops and optimize their day assignments to minimize total weekly driving distance.
+            Plan routes for the next 4 weeks based on actual scheduled appointments.
           </DialogDescription>
         </DialogHeader>
 
+        {/* ── SUCCESS ── */}
         {successData ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-6" data-testid="panel-apply-success">
             <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-6">
               <CheckCircle2 className="h-14 w-14 text-green-600 dark:text-green-400" />
             </div>
             <div className="text-center space-y-2">
-              <p className="text-xl font-semibold">Optimization Applied</p>
+              <p className="text-xl font-semibold">Plan Applied</p>
               <p className="text-foreground font-medium" data-testid="text-success-summary">
-                {successData.routesCreated > 0
-                  ? `${successData.routesCreated} route${successData.routesCreated !== 1 ? "s" : ""} created`
-                  : "Routes updated"
-                } · {successData.stopsUpdated} stop{successData.stopsUpdated !== 1 ? "s" : ""} reassigned
+                {successData.weeksApplied} week{successData.weeksApplied !== 1 ? "s" : ""} applied
+                {successData.routesCreated > 0 && ` · ${successData.routesCreated} route${successData.routesCreated !== 1 ? "s" : ""} created`}
+                {successData.stopsUpdated > 0 && ` · ${successData.stopsUpdated} stop${successData.stopsUpdated !== 1 ? "s" : ""} reassigned`}
               </p>
-              {(successData.milesSaved > 0 || successData.minutesSaved > 0) && (
-                <p className="text-muted-foreground text-sm" data-testid="text-success-savings">
-                  {successData.milesSaved > 0 && `${successData.milesSaved} miles saved`}
-                  {successData.milesSaved > 0 && successData.minutesSaved > 0 && " · "}
-                  {successData.minutesSaved > 0 && `${formatMinutes(successData.minutesSaved)} saved this week`}
-                </p>
-              )}
               {successData.creditsUsed > 0 && (
                 <p className="text-xs text-muted-foreground" data-testid="text-success-credits-used">
-                  {successData.creditsUsed} credit{successData.creditsUsed !== 1 ? "s" : ""} used (1 per route) · {successData.creditsRemaining} remaining this month
+                  {successData.creditsUsed} credit{successData.creditsUsed !== 1 ? "s" : ""} used · {successData.creditsRemaining} remaining this month
                 </p>
               )}
             </div>
             <div className="flex items-center gap-3">
-              <Button
-                onClick={() => { setSuccessData(null); onOpenChange(false); navigate("/routes"); }}
-                data-testid="button-view-routes"
-              >
+              <Button onClick={() => { resetAll(); onOpenChange(false); navigate("/routes"); }} data-testid="button-view-routes">
                 View Routes
               </Button>
-              <Button variant="outline" size="sm" onClick={() => { setSuccessData(null); onOpenChange(false); }} data-testid="button-close-success">
+              <Button variant="outline" size="sm" onClick={() => { resetAll(); onOpenChange(false); }} data-testid="button-close-success">
                 Close
               </Button>
             </div>
           </div>
-        ) : !result ? (
+
+        /* ── PRE-ANALYSIS ── */
+        ) : !multiWeekResult ? (
           <div className="space-y-6 py-4">
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -359,22 +368,14 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
                   <p className="text-sm font-medium">Respect Service Zones</p>
                   <p className="text-xs text-muted-foreground">Keep stops on their zone-assigned day</p>
                 </div>
-                <Switch
-                  checked={respectZones}
-                  onCheckedChange={setRespectZones}
-                  data-testid="switch-respect-zones"
-                />
+                <Switch checked={respectZones} onCheckedChange={setRespectZones} data-testid="switch-respect-zones" />
               </div>
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
                   <p className="text-sm font-medium">Include Saturday</p>
                   <p className="text-xs text-muted-foreground">Allow stops to be scheduled on Saturday</p>
                 </div>
-                <Switch
-                  checked={includeSaturday}
-                  onCheckedChange={setIncludeSaturday}
-                  data-testid="switch-include-saturday"
-                />
+                <Switch checked={includeSaturday} onCheckedChange={setIncludeSaturday} data-testid="switch-include-saturday" />
               </div>
             </div>
 
@@ -384,9 +385,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
                   <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">Not enough geocoded stops</p>
-                    <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
-                      Fix the addresses below and try again.
-                    </p>
+                    <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">Fix the addresses below and try again.</p>
                   </div>
                 </div>
                 {geocodeError.failedStops.length > 0 && (
@@ -410,289 +409,282 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
               data-testid="button-run-analysis"
             >
               {analyzeMutation.isPending ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  Analyzing routes...
-                </>
+                <><Loader2 className="h-5 w-5 animate-spin mr-2" />Analyzing routes...</>
               ) : geocodeError ? (
-                <>
-                  <RotateCcw className="h-5 w-5 mr-2" />
-                  Retry Analysis
-                </>
+                <><RotateCcw className="h-5 w-5 mr-2" />Retry Analysis</>
               ) : (
-                <>
-                  <Sparkles className="h-5 w-5 mr-2" />
-                  Analyze Weekly Schedule
-                </>
+                <><Sparkles className="h-5 w-5 mr-2" />Analyze Next 4 Weeks</>
               )}
             </Button>
           </div>
-        ) : (
-          <ScrollArea className="flex-1 min-h-0">
-            <div className="space-y-5 pb-4">
 
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Optimization Preview</p>
-                  <p className="text-sm text-muted-foreground">Review the proposed changes before applying</p>
-                </div>
+        /* ── RESULT VIEW ── */
+        ) : (
+          <>
+            {/* Week tab buttons */}
+            <div className="flex gap-1 border-b pb-0 overflow-x-auto shrink-0" data-testid="week-tabs">
+              {multiWeekResult.weeks.map((week) => {
+                const isActive = week.weekStart === activeWeekStart;
+                const isAccepted = !week.empty && acceptedWeeks.has(week.weekStart);
+                return (
+                  <button
+                    key={week.weekStart}
+                    onClick={() => setActiveWeekStart(week.weekStart)}
+                    className={[
+                      "flex flex-col items-start px-3 py-2 text-left border-b-2 transition-colors whitespace-nowrap shrink-0 rounded-t",
+                      isActive
+                        ? "border-primary text-primary bg-primary/5"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                    ].join(" ")}
+                    data-testid={`tab-week-${week.weekNum}`}
+                  >
+                    <span className="text-xs font-semibold">{weekTabLabel(week.weekNum)}</span>
+                    <span className="text-[10px] opacity-75">{week.weekLabel}</span>
+                    {!week.empty && isAccepted && (
+                      <span className="mt-0.5 inline-flex items-center gap-0.5 text-[9px] text-green-600 dark:text-green-400 font-medium">
+                        <Check className="h-2.5 w-2.5" />
+                        {week.creditsRequired} credit{week.creditsRequired !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {week.empty && (
+                      <span className="mt-0.5 text-[9px] text-muted-foreground">Empty</span>
+                    )}
+                  </button>
+                );
+              })}
+              <div className="ml-auto flex items-center gap-2 pb-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => { setResult(null); setApplyConfirmPending(false); }}
+                  onClick={() => { setMultiWeekResult(null); setApplyConfirmPending(false); }}
                   data-testid="button-reanalyze"
                 >
                   <RotateCcw className="h-4 w-4 mr-1" /> Re-analyze
                 </Button>
               </div>
+            </div>
 
-              {/* Ungeocoded stops warning */}
-              {result.ungeocodedStops && result.ungeocodedStops.length > 0 && (
-                <div className="rounded-lg border border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30 p-4 space-y-2" data-testid="banner-weekly-geocode-warning">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
-                        {result.ungeocodedStops.length} stop{result.ungeocodedStops.length !== 1 ? "s" : ""} excluded — missing coordinates
-                      </p>
-                      <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
-                        These stops were not included in the optimization. Fix their addresses and re-analyze to include them.
-                      </p>
-                    </div>
-                  </div>
-                  <ul className="space-y-0.5 ml-6">
-                    {result.ungeocodedStops.map((stop) => (
-                      <li key={stop.servicePlanId} className="flex items-start gap-1.5 text-xs text-orange-800 dark:text-orange-200">
-                        <MapPin className="h-3 w-3 shrink-0 mt-0.5 text-orange-500" />
-                        <span>
-                          <span className="font-medium">{stop.name}</span>
-                          {stop.address && stop.address !== "No address" && (
-                            <span className="text-orange-600 dark:text-orange-400"> — {stop.address}</span>
-                          )}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+            {/* Active week content */}
+            <ScrollArea className="flex-1 min-h-0">
+              {activeWeek ? (
+                <div className="space-y-4 pb-4 pt-2" data-testid={`panel-week-${activeWeek.weekNum}`}>
 
-              {/* Section 1: Impact Summary */}
-              <div className="rounded-xl border bg-primary/5 border-primary/20 p-4" data-testid="tab-summary">
-                <div className="flex items-center justify-between mb-4">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Impact Summary</p>
-                  <span className="text-xs text-muted-foreground" data-testid="text-weekly-improvement">{result.improvementPct}% improvement</span>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center" data-testid="metric-miles-saved">
-                    <p className="text-3xl font-bold text-primary" data-testid="text-weekly-miles-saved">{result.milesSaved}</p>
-                    <p className="text-sm font-medium mt-0.5">Miles Saved</p>
-                    <p className="text-[11px] text-muted-foreground">vs current schedule</p>
-                  </div>
-                  <div className="text-center" data-testid="metric-time-saved">
-                    <p className="text-3xl font-bold text-primary" data-testid="text-weekly-minutes-saved">{formatMinutes(result.minutesSaved)}</p>
-                    <p className="text-sm font-medium mt-0.5">Time Saved</p>
-                    <p className="text-[11px] text-muted-foreground">vs current schedule</p>
-                  </div>
-                  <div className="text-center" data-testid="metric-dollar-savings">
-                    <p className="text-3xl font-bold text-primary" data-testid="text-weekly-dollar-savings">~${dollarSavings}</p>
-                    <p className="text-sm font-medium mt-0.5">Est. Savings</p>
-                    <p className="text-[11px] text-muted-foreground">at $0.67/mile</p>
-                  </div>
-                  <div className="text-center" data-testid="metric-jobs-moved">
-                    <p className="text-3xl font-bold" data-testid="text-weekly-moves">{result.movedStops.length}</p>
-                    <p className="text-sm font-medium mt-0.5">Jobs Moved</p>
-                    <p className="text-[11px] text-muted-foreground">vs current schedule</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-primary/10 text-sm">
-                  <div className="p-2 rounded bg-muted/50">
-                    <p className="text-[11px] text-muted-foreground mb-0.5">Current Schedule</p>
-                    <p className="font-semibold">{result.current.totalMiles} mi / {formatMinutes(result.current.totalMinutes)}</p>
-                    <p className="text-[11px] text-muted-foreground">{result.current.totalStops} stops</p>
-                  </div>
-                  <div className="p-2 rounded bg-primary/10">
-                    <p className="text-[11px] text-muted-foreground mb-0.5">Proposed Schedule</p>
-                    <p className="font-semibold text-primary">{result.proposed.totalMiles} mi / {formatMinutes(result.proposed.totalMinutes)}</p>
-                    <p className="text-[11px] text-muted-foreground">{result.proposed.totalStops} stops</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 2: Changes List */}
-              {result.movedStops.length > 0 && (
-                <div data-testid="tab-moves">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Changes ({result.movedStops.length})</p>
-                  <div className="space-y-1.5">
-                    {result.movedStops.map((move, idx) => {
-                      const reason = getReasonChip(move, result.movedStops);
-                      return (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2 p-2.5 border rounded-lg text-sm"
-                          data-testid={`move-${idx}`}
+                  {/* Week accept toggle */}
+                  {!activeWeek.empty && (
+                    <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`accept-week-${activeWeek.weekStart}`}
+                          checked={acceptedWeeks.has(activeWeek.weekStart)}
+                          onCheckedChange={() => toggleWeek(activeWeek.weekStart)}
+                          data-testid={`checkbox-accept-week-${activeWeek.weekNum}`}
+                        />
+                        <label
+                          htmlFor={`accept-week-${activeWeek.weekStart}`}
+                          className="text-sm font-medium cursor-pointer"
                         >
-                          <span className="font-medium truncate flex-1 min-w-0">{move.contactName}</span>
-                          <Badge variant="secondary" className="text-[10px] capitalize shrink-0 font-medium">
-                            {DAY_LABELS[move.fromDay] ?? move.fromDay}
-                          </Badge>
-                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <Badge variant="default" className="text-[10px] capitalize shrink-0 font-medium">
-                            {DAY_LABELS[move.toDay] ?? move.toDay}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] text-muted-foreground shrink-0 hidden sm:flex"
-                            data-testid={`chip-reason-${idx}`}
-                          >
-                            {reason}
-                          </Badge>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {result.movedStops.length === 0 && (
-                <div className="flex flex-col items-center gap-2 py-6 text-center text-sm text-muted-foreground border rounded-lg bg-muted/30" data-testid="section-no-moves">
-                  <CheckCircle2 className="h-8 w-8 text-green-500" />
-                  <p className="font-medium text-foreground">No stops need to be moved</p>
-                  <p>The current schedule is already well-organized.</p>
-                </div>
-              )}
-
-              {/* Section 3: Trust Signals */}
-              <div className="rounded-lg border bg-muted/30 px-4 py-3 flex flex-wrap gap-2 items-center" data-testid="section-trust-signals">
-                <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
-                <Badge variant="outline" className="text-xs font-medium" data-testid="trust-jobs-changed">
-                  {result.movedStops.length} jobs changed day
-                </Badge>
-                <Badge variant="outline" className="text-xs font-medium" data-testid="trust-technician-unchanged">
-                  0 jobs changed technician
-                </Badge>
-                <Badge variant="outline" className="text-xs font-medium" data-testid="trust-cadence">
-                  Recurring cadence preserved
-                </Badge>
-                {(result.excludedWeekendCount ?? 0) > 0 && (
-                  <Badge variant="outline" className="text-xs font-medium" data-testid="trust-weekend-excluded">
-                    {result.excludedWeekendCount} Saturday stops kept as scheduled
-                  </Badge>
-                )}
-              </div>
-
-              {/* Weekend excluded banner */}
-              {(result.excludedWeekendCount ?? 0) > 0 && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/60 border text-xs text-muted-foreground" data-testid="banner-excluded-weekend">
-                  <span className="font-medium">{result.excludedWeekendCount} Saturday stops kept as scheduled.</span>
-                  <span>Enable "Include Saturday" to optimize them.</span>
-                </div>
-              )}
-
-              {/* Section 4: Notification Toggle */}
-              {result.movedStops.length > 0 && (
-                <div className="flex items-center justify-between p-4 border rounded-lg" data-testid="section-notify-customers">
-                  <div className="flex items-center gap-3">
-                    <Bell className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium">Notify affected customers</p>
-                      <p className="text-xs text-muted-foreground">
-                        {uniqueContactsCount} {uniqueContactsCount === 1 ? "customer" : "customers"} will be notified of their new day
-                      </p>
+                          Include this week in the plan
+                        </label>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {activeWeek.creditsRequired} credit{activeWeek.creditsRequired !== 1 ? "s" : ""} · {activeWeek.proposed.totalStops} stops
+                      </span>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Empty week state */}
+                  {activeWeek.empty ? (
+                    <div className="flex flex-col items-center gap-3 py-12 text-center border rounded-lg bg-muted/20" data-testid={`empty-week-${activeWeek.weekNum}`}>
+                      <Calendar className="h-10 w-10 text-muted-foreground/50" />
+                      <div>
+                        <p className="font-medium text-muted-foreground">No stops scheduled this week</p>
+                        <p className="text-xs text-muted-foreground mt-1">{activeWeek.reason}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Impact summary */}
+                      <div className="rounded-xl border bg-primary/5 border-primary/20 p-4" data-testid={`summary-week-${activeWeek.weekNum}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Impact Summary — {activeWeek.weekLabel}</p>
+                          <span className="text-xs text-muted-foreground" data-testid={`text-improvement-week-${activeWeek.weekNum}`}>{activeWeek.improvementPct}% improvement</span>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="text-center" data-testid={`metric-miles-week-${activeWeek.weekNum}`}>
+                            <p className="text-2xl font-bold text-primary">{activeWeek.milesSaved}</p>
+                            <p className="text-xs font-medium mt-0.5">Miles Saved</p>
+                          </div>
+                          <div className="text-center" data-testid={`metric-time-week-${activeWeek.weekNum}`}>
+                            <p className="text-2xl font-bold text-primary">{formatMinutes(activeWeek.minutesSaved)}</p>
+                            <p className="text-xs font-medium mt-0.5">Time Saved</p>
+                          </div>
+                          <div className="text-center" data-testid={`metric-moves-week-${activeWeek.weekNum}`}>
+                            <p className="text-2xl font-bold">{activeWeek.movedStops.length}</p>
+                            <p className="text-xs font-medium mt-0.5">Jobs Moved</p>
+                          </div>
+                          <div className="text-center" data-testid={`metric-credits-week-${activeWeek.weekNum}`}>
+                            <p className="text-2xl font-bold">{activeWeek.creditsRequired}</p>
+                            <p className="text-xs font-medium mt-0.5">Credits</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-primary/10 text-sm">
+                          <div className="p-2 rounded bg-muted/50">
+                            <p className="text-[11px] text-muted-foreground mb-0.5">Current Schedule</p>
+                            <p className="font-semibold">{activeWeek.current.totalMiles} mi / {formatMinutes(activeWeek.current.totalMinutes)}</p>
+                            <p className="text-[11px] text-muted-foreground">{activeWeek.current.totalStops} stops</p>
+                          </div>
+                          <div className="p-2 rounded bg-primary/10">
+                            <p className="text-[11px] text-muted-foreground mb-0.5">Proposed Schedule</p>
+                            <p className="font-semibold text-primary">{activeWeek.proposed.totalMiles} mi / {formatMinutes(activeWeek.proposed.totalMinutes)}</p>
+                            <p className="text-[11px] text-muted-foreground">{activeWeek.proposed.totalStops} stops</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Trust signals */}
+                      <div className="rounded-lg border bg-muted/30 px-4 py-3 flex flex-wrap gap-2 items-center" data-testid={`section-trust-week-${activeWeek.weekNum}`}>
+                        <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <Badge variant="outline" className="text-xs font-medium">{activeWeek.movedStops.length} jobs changed day</Badge>
+                        <Badge variant="outline" className="text-xs font-medium">0 jobs changed technician</Badge>
+                        <Badge variant="outline" className="text-xs font-medium">Recurring cadence preserved</Badge>
+                        <Badge variant="outline" className="text-xs font-medium">{activeWeek.techCount} technician{activeWeek.techCount !== 1 ? "s" : ""}</Badge>
+                        {(activeWeek.excludedWeekendCount ?? 0) > 0 && (
+                          <Badge variant="outline" className="text-xs font-medium">{activeWeek.excludedWeekendCount} Saturday stops kept</Badge>
+                        )}
+                      </div>
+
+                      {/* Ungeocoded warning */}
+                      {activeWeek.ungeocodedStops && activeWeek.ungeocodedStops.length > 0 && (
+                        <div className="rounded-lg border border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30 p-4 space-y-2" data-testid={`banner-geocode-week-${activeWeek.weekNum}`}>
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
+                                {activeWeek.ungeocodedStops.length} stop{activeWeek.ungeocodedStops.length !== 1 ? "s" : ""} excluded — missing coordinates
+                              </p>
+                              <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">Fix their addresses and re-analyze to include them.</p>
+                            </div>
+                          </div>
+                          <ul className="space-y-0.5 ml-6">
+                            {activeWeek.ungeocodedStops.map((stop) => (
+                              <li key={stop.servicePlanId} className="flex items-start gap-1.5 text-xs text-orange-800 dark:text-orange-200">
+                                <MapPin className="h-3 w-3 shrink-0 mt-0.5 text-orange-500" />
+                                <span>
+                                  <span className="font-medium">{stop.name}</span>
+                                  {stop.address && stop.address !== "No address" && (
+                                    <span className="text-orange-600 dark:text-orange-400"> — {stop.address}</span>
+                                  )}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Day-by-day routes */}
+                      <div className="space-y-3" data-testid={`panel-day-by-day-week-${activeWeek.weekNum}`}>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Day by Day Routes</p>
+                        {activeWeek.proposed.days.filter(d => d.totalStops > 0).map(day => (
+                          <Card key={day.day} data-testid={`day-card-${activeWeek.weekNum}-${day.day}`}>
+                            <CardHeader className="p-3 pb-2">
+                              <div className="flex items-center justify-between">
+                                <CardTitle className="text-sm capitalize flex items-center gap-2">
+                                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                                  {DAY_LABELS[day.day] ?? day.day}
+                                  <Badge variant="outline" className="text-[10px]">{day.totalStops} stops</Badge>
+                                </CardTitle>
+                                <span className="text-xs text-muted-foreground">{day.totalMiles} mi · {formatMinutes(day.totalMinutes)}</span>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="p-3 pt-0 space-y-4">
+                              <StopMiniMap routes={day.routes} />
+                              {day.routes.map((route, rIdx) => {
+                                const techId = getTechForRoute(activeWeek.weekStart, day.day, route.routeLabel);
+                                return (
+                                  <div key={rIdx} className="space-y-1.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className="text-xs font-medium flex items-center gap-1.5 min-w-0">
+                                        <span
+                                          className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                                          style={{ backgroundColor: ROUTE_COLORS[rIdx % ROUTE_COLORS.length] }}
+                                        />
+                                        {route.routeLabel}
+                                      </p>
+                                      <Select
+                                        value={techId || "unassigned"}
+                                        onValueChange={(v) => setTechForRoute(activeWeek.weekStart, day.day, route.routeLabel, v === "unassigned" ? "" : v)}
+                                      >
+                                        <SelectTrigger
+                                          className="h-6 text-[11px] w-auto max-w-[140px] gap-1"
+                                          data-testid={`select-tech-${activeWeek.weekNum}-${day.day}-${rIdx}`}
+                                        >
+                                          <User className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                          <SelectValue placeholder="Assign tech" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="unassigned">Unassigned</SelectItem>
+                                          {teamMembers.map(m => (
+                                            <SelectItem key={m.id} value={m.id} data-testid={`option-tech-${m.id}`}>
+                                              {m.firstName} {m.lastName}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      {route.stops.map((stop, sIdx) => (
+                                        <div key={stop.servicePlanId} className="flex items-center gap-2 text-xs py-0.5">
+                                          <Badge variant="outline" className="text-[9px] px-1 py-0 w-5 h-5 flex items-center justify-center shrink-0">
+                                            {sIdx + 1}
+                                          </Badge>
+                                          <span className="truncate font-medium">{stop.contactName}</span>
+                                          <span className="truncate text-muted-foreground ml-auto">{stop.address}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground pt-1">
+                                      <Car className="h-3 w-3" />
+                                      <span>{route.estimatedMiles} mi · {route.estimatedMinutes} min · {route.stopCount} stops</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </CardContent>
+                          </Card>
+                        ))}
+                        {activeWeek.proposed.days.filter(d => d.totalStops > 0).length === 0 && (
+                          <div className="text-center text-sm text-muted-foreground py-8 border rounded-lg bg-muted/20">
+                            No stops optimized for this week.
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : null}
+            </ScrollArea>
+
+            {/* Action bar */}
+            <Separator className="mt-2" />
+            {anyAcceptedHasMoves && (
+              <div className="flex items-center justify-between py-2 text-sm">
+                <div className="flex items-center gap-3">
+                  <span className="text-muted-foreground text-xs">Notify affected customers</span>
                   <Switch
                     checked={notifyCustomers}
                     onCheckedChange={setNotifyCustomers}
                     data-testid="switch-notify-customers"
                   />
                 </div>
-              )}
-
-              {/* Section 5: Day by Day (collapsible) */}
-              <div className="border rounded-lg overflow-hidden" data-testid="section-day-by-day">
-                <button
-                  className="w-full flex items-center justify-between p-3 text-sm font-medium hover:bg-muted/40 transition-colors"
-                  onClick={() => setDayByDayOpen(v => !v)}
-                  data-testid="tab-day-by-day"
-                >
-                  <span className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    Day by Day Detail
-                  </span>
-                  {dayByDayOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                </button>
-                {dayByDayOpen && (
-                  <div className="border-t p-3 space-y-4" data-testid="panel-day-by-day">
-                    {result.proposed.days.filter(d => d.totalStops > 0).map(day => (
-                      <Card key={day.day} data-testid={`summary-day-${day.day}`}>
-                        <CardHeader className="p-3 pb-2">
-                          <div className="flex items-center justify-between">
-                            <CardTitle className="text-sm capitalize flex items-center gap-2">
-                              <span
-                                className="inline-flex w-5 h-5 rounded border border-primary bg-primary items-center justify-center shrink-0"
-                                data-testid={`checkbox-day-${day.day}`}
-                              >
-                                <Check className="h-3 w-3 text-primary-foreground" />
-                              </span>
-                              <Calendar className="h-4 w-4" />
-                              {day.day}
-                              <Badge variant="outline" className="text-[10px]">{day.totalStops} stops</Badge>
-                            </CardTitle>
-                            <span className="text-xs text-muted-foreground">
-                              {day.totalMiles} mi · {formatMinutes(day.totalMinutes)}
-                            </span>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="p-3 pt-0 space-y-3">
-                          <StopMiniMap routes={day.routes} />
-                          {day.routes.map((route, rIdx) => (
-                            <div key={rIdx} className="space-y-1">
-                              <p className="text-xs font-medium flex items-center gap-1.5">
-                                <span
-                                  className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                                  style={{ backgroundColor: ROUTE_COLORS[rIdx % ROUTE_COLORS.length] }}
-                                />
-                                {route.routeLabel}
-                              </p>
-                              <div className="space-y-0.5">
-                                {route.stops.map((stop, sIdx) => (
-                                  <div key={stop.servicePlanId} className="flex items-center gap-2 text-xs py-0.5">
-                                    <Badge variant="outline" className="text-[9px] px-1 py-0 w-5 h-5 flex items-center justify-center shrink-0">
-                                      {sIdx + 1}
-                                    </Badge>
-                                    <span className="truncate font-medium">{stop.contactName}</span>
-                                    <span className="truncate text-muted-foreground ml-auto">{stop.address}</span>
-                                  </div>
-                                ))}
-                              </div>
-                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground pt-1">
-                                <Car className="h-3 w-3" />
-                                <span>{route.estimatedMiles} mi · {route.estimatedMinutes} min · {route.stopCount} stops</span>
-                              </div>
-                            </div>
-                          ))}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
               </div>
-
-            </div>
-          </ScrollArea>
-        )}
-
-        {/* Action Bar — only shown during result review */}
-        {result && !successData && (
-          <>
-            <Separator className="mt-2" />
+            )}
             {applyConfirmPending && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-2.5 text-sm flex items-center gap-2" data-testid="banner-credit-confirm">
                 <span className="text-amber-700 dark:text-amber-400">
                   This will use{" "}
-                  <span className="font-semibold" data-testid="text-confirm-credits-cost">{acceptedRouteCount}</span>
-                  {" "}credit{acceptedRouteCount !== 1 ? "s" : ""} (1 per route). You currently have{" "}
+                  <span className="font-semibold" data-testid="text-confirm-credits-cost">{totalAcceptedCredits}</span>
+                  {" "}credit{totalAcceptedCredits !== 1 ? "s" : ""} across{" "}
+                  <span className="font-semibold">{acceptedWeeks.size}</span> week{acceptedWeeks.size !== 1 ? "s" : ""}. You currently have{" "}
                   <span className="font-semibold" data-testid="text-confirm-credits-balance">{liveCredits}</span>
                   {" "}remaining this month.
                 </span>
@@ -700,20 +692,19 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
             )}
             <div className="flex items-center justify-between gap-3 pt-2" data-testid="dialog-confirm-apply-weekly">
               <div className="text-sm text-muted-foreground flex flex-col gap-0.5">
-                {credits !== Infinity && acceptedDays.size > 0 && !applyConfirmPending && (
+                {credits !== Infinity && acceptedWeeks.size > 0 && !applyConfirmPending && (
                   <>
                     <span>
-                      This will use{" "}
-                      <span className="font-semibold text-foreground" data-testid="text-credits-required">{acceptedRouteCount}</span>
-                      {" "}credit{acceptedRouteCount !== 1 ? "s" : ""} (1 per route) · {credits} available this month
+                      <span className="font-semibold text-foreground" data-testid="text-credits-required">{totalAcceptedCredits}</span>
+                      {" "}credit{totalAcceptedCredits !== 1 ? "s" : ""} across {acceptedWeeks.size} week{acceptedWeeks.size !== 1 ? "s" : ""} · {credits} available
                     </span>
-                    {credits < acceptedCredits && (
+                    {credits < totalAcceptedCredits && (
                       <button
                         className="text-xs text-primary underline underline-offset-2 text-left"
-                        onClick={() => onNeedCredits(acceptedCredits - credits)}
+                        onClick={() => onNeedCredits(totalAcceptedCredits - credits)}
                         data-testid="button-topup-inline"
                       >
-                        Need {acceptedCredits - credits} more — top up
+                        Need {totalAcceptedCredits - credits} more — top up
                       </button>
                     )}
                   </>
@@ -722,32 +713,30 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => { setResult(null); setApplyConfirmPending(false); onOpenChange(false); }}
+                  onClick={() => { resetAll(); onOpenChange(false); }}
                   data-testid="button-cancel-apply"
                 >
                   <X className="h-4 w-4 mr-1" />
-                  Keep Current Routes
+                  Cancel
                 </Button>
                 <Button
                   onClick={handleApplyClick}
-                  disabled={acceptedDays.size === 0 || acceptedCredits > liveCredits || applyMutation.isPending}
+                  disabled={acceptedWeeks.size === 0 || totalAcceptedCredits > liveCredits || applyMutation.isPending}
                   data-testid={applyConfirmPending ? "button-confirm-apply" : "button-apply-plan"}
                   className={applyConfirmPending ? "bg-green-600 hover:bg-green-700 text-white" : ""}
                 >
                   {applyMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                      {applyProgress ? `Applying week ${applyProgress.current} of ${applyProgress.total}...` : "Applying..."}
+                    </>
+                  ) : totalAcceptedCredits > liveCredits ? (
+                    "Not Enough Credits"
                   ) : applyConfirmPending ? (
-                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    <><CheckCircle2 className="h-4 w-4 mr-1" />Confirm — {totalAcceptedCredits} credit{totalAcceptedCredits !== 1 ? "s" : ""}</>
                   ) : (
-                    <Sparkles className="h-4 w-4 mr-1" />
+                    <><Sparkles className="h-4 w-4 mr-1" />Apply Accepted Weeks ({acceptedWeeks.size})</>
                   )}
-                  {acceptedCredits > liveCredits
-                    ? "Not Enough Credits"
-                    : applyMutation.isPending
-                    ? "Applying..."
-                    : applyConfirmPending
-                    ? `Confirm — ${acceptedRouteCount} credit${acceptedRouteCount !== 1 ? "s" : ""}`
-                    : "Apply Optimization"}
                 </Button>
               </div>
             </div>
