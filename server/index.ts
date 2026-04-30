@@ -2174,6 +2174,90 @@ async function auditRetellWebhooks() {
   }
 }
 
+async function seedLakeErieScoopersAccount() {
+  try {
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const crypto = await import("crypto");
+
+    const existing = await pool.query("SELECT id FROM users WHERE email = 'lakeeriescoopers@gmail.com'");
+    if (existing.rows.length > 0) {
+      console.log("[Migration] Lake Erie Scoopers account already exists");
+      await pool.end();
+      return;
+    }
+
+    // Random scrypt password — account requires password reset on first login
+    const tmpRaw = crypto.randomBytes(12).toString("base64url");
+    const salt = crypto.randomBytes(16).toString("hex");
+    const key = await new Promise<Buffer>((res, rej) =>
+      crypto.scrypt(tmpRaw, salt, 64, (err, k) => (err ? rej(err) : res(k as Buffer)))
+    );
+    const pwHash = `${salt}:${key.toString("hex")}`;
+
+    const compRes = await pool.query(`
+      INSERT INTO companies (name, slug, timezone, subscription_tier, subscription_status,
+        charge_timing, route_credits, reminders_enabled, auto_visits_enabled,
+        ai_import_mapping_enabled, rover_ai_enabled, sms_provider, max_stops_per_route)
+      VALUES ('Lake Erie Scoopers', 'lake-erie-scoopers', 'America/New_York', 'tier_1_3',
+        'active', 'day_before', 30, true, true, true, true, 'telnyx', 50)
+      RETURNING id
+    `);
+    const companyId = compRes.rows[0].id;
+
+    const userRes = await pool.query(
+      `INSERT INTO users (email, password_hash, first_name, last_name, must_change_password)
+       VALUES ('lakeeriescoopers@gmail.com', $1, 'Lake Erie', 'Scoopers', true) RETURNING id`,
+      [pwHash]
+    );
+    const userId = userRes.rows[0].id;
+
+    await pool.query(
+      `INSERT INTO company_users (company_id, user_id, role) VALUES ($1, $2, 'owner')`,
+      [companyId, userId]
+    );
+
+    // 24-hour password-set token
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+      [userId, tokenHash, expiresAt]
+    );
+
+    const baseUrl = process.env.APP_BASE_URL || "https://app.scoopilot.com";
+    const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+    const { sendEmail } = await import("./services/email");
+    await sendEmail({
+      to: "lakeeriescoopers@gmail.com",
+      subject: "Your ScooPilot account is ready",
+      text: `Your Lake Erie Scoopers account on ScooPilot is ready.\n\nClick the link below to set your password and log in:\n\n${resetUrl}\n\nThis link expires in 24 hours.`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <div style="background-color:#2d8a5e;padding:20px;text-align:center;">
+            <h1 style="color:white;margin:0;">ScooPilot</h1>
+          </div>
+          <div style="padding:20px;border:1px solid #e5e7eb;">
+            <h2 style="margin-top:0;">Your account is ready</h2>
+            <p>Your <strong>Lake Erie Scoopers</strong> account has been created. Click below to set your password:</p>
+            <div style="text-align:center;margin:30px 0;">
+              <a href="${resetUrl}" style="background-color:#2d8a5e;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;">Set My Password</a>
+            </div>
+            <p style="color:#6b7280;font-size:14px;">This link expires in 24 hours.</p>
+            <p style="color:#9ca3af;font-size:12px;margin-top:20px;">If the button doesn't work, copy and paste this link into your browser:<br/>${resetUrl}</p>
+          </div>
+        </div>
+      `,
+    });
+
+    console.log(`[Migration] Lake Erie Scoopers created — company: ${companyId}, user: ${userId}. Reset email sent to lakeeriescoopers@gmail.com.`);
+    await pool.end();
+  } catch (err) {
+    console.error("[Migration] Failed to create Lake Erie Scoopers account:", err);
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
@@ -2188,6 +2272,7 @@ async function auditRetellWebhooks() {
   await ensureVisitsUniqueConstraint();
   await syncSubscriptionTiers();
   await seedDemoCompany();
+  await seedLakeErieScoopersAccount();
   await applyDemoAutopayMigration();
   await ensureErrorReportsTable();
   await ensureCompanyNotificationColumns();
