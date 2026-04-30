@@ -6,7 +6,7 @@ import fs from "fs";
 import path from "path";
 import multer from "multer";
 import { storage } from "./storage";
-import { db, pool } from "./db";
+import { db } from "./db";
 import { sql, eq, and, lt, gte, isNotNull, or, inArray, desc } from "drizzle-orm";
 import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable, stripeEvents, automationRules, automationEventLogs, quoteFormEvents } from "@shared/schema";
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, parseLotSizeStringToAcres, type PriceCalculatorInputs } from "./services/pricing-calculator";
@@ -21072,30 +21072,6 @@ Respond with exactly one category from the list above and nothing else.`;
       res.json(fixTask);
     } catch (err) {
       handleError(res, err);
-    }
-  });
-
-  // ── One-shot demo account clone ──────────────────────────────────────────
-  // Clones Lake Erie Scoopers into a standalone demo company owned by jeremy@scoopilot.com.
-  // Protected by admin session. Idempotent — returns existing demo company if already cloned.
-  app.post("/api/admin/clone-demo-account", isAdmin, async (_req: Request, res: Response) => {
-    const SOURCE_COMPANY_ID = "8089c512-bec6-47e1-9678-ec3e3eda4e95";
-    const TARGET_COMPANY_NAME = "Lake Erie Scoopers (Demo)";
-    const NEW_USER_EMAIL = "jeremy@scoopilot.com";
-    const NEW_USER_PASSWORD = "ZAfukr2121@!";
-    try {
-      const existingCheck = await pool.query(
-        `SELECT id, name FROM companies WHERE name = $1 LIMIT 1`, [TARGET_COMPANY_NAME]
-      );
-      if (existingCheck.rows.length > 0) {
-        return res.json({ ok: true, message: "Demo company already exists", companyId: existingCheck.rows[0].id, name: existingCheck.rows[0].name });
-      }
-      const { cloneCompany } = await import("./services/clone-company");
-      const result = await cloneCompany(SOURCE_COMPANY_ID, TARGET_COMPANY_NAME, NEW_USER_EMAIL, NEW_USER_PASSWORD, pool);
-      res.json({ ok: true, ...result });
-    } catch (err) {
-      console.error("[clone-demo-account] Error:", err);
-      res.status(500).json({ error: String(err) });
     }
   });
 
