@@ -81,6 +81,15 @@ The scheduling data model is refactored into three layers: `agreements` (billing
 
 ## CI / Quality Gates
 
+### Combined Check (`check-all`) — Recommended
+
+Run all three quality gates in one step:
+
+- **Run command**: `npx eslint . && npx tsc --noEmit && npx prettier --check .`
+- **Registered as**: validation command `check-all`
+- **Exit code**: `0` only if lint, typecheck, **and** format all pass
+- Use this as the single quality gate before committing or merging. It runs the checks in sequence (lint → typecheck → format) and stops on the first failure.
+
 ### TypeScript (`typecheck`)
 
 A `typecheck` validation step is registered and runs `npx tsc --noEmit` against the full project (`client/`, `server/`, `shared/`). It enforces all compiler flags in `tsconfig.json`, including `strict: true` and `noUnusedLocals: true`. TypeScript errors **block merges** — the check must pass before any PR is accepted.

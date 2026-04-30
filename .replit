@@ -59,6 +59,10 @@ args = "lint"
 task = "workflow.run"
 args = "format"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "check-all"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -130,6 +134,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npx prettier --check ."
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "check-all"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx eslint . && npx tsc --noEmit && npx prettier --check ."
 
 [workflows.workflow.metadata]
 isValidation = true
