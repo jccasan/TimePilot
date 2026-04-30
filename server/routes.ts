@@ -646,7 +646,7 @@ export async function registerRoutes(
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
-      const priceId = process.env.STRIPE_PRICE_SEAT_ADDON;
+      const priceId = process.env.STRIPE_PRICE_SEAT_ADDON || "price_1TRiS0GVMaTr43jX34RtXqoY";
       if (!priceId) return res.status(400).json({ error: "Seat add-on price not configured" });
 
       const baseUrl = getBaseUrl(req);
