@@ -5808,6 +5808,7 @@ Return ONLY valid JSON, no markdown.`,
 
       for (const rId of Array.from(affectedRouteIds)) {
         clearRouteOptimizationState(rId, companyId).catch(console.error);
+        storage.renumberRouteStops(rId, companyId).catch(console.error);
       }
 
       const appliedDaySet = new Set(daysToApply.map(d => d.day));
@@ -6568,9 +6569,13 @@ Return ONLY valid JSON, no markdown.`,
         }
       }
 
+      if (body.routeId === null && existing.routeId && body.stopOrder === undefined) {
+        body.stopOrder = 0;
+      }
       if (body.routeId && body.routeId !== existing.routeId && body.stopOrder === undefined) {
         const routeStops = await storage.getServicePlans(companyId, { routeId: body.routeId, isActive: true });
-        body.stopOrder = routeStops.length + 1;
+        const maxOrder = routeStops.reduce((m, s) => Math.max(m, s.stopOrder ?? 0), 0);
+        body.stopOrder = maxOrder + 1;
       }
 
       if (body.routeId && !body.dayOfWeek) {
@@ -6631,6 +6636,15 @@ Return ONLY valid JSON, no markdown.`,
         if (body.routeId && body.routeId !== existing.routeId) routesToClear.add(body.routeId);
         for (const rId of Array.from(routesToClear)) {
           clearRouteOptimizationState(rId, companyId).catch(console.error);
+        }
+      }
+
+      if (routeIdChanged || deactivated) {
+        const routesToRenumber = new Set<string>();
+        if (existing.routeId) routesToRenumber.add(existing.routeId);
+        if (body.routeId && body.routeId !== existing.routeId) routesToRenumber.add(body.routeId);
+        for (const rId of Array.from(routesToRenumber)) {
+          storage.renumberRouteStops(rId, companyId).catch(console.error);
         }
       }
 

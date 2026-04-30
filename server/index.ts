@@ -484,6 +484,72 @@ async function ensureMaxStopsSchema() {
   }
 }
 
+async function repairDuplicateStopOrders() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    const result = await pool.query(`
+      WITH ranked AS (
+        SELECT
+          id,
+          ROW_NUMBER() OVER (
+            PARTITION BY route_id
+            ORDER BY stop_order, created_at
+          ) AS new_order
+        FROM service_plans
+        WHERE route_id IS NOT NULL
+          AND is_active = true
+          AND stop_order > 0
+      ),
+      bad_routes AS (
+        SELECT DISTINCT sp.route_id
+        FROM service_plans sp
+        WHERE sp.route_id IS NOT NULL
+          AND sp.is_active = true
+          AND sp.stop_order > 0
+        GROUP BY sp.route_id, sp.stop_order
+        HAVING COUNT(*) > 1
+        UNION
+        SELECT DISTINCT sp.route_id
+        FROM service_plans sp
+        WHERE sp.route_id IS NOT NULL
+          AND sp.is_active = true
+          AND sp.stop_order > 0
+          AND sp.route_id IN (
+            SELECT route_id FROM service_plans
+            WHERE route_id IS NOT NULL AND is_active = true AND stop_order > 0
+            GROUP BY route_id
+            HAVING MAX(stop_order) != COUNT(*)
+          )
+      )
+      UPDATE service_plans
+      SET stop_order = ranked.new_order, updated_at = NOW()
+      FROM ranked
+      WHERE service_plans.id = ranked.id
+        AND service_plans.route_id IN (SELECT route_id FROM bad_routes)
+      RETURNING service_plans.id
+    `);
+    const repaired = result.rowCount ?? 0;
+    if (repaired > 0) {
+      await pool.query(`
+        UPDATE jobs
+        SET stop_order = sp.stop_order, updated_at = NOW()
+        FROM service_plans sp
+        WHERE jobs.service_plan_id = sp.id
+          AND sp.route_id IS NOT NULL
+          AND sp.is_active = true
+      `);
+      console.log(`[Migration] Repaired stop_order for ${repaired} stops across routes with duplicates/gaps`);
+    } else {
+      console.log("[Migration] Stop order integrity check passed — no repairs needed");
+    }
+  } catch (err) {
+    console.error("[Migration] Failed to repair duplicate stop orders:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function ensureCanadaMarketColumns() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -2118,6 +2184,7 @@ async function auditRetellWebhooks() {
   await ensureCanadaMarketColumns();
   await migrateServicePlansToAgreementsAndJobs();
   await repairServicePlanDayOfWeek();
+  await repairDuplicateStopOrders();
   await ensureVisitsUniqueConstraint();
   await syncSubscriptionTiers();
   await seedDemoCompany();

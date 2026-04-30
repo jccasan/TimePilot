@@ -147,6 +147,7 @@ export interface IStorage {
   updateRoute(id: string, companyId: string, data: Partial<InsertRoute>): Promise<Route>;
   deleteRoute(id: string, companyId: string): Promise<void>;
   moveRouteToDate(routeId: string, companyId: string, targetDate: string): Promise<{ movedCount: number; targetRouteId: string }>;
+  renumberRouteStops(routeId: string, companyId: string): Promise<void>;
 
   // Agreements
   getAgreement(id: string, companyId: string): Promise<Agreement | undefined>;
@@ -825,6 +826,36 @@ export class DatabaseStorage implements IStorage {
       .returning({ id: visits.id });
 
     return { movedCount: moved.length, targetRouteId };
+  }
+
+  async renumberRouteStops(routeId: string, companyId: string): Promise<void> {
+    const stops = await db
+      .select({ id: servicePlans.id })
+      .from(servicePlans)
+      .where(and(
+        eq(servicePlans.routeId, routeId),
+        eq(servicePlans.companyId, companyId),
+        eq(servicePlans.isActive, true),
+      ))
+      .orderBy(asc(servicePlans.stopOrder), asc(servicePlans.id));
+
+    for (let i = 0; i < stops.length; i++) {
+      await db.update(servicePlans)
+        .set({ stopOrder: i + 1, updatedAt: new Date() })
+        .where(and(eq(servicePlans.id, stops[i].id), eq(servicePlans.companyId, companyId)));
+    }
+
+    if (stops.length > 0) {
+      await db.execute(sql`
+        UPDATE jobs
+        SET stop_order = sp.stop_order, updated_at = NOW()
+        FROM service_plans sp
+        WHERE jobs.service_plan_id = sp.id
+          AND sp.route_id = ${routeId}
+          AND sp.company_id = ${companyId}
+          AND sp.is_active = true
+      `);
+    }
   }
 
   // ================ Agreements ================
