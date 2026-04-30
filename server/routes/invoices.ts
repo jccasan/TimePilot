@@ -471,7 +471,7 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
   app.post("/api/invoices/from-visits", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { contactId, visitIds, dueDate } = req.body;
+      const { contactId, visitIds, dueDate, draftInvoiceIds } = req.body;
       if (!contactId || !visitIds || !Array.isArray(visitIds) || visitIds.length === 0) {
         return res.status(400).json({ error: "contactId and visitIds array required" });
       }
@@ -533,6 +533,24 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         await storage.updateVisit(visit.id, companyId, { invoiceId: invoice.id });
       }
 
+      // Void any existing draft invoices the caller asked to absorb
+      if (Array.isArray(draftInvoiceIds) && draftInvoiceIds.length > 0) {
+        const absorbedVisitIds = new Set(allVisits.map((v) => v.id));
+        for (const draftId of draftInvoiceIds) {
+          const draftInv = await storage.getInvoice(draftId, companyId);
+          if (!draftInv || draftInv.contactId !== contactId || draftInv.status !== "draft")
+            continue;
+          await storage.updateInvoice(draftId, companyId, { status: "voided" as any });
+          // Re-link any visits from the voided draft that aren't in the new invoice
+          const draftItems = await storage.getInvoiceLineItems(draftId);
+          for (const item of draftItems) {
+            if (item.visitId && !absorbedVisitIds.has(item.visitId)) {
+              await storage.updateVisit(item.visitId, companyId, { invoiceId: invoice.id });
+            }
+          }
+        }
+      }
+
       qboAutoSync(companyId, invoice.id, "invoice");
       const { userId: auditUid2 } = await getCompanyContext(req);
       auditLog(
@@ -547,12 +565,109 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
             total: invoice.total,
             contactId,
             visitCount: allVisits.length,
+            absorbedDraftCount: Array.isArray(draftInvoiceIds) ? draftInvoiceIds.length : 0,
           },
         },
         req.ip || undefined
       );
       const items = await storage.getInvoiceLineItems(invoice.id);
       res.status(201).json({ ...invoice, lineItems: items });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // ── Merge multiple draft invoices into one ────────────────────────────────
+  app.post("/api/invoices/merge", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId } = await getCompanyContext(req);
+      const { invoiceIds, dueDate } = req.body;
+      if (!Array.isArray(invoiceIds) || invoiceIds.length < 2) {
+        return res.status(400).json({ error: "invoiceIds array with at least 2 entries required" });
+      }
+
+      // Validate: all must be drafts for the same contact
+      let contactId: string | null = null;
+      const validInvoices: Awaited<ReturnType<typeof storage.getInvoice>>[] = [];
+      for (const id of invoiceIds) {
+        const inv = await storage.getInvoice(id, companyId);
+        if (!inv) return res.status(404).json({ error: `Invoice ${id} not found` });
+        if (inv.status !== "draft")
+          return res.status(400).json({ error: `Invoice ${id} is not a draft` });
+        if (contactId && inv.contactId !== contactId)
+          return res
+            .status(400)
+            .json({ error: "All invoices must belong to the same client to merge" });
+        contactId = inv.contactId;
+        validInvoices.push(inv);
+      }
+      if (!contactId) return res.status(400).json({ error: "Could not determine contact" });
+
+      // Gather all line items from all draft invoices
+      const allLineItems: {
+        description: string;
+        quantity: number;
+        unitPrice: string;
+        total: string;
+        visitId?: string;
+      }[] = [];
+      for (const inv of validInvoices) {
+        const items = await storage.getInvoiceLineItems(inv!.id);
+        for (const item of items) {
+          allLineItems.push({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total,
+            visitId: item.visitId ?? undefined,
+          });
+        }
+      }
+
+      const subtotal = allLineItems.reduce((sum, item) => sum + parseFloat(item.total), 0);
+      const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
+      const dueDateStr =
+        dueDate ||
+        (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 30);
+          return d.toISOString().split("T")[0];
+        })();
+
+      const merged = await storage.createInvoiceWithLineItems(
+        {
+          companyId,
+          contactId,
+          invoiceNumber,
+          dueDate: dueDateStr,
+          subtotal: subtotal.toFixed(2),
+          tax: "0",
+          total: subtotal.toFixed(2),
+          status: "draft",
+          autoGenerated: false,
+          paymentAttempts: 0,
+        },
+        allLineItems
+      );
+
+      const newVisitIds = new Set(allLineItems.filter((i) => i.visitId).map((i) => i.visitId!));
+
+      // Void originals and re-link visits to the merged invoice
+      for (const inv of validInvoices) {
+        await storage.updateInvoice(inv!.id, companyId, { status: "voided" as any });
+      }
+      for (const visitId of newVisitIds) {
+        await storage.updateVisit(visitId, companyId, { invoiceId: merged.id });
+      }
+
+      auditLog(companyId, userId, "invoice", merged.id, "create", {
+        action: "merged",
+        mergedFrom: invoiceIds,
+        lineItemCount: allLineItems.length,
+      });
+
+      const items = await storage.getInvoiceLineItems(merged.id);
+      res.status(201).json({ ...merged, lineItems: items });
     } catch (err) {
       handleError(res, err);
     }
@@ -616,8 +731,34 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
             });
             const planMap = new Map(plans.map((p) => [p.id, p]));
 
-            const lineItems = await buildVisitLineItemsWithAddOns(visitsToInvoice, planMap);
-            const subtotal = lineItems.reduce((sum, item) => sum + parseFloat(item.total), 0);
+            // Collect any existing drafts so we can absorb and void them
+            const existingDrafts = await storage.getInvoices(companyId, {
+              contactId: contactEntry.contactId,
+              status: "draft",
+            });
+            const draftLineItems: {
+              description: string;
+              quantity: number;
+              unitPrice: string;
+              total: string;
+              visitId?: string;
+            }[] = [];
+            for (const draft of existingDrafts) {
+              const items = await storage.getInvoiceLineItems(draft.id);
+              for (const item of items) {
+                draftLineItems.push({
+                  description: item.description,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  total: item.total,
+                  visitId: item.visitId ?? undefined,
+                });
+              }
+            }
+
+            const visitLineItems = await buildVisitLineItemsWithAddOns(visitsToInvoice, planMap);
+            const allLineItems = [...draftLineItems, ...visitLineItems];
+            const subtotal = allLineItems.reduce((sum, item) => sum + parseFloat(item.total), 0);
             const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
 
             const invoice = await storage.createInvoiceWithLineItems(
@@ -633,11 +774,23 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
                 autoGenerated: true,
                 paymentAttempts: 0,
               },
-              lineItems
+              allLineItems
             );
 
             for (const visit of visitsToInvoice) {
               await storage.updateVisit(visit.id, companyId, { invoiceId: invoice.id });
+            }
+
+            // Void the absorbed drafts and re-link their visits
+            const newVisitIds = new Set(visitsToInvoice.map((v) => v.id));
+            for (const draft of existingDrafts) {
+              await storage.updateInvoice(draft.id, companyId, { status: "voided" as any });
+              const draftItems = await storage.getInvoiceLineItems(draft.id);
+              for (const item of draftItems) {
+                if (item.visitId && !newVisitIds.has(item.visitId)) {
+                  await storage.updateVisit(item.visitId, companyId, { invoiceId: invoice.id });
+                }
+              }
             }
 
             qboAutoSync(companyId, invoice.id, "invoice");
@@ -776,7 +929,7 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
                   billing_address: emailBillingAddr,
                   service_address: emailServiceAddr,
                   show_service_address: emailShowServiceAddr ? emailServiceAddr : null,
-                  line_items: lineItems.map((li) => ({
+                  line_items: allLineItems.map((li) => ({
                     description: li.description,
                     details: "",
                     qty: li.quantity,
@@ -814,7 +967,7 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
                 const venmoTextLine = company?.venmoHandle
                   ? `\nOr pay via Venmo: @${company.venmoHandle}`
                   : "";
-                const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${lineItems.map((li) => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}${venmoTextLine}\n\nThank you for your business!`;
+                const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${allLineItems.map((li) => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}${venmoTextLine}\n\nThank you for your business!`;
 
                 const msg = await storage.createMessage({
                   companyId,

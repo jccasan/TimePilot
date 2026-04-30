@@ -84,6 +84,7 @@ import {
   Calendar,
   AlertCircle,
   Activity,
+  GitMerge,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import {
@@ -1236,6 +1237,7 @@ export default function Invoices() {
   const [confirmSendAll, setConfirmSendAll] = useState(false);
   const [confirmChargeAll, setConfirmChargeAll] = useState(false);
   const [confirmGenerateAll, setConfirmGenerateAll] = useState(false);
+  const [confirmMerge, setConfirmMerge] = useState(false);
   const [generateAllContactIds, setGenerateAllContactIds] = useState<string[] | null>(null);
   const [selectedUninvoicedIds, setSelectedUninvoicedIds] = useState<Set<string>>(new Set());
   const [expandedUninvoicedIds, setExpandedUninvoicedIds] = useState<Set<string>>(new Set());
@@ -1703,6 +1705,40 @@ export default function Invoices() {
       setBatchPending(false);
     }
   }
+
+  // Merge selected draft invoices (all must be drafts for same contact)
+  const mergeSelectedInfo = useMemo(() => {
+    if (!allInvoicesForStats || selectedIds.size < 2) return null;
+    const selected = allInvoicesForStats.filter((inv) => selectedIds.has(inv.id));
+    if (selected.some((inv) => inv.status !== "draft")) return null;
+    const contactId = selected[0].contactId;
+    if (selected.some((inv) => inv.contactId !== contactId)) return null;
+    const total = selected.reduce((sum, inv) => sum + parseFloat(inv.total ?? "0"), 0);
+    return { contactId, invoiceIds: selected.map((inv) => inv.id), count: selected.length, total };
+  }, [allInvoicesForStats, selectedIds]);
+
+  const mergeMutation = useMutation({
+    mutationFn: async (invoiceIds: string[]) => {
+      const res = await apiRequest("POST", "/api/invoices/merge", { invoiceIds });
+      return res.json();
+    },
+    onSuccess: (data: Invoice) => {
+      queryClient.invalidateQueries({
+        predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
+      toast({
+        title: "Invoices merged",
+        description: `Invoice #${data.invoiceNumber} created from ${mergeSelectedInfo?.count ?? 0} drafts.`,
+      });
+      setSelectedIds(new Set());
+      setConfirmMerge(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Merge failed", description: err.message, variant: "destructive" });
+    },
+  });
 
   function toggleSelectAll(invoiceList: Invoice[]) {
     if (invoiceList.every((inv) => selectedIds.has(inv.id))) {
@@ -2902,6 +2938,18 @@ export default function Invoices() {
               <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
               Mark Paid
             </Button>
+            {mergeSelectedInfo && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setConfirmMerge(true)}
+                disabled={batchPending || mergeMutation.isPending}
+                data-testid="button-batch-merge"
+              >
+                <GitMerge className="mr-1 h-3.5 w-3.5" />
+                Merge into one
+              </Button>
+            )}
             <Button
               size="sm"
               variant="ghost"
@@ -2911,7 +2959,9 @@ export default function Invoices() {
               Clear
             </Button>
           </div>
-          {batchPending && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
+          {(batchPending || mergeMutation.isPending) && (
+            <Loader2 className="h-4 w-4 animate-spin ml-auto" />
+          )}
         </div>
       )}
 
@@ -2975,6 +3025,39 @@ export default function Invoices() {
               Charge All
             </Button>
             <Button variant="outline" onClick={() => setConfirmChargeAll(false)}>
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmMerge} onOpenChange={setConfirmMerge}>
+        <DialogContent className="max-w-sm" data-testid="dialog-confirm-merge">
+          <DialogHeader>
+            <DialogTitle>Merge {mergeSelectedInfo?.count ?? 0} Draft Invoices?</DialogTitle>
+            <DialogDescription>
+              {mergeSelectedInfo?.count ?? 0} draft invoices totaling $
+              {(mergeSelectedInfo?.total ?? 0).toFixed(2)} will be combined into one new draft and
+              the originals will be voided.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mt-2">
+            <Button
+              className="flex-1"
+              onClick={() => {
+                if (mergeSelectedInfo) mergeMutation.mutate(mergeSelectedInfo.invoiceIds);
+              }}
+              disabled={mergeMutation.isPending}
+              data-testid="button-confirm-merge"
+            >
+              {mergeMutation.isPending ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <GitMerge className="mr-1 h-4 w-4" />
+              )}
+              Merge
+            </Button>
+            <Button variant="outline" onClick={() => setConfirmMerge(false)}>
               Cancel
             </Button>
           </div>

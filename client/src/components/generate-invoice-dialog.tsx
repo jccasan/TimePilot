@@ -39,6 +39,8 @@ type UninvoicedResult = {
   totalDollars: number;
 };
 
+type UnsentInvoice = Invoice & { lineItems: InvoiceLineItem[] };
+
 interface GenerateInvoiceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -109,6 +111,17 @@ export function GenerateInvoiceDialog({
     queryKey: ["/api/contacts", activeContactId, "uninvoiced-visits"],
     enabled: !!activeContactId && open,
   });
+
+  const { data: unsentData } = useQuery<{ invoices: UnsentInvoice[] }>({
+    queryKey: ["/api/contacts", activeContactId, "unsent-invoices"],
+    enabled: !!activeContactId && open,
+  });
+
+  const existingDrafts = unsentData?.invoices ?? [];
+  const existingDraftsTotal = existingDrafts.reduce(
+    (sum, inv) => sum + parseFloat(inv.total ?? "0"),
+    0
+  );
 
   const filteredVisits = useMemo(() => {
     if (!uninvoicedData?.visits) return [];
@@ -184,6 +197,7 @@ export function GenerateInvoiceDialog({
         visitIds: Array.from(selectedVisitIds),
         dueDate,
         suppressNotifications,
+        draftInvoiceIds: existingDrafts.map((d) => d.id),
       });
       return res.json();
     },
@@ -486,6 +500,21 @@ export function GenerateInvoiceDialog({
                   </p>
                 </div>
               </div>
+
+              {existingDrafts.length > 0 && (
+                <div
+                  className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-3 py-2 text-sm"
+                  data-testid="banner-existing-drafts"
+                >
+                  <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <span className="text-amber-800 dark:text-amber-300">
+                    {existingDrafts.length} existing draft invoice
+                    {existingDrafts.length !== 1 ? "s" : ""} totaling $
+                    {existingDraftsTotal.toFixed(2)} will be voided and their line items combined
+                    into this invoice.
+                  </span>
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <Switch
