@@ -27,6 +27,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Security**: Helmet middleware, CORS, rate limiting, and multi-tenant data isolation.
 - **Automation**: Configurable reminder system and quiet hours.
 - **Route Optimization**: Nearest-neighbor TSP with 2-opt improvement.
+- **Routes Structure**: Backend routes are split into domain-specific modules under `server/routes/`. Each module exports a `registerXxxRoutes(app)` function. Shared middleware and helpers live in `server/routes/shared.ts`. `server/routes/index.ts` orchestrates all registrations. `server/routes.ts` is a thin re-export of `registerRoutes` from the index.
 
 ### Frontend
 - **Framework**: React with TypeScript
